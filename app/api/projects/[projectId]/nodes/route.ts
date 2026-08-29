@@ -1,5 +1,6 @@
 import { getProject } from '@/lib/project-registry';
 import {
+  assertGraphRoot,
   createStartNode,
   deleteTaskGraphNode,
   updateStartNode,
@@ -36,11 +37,17 @@ export async function POST(
         { status: 400 },
       );
     }
-    const result = await createStartNode(project, {
-      title,
-      contextRefs,
-      files,
-    });
+    const idea = formData.get('idea');
+    const result = await createStartNode(
+      project,
+      {
+        title,
+        contextRefs,
+        files,
+        idea: typeof idea === 'string' ? idea : undefined,
+      },
+      assertGraphRoot(formData.get('graph') ?? undefined),
+    );
     return Response.json(result, { status: 201 });
   } catch (error) {
     const message =
@@ -83,13 +90,19 @@ export async function PATCH(
         { status: 400 },
       );
     }
-    const result = await updateStartNode(project, {
-      id,
-      title,
-      contextRefs,
-      retainedAttachmentRefs,
-      files,
-    });
+    const idea = formData.get('idea');
+    const result = await updateStartNode(
+      project,
+      {
+        id,
+        title,
+        contextRefs,
+        retainedAttachmentRefs,
+        files,
+        idea: typeof idea === 'string' ? idea : undefined,
+      },
+      assertGraphRoot(formData.get('graph') ?? undefined),
+    );
     return Response.json(result);
   } catch (error) {
     const message =
@@ -111,11 +124,20 @@ export async function DELETE(
   }
 
   try {
-    const payload = (await request.json()) as { id?: unknown };
+    const payload = (await request.json()) as {
+      id?: unknown;
+      graph?: unknown;
+    };
     if (typeof payload.id !== 'string') {
       return Response.json({ error: 'A node is required.' }, { status: 400 });
     }
-    return Response.json(await deleteTaskGraphNode(project, payload.id));
+    return Response.json(
+      await deleteTaskGraphNode(
+        project,
+        payload.id,
+        assertGraphRoot(payload.graph),
+      ),
+    );
   } catch (error) {
     const message =
       error instanceof Error ? error.message : 'Could not delete the node.';

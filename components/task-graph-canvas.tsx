@@ -38,6 +38,8 @@ type TaskCardData = Record<string, unknown> & {
   status?: string;
   agentLabel?: string;
   relationshipCount: number;
+  selectedForRun?: boolean;
+  plusLabel?: string;
   onDecompose: (nodeId: string) => void;
   onInspect: (nodeId: string) => void;
   onCancelRun: (runId: string) => void;
@@ -52,6 +54,9 @@ export function TaskGraphCanvas({
   previews,
   focusedNodeId,
   locateRequest,
+  selectedNodeIds,
+  plusLabel,
+  onMultiSelect,
   onFocusNode,
   onInspectNode,
   onSelectPreview,
@@ -62,12 +67,16 @@ export function TaskGraphCanvas({
   previews: TaskGraphPreview[];
   focusedNodeId: string;
   locateRequest: { nodeId: string; sequence: number } | null;
+  selectedNodeIds?: string[];
+  plusLabel?: string;
+  onMultiSelect?: (nodeId: string) => void;
   onFocusNode: (nodeId: string) => void;
   onInspectNode: (nodeId: string) => void;
   onSelectPreview: (previewId: string) => void;
   onDecompose: (nodeId: string) => void;
   onCancelRun: (runId: string) => void;
 }) {
+  const selectionKey = (selectedNodeIds ?? []).join(',');
   const graph = useMemo(
     () =>
       buildFlowGraph(
@@ -77,8 +86,19 @@ export function TaskGraphCanvas({
         onDecompose,
         onInspectNode,
         onCancelRun,
+        selectionKey ? selectionKey.split(',') : [],
+        plusLabel,
       ),
-    [focusedNodeId, nodes, onCancelRun, onDecompose, onInspectNode, previews],
+    [
+      focusedNodeId,
+      nodes,
+      onCancelRun,
+      onDecompose,
+      onInspectNode,
+      plusLabel,
+      previews,
+      selectionKey,
+    ],
   );
   const [flowNodes, setFlowNodes, onNodesChange] = useNodesState(graph.nodes);
   const [flowEdges, setFlowEdges, onEdgesChange] = useEdgesState(graph.edges);
@@ -123,7 +143,15 @@ export function TaskGraphCanvas({
       }}
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
-      onNodeClick={(_, node) => {
+      onNodeClick={(event, node) => {
+        if (
+          onMultiSelect &&
+          node.data.kind === 'formal' &&
+          (event.ctrlKey || event.metaKey)
+        ) {
+          onMultiSelect(node.id);
+          return;
+        }
         if (
           node.data.kind === 'preview' &&
           node.data.transientKind === 'request'
@@ -182,6 +210,7 @@ function TaskCard({ id, data, selected }: NodeProps<TaskFlowNode>) {
       className={cn(
         'group relative min-h-[156px] w-72 rounded-2xl border border-t-[3px] bg-background p-4 text-left shadow-[0_10px_30px_rgb(15_23_42/6%)] transition',
         selected && 'ring-3 ring-ring/20',
+        data.selectedForRun && 'ring-3 ring-violet-500/45',
         preview && 'border-dashed bg-secondary/35',
       )}
       style={
@@ -303,8 +332,12 @@ function TaskCard({ id, data, selected }: NodeProps<TaskFlowNode>) {
               ? 'opacity-100'
               : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100',
           )}
-          aria-label={`Decompose ${data.title}`}
-          title="Decompose from this node"
+          aria-label={`${data.plusLabel ?? 'Decompose'} ${data.title}`}
+          title={
+            data.plusLabel
+              ? `${data.plusLabel} from this node`
+              : 'Decompose from this node'
+          }
           onClick={(event) => {
             event.stopPropagation();
             data.onDecompose(id);
@@ -330,8 +363,11 @@ function buildFlowGraph(
   onDecompose: (nodeId: string) => void,
   onInspect: (nodeId: string) => void,
   onCancelRun: (runId: string) => void,
+  selectedNodeIds: string[] = [],
+  plusLabel?: string,
 ) {
   const layout = buildTaskGraphLayout(nodes, previews);
+  const selectedIds = new Set(selectedNodeIds);
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const previewById = new Map(previews.map((preview) => [preview.id, preview]));
   const focusedEdges = focusedNodeId
@@ -381,6 +417,8 @@ function buildFlowGraph(
           (layoutNode.kind === 'preview'
             ? transientColor(preview)
             : nodeTypeColor(node?.type ?? 'node')),
+        selectedForRun: selectedIds.has(layoutNode.id),
+        plusLabel,
         onDecompose,
         onInspect,
         onCancelRun,
