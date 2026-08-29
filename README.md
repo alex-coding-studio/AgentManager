@@ -52,6 +52,8 @@ The internal `.agent-manager/` asset layout is fixed by the product. Users
 choose the project root, while AgentManager owns the planning paths beneath it.
 Product Context sections are discovered directly from folders and their
 `README.md` files; no database or manifest duplicates that structure.
+README files can be opened in a reusable focus reader or revealed in the system
+file manager for external editing.
 
 Set `AGENT_MANAGER_HOME` to use a different machine-registry directory.
 

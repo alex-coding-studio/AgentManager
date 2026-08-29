@@ -100,6 +100,9 @@ library:
    manifest.
 4. Select a section and read its rendered Markdown in a persistent preview
    area.
+5. Open any README in a reusable focus-reading overlay for long documents.
+6. Reveal the selected section in the operating system's file manager for
+   external editing.
 
 Creating, importing, renaming, moving, or deleting ordinary context documents
 and previewing non-Markdown assets remain deferred.

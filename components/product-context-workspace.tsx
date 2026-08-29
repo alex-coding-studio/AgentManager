@@ -1,9 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { BookOpen, FileText, Folder, FolderPlus } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { Folder, FolderPlus } from 'lucide-react';
+import { MarkdownReader } from '@/components/markdown-reader';
 import { Button } from '@/components/ui/button';
 import type { ContextSection } from '@/lib/product-context';
 import { cn } from '@/lib/utils';
@@ -45,6 +44,19 @@ export function ProductContextWorkspace({
     }
     setSections(result.sections);
     setSelectedSlug(result.sections[0]?.slug ?? '');
+  }
+
+  async function revealSelectedSection() {
+    if (!selectedSection) return;
+    const response = await fetch(`/api/projects/${projectId}/context/reveal`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ section: selectedSection.slug }),
+    });
+    if (!response.ok) {
+      const result = (await response.json()) as { error?: string };
+      throw new Error(result.error ?? 'Could not open the folder.');
+    }
   }
 
   if (sections.length === 0) {
@@ -131,93 +143,12 @@ export function ProductContextWorkspace({
           })}
         </ul>
 
-        <article className="min-h-[560px] overflow-hidden rounded-2xl border border-border bg-card shadow-[0_1px_0_rgb(15_23_42/5%),0_14px_40px_rgb(15_23_42/5%)]">
-          <header className="flex items-center gap-3 border-b border-border px-6 py-4">
-            <div className="grid size-9 place-items-center rounded-xl bg-secondary">
-              <BookOpen className="size-4" />
-            </div>
-            <div>
-              <p className="font-medium">{selectedSection?.title}</p>
-              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <FileText className="size-3" />
-                context/{selectedSection?.slug}/README.md
-              </p>
-            </div>
-          </header>
-          <div className="px-6 py-7 sm:px-9 sm:py-9">
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              skipHtml
-              components={{
-                h1: ({ children }) => (
-                  <h1 className="mb-5 text-3xl font-semibold tracking-tight">
-                    {children}
-                  </h1>
-                ),
-                h2: ({ children }) => (
-                  <h2 className="mt-8 mb-3 text-lg font-semibold">
-                    {children}
-                  </h2>
-                ),
-                h3: ({ children }) => (
-                  <h3 className="mt-6 mb-2 font-semibold">{children}</h3>
-                ),
-                p: ({ children }) => (
-                  <p className="my-3 text-sm leading-7 text-foreground/78">
-                    {children}
-                  </p>
-                ),
-                ul: ({ children }) => (
-                  <ul className="my-3 list-disc space-y-2 pl-5 text-sm leading-6 text-foreground/78">
-                    {children}
-                  </ul>
-                ),
-                ol: ({ children }) => (
-                  <ol className="my-3 list-decimal space-y-2 pl-5 text-sm leading-6 text-foreground/78">
-                    {children}
-                  </ol>
-                ),
-                a: ({ children, href }) => (
-                  <a
-                    href={href}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="font-medium underline underline-offset-4"
-                  >
-                    {children}
-                  </a>
-                ),
-                blockquote: ({ children }) => (
-                  <blockquote className="my-5 border-l-2 border-foreground/25 pl-4 text-muted-foreground">
-                    {children}
-                  </blockquote>
-                ),
-                code: ({ children }) => (
-                  <code className="rounded bg-secondary px-1.5 py-0.5 font-mono text-[0.85em]">
-                    {children}
-                  </code>
-                ),
-                table: ({ children }) => (
-                  <div className="my-5 overflow-x-auto">
-                    <table className="w-full border-collapse text-sm">
-                      {children}
-                    </table>
-                  </div>
-                ),
-                th: ({ children }) => (
-                  <th className="border border-border bg-secondary px-3 py-2 text-left font-medium">
-                    {children}
-                  </th>
-                ),
-                td: ({ children }) => (
-                  <td className="border border-border px-3 py-2">{children}</td>
-                ),
-              }}
-            >
-              {selectedSection?.markdown ?? ''}
-            </ReactMarkdown>
-          </div>
-        </article>
+        <MarkdownReader
+          title={selectedSection?.title ?? 'README'}
+          filePath={`context/${selectedSection?.slug}/README.md`}
+          markdown={selectedSection?.markdown ?? ''}
+          onReveal={revealSelectedSection}
+        />
       </div>
     </div>
   );
