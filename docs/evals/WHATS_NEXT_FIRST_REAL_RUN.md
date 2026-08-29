@@ -130,6 +130,38 @@ with 1,302 output tokens and 170 reasoning tokens. These figures establish only
 the observed run cost; optimization remains deferred until the product loop is
 validated.
 
+## First progressive-resolution continuation
+
+Harness revision 3 intentionally started a fresh Codex Session from
+`CANDIDATE-0001` revision 2 because the prior provider Session held the revision
+2 Contract. The user asked for an example that could validate the abstract
+Context direction quickly. Codex returned a coherent ten-minute loop: begin
+with a fuzzy product goal, expose only the Context needed for one decision,
+produce one reviewable action, and draft the first GitHub Issue. Its Reflection
+correctly recommended moving to a lightweight prototype rather than continuing
+conceptual exploration.
+
+The initial validation failed because the Agent copied Candidate revision 2
+instead of returning revision 3. Request identity, Harness revision, graph
+relationships, Reflection, and Markdown were otherwise valid. The raw result
+was recovered without another Agent call by correcting only that machine-owned
+revision number and running the normal failed-Run recovery validator. The next
+request packet now supplies an explicit `requiredRevision` so the Agent does
+not need to infer it.
+
+This run used 46,936 input tokens, including 33,280 cached input tokens, with
+1,535 output tokens and 334 reasoning tokens. It ran for approximately 35
+seconds. The recovered real graph contains all five Candidates and all five
+source lineage edges.
+
+The same run exposed a Canvas-state regression: selecting a Candidate before
+Refine left graph focus active while its card became a Running placeholder, so
+unrelated cards and edges became effectively invisible at a small zoom. Refine
+start, cancellation, failure, and completion now clear graph focus while
+preserving the Candidate identity and relationship set. A development-only
+Refining fixture verifies full-opacity sibling cards and lineage edges without
+starting another Agent.
+
 ## Remaining audit
 
 - Review the complete Response and all five Candidate Markdown artifacts in a

@@ -223,6 +223,7 @@ export function WhatsNextWorkspace({
       const { run } = (await response.json()) as { run: WhatsNextRunRecord };
       if (['running', 'validating'].includes(run.status)) continue;
       if (run.revisionOf && run.result?.outcome !== 'proposal') {
+        setFocusedNodeId('');
         await loadRunsFromServer();
         return;
       }
@@ -233,6 +234,7 @@ export function WhatsNextWorkspace({
           runToPreviews(run),
         ),
       );
+      if (run.revisionOf) setFocusedNodeId('');
       return;
     }
   }
@@ -280,6 +282,7 @@ export function WhatsNextWorkspace({
     setPreviews((current) =>
       mergePreviews(current, runToPreviews(payload.run!)),
     );
+    if (input.revisionTarget) setFocusedNodeId('');
     void pollRun(payload.run.runId);
   }
 
@@ -369,6 +372,7 @@ export function WhatsNextWorkspace({
       body: JSON.stringify({ runId }),
     }).catch(() => null);
     if (snapshot?.revisionTarget) {
+      setFocusedNodeId('');
       await loadRunsFromServer();
       return;
     }

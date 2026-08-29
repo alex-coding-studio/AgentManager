@@ -6,6 +6,7 @@ import {
   WHATS_NEXT_HARNESS_REVISION,
   WhatsNextResultValidationError,
   canReuseWhatsNextSession,
+  createWhatsNextRevisionTarget,
   parseWhatsNextHarnessResult,
   validateWhatsNextHarnessResult,
 } from '../lib/whats-next-harness.ts';
@@ -15,6 +16,7 @@ void test('ships the settled Reflection and Markdown Harness contract', () => {
   assert.match(WHATS_NEXT_HARNESS_PROMPT, /user-facing Reflection/);
   assert.match(WHATS_NEXT_HARNESS_PROMPT, /Why this direction/);
   assert.match(WHATS_NEXT_HARNESS_PROMPT, /For refine-candidate/);
+  assert.match(WHATS_NEXT_HARNESS_PROMPT, /requiredRevision/);
   assert.match(WHATS_NEXT_HARNESS_PROMPT, /exactly one semantic level/);
   assert.match(WHATS_NEXT_HARNESS_PROMPT, /protected comparison Context/);
   assert.doesNotMatch(WHATS_NEXT_HARNESS_PROMPT, /placeholder/);
@@ -128,6 +130,13 @@ void test('does not resume a provider Session across Harness revisions', () => {
       'codex-cli',
     ),
     true,
+  );
+});
+
+void test('provides the exact required Candidate revision', () => {
+  assert.equal(
+    createWhatsNextRevisionTarget(candidate('CANDIDATE-0001')).requiredRevision,
+    2,
   );
 });
 
