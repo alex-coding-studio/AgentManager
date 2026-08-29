@@ -193,7 +193,7 @@ export function WhatsNextWorkspace({
       )
     : false;
 
-  const restoreRuns = useEffectEvent(async () => {
+  async function loadRunsFromServer() {
     const response = await fetch(
       `/api/projects/${projectId}/whats-next-runs`,
     ).catch(() => null);
@@ -202,7 +202,9 @@ export function WhatsNextWorkspace({
     setRuns(payload.runs);
     setSelectedAgent(agentForRun(payload.runs.at(-1)));
     setPreviews(mergePreviews([], payload.runs.flatMap(runToPreviews)));
-  });
+  }
+
+  const restoreRuns = useEffectEvent(loadRunsFromServer);
 
   useEffect(() => {
     if (developmentPreview) return;
@@ -220,6 +222,10 @@ export function WhatsNextWorkspace({
       if (!response?.ok) continue;
       const { run } = (await response.json()) as { run: WhatsNextRunRecord };
       if (['running', 'validating'].includes(run.status)) continue;
+      if (run.revisionOf && run.result?.outcome !== 'proposal') {
+        await loadRunsFromServer();
+        return;
+      }
       setRuns((current) => upsertRun(current, run));
       setPreviews((current) =>
         mergePreviews(
@@ -362,6 +368,10 @@ export function WhatsNextWorkspace({
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ runId }),
     }).catch(() => null);
+    if (snapshot?.revisionTarget) {
+      await loadRunsFromServer();
+      return;
+    }
     if (!snapshot || snapshot.revisionTarget) return;
     if (snapshot.sourceNodeIds.length > 1) {
       setCombineIds(snapshot.sourceNodeIds);
@@ -1652,17 +1662,29 @@ function mergePreviews(
     const previous = merged.get(preview.id);
     merged.set(
       preview.id,
-      previous?.kind === 'candidate' && preview.kind === 'candidate'
+      previous?.kind === 'candidate' &&
+        preview.kind === 'run' &&
+        preview.revisionOf === previous.id
         ? {
             ...preview,
-            previousOutputPath:
-              preview.previousOutputPath ?? previous.outputPath,
-            previousMarkdown:
-              previous.candidate && 'outputMarkdown' in previous.candidate
-                ? previous.candidate.outputMarkdown
-                : undefined,
+            title: previous.title,
+            description: previous.description,
+            candidate: previous.candidate,
+            outputPath: previous.outputPath,
+            previousOutputPath: previous.previousOutputPath,
+            previousMarkdown: previous.previousMarkdown,
           }
-        : preview,
+        : previous?.kind === 'candidate' && preview.kind === 'candidate'
+          ? {
+              ...preview,
+              previousOutputPath:
+                preview.previousOutputPath ?? previous.outputPath,
+              previousMarkdown:
+                previous.candidate && 'outputMarkdown' in previous.candidate
+                  ? previous.candidate.outputMarkdown
+                  : undefined,
+            }
+          : preview,
     );
   }
   return [...merged.values()];
@@ -1760,13 +1782,14 @@ function runToPreviews(run: WhatsNextRunRecord): TaskGraphPreview[] {
     return [
       {
         ...base,
-        id: run.runId,
+        id: run.revisionOf ?? run.runId,
         kind: 'run',
-        title: agentLabel,
-        type: 'Running',
+        title: run.revisionOf ? 'Refining direction' : agentLabel,
+        type: run.revisionOf ? 'Refining' : 'Running',
         description: run.input?.instruction ?? '',
         agentLabel,
         status: run.status,
+        revisionOf: run.revisionOf,
       },
     ];
   }

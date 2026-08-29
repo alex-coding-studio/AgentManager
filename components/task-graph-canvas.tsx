@@ -37,6 +37,7 @@ type TaskCardData = Record<string, unknown> & {
   transientKind?: TaskGraphPreview['kind'];
   status?: string;
   agentLabel?: string;
+  runId?: string;
   relationshipCount: number;
   selectedForRun?: boolean;
   plusLabel?: string;
@@ -282,7 +283,7 @@ function TaskCard({ id, data, selected }: NodeProps<TaskFlowNode>) {
               title="Cancel Agent Run"
               onClick={(event) => {
                 event.stopPropagation();
-                data.onCancelRun(id);
+                data.onCancelRun(data.runId ?? id);
               }}
             >
               <X className="size-4" />
@@ -430,6 +431,7 @@ function buildFlowGraph(
         transientKind: preview?.kind ?? 'request',
         status: preview?.status,
         agentLabel: preview?.agentLabel,
+        runId: preview?.runId,
         resourceSummary: preview
           ? preview.kind === 'candidate' && preview.candidate
             ? `Revision ${preview.candidate.revision} · ${preview.candidate.resources.length} Resources`
