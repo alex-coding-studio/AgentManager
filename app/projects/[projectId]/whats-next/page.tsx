@@ -52,6 +52,7 @@ export default async function WhatsNextPage({
         initialNodes={reviewPreview?.nodes ?? nodes}
         initialRuns={reviewPreview?.runs ?? []}
         developmentPreview={reviewPreview !== null}
+        developmentTransitionRun={reviewPreview?.transitionRun}
       />
     </ProjectShell>
   );

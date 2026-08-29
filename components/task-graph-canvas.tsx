@@ -12,6 +12,7 @@ import {
   ReactFlow,
   useEdgesState,
   useNodesState,
+  useUpdateNodeInternals,
   type Edge,
   type Node,
   type NodeProps,
@@ -110,6 +111,13 @@ export function TaskGraphCanvas({
   );
   const [flowNodes, setFlowNodes, onNodesChange] = useNodesState(graph.nodes);
   const [flowEdges, setFlowEdges, onEdgesChange] = useEdgesState(graph.edges);
+  const internalsKey = previews
+    .map((preview) =>
+      [preview.id, preview.kind, preview.status, preview.runId].join(':'),
+    )
+    .sort()
+    .join('|');
+  const graphNodeIdsKey = graph.nodes.map((node) => node.id).join('|');
   const flowInstance = useRef<ReactFlowInstance<TaskFlowNode, Edge> | null>(
     null,
   );
@@ -183,6 +191,10 @@ export function TaskGraphCanvas({
       className="bg-background"
       aria-label="Graph canvas"
     >
+      <GraphInternalsUpdater
+        nodeIdsKey={graphNodeIdsKey}
+        revisionKey={internalsKey}
+      />
       <Background
         variant={BackgroundVariant.Dots}
         gap={22}
@@ -218,6 +230,23 @@ export function TaskGraphCanvas({
       />
     </ReactFlow>
   );
+}
+
+function GraphInternalsUpdater({
+  nodeIdsKey,
+  revisionKey,
+}: {
+  nodeIdsKey: string;
+  revisionKey: string;
+}) {
+  const updateNodeInternals = useUpdateNodeInternals();
+  useEffect(() => {
+    const frame = requestAnimationFrame(() =>
+      updateNodeInternals(nodeIdsKey.split('|')),
+    );
+    return () => cancelAnimationFrame(frame);
+  }, [nodeIdsKey, revisionKey, updateNodeInternals]);
+  return null;
 }
 
 function TaskCard({ id, data, selected }: NodeProps<TaskFlowNode>) {

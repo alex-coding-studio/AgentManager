@@ -187,7 +187,7 @@ The direction remains useful, but its center has shifted. The value is not produ
       candidates: [refinedCandidate],
     },
   };
-  return { nodes: [start], runs: [run, refinedRun] };
+  return { nodes: [start], runs: [run, refinedRun], transitionRun: undefined };
 }
 
 export function createWhatsNextRefiningPreview() {
@@ -195,15 +195,13 @@ export function createWhatsNextRefiningPreview() {
   const refinement = preview.runs[1]!;
   return {
     nodes: preview.nodes,
-    runs: [
-      preview.runs[0]!,
-      {
-        ...refinement,
-        status: 'running' as const,
-        endedAt: null,
-        result: null,
-      },
-    ],
+    runs: [preview.runs[0]!],
+    transitionRun: {
+      ...refinement,
+      status: 'running' as const,
+      endedAt: null,
+      result: null,
+    },
   };
 }
 

@@ -65,12 +65,14 @@ export function WhatsNextWorkspace({
   initialNodes,
   initialRuns = [],
   developmentPreview = false,
+  developmentTransitionRun,
 }: {
   projectId: string;
   folders: ContextBrowserFolder[];
   initialNodes: TaskGraphNode[];
   initialRuns?: WhatsNextRunRecord[];
   developmentPreview?: boolean;
+  developmentTransitionRun?: WhatsNextRunRecord;
 }) {
   const [nodes, setNodes] = useState(initialNodes);
   const [previews, setPreviews] = useState<TaskGraphPreview[]>(
@@ -212,6 +214,18 @@ export function WhatsNextWorkspace({
     restoredRuns.current = true;
     void restoreRuns();
   }, [developmentPreview]);
+
+  useEffect(() => {
+    if (!developmentTransitionRun) return;
+    const timeout = window.setTimeout(() => {
+      setRuns((current) => upsertRun(current, developmentTransitionRun));
+      setPreviews((current) =>
+        mergePreviews(current, runToPreviews(developmentTransitionRun)),
+      );
+      setFocusedNodeId('');
+    }, 600);
+    return () => window.clearTimeout(timeout);
+  }, [developmentTransitionRun]);
 
   async function pollRun(runId: string) {
     for (let attempt = 0; attempt < 3_600; attempt += 1) {
