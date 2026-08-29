@@ -12,6 +12,7 @@ import {
   GitFork,
   LayoutDashboard,
   Settings,
+  Sparkles,
 } from 'lucide-react';
 import { siGithub } from 'simple-icons/icons';
 import type { RegisteredProject } from '@/lib/project-registry';
@@ -23,6 +24,12 @@ const navigation = [
     label: 'Product context',
     icon: FileText,
     path: '/context',
+    available: true,
+  },
+  {
+    label: "What's next",
+    icon: Sparkles,
+    path: '/whats-next',
     available: true,
   },
   {

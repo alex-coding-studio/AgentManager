@@ -36,10 +36,12 @@ export async function POST(
         { status: 400 },
       );
     }
+    const idea = formData.get('idea');
     const result = await createStartNode(project, {
       title,
       contextRefs,
       files,
+      idea: typeof idea === 'string' ? idea : undefined,
     });
     return Response.json(result, { status: 201 });
   } catch (error) {

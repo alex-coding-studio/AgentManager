@@ -40,6 +40,7 @@ export type TaskGraphNode = {
     color?: string;
   };
   provenance?: {
+    feature?: 'task-decomposition' | 'whats-next';
     runId: string;
     candidateId: string;
     revision: number;
@@ -84,6 +85,7 @@ export async function createStartNode(
     title: string;
     contextRefs: string[];
     files: File[];
+    idea?: string;
   },
 ) {
   const title = input.title.trim();
@@ -91,8 +93,14 @@ export async function createStartNode(
   if (title.length > 160) {
     throw new Error('Start-node title must be 160 characters or fewer.');
   }
-  if (input.contextRefs.length + input.files.length === 0) {
-    throw new Error('Select or upload at least one source document.');
+  const idea = input.idea?.trim() ?? '';
+  if (idea.length > 4_000) {
+    throw new Error('The starting idea must be 4,000 characters or fewer.');
+  }
+  if (input.contextRefs.length + input.files.length === 0 && !idea) {
+    throw new Error(
+      'Write a starting idea, or select or upload at least one source document.',
+    );
   }
   if (input.contextRefs.length > 50) {
     throw new Error('Select no more than 50 Context Library documents.');
@@ -121,9 +129,22 @@ export async function createStartNode(
   const uploadedResources: TaskGraphNode['resources'] = [];
 
   try {
+    if (idea) {
+      const resourcesPath = path.join(temporaryNodePath, 'resources');
+      await mkdir(resourcesPath, { recursive: true });
+      await writeFile(
+        path.join(resourcesPath, 'idea.md'),
+        `# ${title}\n\n${idea}\n`,
+        { flag: 'wx' },
+      );
+      uploadedResources.push({
+        kind: 'idea',
+        path: `task-graph/nodes/${id}/resources/idea.md`,
+      });
+    }
     if (uploads.length > 0) {
       const resourcesPath = path.join(temporaryNodePath, 'resources');
-      await mkdir(resourcesPath);
+      await mkdir(resourcesPath, { recursive: true });
       const usedNames = new Set<string>();
       for (const upload of uploads) {
         const fileName = chooseUniqueName(upload.baseName, usedNames);
@@ -334,6 +355,9 @@ export async function readTaskGraphMarkdownResource(
       resourcePath,
     ) &&
     !/^task-decomposition\/runs\/RUN-[0-9a-f-]{36}\/candidates\/CANDIDATE-\d{4,}\/output\.md$/i.test(
+      resourcePath,
+    ) &&
+    !/^whats-next\/runs\/RUN-[0-9a-f-]{36}\/candidates\/CANDIDATE-\d{4,}\/output\.md$/i.test(
       resourcePath,
     ) &&
     !/^task-graph\/nodes\/NODE-\d{4,}\/output\.md$/i.test(resourcePath)
