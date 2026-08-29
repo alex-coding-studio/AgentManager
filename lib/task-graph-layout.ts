@@ -1,6 +1,7 @@
 import dagre from '@dagrejs/dagre';
 import type { HarnessCandidate } from '@/lib/task-decomposition-harness';
 import type { TaskGraphNode } from '@/lib/task-graph';
+import type { WhatsNextCandidate } from '@/lib/whats-next-harness';
 
 export type TaskGraphPreview = {
   id: string;
@@ -17,8 +18,10 @@ export type TaskGraphPreview = {
   agentLabel?: string;
   derivedFrom?: string[];
   dependsOn?: string[];
-  candidate?: HarnessCandidate;
+  candidate?: HarnessCandidate | WhatsNextCandidate;
   outputPath?: string;
+  previousOutputPath?: string;
+  previousMarkdown?: string;
   runId?: string;
   revisionOf?: string;
 };

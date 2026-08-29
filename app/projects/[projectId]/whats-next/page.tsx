@@ -8,15 +8,19 @@ import {
   listProjects,
 } from '@/lib/project-registry';
 import { listTaskGraphNodes } from '@/lib/task-graph';
+import { createWhatsNextReviewPreview } from '@/lib/whats-next-preview';
 
 export const dynamic = 'force-dynamic';
 
 export default async function WhatsNextPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ projectId: string }>;
+  searchParams: Promise<{ preview?: string }>;
 }) {
   const { projectId } = await params;
+  const { preview } = await searchParams;
   const project = await getProject(projectId);
   if (!project) notFound();
   const [projects, folders, nodes] = await Promise.all([
@@ -24,6 +28,10 @@ export default async function WhatsNextPage({
     readContextBrowser(project),
     listTaskGraphNodes(project, 'whats-next'),
   ]);
+  const reviewPreview =
+    process.env.NODE_ENV === 'development' && preview === 'review-flow'
+      ? createWhatsNextReviewPreview()
+      : null;
 
   return (
     <ProjectShell
@@ -34,7 +42,9 @@ export default async function WhatsNextPage({
       <WhatsNextWorkspace
         projectId={project.id}
         folders={folders}
-        initialNodes={nodes}
+        initialNodes={reviewPreview?.nodes ?? nodes}
+        initialRuns={reviewPreview?.runs ?? []}
+        developmentPreview={reviewPreview !== null}
       />
     </ProjectShell>
   );

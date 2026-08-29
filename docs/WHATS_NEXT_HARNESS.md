@@ -7,9 +7,11 @@ AgentManager's built-in What's Next Harness. It separates settled behavior from
 open design questions so the executable Harness is not written ahead of the
 product model.
 
-The current prompt in `lib/whats-next-harness.ts` remains a placeholder. This
-document is not yet the executable prompt, a final output schema, or an
-implementation plan.
+Harness revision 2 in `lib/whats-next-harness.ts` is the first executable V1
+baseline. It implements the settled Reflection, Candidate Markdown, bounded
+Context, dependency, and one-to-one Refine contract. Real-project dogfooding
+must still determine whether the prompt and output-density limits are good
+enough.
 
 ## Purpose
 
@@ -220,13 +222,13 @@ Refine means that the current direction is useful but its meaning, boundary, or
 expression needs improvement.
 
 - One Candidate enters and the same Candidate returns at its next revision.
-- The Agent returns a patch against that Candidate's Markdown rather than a new
-  Candidate set.
+- The Agent returns the complete next Markdown revision for that Candidate
+  rather than a new Candidate set.
 - One or several Markdown sections may change while untouched sections remain
   unchanged.
 - No sibling, child, dependency, or Formal Node may be created.
-- AgentManager validates the base revision and hash, applies the patch, and
-  presents the complete diff before the new revision is accepted.
+- AgentManager validates the base revision and feedback anchors, persists the
+  next revision, and derives the complete line diff before acceptance.
 - The response should summarize what changed because of the user's feedback.
 
 If feedback suggests a materially different idea, the Agent may mention that
@@ -391,19 +393,34 @@ The Harness must not:
 - preserve an entire discarded Session merely because its decisions once
   appeared in conversation.
 
+## Current V1 implementation
+
+The first executable slice now provides:
+
+- a required Markdown Reflection with structured continuation advice;
+- canonical Candidate `output.md` content inside a validated transport
+  envelope;
+- compact JSON identity, graph relationship, provenance, and validation data;
+- operation-aware cardinality so Explore returns several directions while
+  Refine returns exactly one unchanged Candidate identity;
+- sibling Candidate dependency validation and dependency-ordered promotion;
+- persistent provider Session reuse with delta continuation packets;
+- per-round Reflection, Candidate artifacts, request snapshots, and a durable
+  Session checkpoint;
+- line- and block-anchored Markdown feedback with stale excerpt detection;
+- Markdown-first Candidate review, revision comparison, and a development-only
+  non-mutating review fixture; and
+- responsive navigation and fixed submission controls for narrow windows.
+
 ## Remaining implementation and evaluation decisions
 
-The product boundary is sufficiently settled for V1 implementation. The next
-slice should choose and test:
+The product boundary is sufficiently settled. The next slice should test and
+complete:
 
-1. the exact JSON sidecar and transport envelope that reference Reflection,
-   Candidate Markdown, section patches, hashes, and Context inspection records;
-2. the initial UI for viewing the combined Response, attaching inline feedback,
-   reviewing diffs, and choosing Refine, Restart exploration, or Explore from
-   this Node;
-3. confirmation and system-Trash cleanup behavior for accepted, restarted, and
-   abandoned Sessions; and
-4. real-project evaluation cases that test pain-point fit, useful Reflection,
+1. explicit Restart exploration and its system-Trash cleanup behavior;
+2. recovery and rollover from a checkpoint when provider Session resume is
+   unavailable or no longer trustworthy; and
+3. real-project evaluation cases that test pain-point fit, useful Reflection,
    strict one-to-one Refine, Context expansion discipline, and recovery from a
    fresh provider Session.
 

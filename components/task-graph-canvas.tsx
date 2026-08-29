@@ -169,7 +169,6 @@ export function TaskGraphCanvas({
       fitViewOptions={{ padding: 0.35, minZoom: 0.55, maxZoom: 1 }}
       nodesConnectable={false}
       deleteKeyCode={null}
-      proOptions={{ hideAttribution: true }}
       className="bg-background"
       aria-label="Graph canvas"
     >
@@ -268,7 +267,7 @@ function TaskCard({ id, data, selected }: NodeProps<TaskFlowNode>) {
           {running ? (
             <button
               type="button"
-              className="nodrag nopan grid size-6 place-items-center rounded-full text-muted-foreground transition hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
+              className="nodrag nopan grid size-8 place-items-center rounded-full text-muted-foreground transition hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
               aria-label="Cancel Agent Run"
               title="Cancel Agent Run"
               onClick={(event) => {
@@ -276,13 +275,13 @@ function TaskCard({ id, data, selected }: NodeProps<TaskFlowNode>) {
                 data.onCancelRun(id);
               }}
             >
-              <X className="size-3.5" />
+              <X className="size-4" />
             </button>
           ) : null}
           {!preview || data.transientKind === 'candidate' ? (
             <button
               type="button"
-              className="nodrag nopan grid size-6 place-items-center rounded-full text-muted-foreground transition hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
+              className="nodrag nopan grid size-8 place-items-center rounded-full text-muted-foreground transition hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
               aria-label={`Open details for ${data.title}`}
               title="Open details"
               onClick={(event) => {
@@ -290,12 +289,14 @@ function TaskCard({ id, data, selected }: NodeProps<TaskFlowNode>) {
                 data.onInspect(id);
               }}
             >
-              <Info className="size-3.5" />
+              <Info className="size-4" />
             </button>
           ) : null}
         </span>
       </div>
-      <h2 className="mt-4 text-sm font-semibold leading-5">{data.title}</h2>
+      <h2 className="mt-4 line-clamp-3 text-sm font-semibold leading-5">
+        {data.title}
+      </h2>
       {preview ? (
         <div className="mt-2">
           <p className="line-clamp-2 text-[11px] leading-5 text-muted-foreground">
@@ -450,7 +451,7 @@ function buildFlowGraph(
       target: edge.target,
       sourceHandle: 'lineage-source',
       targetHandle: 'lineage-target',
-      type: 'bezier',
+      type: 'default',
       markerEnd: {
         type: MarkerType.ArrowClosed,
         width: 14,

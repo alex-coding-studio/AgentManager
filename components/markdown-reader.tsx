@@ -1,11 +1,18 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import {
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import {
   BookOpen,
   FileText,
   FolderOpen,
   Maximize2,
+  MessageSquarePlus,
   Minimize2,
   Trash2,
   X,
@@ -24,6 +31,8 @@ export function MarkdownReader({
   onClose,
   showFocusButton = true,
   deleting = false,
+  onAddFeedback,
+  compact = false,
   className,
 }: {
   title: string;
@@ -34,11 +43,17 @@ export function MarkdownReader({
   onClose?: () => void;
   showFocusButton?: boolean;
   deleting?: boolean;
+  onAddFeedback?: (selection: MarkdownFeedbackSelection) => void;
+  compact?: boolean;
   className?: string;
 }) {
   const [focusMode, setFocusMode] = useState(false);
   const [revealing, setRevealing] = useState(false);
   const [revealError, setRevealError] = useState('');
+  const [selection, setSelection] = useState<MarkdownFeedbackSelection | null>(
+    null,
+  );
+  const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!focusMode) return;
@@ -69,17 +84,63 @@ export function MarkdownReader({
     }
   }
 
+  const captureSelection = useEffectEvent(() => {
+    if (!onAddFeedback || !contentRef.current) return;
+    const selected = window.getSelection();
+    if (!selected || selected.isCollapsed || selected.rangeCount === 0) {
+      setSelection(null);
+      return;
+    }
+    const range = selected.getRangeAt(0);
+    if (!contentRef.current.contains(range.commonAncestorContainer)) {
+      setSelection(null);
+      return;
+    }
+    const start = closestPositionedElement(range.startContainer);
+    const end = closestPositionedElement(range.endContainer);
+    const excerpt = selected.toString().trim();
+    const startLine = Number(start?.dataset.lineStart);
+    const endLine = Number(end?.dataset.lineEnd);
+    if (!excerpt || !Number.isFinite(startLine) || !Number.isFinite(endLine)) {
+      setSelection(null);
+      return;
+    }
+    setSelection({
+      startLine: Math.min(startLine, endLine),
+      endLine: Math.max(startLine, endLine),
+      excerpt: excerpt.slice(0, 1_200),
+    });
+  });
+
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!content || !onAddFeedback) return;
+    content.addEventListener('mouseup', captureSelection);
+    document.addEventListener('selectionchange', captureSelection);
+    return () => {
+      content.removeEventListener('mouseup', captureSelection);
+      document.removeEventListener('selectionchange', captureSelection);
+    };
+  }, [onAddFeedback]);
+
   const reader = (
     <article
       className={cn(
         'min-w-0 overflow-hidden border border-border bg-card shadow-[0_1px_0_rgb(15_23_42/5%),0_14px_40px_rgb(15_23_42/5%)]',
         focusMode
           ? 'flex h-[min(88vh,960px)] w-full flex-col rounded-2xl sm:w-[80vw] sm:max-w-6xl'
-          : 'min-h-[560px] rounded-2xl',
+          : compact
+            ? 'rounded-xl'
+            : 'min-h-[560px] rounded-2xl',
         className,
       )}
     >
-      <header className="flex shrink-0 items-center gap-3 border-b border-border px-6 py-4">
+      <header
+        className={cn(
+          'flex shrink-0 items-center gap-3 border-b border-border',
+          compact ? 'px-4 py-3' : 'px-6 py-4',
+        )}
+      >
         <div className="grid size-9 place-items-center rounded-xl bg-secondary">
           <BookOpen className="size-4" />
         </div>
@@ -91,6 +152,24 @@ export function MarkdownReader({
           </p>
         </div>
         <div className="ml-auto flex items-center gap-1">
+          {onAddFeedback ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label="Add feedback from selected text"
+              title={selection ? 'Add feedback' : 'Select text to add feedback'}
+              disabled={!selection}
+              onClick={() => {
+                if (!selection) return;
+                onAddFeedback(selection);
+                window.getSelection()?.removeAllRanges();
+                setSelection(null);
+              }}
+            >
+              <MessageSquarePlus />
+            </Button>
+          ) : null}
           {onReveal ? (
             <Button
               type="button"
@@ -160,8 +239,10 @@ export function MarkdownReader({
       ) : null}
 
       <div
+        ref={contentRef}
         className={cn(
-          'min-w-0 px-6 py-7 sm:px-9 sm:py-9',
+          'relative min-w-0 px-6 py-7 sm:px-9 sm:py-9',
+          compact && 'px-4 py-4 sm:px-4 sm:py-4',
           focusMode && 'mx-auto w-full max-w-4xl flex-1 overflow-y-auto',
         )}
       >
@@ -169,21 +250,43 @@ export function MarkdownReader({
           remarkPlugins={[remarkGfm]}
           skipHtml
           components={{
-            h1: ({ children }) => (
-              <h1 className="mb-5 text-3xl font-semibold tracking-tight">
+            h1: ({ children, node }) => (
+              <h1
+                {...sourcePosition(node)}
+                className="mb-5 text-3xl font-semibold tracking-tight"
+              >
                 {children}
               </h1>
             ),
-            h2: ({ children }) => (
-              <h2 className="mt-8 mb-3 text-lg font-semibold">{children}</h2>
-            ),
-            h3: ({ children }) => (
-              <h3 className="mt-6 mb-2 font-semibold">{children}</h3>
-            ),
-            p: ({ children }) => (
-              <p className="my-3 text-sm leading-7 text-foreground/78">
+            h2: ({ children, node }) => (
+              <h2
+                {...sourcePosition(node)}
+                className="mt-8 mb-3 text-lg font-semibold"
+              >
                 {children}
-              </p>
+              </h2>
+            ),
+            h3: ({ children, node }) => (
+              <h3 {...sourcePosition(node)} className="mt-6 mb-2 font-semibold">
+                {children}
+              </h3>
+            ),
+            p: ({ children, node }) => (
+              <div className="group/feedback relative">
+                <p
+                  {...sourcePosition(node)}
+                  className="my-3 pr-8 text-sm leading-7 text-foreground/78"
+                >
+                  {children}
+                </p>
+                {onAddFeedback ? (
+                  <FeedbackButton
+                    node={node}
+                    excerpt={childrenText(children)}
+                    onAddFeedback={onAddFeedback}
+                  />
+                ) : null}
+              </div>
             ),
             ul: ({ children }) => (
               <ul className="my-3 list-disc space-y-2 pl-5 text-sm leading-6 text-foreground/78">
@@ -205,8 +308,26 @@ export function MarkdownReader({
                 {children}
               </a>
             ),
-            blockquote: ({ children }) => (
-              <blockquote className="my-5 border-l-2 border-foreground/25 pl-4 text-muted-foreground">
+            li: ({ children, node }) => (
+              <li
+                {...sourcePosition(node)}
+                className="group/feedback relative pr-8"
+              >
+                {children}
+                {onAddFeedback ? (
+                  <FeedbackButton
+                    node={node}
+                    excerpt={childrenText(children)}
+                    onAddFeedback={onAddFeedback}
+                  />
+                ) : null}
+              </li>
+            ),
+            blockquote: ({ children, node }) => (
+              <blockquote
+                {...sourcePosition(node)}
+                className="my-5 border-l-2 border-foreground/25 pl-4 text-muted-foreground"
+              >
                 {children}
               </blockquote>
             ),
@@ -239,6 +360,22 @@ export function MarkdownReader({
         >
           {markdown}
         </ReactMarkdown>
+        {selection ? (
+          <div className="sticky bottom-3 mt-5 flex justify-end">
+            <Button
+              type="button"
+              size="sm"
+              className="shadow-lg"
+              onClick={() => {
+                onAddFeedback?.(selection);
+                window.getSelection()?.removeAllRanges();
+                setSelection(null);
+              }}
+            >
+              Add feedback · lines {selection.startLine}–{selection.endLine}
+            </Button>
+          </div>
+        ) : null}
       </div>
     </article>
   );
@@ -261,4 +398,84 @@ export function MarkdownReader({
       <div className="relative z-10">{reader}</div>
     </dialog>
   );
+}
+
+export type MarkdownFeedbackSelection = {
+  startLine: number;
+  endLine: number;
+  excerpt: string;
+};
+
+function sourcePosition(
+  node:
+    | {
+        position?: {
+          start: { line: number };
+          end: { line: number };
+        };
+      }
+    | undefined,
+) {
+  return {
+    'data-line-start': node?.position?.start.line,
+    'data-line-end': node?.position?.end.line,
+  };
+}
+
+function closestPositionedElement(node: Node) {
+  const element =
+    node.nodeType === Node.ELEMENT_NODE
+      ? (node as HTMLElement)
+      : node.parentElement;
+  return element?.closest<HTMLElement>('[data-line-start]') ?? null;
+}
+
+function FeedbackButton({
+  node,
+  excerpt,
+  onAddFeedback,
+}: {
+  node:
+    | {
+        position?: {
+          start: { line: number };
+          end: { line: number };
+        };
+      }
+    | undefined;
+  excerpt: string;
+  onAddFeedback: (selection: MarkdownFeedbackSelection) => void;
+}) {
+  const startLine = node?.position?.start.line;
+  const endLine = node?.position?.end.line;
+  if (!startLine || !endLine || !excerpt.trim()) return null;
+  return (
+    <button
+      type="button"
+      className="absolute top-1 right-0 grid size-7 place-items-center rounded-full text-muted-foreground opacity-0 transition hover:bg-secondary hover:text-foreground group-hover/feedback:opacity-100 focus:opacity-100"
+      aria-label={`Add feedback for lines ${startLine} to ${endLine}`}
+      title="Add feedback"
+      onClick={() =>
+        onAddFeedback({
+          startLine,
+          endLine,
+          excerpt: excerpt.trim().slice(0, 1_200),
+        })
+      }
+    >
+      <MessageSquarePlus className="size-3.5" />
+    </button>
+  );
+}
+
+function childrenText(value: ReactNode): string {
+  if (typeof value === 'string' || typeof value === 'number') {
+    return String(value);
+  }
+  if (Array.isArray(value)) return value.map(childrenText).join('');
+  if (value && typeof value === 'object' && 'props' in value) {
+    const element = value as { props?: { children?: ReactNode } };
+    return childrenText(element.props?.children);
+  }
+  return '';
 }

@@ -392,6 +392,12 @@ export async function readTaskGraphMarkdownResource(
     !/^whats-next\/runs\/RUN-[0-9a-f-]{36}\/candidates\/CANDIDATE-\d{4,}\/output\.md$/i.test(
       resourcePath,
     ) &&
+    !/^whats-next\/runs\/RUN-[0-9a-f-]{36}\/reflection\.md$/i.test(
+      resourcePath,
+    ) &&
+    !/^whats-next\/runs\/RUN-[0-9a-f-]{36}\/response\.md$/i.test(
+      resourcePath,
+    ) &&
     !/^(?:task-graph|whats-next)\/nodes\/NODE-\d{4,}\/output\.md$/i.test(
       resourcePath,
     )

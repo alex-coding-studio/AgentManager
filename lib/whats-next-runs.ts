@@ -23,10 +23,15 @@ import {
   buildWhatsNextContinuationPrompt,
   buildWhatsNextPrompt,
 } from './whats-next-prompt.ts';
+import { renderWhatsNextResponseMarkdown } from './whats-next-response.ts';
 import {
   readWhatsNextAttachment,
   readWhatsNextContext,
 } from './whats-next-context.ts';
+import {
+  candidateDependencyBlockers,
+  resolveCandidateDependencies,
+} from './task-decomposition-dependencies.ts';
 import {
   primarySourceResourcePaths,
   relatedContextNodeIds,
@@ -72,7 +77,7 @@ export type WhatsNextRunRecord = {
   agentSessionId: string | null;
   agentSessionMode?: 'persistent';
   sourceNodeIds: string[];
-  operation: 'explore' | 'revise-candidate';
+  operation: 'explore' | 'refine-candidate';
   parentRunId?: string;
   revisionOf?: string;
   status: WhatsNextRunStatus;
@@ -85,6 +90,7 @@ export type WhatsNextRunRecord = {
     instruction: string;
     projectInstructions: string;
     resourcePaths: string[];
+    feedback: WhatsNextFeedbackAnchor[];
     requestArtifact: 'request.json';
   };
   inputFingerprint: string;
@@ -96,12 +102,24 @@ export type WhatsNextRunRecord = {
   error: string | null;
 };
 
+export type WhatsNextFeedbackAnchor = {
+  feedbackId: string;
+  path: string;
+  baseRevision: number;
+  startLine: number;
+  endLine: number;
+  excerpt: string;
+  excerptHash: string;
+  instruction: string;
+};
+
 type RunRequest = {
   sourceNodeIds: string[];
   agent: LocalAgentKind;
   instruction: string;
   contextRefs: string[];
   files: File[];
+  feedback?: WhatsNextFeedbackAnchor[];
   revisionRunId?: string;
   revisionCandidateId?: string;
 };
@@ -122,7 +140,10 @@ export async function startWhatsNextRun(
     return node;
   });
   const revisionTarget = await resolveRevisionTarget(project, input);
-  const operation = revisionTarget ? 'revise-candidate' : 'explore';
+  if (revisionTarget && input.feedback?.length) {
+    await validateInlineFeedback(project, revisionTarget, input.feedback);
+  }
+  const operation = revisionTarget ? 'refine-candidate' : 'explore';
   const transport = RUN_TRANSPORTS[input.agent];
   const coordinatorCandidate = revisionTarget
     ? revisionTarget.run
@@ -133,6 +154,13 @@ export async function startWhatsNextRun(
       ? coordinatorCandidate
       : null;
   const continuesExistingSession = Boolean(coordinatorRun?.agentSessionId);
+  const effectiveInstruction =
+    input.instruction.trim() ||
+    (revisionTarget
+      ? 'Refine the current Candidate using the attached inline feedback.'
+      : continuesExistingSession
+        ? 'Continue this line of inquiry from the current accepted understanding.'
+        : 'Explore the most useful next directions from the selected origin.');
   const reservedCandidateIds = await collectReservedCandidateIds(project);
   if (
     [...activeRuns.values()].some(
@@ -144,7 +172,6 @@ export async function startWhatsNextRun(
   ) {
     throw new Error("A selected Node already has an active What's next Run.");
   }
-
   const runId = `RUN-${randomUUID()}`;
   const sessionId = coordinatorRun?.sessionId ?? `SESSION-${randomUUID()}`;
   const requestId = `REQUEST-${randomUUID()}`;
@@ -165,6 +192,7 @@ export async function startWhatsNextRun(
     input.contextRefs,
     uploadedResources,
     featureContext.attachments.map((attachment) => attachment.fileName),
+    continuesExistingSession,
     revisionTarget
       ? {
           outputPath: `whats-next/runs/${revisionTarget.run.runId}/candidates/${revisionTarget.candidate.candidateId}/output.md`,
@@ -186,7 +214,7 @@ export async function startWhatsNextRun(
   const packet = {
     request: requestIdentity,
     operation,
-    instruction: input.instruction.trim(),
+    instruction: effectiveInstruction,
     projectInstructions: continuesExistingSession
       ? undefined
       : featureContext.instructions,
@@ -199,6 +227,7 @@ export async function startWhatsNextRun(
       related: contextWorkspace.manifest.related,
     },
     revisionTarget: revisionTarget?.candidate ?? null,
+    feedback: input.feedback ?? [],
     reservedCandidateIds: reservedCandidateIds.filter(
       (candidateId) => candidateId !== revisionTarget?.candidate.candidateId,
     ),
@@ -243,9 +272,10 @@ export async function startWhatsNextRun(
       revision: WHATS_NEXT_HARNESS_REVISION,
     },
     input: {
-      instruction: input.instruction.trim(),
+      instruction: effectiveInstruction,
       projectInstructions: featureContext.instructions,
       resourcePaths: resources.map((resource) => resource.logicalPath),
+      feedback: input.feedback ?? [],
       requestArtifact: 'request.json',
     },
     inputFingerprint: requestIdentity.inputFingerprint,
@@ -271,7 +301,7 @@ export async function startWhatsNextRun(
     nodes,
     resources,
     revisionTarget?.candidate,
-    operation === 'revise-candidate' ? [] : reservedCandidateIds,
+    operation === 'refine-candidate' ? [] : reservedCandidateIds,
   );
   return record;
 }
@@ -281,12 +311,42 @@ export async function readWhatsNextRun(
   runId: string,
 ) {
   validateRunId(runId);
-  const record = JSON.parse(
+  const stored = JSON.parse(
     await readFile(
       path.join(whatsNextRunPath(project, runId), 'run.json'),
       'utf8',
     ),
-  ) as WhatsNextRunRecord;
+  ) as Omit<WhatsNextRunRecord, 'operation'> & { operation?: string };
+  if (stored.operation === 'revise-candidate') {
+    stored.operation = 'refine-candidate';
+  }
+  stored.operation ??= stored.revisionOf ? 'refine-candidate' : 'explore';
+  const record = stored as WhatsNextRunRecord;
+  if (record.result && !record.result.reflection) {
+    record.result.reflection = {
+      markdown: record.result.exploration.notes.length
+        ? `# Reflection\n\n${record.result.exploration.notes.join('\n\n')}`
+        : '# Reflection\n\nThis legacy Run did not record a Reflection.',
+      continuationAdvice: {
+        action: 'continue',
+        reason: 'This legacy Run predates explicit continuation advice.',
+      },
+    };
+  }
+  if (record.result?.outcome === 'proposal') {
+    for (const candidate of record.result.candidates) {
+      if (candidate.outputMarkdown) continue;
+      candidate.outputMarkdown = await readFile(
+        path.join(
+          whatsNextRunPath(project, record.runId),
+          'candidates',
+          candidate.candidateId,
+          'output.md',
+        ),
+        'utf8',
+      ).catch(() => renderLegacyCandidateMarkdown(candidate));
+    }
+  }
   await ensureCandidateArtifacts(project, record);
   return record;
 }
@@ -347,26 +407,10 @@ export async function acceptWhatsNextCandidate(
   );
   if (accepted) return { node: accepted, nodes: existingNodes };
 
-  const acceptedCandidateNodeIds = new Map(
-    existingNodes.flatMap((node) =>
-      node.provenance?.candidateId
-        ? [[node.provenance.candidateId, node.id]]
-        : [],
-    ),
-  );
-  const unresolved = candidate.dependsOn.filter(
-    (dependencyId) =>
-      dependencyId.startsWith('CANDIDATE-') &&
-      !acceptedCandidateNodeIds.has(dependencyId),
-  );
-  if (unresolved.length > 0) {
-    throw new Error(
-      `Accept ${unresolved.join(', ')} first: this direction names it as a prerequisite.`,
-    );
-  }
-  const resolvedDependencies = candidate.dependsOn.map(
-    (dependencyId) =>
-      acceptedCandidateNodeIds.get(dependencyId) ?? dependencyId,
+  const resolvedDependencies = resolveCandidateDependencies(
+    candidate.candidateId,
+    candidate.dependsOn,
+    existingNodes,
   );
 
   const nextNumber =
@@ -467,13 +511,10 @@ export async function discardWhatsNextCandidate(
   if (accepted) {
     throw new Error('An accepted Candidate must be managed as a formal Node.');
   }
-  const blockers = (await collectLatestUnacceptedCandidates(project))
-    .filter(
-      (candidate) =>
-        candidate.candidateId !== candidateId &&
-        candidate.dependsOn.includes(candidateId),
-    )
-    .map((candidate) => candidate.candidateId);
+  const blockers = candidateDependencyBlockers(
+    candidateId,
+    await collectLatestUnacceptedCandidates(project),
+  );
   if (blockers.length > 0) {
     throw new Error(
       `${candidateId} is still required by ${blockers.join(', ')}. Discard those directions first.`,
@@ -521,6 +562,7 @@ async function discardCandidateFromRun(
     run.result.candidates.splice(candidateIndex, 1);
     run.updatedAt = new Date().toISOString();
     await writeRunRecord(project, run);
+    await ensureCandidateArtifacts(project, run);
   } catch (error) {
     await rename(stagedPath, candidatePath);
     throw error;
@@ -564,6 +606,9 @@ async function finishWhatsNextRun(
         : undefined,
       reservedCandidateIds,
       knownCandidates: await collectLatestUnacceptedCandidates(project),
+      operation: record.operation,
+      revisionCandidateId: revisionTarget?.candidateId,
+      revisionTarget,
     });
     if (
       revisionTarget &&
@@ -572,15 +617,16 @@ async function finishWhatsNextRun(
         result.candidates[0]?.candidateId !== revisionTarget.candidateId)
     ) {
       throw new Error(
-        'A revision must return exactly the requested Candidate identifier.',
+        'Refine must return exactly the requested Candidate identifier.',
       );
     }
     const endedAt = new Date().toISOString();
     record.status = result.outcome;
     record.result = result;
-    await ensureCandidateArtifacts(project, record);
     record.updatedAt = endedAt;
     record.endedAt = endedAt;
+    await ensureCandidateArtifacts(project, record);
+    await writeWhatsNextCheckpoint(project, record);
     await writeRunRecord(project, record);
   } catch (error) {
     if (isRunCanceled(record)) return;
@@ -603,6 +649,7 @@ async function collectContextWorkspaceInputs(
   contextRefs: string[],
   uploads: ContextWorkspaceInput[],
   featureAttachmentNames: string[],
+  continuesExistingSession: boolean,
   revision?: { outputPath: string; resourcePaths: string[] },
 ) {
   const relatedNodeIds = new Set(
@@ -625,9 +672,10 @@ async function collectContextWorkspaceInputs(
       );
       return sourceNode.resources.map((resource) => ({
         path: resource.path,
-        role: primaryPaths.has(resource.path)
-          ? ('primary' as const)
-          : ('related' as const),
+        role:
+          !continuesExistingSession && primaryPaths.has(resource.path)
+            ? ('primary' as const)
+            : ('related' as const),
         kind: resource.kind,
         nodeId: sourceOutputPaths.has(resource.path)
           ? sourceNode.id
@@ -775,7 +823,13 @@ function validateRunRequest(input: RunRequest) {
     throw new Error('An origin Node is invalid.');
   }
   const instruction = input.instruction.trim();
-  if (!instruction) throw new Error('An Instruction is required.');
+  if (
+    input.revisionCandidateId &&
+    !instruction &&
+    (input.feedback?.length ?? 0) === 0
+  ) {
+    throw new Error('Refine requires feedback or an Instruction.');
+  }
   if (instruction.length > 1_000) {
     throw new Error('The Instruction must be 1,000 characters or fewer.');
   }
@@ -784,6 +838,20 @@ function validateRunRequest(input: RunRequest) {
   }
   if (input.files.length > 20) {
     throw new Error('Upload no more than 20 Markdown Resources.');
+  }
+  for (const feedback of input.feedback ?? []) {
+    if (
+      !feedback.feedbackId ||
+      !feedback.path ||
+      feedback.baseRevision < 1 ||
+      feedback.startLine < 1 ||
+      feedback.endLine < feedback.startLine ||
+      !feedback.excerpt.trim() ||
+      !feedback.excerptHash ||
+      !feedback.instruction.trim()
+    ) {
+      throw new Error('Inline feedback is invalid.');
+    }
   }
   if (
     (input.revisionRunId && !input.revisionCandidateId) ||
@@ -809,6 +877,48 @@ async function resolveRevisionTarget(
   return { run, candidate };
 }
 
+async function validateInlineFeedback(
+  project: RegisteredProject,
+  target: { run: WhatsNextRunRecord; candidate: WhatsNextCandidate },
+  feedback: WhatsNextFeedbackAnchor[],
+) {
+  const expectedPath = `whats-next/runs/${target.run.runId}/candidates/${target.candidate.candidateId}/output.md`;
+  const markdown = await readFile(
+    path.join(
+      whatsNextRunPath(project, target.run.runId),
+      'candidates',
+      target.candidate.candidateId,
+      'output.md',
+    ),
+    'utf8',
+  );
+  const lines = markdown.split('\n');
+  for (const item of feedback) {
+    const selfHash = createHash('sha256').update(item.excerpt).digest('hex');
+    const currentExcerpt = lines
+      .slice(item.startLine - 1, item.endLine)
+      .join('\n');
+    if (
+      item.path !== expectedPath ||
+      item.baseRevision !== target.candidate.revision ||
+      selfHash !== item.excerptHash ||
+      !normalizeExcerpt(currentExcerpt).includes(normalizeExcerpt(item.excerpt))
+    ) {
+      throw new Error(
+        'Inline feedback is stale. Reopen the current Candidate and select the text again.',
+      );
+    }
+  }
+}
+
+function normalizeExcerpt(value: string) {
+  return value
+    .replace(/^\s*[-*#>]\s*/gm, '')
+    .replace(/[`*_]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 async function findLatestCoordinatorRun(
   project: RegisteredProject,
   sourceNodeIds: string[],
@@ -820,6 +930,8 @@ async function findLatestCoordinatorRun(
         (run) =>
           run.agentSessionId &&
           run.agentSessionMode === 'persistent' &&
+          run.harness.revision === WHATS_NEXT_HARNESS_REVISION &&
+          ['proposal', 'clarification', 'no-change'].includes(run.status) &&
           [...run.sourceNodeIds].sort().join(',') === key,
       )
       .sort((left, right) =>
@@ -927,7 +1039,31 @@ async function ensureCandidateArtifacts(
   project: RegisteredProject,
   record: WhatsNextRunRecord,
 ) {
-  if (record.result?.outcome !== 'proposal') return;
+  if (!record.result) return;
+  const runPath = whatsNextRunPath(project, record.runId);
+  const reflectionPath = path.join(runPath, 'reflection.md');
+  if (
+    !(await access(reflectionPath)
+      .then(() => true)
+      .catch(() => false))
+  ) {
+    await writeFile(
+      reflectionPath,
+      `${record.result.reflection.markdown.trim()}\n`,
+      {
+        flag: 'wx',
+      },
+    );
+  }
+  const responsePath = path.join(runPath, 'response.md');
+  const responseMarkdown = renderWhatsNextResponseMarkdown(record.result);
+  const existingResponse = await readFile(responsePath, 'utf8').catch(() => '');
+  if (existingResponse !== responseMarkdown) {
+    const temporaryResponsePath = `${responsePath}.${randomUUID()}.tmp`;
+    await writeFile(temporaryResponsePath, responseMarkdown, { flag: 'wx' });
+    await rename(temporaryResponsePath, responsePath);
+  }
+  if (record.result.outcome !== 'proposal') return;
   await Promise.all(
     record.result.candidates.map(async (candidate) => {
       const candidatePath = path.join(
@@ -943,54 +1079,90 @@ async function ensureCandidateArtifacts(
       )
         return;
       await mkdir(candidatePath, { recursive: true });
-      await writeFile(outputPath, renderCandidateMarkdown(candidate), {
-        flag: 'wx',
-      });
+      await writeFile(
+        outputPath,
+        `${(
+          candidate.outputMarkdown ?? renderLegacyCandidateMarkdown(candidate)
+        ).trim()}\n`,
+        {
+          flag: 'wx',
+        },
+      );
     }),
   );
 }
 
-function renderCandidateMarkdown(candidate: WhatsNextCandidate) {
-  const relationships = [
-    `- Grew from: ${candidate.derivedFrom.join(', ')}`,
-    `- Depends on: ${candidate.dependsOn.join(', ') || 'None'}`,
-  ];
-  const resources = candidate.resources.length
-    ? candidate.resources.map(
-        (resource) => `- \`${resource.path}\` (${resource.kind})`,
-      )
-    : ['- None'];
-  const assumptions = candidate.assumptions.length
-    ? candidate.assumptions.map((assumption) => `- ${assumption}`)
-    : ['- None'];
-  const metadata = Object.keys(candidate.metadata).length
-    ? `\n\`\`\`json\n${JSON.stringify(candidate.metadata, null, 2)}\n\`\`\``
-    : '\nNone.';
+async function writeWhatsNextCheckpoint(
+  project: RegisteredProject,
+  record: WhatsNextRunRecord,
+) {
+  if (!record.result) return;
+  if (!/^SESSION-[0-9a-f-]{36}$/i.test(record.sessionId)) {
+    throw new Error("The What's Next Session identifier is invalid.");
+  }
+  const sessionPath = path.join(
+    project.planningPath,
+    'whats-next',
+    'sessions',
+    record.sessionId,
+  );
+  await mkdir(sessionPath, { recursive: true });
+  const activeCandidates = new Map(
+    (await collectLatestUnacceptedCandidates(project)).map((candidate) => [
+      candidate.candidateId,
+      candidate,
+    ]),
+  );
+  if (record.result.outcome === 'proposal') {
+    for (const candidate of record.result.candidates) {
+      activeCandidates.set(candidate.candidateId, candidate);
+    }
+  }
+  const checkpoint = {
+    schemaVersion: 1,
+    sessionId: record.sessionId,
+    providerSessionId: record.agentSessionId,
+    latestRunId: record.runId,
+    updatedAt: record.updatedAt,
+    sourceNodeIds: record.sourceNodeIds,
+    operation: record.operation,
+    status: record.status,
+    candidateRevisions: Object.fromEntries(
+      [...activeCandidates.values()].map((candidate) => [
+        candidate.candidateId,
+        candidate.revision,
+      ]),
+    ),
+    unresolvedFeedback: [],
+    contextIndexPath: `whats-next/runs/${record.runId}/context/index.json`,
+    reflectionPath: `whats-next/runs/${record.runId}/reflection.md`,
+    responsePath: `whats-next/runs/${record.runId}/response.md`,
+  };
+  const filePath = path.join(sessionPath, 'checkpoint.json');
+  const temporaryPath = `${filePath}.${randomUUID()}.tmp`;
+  await writeFile(temporaryPath, `${JSON.stringify(checkpoint, null, 2)}\n`);
+  await rename(temporaryPath, filePath);
+}
+
+function renderLegacyCandidateMarkdown(candidate: WhatsNextCandidate) {
+  const legacyAssumptions = (
+    candidate as WhatsNextCandidate & { assumptions?: string[] }
+  ).assumptions;
+  const assumptions = legacyAssumptions?.length
+    ? legacyAssumptions.map((assumption) => `- ${assumption}`).join('\n')
+    : '- None';
   return `# ${candidate.title}
 
 ${candidate.summary}
 
-## Direction
+## Why this direction
 
-- ID: \`${candidate.candidateId}\`
-- Revision: ${candidate.revision}
-- Type: ${candidate.type}
-
-## Relationships
-
-${relationships.join('\n')}
-
-## Resources
-
-${resources.join('\n')}
+- This direction was generated by the legacy What's Next Harness.
+- Review its original Run evidence before accepting or refining it.
 
 ## Assumptions
 
-${assumptions.join('\n')}
-
-## Metadata
-${metadata}
-`;
+${assumptions}`;
 }
 
 function isRunCanceled(record: WhatsNextRunRecord) {

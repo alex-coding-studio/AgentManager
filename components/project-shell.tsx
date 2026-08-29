@@ -64,15 +64,20 @@ export function ProjectShell({
     <div className="min-h-screen bg-background text-foreground lg:grid lg:grid-cols-[272px_1fr]">
       <aside className="border-b border-border bg-[color-mix(in_oklch,var(--background),var(--foreground)_2%)] lg:sticky lg:top-0 lg:h-screen lg:border-r lg:border-b-0">
         <div className="flex h-full flex-col">
-          <div className="border-b border-border p-4">
-            <Link href="/" className="mb-4 flex items-center gap-2.5 px-1">
+          <div className="flex items-center gap-3 border-b border-border p-3 lg:block lg:p-4">
+            <Link
+              href="/"
+              className="flex shrink-0 items-center gap-2.5 px-1 lg:mb-4"
+            >
               <div className="grid size-8 place-items-center rounded-lg bg-primary text-xs font-semibold text-primary-foreground">
                 AM
               </div>
-              <span className="font-semibold tracking-tight">AgentManager</span>
+              <span className="hidden font-semibold tracking-tight sm:inline">
+                AgentManager
+              </span>
             </Link>
 
-            <div className="relative">
+            <div className="relative min-w-0 flex-1">
               <select
                 aria-label="Switch project"
                 value={project.id}
@@ -91,7 +96,10 @@ export function ProjectShell({
             </div>
           </div>
 
-          <nav className="grid gap-1 p-3" aria-label="Project navigation">
+          <nav
+            className="flex gap-1 overflow-x-auto p-2 lg:grid lg:p-3"
+            aria-label="Project navigation"
+          >
             {navigation.map((item) => {
               const Icon = item.icon;
               const href = `/projects/${project.id}${item.path}`;
@@ -108,7 +116,7 @@ export function ProjectShell({
                 </>
               );
               const className = cn(
-                'flex h-10 items-center gap-3 rounded-lg px-3 text-sm transition',
+                'flex h-10 shrink-0 items-center gap-2 rounded-lg px-3 text-sm transition lg:gap-3',
                 active
                   ? 'bg-primary text-primary-foreground'
                   : 'text-muted-foreground',

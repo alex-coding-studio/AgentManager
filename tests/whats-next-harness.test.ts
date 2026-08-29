@@ -2,11 +2,20 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   WHATS_NEXT_HARNESS_ID,
+  WHATS_NEXT_HARNESS_PROMPT,
   WHATS_NEXT_HARNESS_REVISION,
   WhatsNextResultValidationError,
   parseWhatsNextHarnessResult,
   validateWhatsNextHarnessResult,
 } from '../lib/whats-next-harness.ts';
+import { renderWhatsNextResponseMarkdown } from '../lib/whats-next-response.ts';
+
+void test('ships the settled Reflection and Markdown Harness contract', () => {
+  assert.match(WHATS_NEXT_HARNESS_PROMPT, /user-facing Reflection/);
+  assert.match(WHATS_NEXT_HARNESS_PROMPT, /Why this direction/);
+  assert.match(WHATS_NEXT_HARNESS_PROMPT, /For refine-candidate/);
+  assert.doesNotMatch(WHATS_NEXT_HARNESS_PROMPT, /placeholder/);
+});
 
 const request = {
   sessionId: 'SESSION-0001',
@@ -28,6 +37,14 @@ function baseResult() {
       revision: WHATS_NEXT_HARNESS_REVISION,
     },
     request,
+    reflection: {
+      markdown:
+        '# Reflection\n\nThe user most needs a bounded way to make the idea concrete.',
+      continuationAdvice: {
+        action: 'continue',
+        reason: 'Several useful starting directions remain unexplored.',
+      },
+    },
     exploration: {
       consideredNodeIds: ['NODE-0001'],
       notes: ['The Start carries only the stated idea.'],
@@ -36,11 +53,12 @@ function baseResult() {
 }
 
 function candidate(id: string, overrides: Record<string, unknown> = {}) {
+  const title = `Direction ${id}`;
   return {
     candidateId: id,
     revision: 1,
     type: 'module',
-    title: `Direction ${id}`,
+    title,
     summary: 'One possible next step grown from the Start.',
     derivedFrom: ['NODE-0001'],
     dependsOn: [],
@@ -49,6 +67,18 @@ function candidate(id: string, overrides: Record<string, unknown> = {}) {
     metadata: {},
     presentation: {},
     assumptions: [],
+    outputMarkdown: `# ${title}
+
+One possible next step grown from the Start.
+
+## Why this direction
+
+- The origin describes a broad product idea that still needs a concrete entry point.
+- This direction provides one bounded possibility the user can inspect.
+
+## Assumptions
+
+- None`,
     ...overrides,
   };
 }
@@ -63,6 +93,17 @@ void test('accepts a proposal of distinct directions', () => {
     context,
   );
   assert.equal(result.outcome, 'proposal');
+});
+
+void test('renders one readable Response from Reflection and Candidates', () => {
+  const result = validateWhatsNextHarnessResult(
+    proposal([candidate('CANDIDATE-0001'), candidate('CANDIDATE-0002')]),
+    context,
+  );
+  const markdown = renderWhatsNextResponseMarkdown(result);
+  assert.match(markdown, /# Reflection/);
+  assert.match(markdown, /# Candidate Proposals/);
+  assert.match(markdown, /## Direction CANDIDATE-0001/);
 });
 
 void test('rejects a single-direction proposal', () => {
@@ -166,6 +207,9 @@ void test('rejects a response for a different request', () => {
 void test('requires the next revision when revising one direction', () => {
   const revising = {
     ...context,
+    operation: 'refine-candidate' as const,
+    revisionCandidateId: 'CANDIDATE-0001',
+    revisionTarget: candidate('CANDIDATE-0001'),
     previousCandidateRevisions: { 'CANDIDATE-0001': 1 },
   };
   assert.throws(
@@ -177,13 +221,65 @@ void test('requires the next revision when revising one direction', () => {
     WhatsNextResultValidationError,
   );
   const result = validateWhatsNextHarnessResult(
-    proposal([
-      candidate('CANDIDATE-0001', { revision: 2 }),
-      candidate('CANDIDATE-0002'),
-    ]),
+    proposal([candidate('CANDIDATE-0001', { revision: 2 })]),
     revising,
   );
   assert.equal(result.outcome, 'proposal');
+});
+
+void test('rejects Candidate Markdown without a bounded rationale', () => {
+  assert.throws(
+    () =>
+      validateWhatsNextHarnessResult(
+        proposal([
+          candidate('CANDIDATE-0001', {
+            outputMarkdown: '# Direction CANDIDATE-0001\n\nNo rationale.',
+          }),
+          candidate('CANDIDATE-0002'),
+        ]),
+        context,
+      ),
+    WhatsNextResultValidationError,
+  );
+});
+
+void test('rejects assumptions that drift from Candidate Markdown', () => {
+  assert.throws(
+    () =>
+      validateWhatsNextHarnessResult(
+        proposal([
+          candidate('CANDIDATE-0001', {
+            assumptions: ['A hidden assumption.'],
+          }),
+          candidate('CANDIDATE-0002'),
+        ]),
+        context,
+      ),
+    WhatsNextResultValidationError,
+  );
+});
+
+void test('rejects graph changes during one-to-one Refine', () => {
+  const original = candidate('CANDIDATE-0001');
+  assert.throws(
+    () =>
+      validateWhatsNextHarnessResult(
+        proposal([
+          candidate('CANDIDATE-0001', {
+            revision: 2,
+            dependsOn: ['NODE-0002'],
+          }),
+        ]),
+        {
+          ...context,
+          operation: 'refine-candidate',
+          revisionCandidateId: 'CANDIDATE-0001',
+          revisionTarget: original,
+          previousCandidateRevisions: { 'CANDIDATE-0001': 1 },
+        },
+      ),
+    WhatsNextResultValidationError,
+  );
 });
 
 void test('does not offer an insufficient-evidence outcome', () => {
