@@ -81,7 +81,7 @@ Decomposition should stop when each result:
 - expresses one coherent intent;
 - has a boundary distinguishable from its siblings;
 - carries a manageable amount of Context for the user's current purpose;
-- can be inspected, revised, accepted, or rejected independently; and
+- can be inspected, compared, accepted, or rejected independently; and
 - gains little immediate decision value from another split.
 
 Task Decomposition is one profile of this general operation. Decomposition
@@ -130,6 +130,39 @@ can determine the only correct route.
 
 Executability is therefore an affordance of a sufficiently concrete Node, not
 a special Node type or lifecycle status.
+
+## Operation-specific change semantics
+
+Candidate change behavior follows the meaning of the operation rather than one
+universal revision rule.
+
+### What's Next Refine
+
+Refine improves one proposed direction in place. It is always one Candidate to
+one Candidate:
+
+- the Candidate keeps its identity and advances its revision;
+- its title, description, rationale, and assumptions may change;
+- no sibling, child, dependency, or Formal Node is created; and
+- a materially different idea requires a separate exploration chosen by the
+  user.
+
+### Decomposition Recompose
+
+Recompose revisits how one selected scope is partitioned. Because decomposition
+boundaries are relational, a better partition may contain a different number
+of Candidates. Recompose therefore operates on the unaccepted proposal or
+working set rather than pretending to revise one Card in isolation.
+
+It may retain an unchanged Candidate, replace overlapping boundaries, split
+one Candidate, merge several Candidates, or produce a different sibling set.
+The complete proposed partition remains temporary until the user accepts its
+results. Recompose cannot silently replace accepted Formal Nodes or migrate
+their dependencies; restructuring an accepted graph is a separate future graph
+operation.
+
+The two operations may share storage, comparison, and rollback mechanics, but
+their output contracts and cardinality guarantees are intentionally different.
 
 ## Divergence and convergence
 
@@ -199,6 +232,7 @@ The Harness should make unclear intent progressively concrete. It should not
 guess the entire final system, require a full product identity before offering
 useful directions, or turn every Candidate into an execution plan. A Candidate
 may become directly implementable as a consequence of becoming concrete.
+Refine remains a strict one-to-one operation within the current direction.
 
 Detailed decisions are recorded in
 [`WHATS_NEXT_HARNESS.md`](WHATS_NEXT_HARNESS.md).
@@ -209,6 +243,12 @@ The Harness should receive or infer the purpose of the current decomposition.
 It should stop when the results are coherent, distinguishable, and manageable
 at that resolution. It must not keep splitting solely because more execution
 steps could exist.
+
+When the user challenges the proposed partition rather than one Card's wording,
+the Harness should Recompose the unaccepted working set. The result may change
+Candidate cardinality. The existing runtime's one-Candidate `revise-candidate`
+operation remains a compatibility constraint until a proposal-level Recompose
+contract and validator are implemented together.
 
 ### Implementation Harness
 

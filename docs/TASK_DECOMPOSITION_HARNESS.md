@@ -6,6 +6,11 @@ This document records the product decisions behind AgentManager's built-in
 Decomposition Harness. The existing filename, internal identifiers, API paths,
 and storage directories retain `task-decomposition` for compatibility.
 
+The product model now distinguishes proposal-level `Recompose` from the
+current runtime's legacy one-Candidate `revise-candidate` operation. The design
+is recorded here before the operation schema, validator, persistence, and UI
+are migrated together.
+
 ## Purpose
 
 The Harness helps one developer turn ambiguous product material into a small
@@ -14,7 +19,7 @@ promote accepted results into the Decomposition Canvas.
 
 It does not attempt to decompose an entire product to mechanically indivisible
 leaf items in one request. Its minimum useful result is a bounded set of
-well-supported next-level options that the user can understand and refine.
+well-supported next-level options that the user can understand and recompose.
 
 Atomicity is relative to the current purpose. A Candidate is atomic when it
 expresses one coherent intent, has a boundary distinguishable from its siblings,
@@ -82,9 +87,10 @@ One invocation creates or continues a bounded Decomposition Session.
 3. The Agent generates a small batch of Candidate Cards, such as several
    possible functional modules.
 4. The interface persists and displays every Candidate independently.
-5. The user can keep, revise, split, merge, remove, or accept a Candidate.
-6. Feedback about one Candidate revises that Candidate with only the relevant
-   context instead of regenerating the entire batch.
+5. The user can keep, remove, accept, or ask to Recompose the unaccepted
+   proposal when its partition does not fit the intended scope.
+6. Recompose may preserve, split, merge, add, or remove Candidate boundaries;
+   it does not promise that one input Card produces one output Card.
 7. Accepting a Candidate promotes it into a formal Canvas Node.
 
 When a genuine product ambiguity has more than one reasonable resolution, the
@@ -103,8 +109,8 @@ attempt to force an answer.
 Candidate Cards are temporary session artifacts. Formal Nodes are durable graph
 state. They do not share one lifecycle field.
 
-- Candidates may be revised, compared, replaced, or discarded while a session
-  is active.
+- Candidates and proposal revisions may be compared, replaced, or discarded
+  while a session is active.
 - Formal Nodes are created only after explicit user acceptance.
 - Once accepted, a Node cannot be silently rewritten by a later decomposition
   round.
@@ -121,6 +127,35 @@ Candidate name in general. The session also records the input revision or
 fingerprint used to generate that revision. If a relevant source, origin,
 dependency, or protected Node changes before acceptance, AgentManager marks the
 Candidate stale and requires reconciliation instead of silently promoting it.
+
+## Recomposition semantics
+
+Decomposition Candidates form a proposed partition of one selected scope. A
+boundary cannot always be corrected in isolation because changing it may expose
+an omission, overlap a sibling, split one unit, or require several units to
+merge. The product-level operation is therefore `Recompose`, not `Revise`.
+
+Recompose:
+
+- targets the current unaccepted proposal or working set;
+- may return a different number of Candidates;
+- preserves a Candidate identity only when its coherent meaning and boundary
+  remain the same;
+- creates new Candidate identities for materially new boundaries;
+- explains which boundaries were retained, replaced, split, merged, added, or
+  removed; and
+- never mutates accepted Formal Nodes or their dependencies.
+
+If any affected result has already become a Formal Node, the Harness cannot
+silently recompose that accepted graph. The user may decompose again from an
+appropriate origin and create another branch. Replacing or migrating an
+accepted branch requires a separate future graph-restructuring operation with
+dependency impact handling.
+
+The executable runtime currently validates `revise-candidate` as a strict
+one-to-one operation. Renaming it without changing the operation schema and
+validator would create a false contract, so executable Recompose support is a
+separate implementation slice.
 
 ## Proposal and mutation boundary
 
@@ -310,7 +345,7 @@ The first Harness is an evaluated baseline rather than a claim of final quality.
 Real decomposition cases compare an unguided baseline with Harness-guided output
 and record at least:
 
-- the share of Candidates accepted without revision;
+- the share of proposals accepted without recomposition;
 - the amount and type of user correction;
 - material capability omissions;
 - incorrect execution dependencies;
@@ -335,6 +370,8 @@ The following details should be settled when implementation begins:
   required stable identifier, revision, and input fingerprint;
 - active-session directory names and file lifecycle;
 - the precise provenance object shape;
+- the Recompose operation schema, Candidate identity reconciliation, and
+  proposal-level validator behavior;
 - context-size budgets and expansion limits;
 - the Agent invocation transport and model selection;
 - crash-safe confirmation and system-Trash behavior;
