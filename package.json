@@ -17,7 +17,7 @@
     "format": "oxfmt",
     "test:graph": "node --experimental-strip-types --test tests/task-graph-layout.test.ts tests/task-graph-rules.test.ts",
     "test:harness": "node --experimental-strip-types --test tests/task-decomposition-harness.test.ts",
-    "test:runs": "node --experimental-strip-types --test tests/local-agent-transport.test.ts tests/task-decomposition-runs.test.ts",
+    "test:runs": "node --experimental-strip-types --test tests/local-agent-transport.test.ts tests/task-decomposition-dependencies.test.ts tests/task-decomposition-runs.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

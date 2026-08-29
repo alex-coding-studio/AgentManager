@@ -1,7 +1,7 @@
 import Ajv2020 from 'ajv/dist/2020.js';
 
 export const TASK_DECOMPOSITION_HARNESS_ID = 'agent-manager.task-decomposition';
-export const TASK_DECOMPOSITION_HARNESS_REVISION = 2;
+export const TASK_DECOMPOSITION_HARNESS_REVISION = 3;
 
 export const TASK_DECOMPOSITION_HARNESS_PROMPT = `You are AgentManager's Task Decomposition Agent. Turn the user's current goal and selected evidence into the smallest useful next-level proposal. Do not attempt to decompose an entire product to leaf tasks in one run.
 
@@ -9,7 +9,7 @@ Follow this authority order: the built-in Harness and output contract; the user'
 
 Return only JSON that matches the supplied output schema. You may return a proposal, one bounded clarification, or insufficient evidence. Never manufacture Candidates to reach a fixed count. Never mutate, replace, or delete accepted Nodes. AgentManager validates and promotes proposals after explicit user acceptance.
 
-Every Candidate must have a stable identifier and revision, a concise type and title, a one-or-two-sentence ownership summary, one or more derivedFrom origins, execution-only dependsOn relationships, supported Resource references, and type-specific metadata. Use derivedFrom for decomposition lineage and dependsOn only for execution prerequisites.
+Every Candidate must have a stable identifier and revision, a concise type and title, a one-or-two-sentence ownership summary, one or more derivedFrom origins, execution-only dependsOn relationships, supported Resource references, and type-specific metadata. Use derivedFrom for decomposition lineage and dependsOn only for execution prerequisites. A Candidate may depend on an accepted NODE or another Candidate in the same bounded proposal. Put those relationships in dependsOn, never only in metadata.
 
 Use the lightweight graph map before requesting full content. Request expansion only for a specific unresolved impact. Review direct dependencies, reverse dependents, siblings with the same origin, shared-Resource neighbors, adjacent Candidates, and protected Nodes. If you claim an existing item is affected, include it in reviewedNodeIds. Stop and clarify when bounded expansion cannot resolve a material ambiguity.
 
@@ -87,10 +87,18 @@ export type HarnessValidationContext = {
   knownResourcePaths: Iterable<string>;
   previousCandidateRevisions?: Readonly<Record<string, number>>;
   reservedCandidateIds?: Iterable<string>;
+  acceptedCandidateIds?: Iterable<string>;
+  knownCandidates?: Iterable<
+    Pick<HarnessCandidate, 'candidateId' | 'dependsOn'>
+  >;
 };
 
 const nonEmptyString = { type: 'string', minLength: 1, pattern: '\\S' };
 const nodeId = { type: 'string', pattern: '^NODE-[0-9]{4,}$' };
+const candidateId = {
+  type: 'string',
+  pattern: '^CANDIDATE-[0-9]{4,}$',
+};
 const stringArray = {
   type: 'array',
   uniqueItems: true,
@@ -100,6 +108,11 @@ const nodeIdArray = {
   type: 'array',
   uniqueItems: true,
   items: nodeId,
+};
+const dependencyIdArray = {
+  type: 'array',
+  uniqueItems: true,
+  items: { oneOf: [nodeId, candidateId] },
 };
 const baseProperties = {
   schemaVersion: { const: 1 },
@@ -242,16 +255,13 @@ export const TASK_DECOMPOSITION_HARNESS_OUTPUT_SCHEMA = {
         'assumptions',
       ],
       properties: {
-        candidateId: {
-          type: 'string',
-          pattern: '^CANDIDATE-[0-9]{4,}$',
-        },
+        candidateId,
         revision: { type: 'integer', minimum: 1 },
         type: { ...nonEmptyString, maxLength: 80 },
         title: { ...nonEmptyString, maxLength: 160 },
         summary: { ...nonEmptyString, maxLength: 600 },
         derivedFrom: { ...nodeIdArray, minItems: 1 },
-        dependsOn: nodeIdArray,
+        dependsOn: dependencyIdArray,
         resources: {
           type: 'array',
           uniqueItems: true,
@@ -394,6 +404,16 @@ function validateCandidates(
     candidates.map((candidate) => candidate.candidateId),
     'Candidate identifiers must be unique in one proposal.',
   );
+  const proposalCandidateIds = new Set(
+    candidates.map((candidate) => candidate.candidateId),
+  );
+  const knownCandidates = new Map(
+    [...(context.knownCandidates ?? [])].map((candidate) => [
+      candidate.candidateId,
+      candidate,
+    ]),
+  );
+  const acceptedCandidateIds = new Set(context.acceptedCandidateIds ?? []);
   const knownResourcePaths = new Set(context.knownResourcePaths);
   const reservedCandidateIds = new Set(context.reservedCandidateIds ?? []);
   for (const candidate of candidates) {
@@ -413,7 +433,19 @@ function validateCandidates(
       );
     }
     requireKnownNodes(candidate.derivedFrom, knownNodeIds);
-    requireKnownNodes(candidate.dependsOn, knownNodeIds);
+    for (const dependencyId of candidate.dependsOn) {
+      if (dependencyId === candidate.candidateId) {
+        fail(`Candidate ${candidate.candidateId} cannot depend on itself.`);
+      }
+      if (
+        !knownNodeIds.has(dependencyId) &&
+        !proposalCandidateIds.has(dependencyId) &&
+        !knownCandidates.has(dependencyId) &&
+        !acceptedCandidateIds.has(dependencyId)
+      ) {
+        fail('A Candidate depends on an unknown Node or Candidate.');
+      }
+    }
     if (
       candidate.typeTemplateRef !== null &&
       !knownNodeIds.has(candidate.typeTemplateRef)
@@ -426,6 +458,40 @@ function validateCandidates(
       }
     }
   }
+  assertCandidateDependenciesAreAcyclic([
+    ...knownCandidates.values(),
+    ...candidates,
+  ]);
+}
+
+function assertCandidateDependenciesAreAcyclic(
+  candidates: Iterable<Pick<HarnessCandidate, 'candidateId' | 'dependsOn'>>,
+) {
+  const dependencies = new Map(
+    [...candidates].map((candidate) => [
+      candidate.candidateId,
+      candidate.dependsOn.filter((dependencyId) =>
+        dependencyId.startsWith('CANDIDATE-'),
+      ),
+    ]),
+  );
+  const visiting = new Set<string>();
+  const visited = new Set<string>();
+
+  function visit(candidateId: string) {
+    if (visiting.has(candidateId)) {
+      fail('Candidate dependencies must not contain a cycle.');
+    }
+    if (visited.has(candidateId)) return;
+    visiting.add(candidateId);
+    for (const dependencyId of dependencies.get(candidateId) ?? []) {
+      if (dependencies.has(dependencyId)) visit(dependencyId);
+    }
+    visiting.delete(candidateId);
+    visited.add(candidateId);
+  }
+
+  for (const candidateId of dependencies.keys()) visit(candidateId);
 }
 
 function requireKnownNodes(values: string[], knownNodeIds: Set<string>) {

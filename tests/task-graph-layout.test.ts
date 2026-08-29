@@ -109,6 +109,40 @@ void test('renders execution dependencies separately from lineage', () => {
   });
 });
 
+void test('renders a dependency between Candidates in one proposal', () => {
+  const graph = buildTaskGraphLayout(
+    [node('NODE-0001')],
+    [
+      {
+        id: 'CANDIDATE-0001',
+        sourceNodeId: 'NODE-0001',
+        instruction: '',
+        inheritedResourceCount: 1,
+        additionalResourceCount: 0,
+        kind: 'candidate',
+        dependsOn: [],
+      },
+      {
+        id: 'CANDIDATE-0002',
+        sourceNodeId: 'NODE-0001',
+        instruction: '',
+        inheritedResourceCount: 1,
+        additionalResourceCount: 0,
+        kind: 'candidate',
+        dependsOn: ['CANDIDATE-0001'],
+      },
+    ],
+  );
+
+  assert.ok(
+    graph.edges.some(
+      (edge) =>
+        edge.id === 'depends:CANDIDATE-0002:CANDIDATE-0001' &&
+        edge.relation === 'dependency',
+    ),
+  );
+});
+
 void test('places a request preview without colliding in the target rank', () => {
   const graph = buildTaskGraphLayout(
     [

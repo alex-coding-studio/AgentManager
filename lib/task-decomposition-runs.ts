@@ -26,6 +26,10 @@ import {
   readTaskDecompositionContext,
 } from './task-decomposition-context.ts';
 import {
+  candidateDependencyBlockers,
+  resolveCandidateDependencies,
+} from './task-decomposition-dependencies.ts';
+import {
   startLocalAgentRun,
   type LocalAgentKind,
   type LocalAgentRun,
@@ -202,6 +206,7 @@ export async function startTaskDecompositionRun(
               ...formalChildren.map((node) => ({
                 id: node.id,
                 updatedAt: node.updatedAt,
+                acceptedFromCandidateId: node.provenance?.candidateId ?? null,
               })),
               ...existingCandidateChildren.map((candidate) => ({
                 candidateId: candidate.candidateId,
@@ -284,6 +289,7 @@ export async function startTaskDecompositionRun(
     agent,
     nodes,
     resources,
+    existingCandidateChildren,
     revisionTarget?.candidate,
     operation === 'revise-candidate' ? [] : reservedCandidateIds,
   );
@@ -372,6 +378,11 @@ export async function acceptTaskDecompositionCandidate(
       node.provenance?.runId === runId,
   );
   if (accepted) return { node: accepted, nodes: existingNodes };
+  const resolvedDependencies = resolveCandidateDependencies(
+    candidate.candidateId,
+    candidate.dependsOn,
+    existingNodes,
+  );
 
   const nextNumber =
     existingNodes.reduce((largest, node) => {
@@ -414,7 +425,7 @@ export async function acceptTaskDecompositionCandidate(
         },
       ],
       derivedFrom: candidate.derivedFrom,
-      dependsOn: candidate.dependsOn,
+      dependsOn: resolvedDependencies,
       typeTemplateRef:
         candidate.typeTemplateRef ??
         matchingType?.typeTemplateRef ??
@@ -481,6 +492,15 @@ export async function discardTaskDecompositionCandidate(
   if (accepted) {
     throw new Error('An accepted Candidate must be managed as a formal Node.');
   }
+  const blockers = candidateDependencyBlockers(
+    candidateId,
+    await collectLatestUnacceptedCandidates(project),
+  );
+  if (blockers.length > 0) {
+    throw new Error(
+      `${candidateId} is still required by ${blockers.join(', ')}. Discard dependent Candidates first.`,
+    );
+  }
 
   const candidateRuns = (await readAllTaskDecompositionRuns(project)).filter(
     (run) =>
@@ -537,6 +557,12 @@ async function finishTaskDecompositionRun(
   agent: LocalAgentRun,
   nodes: TaskGraphNode[],
   resources: ResourceContent[],
+  knownCandidates: Array<
+    Extract<
+      TaskDecompositionHarnessResult,
+      { outcome: 'proposal' }
+    >['candidates'][number]
+  >,
   revisionTarget?: Extract<
     TaskDecompositionHarnessResult,
     { outcome: 'proposal' }
@@ -564,10 +590,14 @@ async function finishTaskDecompositionRun(
         knownNodeIds: nodes.map((node) => node.id),
         expandedNodeIds: [record.sourceNodeId],
         knownResourcePaths: resources.map((resource) => resource.path),
+        acceptedCandidateIds: nodes.flatMap((node) =>
+          node.provenance?.candidateId ? [node.provenance.candidateId] : [],
+        ),
         previousCandidateRevisions: revisionTarget
           ? { [revisionTarget.candidateId]: revisionTarget.revision }
           : undefined,
         reservedCandidateIds,
+        knownCandidates,
       },
     );
     if (
@@ -688,6 +718,7 @@ function graphMapEntry(node: TaskGraphNode) {
     summary: node.summary ?? '',
     derivedFrom: node.derivedFrom ?? [],
     dependsOn: node.dependsOn,
+    acceptedFromCandidateId: node.provenance?.candidateId ?? null,
     resourcePaths: node.resources.map((resource) => resource.path),
   };
 }
@@ -774,6 +805,12 @@ async function collectExistingCandidateChildren(
   project: RegisteredProject,
   sourceNodeId: string,
 ) {
+  return (await collectLatestUnacceptedCandidates(project)).filter(
+    (candidate) => candidate.derivedFrom.includes(sourceNodeId),
+  );
+}
+
+async function collectLatestUnacceptedCandidates(project: RegisteredProject) {
   const runs = await readAllTaskDecompositionRuns(project);
   const latestByCandidate = new Map<
     string,
@@ -785,10 +822,7 @@ async function collectExistingCandidateChildren(
   for (const run of runs.sort((left, right) =>
     left.startedAt.localeCompare(right.startedAt),
   )) {
-    if (
-      run.sourceNodeId !== sourceNodeId ||
-      run.result?.outcome !== 'proposal'
-    ) {
+    if (run.result?.outcome !== 'proposal') {
       continue;
     }
     for (const candidate of run.result.candidates) {
@@ -804,9 +838,7 @@ async function collectExistingCandidateChildren(
     ),
   );
   return [...latestByCandidate.values()].filter(
-    (candidate) =>
-      candidate.derivedFrom.includes(sourceNodeId) &&
-      !acceptedIds.has(candidate.candidateId),
+    (candidate) => !acceptedIds.has(candidate.candidateId),
   );
 }
 

@@ -206,7 +206,11 @@ request-only Context or local Markdown without mutating the source. Those
 optional inputs share one collapsed `Run-only context` disclosure rather than
 occupying the default Composer path. A connected
 transient card represents the Run while it executes, and a validated proposal
-replaces it with Candidate cards. Node
+replaces it with Candidate cards. A Candidate may name an accepted `NODE-*` or
+another Candidate from the same bounded proposal in `dependsOn`. The Harness
+rejects unknown references, self-dependencies, and Candidate cycles. These
+temporary relationships render directly on the Canvas rather than being hidden
+inside type-specific metadata. Node
 positions are a deterministic Dagre projection driven only by lineage and
 Request edges. The layout uses a left-to-right rank direction, generous rank
 and sibling spacing, and bounded stable offsets so every target remains to the
@@ -288,9 +292,17 @@ boundaries become clarification rather than implicit rewrites.
 
 Discarding an unaccepted Candidate removes that identifier from every Proposal
 and revision Run, moves all of its generated directories to the operating
-system Trash, and leaves sibling Candidates unchanged. When it is a Proposal's
-last result, that complete Run directory moves to Trash. Accepted Candidates
-are formal Nodes and cannot use this transient deletion path.
+system Trash, and leaves sibling Candidates unchanged. A Candidate still named
+as another Candidate's prerequisite cannot be discarded first. When it is a
+Proposal's last result, that complete Run directory moves to Trash. Accepted
+Candidates are formal Nodes and cannot use this transient deletion path.
+
+Candidate acceptance follows dependency order. A Candidate prerequisite must
+already be accepted; promotion then resolves its `CANDIDATE-*` identifier to
+the formal Node carrying that Candidate in provenance and writes only
+`NODE-*` identifiers into canonical Node JSON. Remaining Candidate cards map
+that provenance back to the accepted Node for rendering without rewriting the
+immutable generated Run evidence.
 
 Every node is a folder so it can carry its JSON card, node-local Resources, and
 future generated artifacts without inventing a database relationship. Semantic

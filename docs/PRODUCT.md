@@ -291,6 +291,21 @@ The eleventh slice adds Claude as a second local Agent transport:
 Per-provider model selection, cost comparison, and running both Agents on one
 request remain outside this slice.
 
+## Twelfth implementation slice
+
+The twelfth slice makes dependencies between proposed siblings first-class:
+
+1. Let a Candidate name either an accepted Node or another Candidate from the
+   same bounded proposal as an execution prerequisite.
+2. Render Candidate dependencies on the Canvas and in the Candidate inspector
+   instead of storing them only in open-ended metadata.
+3. Reject unknown references, self-dependencies, and dependency cycles before a
+   proposal reaches the Canvas.
+4. Require prerequisites to be accepted first, then map their Candidate
+   identifiers to formal Node identifiers during promotion.
+5. Prevent discarding a Candidate while another unaccepted Candidate still
+   depends on it.
+
 ## Decomposition continuity
 
 Every action preserves the meaning of already visible boundaries:

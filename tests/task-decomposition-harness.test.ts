@@ -85,6 +85,164 @@ void test('accepts a supported Candidate proposal', () => {
   assert.equal(result.candidates[0]?.revision, 1);
 });
 
+void test('accepts dependencies between Candidates in one proposal', () => {
+  const result = validateTaskDecompositionHarnessResult(
+    {
+      ...baseResult(),
+      outcome: 'proposal',
+      candidates: [
+        {
+          candidateId: 'CANDIDATE-0001',
+          revision: 1,
+          type: 'module',
+          title: 'Foundation',
+          summary: 'Owns the shared foundation.',
+          derivedFrom: ['NODE-0001'],
+          dependsOn: [],
+          resources: [],
+          typeTemplateRef: null,
+          metadata: {},
+          presentation: {},
+          assumptions: [],
+        },
+        {
+          candidateId: 'CANDIDATE-0002',
+          revision: 1,
+          type: 'module',
+          title: 'Feature',
+          summary: 'Builds on the shared foundation.',
+          derivedFrom: ['NODE-0001'],
+          dependsOn: ['CANDIDATE-0001'],
+          resources: [],
+          typeTemplateRef: null,
+          metadata: {},
+          presentation: {},
+          assumptions: [],
+        },
+      ],
+    },
+    context,
+  );
+
+  assert.equal(result.outcome, 'proposal');
+  if (result.outcome === 'proposal') {
+    assert.deepEqual(result.candidates[1]?.dependsOn, ['CANDIDATE-0001']);
+  }
+});
+
+void test('accepts an immutable Candidate alias after its formal promotion', () => {
+  const result = validateTaskDecompositionHarnessResult(
+    {
+      ...baseResult(),
+      outcome: 'proposal',
+      candidates: [
+        {
+          candidateId: 'CANDIDATE-0002',
+          revision: 2,
+          type: 'module',
+          title: 'Revised feature',
+          summary: 'Keeps its accepted prerequisite after revision.',
+          derivedFrom: ['NODE-0001'],
+          dependsOn: ['CANDIDATE-0001'],
+          resources: [],
+          typeTemplateRef: null,
+          metadata: {},
+          presentation: {},
+          assumptions: [],
+        },
+      ],
+    },
+    {
+      ...context,
+      acceptedCandidateIds: ['CANDIDATE-0001'],
+      previousCandidateRevisions: { 'CANDIDATE-0002': 1 },
+    },
+  );
+
+  assert.equal(result.outcome, 'proposal');
+  if (result.outcome === 'proposal') {
+    assert.deepEqual(result.candidates[0]?.dependsOn, ['CANDIDATE-0001']);
+  }
+});
+
+void test('rejects unknown, self, and cyclic Candidate dependencies', () => {
+  const candidate = {
+    revision: 1,
+    type: 'module',
+    summary: 'A bounded module.',
+    derivedFrom: ['NODE-0001'],
+    resources: [],
+    typeTemplateRef: null,
+    metadata: {},
+    presentation: {},
+    assumptions: [],
+  };
+
+  assert.throws(
+    () =>
+      validateTaskDecompositionHarnessResult(
+        {
+          ...baseResult(),
+          outcome: 'proposal',
+          candidates: [
+            {
+              ...candidate,
+              candidateId: 'CANDIDATE-0001',
+              title: 'Unknown dependency',
+              dependsOn: ['CANDIDATE-9999'],
+            },
+          ],
+        },
+        context,
+      ),
+    /unknown Node or Candidate/,
+  );
+  assert.throws(
+    () =>
+      validateTaskDecompositionHarnessResult(
+        {
+          ...baseResult(),
+          outcome: 'proposal',
+          candidates: [
+            {
+              ...candidate,
+              candidateId: 'CANDIDATE-0001',
+              title: 'Self dependency',
+              dependsOn: ['CANDIDATE-0001'],
+            },
+          ],
+        },
+        context,
+      ),
+    /cannot depend on itself/,
+  );
+  assert.throws(
+    () =>
+      validateTaskDecompositionHarnessResult(
+        {
+          ...baseResult(),
+          outcome: 'proposal',
+          candidates: [
+            {
+              ...candidate,
+              candidateId: 'CANDIDATE-0001',
+              title: 'First cycle member',
+              dependsOn: ['CANDIDATE-0002'],
+            },
+            {
+              ...candidate,
+              candidateId: 'CANDIDATE-0002',
+              title: 'Second cycle member',
+              dependsOn: ['CANDIDATE-0001'],
+            },
+          ],
+        },
+        context,
+      ),
+    /must not contain a cycle/,
+  );
+});
+
 void test('requires the next revision for an existing Candidate', () => {
   assert.throws(
     () =>
