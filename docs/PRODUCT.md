@@ -105,10 +105,58 @@ library:
    external editing.
 7. Create a titled Markdown document in the selected section.
 8. Import one or more Markdown files through a file picker or drag and drop,
-   choosing collision-free file names without overwriting existing content.
+   explicitly confirming before replacing existing content.
+9. Create and rename context folders while leaving folder deletion to the
+   operating system's file manager.
+10. Delete individual Markdown documents without deleting their folder.
 
-Editing, renaming, moving, or deleting ordinary context documents and
+Editing Markdown in the browser, moving documents between folders, and
 previewing non-Markdown assets remain deferred.
+
+## Third implementation slice
+
+The third slice captures stable starting points for later Agent decomposition:
+
+1. Open a canvas-backed Task Decomposition workspace.
+2. Give a start node a concise title.
+3. Select one or more Markdown documents already stored in Product Context.
+4. Add one or more local Markdown sources by file picker or drag and drop.
+5. Copy external sources into the node's own Resource folder.
+6. Persist one human-readable JSON record with relative source references.
+7. Render the captured start node on the canvas.
+8. Show each source by file name and open Markdown sources in the shared reader.
+9. Edit the node title and source set without changing the node identity.
+
+Agent invocation, generated child nodes, dependency edges, manual canvas
+positioning, and prompt calibration remain outside this slice.
+
+## Canvas direction
+
+Task Decomposition is an open canvas rather than a traditional project board or
+a single-root tree. A canvas can contain many independent start nodes. Future
+Agent operations can continue from any selected node and produce additional
+nodes and dependency edges.
+
+Graph role and semantic type are independent. `start` and `node` describe where
+an item sits in the graph. Open-ended semantic types such as `source`,
+`experience`, `module`, and `task` determine what the card means. A node with no
+continuation is naturally an endpoint; the model does not require a separate
+leaf type.
+
+Each node is a folder containing its `node.json`, node-local Resources, and
+future generated artifacts. Node JSON can carry type-specific `metadata`
+without a relational schema migration. It may also carry presentation hints
+such as a card color. Semantic types are project-defined strings rather than an
+application enum. The first accepted card of a new type becomes its reference;
+later cards of that type point to it and inherit its visual and structural
+conventions. Users can extend the reference card's metadata or add a
+`template.md` with type-specific generation rules. Agents resolve that reference
+before creating another card of the same type, so project conventions can
+evolve without an application schema migration. The canvas renders newly
+introduced types from their JSON. Future decomposition requests package
+selected Resources, user instructions, and answers collected by the interface
+for an Agent through MCP. The Agent returns validated node JSON and edges rather
+than unstructured prose.
 
 ## Planned domain concepts
 
