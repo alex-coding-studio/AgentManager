@@ -79,6 +79,7 @@ export function ProjectShell({
 
             <div className="relative min-w-0 flex-1">
               <select
+                suppressHydrationWarning
                 aria-label="Switch project"
                 value={project.id}
                 onChange={(event) =>
