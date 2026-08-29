@@ -18,10 +18,25 @@ import type { RegisteredProject } from '@/lib/project-registry';
 import { cn } from '@/lib/utils';
 
 const navigation = [
-  { label: 'Overview', icon: LayoutDashboard, available: true },
-  { label: 'Product context', icon: FileText, available: false },
-  { label: 'Task decomposition', icon: Boxes, available: false },
-  { label: 'Dependencies', icon: GitFork, available: false },
+  { label: 'Overview', icon: LayoutDashboard, path: '', available: true },
+  {
+    label: 'Product context',
+    icon: FileText,
+    path: '/context',
+    available: true,
+  },
+  {
+    label: 'Task decomposition',
+    icon: Boxes,
+    path: '/decomposition',
+    available: false,
+  },
+  {
+    label: 'Dependencies',
+    icon: GitFork,
+    path: '/dependencies',
+    available: false,
+  },
 ];
 
 export function ProjectShell({
@@ -72,19 +87,10 @@ export function ProjectShell({
           <nav className="grid gap-1 p-3" aria-label="Project navigation">
             {navigation.map((item) => {
               const Icon = item.icon;
-              const active =
-                item.available && pathname === `/projects/${project.id}`;
-              return (
-                <div
-                  key={item.label}
-                  className={cn(
-                    'flex h-10 items-center gap-3 rounded-lg px-3 text-sm',
-                    active
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-muted-foreground',
-                    !item.available && 'opacity-55',
-                  )}
-                >
+              const href = `/projects/${project.id}${item.path}`;
+              const active = item.available && pathname === href;
+              const content = (
+                <>
                   <Icon className="size-4" />
                   <span>{item.label}</span>
                   {!item.available ? (
@@ -92,6 +98,25 @@ export function ProjectShell({
                       Soon
                     </span>
                   ) : null}
+                </>
+              );
+              const className = cn(
+                'flex h-10 items-center gap-3 rounded-lg px-3 text-sm transition',
+                active
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground',
+                item.available &&
+                  !active &&
+                  'hover:bg-muted hover:text-foreground',
+                !item.available && 'opacity-55',
+              );
+              return item.available ? (
+                <Link key={item.label} href={href} className={className}>
+                  {content}
+                </Link>
+              ) : (
+                <div key={item.label} className={className}>
+                  {content}
                 </div>
               );
             })}

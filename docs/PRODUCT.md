@@ -87,6 +87,23 @@ The first slice only allows the user to:
 
 Markdown upload, Product Foundation generation, SQLite task storage, task decomposition, graph visualization, MCP access, Git synchronization, and pull-request reconciliation are explicitly deferred.
 
+## Second implementation slice
+
+The second slice establishes Product Context as a readable filesystem-backed
+library:
+
+1. Initialize fixed Product, Design, Engineering, Milestones, References, and
+   Other folders.
+2. Give the context root and every section an English `README.md` explaining its
+   purpose and Agent loading boundary.
+3. Discover sections directly from the filesystem without a database or
+   manifest.
+4. Select a section and read its rendered Markdown in a persistent preview
+   area.
+
+Creating, importing, renaming, moving, or deleting ordinary context documents
+and previewing non-Markdown assets remain deferred.
+
 ## Planned domain concepts
 
 ### Project
