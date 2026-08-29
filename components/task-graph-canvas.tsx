@@ -48,6 +48,11 @@ type TaskCardData = Record<string, unknown> & {
 type TaskFlowNode = Node<TaskCardData, 'task'>;
 
 const nodeTypes = { task: memo(TaskCard) };
+const defaultFitViewOptions = {
+  padding: 0.3,
+  minZoom: 0.25,
+  maxZoom: 1,
+};
 
 export function TaskGraphCanvas({
   nodes,
@@ -142,6 +147,11 @@ export function TaskGraphCanvas({
       nodeTypes={nodeTypes}
       onInit={(instance) => {
         flowInstance.current = instance;
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            void instance.fitView(defaultFitViewOptions);
+          });
+        });
       }}
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
@@ -166,7 +176,7 @@ export function TaskGraphCanvas({
       minZoom={0.2}
       maxZoom={1.8}
       fitView
-      fitViewOptions={{ padding: 0.35, minZoom: 0.55, maxZoom: 1 }}
+      fitViewOptions={defaultFitViewOptions}
       nodesConnectable={false}
       deleteKeyCode={null}
       className="bg-background"
@@ -396,6 +406,10 @@ function buildFlowGraph(
       id: layoutNode.id,
       type: 'task',
       position: { x: layoutNode.x, y: layoutNode.y },
+      width: 288,
+      height: 156,
+      initialWidth: 288,
+      initialHeight: 156,
       draggable: false,
       deletable: false,
       style: {
