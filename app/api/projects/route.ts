@@ -1,0 +1,53 @@
+import {
+  createProject,
+  listProjects,
+  type ProjectKind,
+} from '@/lib/project-registry';
+
+export const runtime = 'nodejs';
+
+export async function GET() {
+  return Response.json({ projects: await listProjects() });
+}
+
+export async function POST(request: Request) {
+  try {
+    const payload = (await request.json()) as {
+      kind?: ProjectKind;
+      name?: string;
+      description?: string;
+      rootPath?: string;
+    };
+    const name = payload.name?.trim();
+    if (!name) {
+      return Response.json({ error: 'Project name is required.' }, { status: 400 });
+    }
+    if (name.length > 120) {
+      return Response.json(
+        { error: 'Project name must be 120 characters or fewer.' },
+        { status: 400 },
+      );
+    }
+    const description = payload.description?.trim() ?? '';
+    if (description.length > 600) {
+      return Response.json(
+        { error: 'Description must be 600 characters or fewer.' },
+        { status: 400 },
+      );
+    }
+    if (payload.kind !== 'standalone' && payload.kind !== 'repository') {
+      return Response.json({ error: 'Project kind is invalid.' }, { status: 400 });
+    }
+
+    const project = await createProject({
+      kind: payload.kind,
+      name,
+      description,
+      rootPath: payload.rootPath,
+    });
+    return Response.json({ project }, { status: 201 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Could not create project.';
+    return Response.json({ error: message }, { status: 400 });
+  }
+}
