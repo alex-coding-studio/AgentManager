@@ -1156,33 +1156,21 @@ export function TaskDecompositionWorkspace({
               ) : null}
 
               <div className="border-t border-border pt-5">
-                <div className="flex gap-2">
-                  {editingId ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="lg"
-                      onClick={cancelEditing}
-                    >
-                      Cancel
-                    </Button>
-                  ) : null}
-                  <Button
-                    type="submit"
-                    className="flex-1"
-                    size="lg"
-                    disabled={!title.trim() || sourceCount === 0 || creating}
-                  >
-                    {editingId ? <Pencil /> : <Plus />}{' '}
-                    {creating
-                      ? editingId
-                        ? 'Saving…'
-                        : 'Creating…'
-                      : editingId
-                        ? 'Save changes'
-                        : 'Create start node'}
-                  </Button>
-                </div>
+                <Button
+                  type="submit"
+                  className="w-full"
+                  size="lg"
+                  disabled={!title.trim() || sourceCount === 0 || creating}
+                >
+                  {editingId ? <Pencil /> : <Plus />}{' '}
+                  {creating
+                    ? editingId
+                      ? 'Saving…'
+                      : 'Creating…'
+                    : editingId
+                      ? 'Save changes'
+                      : 'Create start node'}
+                </Button>
                 <p className="mt-2 text-center text-[10px] text-muted-foreground">
                   {sourceCount} {sourceCount === 1 ? 'source' : 'sources'}{' '}
                   selected
