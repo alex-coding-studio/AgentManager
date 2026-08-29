@@ -182,9 +182,9 @@ transport is introduced:
 3. Keep Cards project-defined while using a shared visual language for formal
    Nodes and temporary requests.
 4. Start decomposition from the plus control on any formal Node.
-5. Reuse the source Node's Resources, accept optional request-only Context or
-   local Markdown Resources, and collect one bounded instruction in the
-   Composer.
+5. Reuse the source Node's Resources and collect one bounded instruction in the
+   Composer. Keep optional request-only Context and local Markdown inside one
+   collapsed `Run-only context` disclosure.
 6. Show a local-only request summary beside its source with a visible dashed
    directional edge; generated titles belong only to later Candidate Cards.
 7. Keep the Draft explicitly ephemeral: it is neither persisted nor sent to an
@@ -252,8 +252,8 @@ manual deletion:
 The tenth slice completes the first local Codex Agent Run loop:
 
 1. Choose Codex in the decomposition Composer and send the Instruction,
-   inherited Resources, request-only Resources, feature Context, graph map, and
-   immutable Harness as one bounded request.
+   inherited Resources, any explicitly expanded Run-only Resources, feature
+   Context, graph map, and immutable Harness as one bounded request.
 2. Use the installed Codex CLI with the user's existing subscription login; do
    not require an API key, hosted AgentManager service, or model configuration.
 3. Render a connected running card immediately and let the user cancel it,

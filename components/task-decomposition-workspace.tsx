@@ -120,6 +120,7 @@ export function TaskDecompositionWorkspace({
     folders[0]?.path ?? '',
   );
   const [requestDragging, setRequestDragging] = useState(false);
+  const [runContextOpen, setRunContextOpen] = useState(false);
   const [requestError, setRequestError] = useState('');
   const [retainedAttachmentRefs, setRetainedAttachmentRefs] = useState<
     string[]
@@ -308,6 +309,7 @@ export function TaskDecompositionWorkspace({
     setDecompositionGoal('');
     setRequestSelectedRefs([]);
     setRequestFiles([]);
+    setRunContextOpen(false);
     setRequestError('');
     setRevisionTarget(null);
     setRunOperation(hasExistingChildren ? 'append-candidates' : 'propose');
@@ -322,6 +324,9 @@ export function TaskDecompositionWorkspace({
     setDecompositionGoal(preview.instruction);
     setRequestSelectedRefs(preview.contextRefs);
     setRequestFiles(preview.files);
+    setRunContextOpen(
+      preview.contextRefs.length > 0 || preview.files.length > 0,
+    );
     setRequestError('');
   }
 
@@ -331,6 +336,7 @@ export function TaskDecompositionWorkspace({
     setRequestSelectedRefs([]);
     setRequestFiles([]);
     setRequestDragging(false);
+    setRunContextOpen(false);
     setRequestError('');
     setRevisionTarget(null);
     setRunOperation('propose');
@@ -590,6 +596,9 @@ export function TaskDecompositionWorkspace({
       setDecompositionGoal(snapshot.instruction);
       setRequestSelectedRefs(snapshot.contextRefs);
       setRequestFiles(snapshot.files);
+      setRunContextOpen(
+        snapshot.contextRefs.length > 0 || snapshot.files.length > 0,
+      );
       setRevisionTarget(snapshot.revisionTarget ?? null);
       setRunOperation(snapshot.operation);
     }
@@ -606,6 +615,7 @@ export function TaskDecompositionWorkspace({
     setDecompositionGoal('');
     setRequestSelectedRefs([]);
     setRequestFiles([]);
+    setRunContextOpen(false);
     setRequestError('');
     setRunOperation('propose');
     setCandidateActionError('');
@@ -933,14 +943,9 @@ export function TaskDecompositionWorkspace({
           <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-2xl">
             <form onSubmit={saveTask} className="space-y-6">
               <div>
-                <div className="flex items-center gap-2">
-                  <div className="grid size-7 place-items-center rounded-lg bg-primary text-primary-foreground">
-                    <Plus className="size-3.5" />
-                  </div>
-                  <h2 className="text-sm font-semibold">
-                    {editingId ? `Edit ${editingId}` : 'New start node'}
-                  </h2>
-                </div>
+                <h2 className="text-sm font-semibold">
+                  {editingId ? `Edit ${editingId}` : 'New start node'}
+                </h2>
                 <p className="mt-2 text-xs leading-5 text-muted-foreground">
                   Select every document needed to understand what will be
                   decomposed.
@@ -1286,170 +1291,213 @@ export function TaskDecompositionWorkspace({
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-xs font-medium">
-                      Additional Context Library Resources
-                    </p>
-                    <span className="text-[10px] text-muted-foreground">
-                      {requestSelectedRefs.length}
-                    </span>
-                  </div>
-                  <div className="relative">
-                    <select
-                      aria-label="Additional Resource folder"
-                      value={requestFolder?.path ?? ''}
-                      onChange={(event) =>
-                        setRequestFolderPath(event.target.value)
-                      }
-                      className="h-10 w-full appearance-none rounded-xl border border-border bg-background px-3 pr-9 text-xs font-medium outline-none transition focus:border-ring focus:ring-3 focus:ring-ring/20"
-                    >
-                      {folders.map((folder) => {
-                        const depth = folder.path.split('/').length - 2;
-                        return (
-                          <option key={folder.path} value={folder.path}>
-                            {`${'— '.repeat(depth)}${folder.title}`}
-                          </option>
-                        );
-                      })}
-                    </select>
-                    <ChevronDown className="pointer-events-none absolute top-1/2 right-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
-                  </div>
-                  <div className="max-h-44 divide-y divide-border overflow-y-auto rounded-xl border border-border">
-                    {!requestFolder || requestFolder.entries.length === 0 ? (
-                      <p className="p-4 text-xs text-muted-foreground">
-                        This folder is empty.
-                      </p>
-                    ) : (
-                      requestFolder.entries.map((entry, index) => {
-                        if (entry.kind === 'folder') {
-                          return (
-                            <button
-                              key={entry.path}
-                              type="button"
-                              className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition hover:bg-muted/50"
-                              onClick={() => setRequestFolderPath(entry.path)}
-                            >
-                              <Folder className="size-3.5 shrink-0" />
-                              <span className="min-w-0 flex-1 truncate text-xs font-medium">
-                                {entry.name}
-                              </span>
-                              <span className="text-[10px] text-muted-foreground">
-                                Folder
-                              </span>
-                            </button>
-                          );
-                        }
-                        const checked = requestSelectedRefs.includes(
-                          entry.path,
-                        );
-                        const inputId = `request-context-${index}`;
-                        return (
-                          <label
-                            key={entry.path}
-                            htmlFor={inputId}
-                            className="flex cursor-pointer items-start gap-2.5 px-3 py-2.5 transition hover:bg-muted/50"
-                          >
-                            <Checkbox
-                              id={inputId}
-                              checked={checked}
-                              onCheckedChange={(value) =>
-                                toggleRequestSource(entry.path, value === true)
-                              }
-                              aria-label={`Add ${entry.name} to this request`}
-                              className="mt-0.5"
-                            />
-                            <FileText className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
-                            <span className="min-w-0">
-                              <span className="block truncate font-mono text-[11px] font-medium">
-                                {entry.name}
-                              </span>
-                              <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
-                                {entry.title}
-                              </span>
-                            </span>
-                          </label>
-                        );
-                      })
-                    )}
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-xs font-medium">
-                      Additional Local Markdown
-                    </p>
-                    <span className="text-[10px] text-muted-foreground">
-                      {requestFiles.length}
-                    </span>
-                  </div>
+                <div className="overflow-hidden rounded-xl border border-border">
                   <button
                     type="button"
-                    className={cn(
-                      'flex min-h-20 w-full flex-col items-center justify-center rounded-xl border border-dashed border-border px-4 py-3 text-center transition',
-                      requestDragging && 'border-foreground bg-secondary',
-                    )}
-                    onClick={() => requestFileInputRef.current?.click()}
-                    onDragEnter={(event) => {
-                      event.preventDefault();
-                      setRequestDragging(true);
-                    }}
-                    onDragOver={(event) => event.preventDefault()}
-                    onDragLeave={() => setRequestDragging(false)}
-                    onDrop={(event) => {
-                      event.preventDefault();
-                      setRequestDragging(false);
-                      addRequestFiles(Array.from(event.dataTransfer.files));
-                    }}
+                    className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-muted/40"
+                    aria-expanded={runContextOpen}
+                    onClick={() => setRunContextOpen((current) => !current)}
                   >
-                    <Upload className="size-4" />
-                    <span className="mt-1.5 text-xs font-medium">
-                      Drop Markdown or choose files
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-xs font-medium">
+                        Run-only context
+                      </span>
+                      <span className="mt-0.5 block text-[10px] text-muted-foreground">
+                        Optional Resources for this Agent Run only
+                      </span>
                     </span>
+                    {requestSelectedRefs.length + requestFiles.length > 0 ? (
+                      <span className="text-[10px] text-muted-foreground">
+                        {requestSelectedRefs.length + requestFiles.length}
+                      </span>
+                    ) : null}
+                    <ChevronDown
+                      className={cn(
+                        'size-3.5 text-muted-foreground transition-transform',
+                        runContextOpen && 'rotate-180',
+                      )}
+                    />
                   </button>
-                  <input
-                    ref={requestFileInputRef}
-                    type="file"
-                    accept=".md,.markdown,text/markdown"
-                    multiple
-                    hidden
-                    onChange={(event) => {
-                      addRequestFiles(Array.from(event.target.files ?? []));
-                      event.target.value = '';
-                    }}
-                  />
-                  {requestFiles.length > 0 ? (
-                    <ul className="space-y-1.5 pt-1">
-                      {requestFiles.map((file, index) => (
-                        <li
-                          key={`${file.name}:${file.size}:${file.lastModified}`}
-                          className="flex items-center gap-2 rounded-lg bg-secondary px-2.5 py-2"
-                        >
-                          <FileText className="size-3 shrink-0" />
-                          <span className="min-w-0 flex-1 truncate text-[11px]">
-                            {file.name}
+
+                  {runContextOpen ? (
+                    <div className="space-y-5 border-t border-border p-4">
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-xs font-medium">
+                            Additional Context Library Resources
+                          </p>
+                          <span className="text-[10px] text-muted-foreground">
+                            {requestSelectedRefs.length}
                           </span>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon-xs"
-                            aria-label={`Remove ${file.name}`}
-                            title="Remove Resource"
-                            onClick={() =>
-                              setRequestFiles((current) =>
-                                current.filter(
-                                  (_, candidateIndex) =>
-                                    candidateIndex !== index,
-                                ),
-                              )
+                        </div>
+                        <div className="relative">
+                          <select
+                            aria-label="Additional Resource folder"
+                            value={requestFolder?.path ?? ''}
+                            onChange={(event) =>
+                              setRequestFolderPath(event.target.value)
                             }
+                            className="h-10 w-full appearance-none rounded-xl border border-border bg-background px-3 pr-9 text-xs font-medium outline-none transition focus:border-ring focus:ring-3 focus:ring-ring/20"
                           >
-                            <X />
-                          </Button>
-                        </li>
-                      ))}
-                    </ul>
+                            {folders.map((folder) => {
+                              const depth = folder.path.split('/').length - 2;
+                              return (
+                                <option key={folder.path} value={folder.path}>
+                                  {`${'— '.repeat(depth)}${folder.title}`}
+                                </option>
+                              );
+                            })}
+                          </select>
+                          <ChevronDown className="pointer-events-none absolute top-1/2 right-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                        </div>
+                        <div className="max-h-44 divide-y divide-border overflow-y-auto rounded-xl border border-border">
+                          {!requestFolder ||
+                          requestFolder.entries.length === 0 ? (
+                            <p className="p-4 text-xs text-muted-foreground">
+                              This folder is empty.
+                            </p>
+                          ) : (
+                            requestFolder.entries.map((entry, index) => {
+                              if (entry.kind === 'folder') {
+                                return (
+                                  <button
+                                    key={entry.path}
+                                    type="button"
+                                    className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition hover:bg-muted/50"
+                                    onClick={() =>
+                                      setRequestFolderPath(entry.path)
+                                    }
+                                  >
+                                    <Folder className="size-3.5 shrink-0" />
+                                    <span className="min-w-0 flex-1 truncate text-xs font-medium">
+                                      {entry.name}
+                                    </span>
+                                    <span className="text-[10px] text-muted-foreground">
+                                      Folder
+                                    </span>
+                                  </button>
+                                );
+                              }
+                              const checked = requestSelectedRefs.includes(
+                                entry.path,
+                              );
+                              const inputId = `request-context-${index}`;
+                              return (
+                                <label
+                                  key={entry.path}
+                                  htmlFor={inputId}
+                                  className="flex cursor-pointer items-start gap-2.5 px-3 py-2.5 transition hover:bg-muted/50"
+                                >
+                                  <Checkbox
+                                    id={inputId}
+                                    checked={checked}
+                                    onCheckedChange={(value) =>
+                                      toggleRequestSource(
+                                        entry.path,
+                                        value === true,
+                                      )
+                                    }
+                                    aria-label={`Add ${entry.name} to this request`}
+                                    className="mt-0.5"
+                                  />
+                                  <FileText className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+                                  <span className="min-w-0">
+                                    <span className="block truncate font-mono text-[11px] font-medium">
+                                      {entry.name}
+                                    </span>
+                                    <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
+                                      {entry.title}
+                                    </span>
+                                  </span>
+                                </label>
+                              );
+                            })
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-xs font-medium">
+                            Additional Local Markdown
+                          </p>
+                          <span className="text-[10px] text-muted-foreground">
+                            {requestFiles.length}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          className={cn(
+                            'flex min-h-20 w-full flex-col items-center justify-center rounded-xl border border-dashed border-border px-4 py-3 text-center transition',
+                            requestDragging && 'border-foreground bg-secondary',
+                          )}
+                          onClick={() => requestFileInputRef.current?.click()}
+                          onDragEnter={(event) => {
+                            event.preventDefault();
+                            setRequestDragging(true);
+                          }}
+                          onDragOver={(event) => event.preventDefault()}
+                          onDragLeave={() => setRequestDragging(false)}
+                          onDrop={(event) => {
+                            event.preventDefault();
+                            setRequestDragging(false);
+                            addRequestFiles(
+                              Array.from(event.dataTransfer.files),
+                            );
+                          }}
+                        >
+                          <Upload className="size-4" />
+                          <span className="mt-1.5 text-xs font-medium">
+                            Drop Markdown or choose files
+                          </span>
+                        </button>
+                        <input
+                          ref={requestFileInputRef}
+                          type="file"
+                          accept=".md,.markdown,text/markdown"
+                          multiple
+                          hidden
+                          onChange={(event) => {
+                            addRequestFiles(
+                              Array.from(event.target.files ?? []),
+                            );
+                            event.target.value = '';
+                          }}
+                        />
+                        {requestFiles.length > 0 ? (
+                          <ul className="space-y-1.5 pt-1">
+                            {requestFiles.map((file, index) => (
+                              <li
+                                key={`${file.name}:${file.size}:${file.lastModified}`}
+                                className="flex items-center gap-2 rounded-lg bg-secondary px-2.5 py-2"
+                              >
+                                <FileText className="size-3 shrink-0" />
+                                <span className="min-w-0 flex-1 truncate text-[11px]">
+                                  {file.name}
+                                </span>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon-xs"
+                                  aria-label={`Remove ${file.name}`}
+                                  title="Remove Resource"
+                                  onClick={() =>
+                                    setRequestFiles((current) =>
+                                      current.filter(
+                                        (_, candidateIndex) =>
+                                          candidateIndex !== index,
+                                      ),
+                                    )
+                                  }
+                                >
+                                  <X />
+                                </Button>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
+                      </div>
+                    </div>
                   ) : null}
                 </div>
 

@@ -202,7 +202,9 @@ React Flow is the canvas rendering and interaction layer. Canonical graph facts
 remain in node JSON; the library does not own product state. Formal lineage
 edges come from `derivedFrom`. The Composer sends a bounded request to a
 selected local Agent. The request inherits source-node Resources and can add
-request-only Context or local Markdown without mutating the source. A connected
+request-only Context or local Markdown without mutating the source. Those
+optional inputs share one collapsed `Run-only context` disclosure rather than
+occupying the default Composer path. A connected
 transient card represents the Run while it executes, and a validated proposal
 replaces it with Candidate cards. Node
 positions are a deterministic Dagre projection driven only by lineage and
