@@ -271,6 +271,26 @@ The tenth slice completes the first local Codex Agent Run loop:
    output to the operating system Trash without changing sibling Candidates;
    discarding the final Candidate removes the complete Proposal Run.
 
+## Eleventh implementation slice
+
+The eleventh slice adds Claude as a second local Agent transport:
+
+1. Choose Codex or Claude in the decomposition Composer and send an identical
+   bounded request through the same Harness, validation, and Run contract.
+2. Use the installed Claude CLI with the user's existing subscription login; do
+   not require an API key or model configuration.
+3. Restrict the Claude child process to read-only file tools inside its own Run
+   directory, matching the containment the Codex transport already applies.
+4. Record the selected transport on the Run so a restored Run names the Agent
+   that produced it.
+5. Continue a Coordinator Session only within one transport; selecting the other
+   Agent starts a fresh Session.
+6. Keep proposal, clarification, insufficient evidence, no change, failure, and
+   cancellation identical across both transports.
+
+Per-provider model selection, cost comparison, and running both Agents on one
+request remain outside this slice.
+
 ## Decomposition continuity
 
 Every action preserves the meaning of already visible boundaries:

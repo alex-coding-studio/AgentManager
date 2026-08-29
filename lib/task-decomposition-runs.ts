@@ -26,7 +26,8 @@ import {
   readTaskDecompositionContext,
 } from './task-decomposition-context.ts';
 import {
-  startCodexRun,
+  startLocalAgentRun,
+  type LocalAgentKind,
   type LocalAgentRun,
   type LocalAgentUsage,
 } from './local-agent-transport.ts';
@@ -46,6 +47,13 @@ export type TaskDecompositionRunStatus =
   | 'failed'
   | 'canceled';
 
+export type TaskDecompositionRunTransport = 'codex-cli' | 'claude-cli';
+
+const RUN_TRANSPORTS: Record<LocalAgentKind, TaskDecompositionRunTransport> = {
+  codex: 'codex-cli',
+  claude: 'claude-cli',
+};
+
 export type TaskDecompositionRunRecord = {
   schemaVersion: 1;
   runId: string;
@@ -58,7 +66,7 @@ export type TaskDecompositionRunRecord = {
   parentRunId?: string;
   revisionOf?: string;
   status: TaskDecompositionRunStatus;
-  transport: 'codex-cli';
+  transport: TaskDecompositionRunTransport;
   harness: {
     id: typeof TASK_DECOMPOSITION_HARNESS_ID;
     revision: typeof TASK_DECOMPOSITION_HARNESS_REVISION;
@@ -80,6 +88,7 @@ export type TaskDecompositionRunRecord = {
 
 type RunRequest = {
   sourceNodeId: string;
+  agent: LocalAgentKind;
   instruction: string;
   contextRefs: string[];
   files: File[];
@@ -118,8 +127,10 @@ export async function startTaskDecompositionRun(
       ? null
       : (revisionTarget?.run ??
         (await findLatestCoordinatorRun(project, sourceNode.id)));
+  const transport = RUN_TRANSPORTS[input.agent];
   const coordinatorRun =
-    coordinatorCandidate?.agentSessionMode === 'persistent'
+    coordinatorCandidate?.agentSessionMode === 'persistent' &&
+    coordinatorCandidate.transport === transport
       ? coordinatorCandidate
       : null;
   const continuesExistingSession = Boolean(coordinatorRun?.agentSessionId);
@@ -240,7 +251,7 @@ export async function startTaskDecompositionRun(
     parentRunId: coordinatorCandidate?.runId,
     revisionOf: revisionTarget?.candidate.candidateId,
     status: 'running',
-    transport: 'codex-cli',
+    transport,
     harness: {
       id: TASK_DECOMPOSITION_HARNESS_ID,
       revision: TASK_DECOMPOSITION_HARNESS_REVISION,
@@ -261,10 +272,10 @@ export async function startTaskDecompositionRun(
   };
   await writeRunRecord(project, record);
 
-  const agent = startCodexRun({
+  const agent = startLocalAgentRun(input.agent, {
     workingDirectory: runPath,
     prompt,
-    resumeThreadId: coordinatorRun?.agentSessionId ?? undefined,
+    resumeSessionId: coordinatorRun?.agentSessionId ?? undefined,
   });
   activeRuns.set(runKey(project, runId), { record, agent });
   void finishTaskDecompositionRun(
@@ -536,7 +547,7 @@ async function finishTaskDecompositionRun(
     const agentResult = await agent.completion;
     if (isRunCanceled(record)) return;
     record.status = 'validating';
-    record.agentSessionId = agentResult.threadId;
+    record.agentSessionId = agentResult.agentSessionId;
     record.usage = agentResult.usage;
     record.updatedAt = new Date().toISOString();
     await writeRunRecord(project, record);

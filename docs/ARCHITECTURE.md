@@ -236,14 +236,27 @@ moving the complete Node directory to the operating system Trash. Deletion
 never reconnects Nodes or cascades through the graph; the deleted Node's own
 upstream relationships disappear with its directory.
 
-Local Agent invocation is isolated behind a transport boundary. The first
-transport launches the installed Codex CLI as a persistent-session, read-only child
+Local Agent invocation is isolated behind a transport boundary. Every transport
+launches an installed Agent CLI as a persistent-session, read-only child
 process and uses the user's existing subscription login rather than storing an
 API key. AgentManager sends the complete Harness and bounded request packet on
 standard input, consumes structured JSON-line events, records the provider
-thread identifier and reported usage when available, and validates the final
-JSON before rendering it. Claude remains a separate future transport behind
-the same Agent selector and Run contract.
+session identifier and reported usage when available, and validates the final
+JSON before rendering it.
+
+Codex and Claude are two transports behind one Agent selector and one Run
+contract. The Codex transport runs `codex exec` inside its read-only sandbox and
+resumes a thread identifier. The Claude transport runs `claude --print` in
+restricted mode with only the read-only file tools and resumes a session
+identifier. Both normalize provider-reported usage onto one shape that keeps
+cached and cache-write input separate. Read-only containment and removing the
+provider API key from the child environment are transport responsibilities
+rather than Harness responsibilities, so a new transport cannot weaken the
+generation contract.
+
+A Coordinator Session belongs to exactly one transport. A Run resumes a prior
+`agentSessionId` only when the selected transport produced it; choosing the
+other Agent starts a fresh Session instead of replaying foreign Context.
 
 Each invocation owns a durable `task-decomposition/runs/RUN-*/run.json` record
 with AgentManager request identity, the exact User Instruction, project

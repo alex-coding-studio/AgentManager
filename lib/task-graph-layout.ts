@@ -14,6 +14,7 @@ export type TaskGraphPreview = {
   description?: string;
   color?: string;
   status?: string;
+  agentLabel?: string;
   derivedFrom?: string[];
   dependsOn?: string[];
   candidate?: HarnessCandidate;

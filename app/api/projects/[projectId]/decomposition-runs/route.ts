@@ -33,9 +33,9 @@ export async function POST(
         { status: 400 },
       );
     }
-    if (agent !== 'codex') {
+    if (agent !== 'codex' && agent !== 'claude') {
       return Response.json(
-        { error: 'This MVP currently supports Codex only.' },
+        { error: 'This MVP currently supports Codex and Claude only.' },
         { status: 400 },
       );
     }
@@ -47,6 +47,7 @@ export async function POST(
       .filter((entry): entry is File => entry instanceof File);
     const run = await startTaskDecompositionRun(project, {
       sourceNodeId,
+      agent,
       instruction,
       contextRefs,
       files,
