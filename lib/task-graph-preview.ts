@@ -7,7 +7,7 @@ export function createTaskGraphPreview() {
   const nodes = [
     node('NODE-9001', 'start', 'source', 'Product definition', []),
     node('NODE-9010', 'node', 'module', 'Context library', ['NODE-9001']),
-    node('NODE-9011', 'node', 'module', 'Task decomposition', ['NODE-9001']),
+    node('NODE-9011', 'node', 'module', 'Decomposition', ['NODE-9001']),
     node('NODE-9012', 'node', 'module', 'Dependency synchronization', [
       'NODE-9001',
     ]),

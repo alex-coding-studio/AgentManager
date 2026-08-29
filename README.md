@@ -1,16 +1,17 @@
 # AgentManager
 
 AgentManager is a local-first workspace for one developer building products with
-AI agents. It is designed to turn product intent into small, executable,
-independently verifiable tasks while keeping planning state separate from code
-history.
+AI agents. It is designed to grow product intent into coherent directions,
+decompose selected scopes at a human-manageable resolution, and later carry
+accepted work into independently verifiable delivery while keeping product and
+execution state separate from code history.
 
-It is a task-decomposition and dependency-synchronization tool, not a general
+It is a decomposition and dependency-synchronization tool, not a general
 project-management system. Projects provide context boundaries for Agent work.
 
 The current slices provide local project registration, a filesystem-backed
-Product Context library, and capture of source-backed start nodes on the Task
-Canvas. Task Decomposition also has its own user-managed Markdown instructions
+Product Context library, and capture of source-backed start nodes on the
+Decomposition Canvas. Decomposition also has its own user-managed Markdown instructions
 and Markdown or JSON attachments. A project can begin as a standalone product
 idea or attach to an existing local code repository.
 
@@ -19,7 +20,7 @@ idea or attach to an existing local code repository.
 - Node.js 22.13 or later
 - npm
 - The Codex CLI or the Claude CLI, signed in with an existing subscription, for
-  Task Decomposition Agent Runs
+  Decomposition Agent Runs
 
 ## Install the local command
 
@@ -61,13 +62,14 @@ README files can be opened in a reusable focus reader or revealed in the system
 file manager for external editing.
 Markdown documents can be created from the interface or imported through a file
 picker and drag and drop.
-Task Canvas start nodes are stored as one folder per node. Each node contains a
+Decomposition Canvas start nodes are stored as one folder per node. Each node contains a
 human-readable `node.json` and can carry its own Resource files. Context Library
 Markdown can be selected through the folder browser, while external Markdown
 can be attached directly during node creation.
-Task Decomposition Context is stored in
+Decomposition Context is stored in the compatibility directory
 `<project-root>/.agent-manager/task-decomposition/`. It remains separate from
-the feature Harness that will later define Agent output boundaries.
+the built-in Harness that defines Agent output boundaries. Existing internal
+paths and identifiers retain `task-decomposition` for data compatibility.
 
 Set `AGENT_MANAGER_HOME` to use a different machine-registry directory.
 

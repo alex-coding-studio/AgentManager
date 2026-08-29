@@ -15,7 +15,8 @@ void test('builds a bounded prompt with the Harness contract and request packet'
     instruction: 'Propose the next-level modules.',
   });
 
-  assert.match(prompt, /Task Decomposition Agent/);
+  assert.match(prompt, /Decomposition Agent/);
+  assert.match(prompt, /human-manageable resolution/);
   assert.match(prompt, /CANDIDATE-/);
   assert.match(prompt, /SESSION-0001/);
   assert.match(prompt, /Propose the next-level modules/);
@@ -30,5 +31,5 @@ void test('builds a continuation prompt without reinjecting the Harness', () => 
   assert.match(prompt, /Continue the existing AgentManager/);
   assert.match(prompt, /append-candidates/);
   assert.doesNotMatch(prompt, /complete output contract/);
-  assert.doesNotMatch(prompt, /Task Decomposition Agent/);
+  assert.doesNotMatch(prompt, /Decomposition Agent/);
 });

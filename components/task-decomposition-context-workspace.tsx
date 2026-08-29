@@ -182,10 +182,10 @@ export function TaskDecompositionContextWorkspace({
             href={`/projects/${projectId}/decomposition`}
             className="mb-4 inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition hover:text-foreground"
           >
-            <ArrowLeft className="size-3.5" /> Task canvas
+            <ArrowLeft className="size-3.5" /> Decomposition canvas
           </Link>
           <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-            Task decomposition
+            Decomposition
           </p>
           <h1 className="text-3xl font-semibold tracking-[-0.035em]">
             Context
@@ -224,8 +224,8 @@ export function TaskDecompositionContextWorkspace({
             <Textarea
               value={instructions}
               maxLength={100_000}
-              aria-label="Task Decomposition instructions"
-              placeholder="Describe project-specific constraints, preferred task size, naming conventions, acceptance expectations, or anything the Agent should account for while decomposing work."
+              aria-label="Decomposition instructions"
+              placeholder="Describe project-specific constraints, preferred resolution, naming conventions, acceptance expectations, or anything the Agent should account for while decomposing this scope."
               onChange={(event) => {
                 setInstructions(event.target.value);
                 setMessage('');
@@ -432,7 +432,7 @@ export function TaskDecompositionContextWorkspace({
             <DialogTitle>Remove context attachment?</DialogTitle>
             <DialogDescription>
               {deleteCandidate?.fileName} will be deleted from this project’s
-              Task Decomposition context folder.
+              Decomposition context folder.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

@@ -1,21 +1,28 @@
-# Task Decomposition Harness Design
+# Decomposition Harness Design
 
 ## Status
 
-This document records the current product decisions for AgentManager's built-in
-Task Decomposition Harness. It preserves the design before implementation. It is
-not yet the executable Harness, a finalized storage schema, or an implementation
-plan.
+This document records the product decisions behind AgentManager's built-in
+Decomposition Harness. The existing filename, internal identifiers, API paths,
+and storage directories retain `task-decomposition` for compatibility.
 
 ## Purpose
 
 The Harness helps one developer turn ambiguous product material into a small
 batch of inspectable Cards, calibrate those Cards through focused dialogue, and
-promote accepted results into the Task Canvas.
+promote accepted results into the Decomposition Canvas.
 
-It does not attempt to decompose an entire product from its root to executable
-leaf tasks in one request. Its minimum useful result is a bounded set of
+It does not attempt to decompose an entire product to mechanically indivisible
+leaf items in one request. Its minimum useful result is a bounded set of
 well-supported next-level options that the user can understand and refine.
+
+Atomicity is relative to the current purpose. A Candidate is atomic when it
+expresses one coherent intent, has a boundary distinguishable from its siblings,
+and carries a manageable amount of Context for the user's current decision. It
+may still contain several implementation steps. The Harness stops when another
+immediate split would add little decision value, not merely when no further
+mechanical subdivision is possible. One Agent Session or pull request is a
+delivery-sizing signal only when the user explicitly decomposes for delivery.
 
 ## Product ownership
 
@@ -23,7 +30,7 @@ The Harness is an AgentManager-owned core capability.
 
 - Ordinary users cannot edit, replace, disable, or select another Harness from
   the interface or settings.
-- User-managed Task Decomposition Context remains separate and can contain
+- User-managed Decomposition Context remains separate and can contain
   project-specific instructions and Markdown or JSON attachments.
 - Because AgentManager is open source, a user may fork the source or manually
   change an installation. AgentManager does not provide a customization workflow
@@ -166,7 +173,7 @@ Every decomposition round initially includes:
 
 For root decomposition, the Start node's selected documents are primary. For a
 descendant, its accepted `output.md` is primary and its inherited original
-sources are related. Task Decomposition Context attachments are related unless
+sources are related. Decomposition Context attachments are related unless
 the user explicitly selects one for the Run. The interface should warn when the
 always-loaded instructions themselves become unusually large rather than
 silently truncating user constraints.

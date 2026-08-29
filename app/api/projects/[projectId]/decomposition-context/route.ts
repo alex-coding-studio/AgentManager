@@ -53,7 +53,7 @@ export async function PATCH(
     const payload = (await request.json()) as { instructions?: unknown };
     if (typeof payload.instructions !== 'string') {
       return Response.json(
-        { error: 'Task Decomposition instructions are required.' },
+        { error: 'Decomposition instructions are required.' },
         { status: 400 },
       );
     }
@@ -64,7 +64,7 @@ export async function PATCH(
     const message =
       error instanceof Error
         ? error.message
-        : 'Could not save Task Decomposition instructions.';
+        : 'Could not save Decomposition instructions.';
     return Response.json({ error: message }, { status: 400 });
   }
 }

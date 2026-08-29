@@ -45,7 +45,7 @@ export default async function ProjectPage({
 
         <div className="mt-10 grid gap-4 sm:grid-cols-3">
           <SummaryCard icon={<Library />} label="Product sources" value="0" />
-          <SummaryCard icon={<Boxes />} label="Task pieces" value="0" />
+          <SummaryCard icon={<Boxes />} label="Decomposition nodes" value="0" />
           <SummaryCard icon={<GitFork />} label="Dependencies" value="0" />
         </div>
 
@@ -57,7 +57,7 @@ export default async function ProjectPage({
             <div>
               <p className="font-medium">The project boundary is connected.</p>
               <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                Product context, task decomposition, and dependency sync will be
+                Product context, decomposition, and dependency sync will be
                 added as focused capabilities.
               </p>
             </div>

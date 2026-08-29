@@ -915,13 +915,13 @@ export function TaskDecompositionWorkspace({
       <header className="flex shrink-0 items-end justify-between gap-6 border-b border-border px-5 py-5 lg:px-8">
         <div>
           <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-            Task decomposition
+            Decomposition
           </p>
           <h1 className="text-2xl font-semibold tracking-[-0.03em]">
-            Task canvas
+            Decomposition canvas
           </h1>
           <p className="mt-2 max-w-xl text-sm text-muted-foreground">
-            Capture one starting point, then decompose it into Task nodes.
+            Break one scope into coherent, human-manageable nodes.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -1001,7 +1001,7 @@ export function TaskDecompositionWorkspace({
                   id="task-title"
                   value={title}
                   maxLength={160}
-                  placeholder="Task decomposition MVP"
+                  placeholder="Decomposition workspace"
                   onChange={(event) => setTitle(event.target.value)}
                 />
               </div>
