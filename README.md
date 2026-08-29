@@ -5,6 +5,9 @@ AI agents. It is designed to turn product intent into small, executable,
 independently verifiable tasks while keeping planning state separate from code
 history.
 
+It is a task-decomposition and dependency-synchronization tool, not a general
+project-management system. Projects provide context boundaries for Agent work.
+
 The current slice provides local project registration. A project can begin as a
 standalone product idea or attach to an existing local code repository.
 
@@ -44,6 +47,13 @@ stores its own metadata in `<project-root>/.agent-manager/project.json`.
 When the selected directory belongs to a Git repository, AgentManager adds
 `.agent-manager/` to that clone's `.git/info/exclude`. It does not modify the
 tracked `.gitignore`.
+
+The internal `.agent-manager/` asset layout is fixed by the product. Users
+choose the project root, while AgentManager owns the planning paths beneath it.
+Product Context sections are discovered directly from folders and their
+`README.md` files; no database or manifest duplicates that structure.
+README files can be opened in a reusable focus reader or revealed in the system
+file manager for external editing.
 
 Set `AGENT_MANAGER_HOME` to use a different machine-registry directory.
 

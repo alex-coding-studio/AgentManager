@@ -6,6 +6,12 @@ AgentManager is a local-first workspace for one independent developer working wi
 
 The product exists because repository documents and pull requests are good homes for durable product facts and code, but they are too heavy for frequently changing planning state. AgentManager provides the missing planning and task-graph layer without replacing the repository.
 
+AgentManager is not a project-management product. A project is only the boundary
+that supplies product context and local assets. The product's center is task
+decomposition, dependency synchronization, and additional personal Agent
+workflows built on those two capabilities. It does not add planning ceremony for
+its own sake.
+
 ## Primary user
 
 The primary user is one developer working across one or more software repositories with coding agents. The user owns product judgment and acceptance. Agents help clarify intent, decompose work, implement bounded tasks, review changes, and preserve delivery evidence.
@@ -23,6 +29,8 @@ AgentManager is not being designed for a multi-user organization. Team permissio
 7. Product facts and task-planning state must remain distinct.
 8. Every new capability must solve a problem observed while using AgentManager to build AgentManager.
 9. Repository documentation, product contracts, interface copy, examples, data fields, and delivery notes are written in English.
+10. AgentManager owns one fixed internal asset layout; users choose the project
+    root but do not configure internal planning paths.
 
 ## Self-hosting and self-iteration
 
@@ -78,6 +86,26 @@ The first slice only allows the user to:
 4. See the registered project after restarting AgentManager.
 
 Markdown upload, Product Foundation generation, SQLite task storage, task decomposition, graph visualization, MCP access, Git synchronization, and pull-request reconciliation are explicitly deferred.
+
+## Second implementation slice
+
+The second slice establishes Product Context as a readable filesystem-backed
+library:
+
+1. Initialize fixed Product, Design, Engineering, Milestones, References, and
+   Other folders.
+2. Give the context root and every section an English `README.md` explaining its
+   purpose and Agent loading boundary.
+3. Discover sections directly from the filesystem without a database or
+   manifest.
+4. Select a section and read its rendered Markdown in a persistent preview
+   area.
+5. Open any README in a reusable focus-reading overlay for long documents.
+6. Reveal the selected section in the operating system's file manager for
+   external editing.
+
+Creating, importing, renaming, moving, or deleting ordinary context documents
+and previewing non-Markdown assets remain deferred.
 
 ## Planned domain concepts
 

@@ -104,16 +104,40 @@ Planned layout:
 ```text
 .agent-manager/
 ├── project.json
-├── sources/
-├── modules/
-│   └── deletion-works-on-screen.md
-├── tasks/
-│   ├── task-001.json
-│   └── task-002.json
-├── relationships.json
+├── context/
+│   ├── README.md
+│   ├── product/
+│   │   └── README.md
+│   ├── design/
+│   │   └── README.md
+│   ├── engineering/
+│   │   └── README.md
+│   ├── milestones/
+│   │   └── README.md
+│   ├── references/
+│   │   └── README.md
+│   └── other/
+│       └── README.md
+├── task-graph/
+│   ├── tasks/
+│   │   ├── task-001.json
+│   │   └── task-002.json
+│   └── dependencies.json
 └── .cache/
     └── project.sqlite
 ```
+
+This layout is an opinionated product contract and is not user-configurable.
+Users choose the project root directory; AgentManager owns every path beneath
+`.agent-manager/`. A stable layout keeps agents, Skills, synchronization,
+validation, and migrations deterministic. Because AgentManager is open source,
+specialized installations can change the implementation instead of adding a
+configuration system to the core product.
+
+Product Context uses the filesystem as its canonical index. Each section is a
+folder, and its `README.md` defines the section's purpose, content boundary, and
+Agent loading guidance. AgentManager discovers sections by scanning the
+directory. It does not duplicate the context tree in SQLite or a manifest.
 
 Markdown is used for flexible human-readable product and acceptance content. JSON is used for stable structured records and agent interchange. SQLite is introduced only when graph queries require it.
 
