@@ -204,8 +204,10 @@ render an in-memory Draft request beside its source with a dashed directional
 edge. The request inherits source-node Resources and can add request-only
 Context or local Markdown without mutating the source. That Draft is an
 interaction preview only and is deliberately discarded on reload. Node
-positions are also session-local in this slice and can become canonical only
-through a later explicit position schema.
+positions are deterministic projections of lineage depth: each generation is a
+column and siblings are arranged vertically. Users can pan and zoom the canvas,
+but Nodes are not draggable and no presentation coordinates become canonical
+planning data.
 
 Every node is a folder so it can carry its JSON card, node-local Resources, and
 future generated artifacts without inventing a database relationship. Semantic
@@ -338,6 +340,6 @@ The following are intentionally not implemented in the first project-creation sl
 - SQLite task indexes
 - MCP server
 - Agent invocation
-- Persistent canvas positions
+- Manual canvas positioning
 - Pull-request reconciliation
 - Cross-machine synchronization

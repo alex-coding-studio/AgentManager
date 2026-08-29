@@ -27,13 +27,43 @@ export function buildTaskGraphLayout(
   nodes: TaskGraphNode[],
   previews: TaskGraphPreview[],
 ) {
-  const layoutNodes: TaskGraphLayoutNode[] = nodes.map((node, index) => ({
-    id: node.id,
-    kind: 'formal',
-    x: (index % 3) * 340,
-    y: Math.floor(index / 3) * 220,
-    derivedFrom: node.derivedFrom ?? [],
-  }));
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const depthById = new Map<string, number>();
+
+  function resolveDepth(nodeId: string, ancestors: Set<string>): number {
+    const knownDepth = depthById.get(nodeId);
+    if (knownDepth !== undefined) return knownDepth;
+    if (ancestors.has(nodeId)) return 0;
+    const node = nodeById.get(nodeId);
+    const parents = (node?.derivedFrom ?? []).filter((parentId) =>
+      nodeById.has(parentId),
+    );
+    if (parents.length === 0) {
+      depthById.set(nodeId, 0);
+      return 0;
+    }
+    const nextAncestors = new Set(ancestors).add(nodeId);
+    const depth =
+      Math.max(
+        ...parents.map((parentId) => resolveDepth(parentId, nextAncestors)),
+      ) + 1;
+    depthById.set(nodeId, depth);
+    return depth;
+  }
+
+  const countByDepth = new Map<number, number>();
+  const layoutNodes: TaskGraphLayoutNode[] = nodes.map((node) => {
+    const depth = resolveDepth(node.id, new Set());
+    const index = countByDepth.get(depth) ?? 0;
+    countByDepth.set(depth, index + 1);
+    return {
+      id: node.id,
+      kind: 'formal',
+      x: depth * 360,
+      y: index * 190,
+      derivedFrom: node.derivedFrom ?? [],
+    };
+  });
   const nodePositions = new Map(
     layoutNodes.map((node) => [node.id, { x: node.x, y: node.y }]),
   );

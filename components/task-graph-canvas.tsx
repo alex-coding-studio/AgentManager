@@ -62,16 +62,12 @@ export function TaskGraphCanvas({
   const [flowEdges, setFlowEdges, onEdgesChange] = useEdgesState(graph.edges);
 
   useEffect(() => {
-    setFlowNodes((current) => {
-      const positions = new Map(
-        current.map((node) => [node.id, node.position]),
-      );
-      return graph.nodes.map((node) => ({
+    setFlowNodes(
+      graph.nodes.map((node) => ({
         ...node,
-        position: positions.get(node.id) ?? node.position,
         selected: node.id === selectedNodeId,
-      }));
-    });
+      })),
+    );
     setFlowEdges(graph.edges);
   }, [graph, selectedNodeId, setFlowEdges, setFlowNodes]);
 
@@ -87,6 +83,7 @@ export function TaskGraphCanvas({
         else onSelectNode(node.id);
       }}
       onPaneClick={() => onSelectNode('')}
+      nodesDraggable={false}
       minZoom={0.35}
       maxZoom={1.8}
       fitView
@@ -132,7 +129,7 @@ function TaskCard({ id, data, selected }: NodeProps<TaskFlowNode>) {
           {id}
         </span>
         <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-medium capitalize text-secondary-foreground">
-          {preview ? 'Request preview' : data.type}
+          {preview ? 'Preview' : data.type}
         </span>
       </div>
       <h2 className="mt-4 text-sm font-semibold leading-5">{data.title}</h2>
@@ -206,7 +203,7 @@ function buildFlowGraph(
       id: layoutNode.id,
       type: 'task',
       position: { x: layoutNode.x, y: layoutNode.y },
-      draggable: true,
+      draggable: false,
       deletable: false,
       data: {
         kind: layoutNode.kind,

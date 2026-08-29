@@ -35,6 +35,35 @@ void test('builds formal lineage edges from derivedFrom', () => {
       temporary: false,
     },
   ]);
+  assert.deepEqual(
+    graph.nodes.map(({ id, x, y }) => ({ id, x, y })),
+    [
+      { id: 'NODE-0001', x: 0, y: 0 },
+      { id: 'NODE-0002', x: 360, y: 0 },
+    ],
+  );
+});
+
+void test('places each lineage generation in its own column', () => {
+  const graph = buildTaskGraphLayout(
+    [
+      node('NODE-0001'),
+      node('NODE-0002', ['NODE-0001']),
+      node('NODE-0003', ['NODE-0001']),
+      node('NODE-0004', ['NODE-0002']),
+    ],
+    [],
+  );
+
+  assert.deepEqual(
+    graph.nodes.map(({ id, x, y }) => ({ id, x, y })),
+    [
+      { id: 'NODE-0001', x: 0, y: 0 },
+      { id: 'NODE-0002', x: 360, y: 0 },
+      { id: 'NODE-0003', x: 360, y: 190 },
+      { id: 'NODE-0004', x: 720, y: 0 },
+    ],
+  );
 });
 
 void test('places a preview beside its source with a temporary edge', () => {
