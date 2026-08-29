@@ -7,11 +7,11 @@ AgentManager's built-in What's Next Harness. It separates settled behavior from
 open design questions so the executable Harness is not written ahead of the
 product model.
 
-Harness revision 2 in `lib/whats-next-harness.ts` is the first executable V1
+Harness revision 3 in `lib/whats-next-harness.ts` is the current executable V1
 baseline. It implements the settled Reflection, Candidate Markdown, bounded
-Context, dependency, and one-to-one Refine contract. Real-project dogfooding
-must still determine whether the prompt and output-density limits are good
-enough.
+Context, dependency, one-to-one Refine, and progressive semantic-resolution
+contract. Real-project dogfooding must still determine whether the prompt and
+output-density limits are good enough.
 
 ## Purpose
 
@@ -39,6 +39,8 @@ product exploration, not merely a container around Cards.
 
 Formal Nodes and the independent Grow, Decompose, and Implement operations are
 defined in [`DECOMPOSITION_MODEL.md`](DECOMPOSITION_MODEL.md).
+The product-reasoning rules that keep semantic movement grounded are defined in
+[`PRODUCT_DISCOVERY_DOCTRINE.md`](PRODUCT_DISCOVERY_DOCTRINE.md).
 
 ## Settled decisions
 
