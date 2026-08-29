@@ -115,6 +115,13 @@ Planned layout:
     └── project.sqlite
 ```
 
+This layout is an opinionated product contract and is not user-configurable.
+Users choose the project root directory; AgentManager owns every path beneath
+`.agent-manager/`. A stable layout keeps agents, Skills, synchronization,
+validation, and migrations deterministic. Because AgentManager is open source,
+specialized installations can change the implementation instead of adding a
+configuration system to the core product.
+
 Markdown is used for flexible human-readable product and acceptance content. JSON is used for stable structured records and agent interchange. SQLite is introduced only when graph queries require it.
 
 ## SQLite policy

@@ -1,7 +1,9 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import {
+  ArrowUpRight,
   Code2,
   Folder,
   FolderOpen,
@@ -27,10 +29,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import type {
-  ProjectKind,
-  RegisteredProject,
-} from '@/lib/project-registry';
+import type { ProjectKind, RegisteredProject } from '@/lib/project-registry';
 
 export function ProjectWorkspace({
   initialProjects,
@@ -161,7 +160,9 @@ export function ProjectWorkspace({
 
                 <div className="my-5 space-y-5">
                   <fieldset className="space-y-2">
-                    <legend className="text-xs font-medium">Starting point</legend>
+                    <legend className="text-xs font-medium">
+                      Starting point
+                    </legend>
                     <div className="grid grid-cols-2 gap-2">
                       <KindButton
                         active={kind === 'standalone'}
@@ -181,7 +182,10 @@ export function ProjectWorkspace({
                   </fieldset>
 
                   <div className="space-y-2">
-                    <label htmlFor="project-name" className="text-xs font-medium">
+                    <label
+                      htmlFor="project-name"
+                      className="text-xs font-medium"
+                    >
                       Project name
                     </label>
                     <Input
@@ -210,7 +214,10 @@ export function ProjectWorkspace({
                   </div>
 
                   <div className="space-y-2">
-                    <label htmlFor="project-directory" className="text-xs font-medium">
+                    <label
+                      htmlFor="project-directory"
+                      className="text-xs font-medium"
+                    >
                       Project directory
                     </label>
                     <div className="flex gap-2">
@@ -273,32 +280,36 @@ export function ProjectWorkspace({
           ) : null}
 
           {projects.map((project) => (
-            <Card
-              key={project.id}
-              className="border-0 shadow-[0_1px_0_rgb(15_23_42/5%),0_14px_40px_rgb(15_23_42/5%)]"
-            >
-              <CardHeader>
-                <div className="mb-3 flex items-start justify-between gap-4">
-                  <div className="grid size-10 place-items-center rounded-xl bg-secondary">
-                    {project.kind === 'repository' ? (
-                      <Code2 className="size-4.5" />
-                    ) : (
-                      <PackagePlus className="size-4.5" />
-                    )}
+            <Link key={project.id} href={`/projects/${project.id}`}>
+              <Card className="h-full border-0 shadow-[0_1px_0_rgb(15_23_42/5%),0_14px_40px_rgb(15_23_42/5%)] transition hover:-translate-y-0.5 hover:shadow-[0_1px_0_rgb(15_23_42/5%),0_18px_50px_rgb(15_23_42/8%)]">
+                <CardHeader>
+                  <div className="mb-3 flex items-start justify-between gap-4">
+                    <div className="grid size-10 place-items-center rounded-xl bg-secondary">
+                      {project.kind === 'repository' ? (
+                        <Code2 className="size-4.5" />
+                      ) : (
+                        <PackagePlus className="size-4.5" />
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-full bg-secondary px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
+                        {project.kind === 'repository'
+                          ? 'Repository'
+                          : 'Product idea'}
+                      </span>
+                      <ArrowUpRight className="size-4 text-muted-foreground" />
+                    </div>
                   </div>
-                  <span className="rounded-full bg-secondary px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
-                    {project.kind === 'repository' ? 'Repository' : 'Product idea'}
-                  </span>
-                </div>
-                <CardTitle className="text-lg">{project.name}</CardTitle>
-                <CardDescription>
-                  {project.description || 'No description yet.'}
-                </CardDescription>
-                <code className="mt-3 block truncate text-[11px] text-muted-foreground">
-                  {project.rootPath}
-                </code>
-              </CardHeader>
-            </Card>
+                  <CardTitle className="text-lg">{project.name}</CardTitle>
+                  <CardDescription>
+                    {project.description || 'No description yet.'}
+                  </CardDescription>
+                  <code className="mt-3 block truncate text-[11px] text-muted-foreground">
+                    {project.rootPath}
+                  </code>
+                </CardHeader>
+              </Card>
+            </Link>
           ))}
         </div>
       </section>

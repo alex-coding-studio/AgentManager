@@ -88,6 +88,12 @@ export async function listProjects() {
   return (await readRegistry()).projects;
 }
 
+export async function getProject(projectId: string) {
+  return (
+    (await listProjects()).find((project) => project.id === projectId) ?? null
+  );
+}
+
 export async function createProject(input: {
   kind: ProjectKind;
   name: string;

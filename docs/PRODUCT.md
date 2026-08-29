@@ -6,6 +6,12 @@ AgentManager is a local-first workspace for one independent developer working wi
 
 The product exists because repository documents and pull requests are good homes for durable product facts and code, but they are too heavy for frequently changing planning state. AgentManager provides the missing planning and task-graph layer without replacing the repository.
 
+AgentManager is not a project-management product. A project is only the boundary
+that supplies product context and local assets. The product's center is task
+decomposition, dependency synchronization, and additional personal Agent
+workflows built on those two capabilities. It does not add planning ceremony for
+its own sake.
+
 ## Primary user
 
 The primary user is one developer working across one or more software repositories with coding agents. The user owns product judgment and acceptance. Agents help clarify intent, decompose work, implement bounded tasks, review changes, and preserve delivery evidence.
@@ -23,6 +29,8 @@ AgentManager is not being designed for a multi-user organization. Team permissio
 7. Product facts and task-planning state must remain distinct.
 8. Every new capability must solve a problem observed while using AgentManager to build AgentManager.
 9. Repository documentation, product contracts, interface copy, examples, data fields, and delivery notes are written in English.
+10. AgentManager owns one fixed internal asset layout; users choose the project
+    root but do not configure internal planning paths.
 
 ## Self-hosting and self-iteration
 
