@@ -351,9 +351,6 @@ export function validateWhatsNextHarnessResult(
 
   const result = value as WhatsNextHarnessResult;
   validateRequest(result.request, context.request);
-  if (!result.reflection.markdown.trim().startsWith('# Reflection\n')) {
-    fail('Reflection Markdown must start with a Reflection heading.');
-  }
   const knownNodeIds = new Set(context.knownNodeIds);
   requireKnownNodes(result.exploration.consideredNodeIds, knownNodeIds);
 
@@ -514,7 +511,7 @@ function validateCandidateMarkdown(candidate: WhatsNextCandidate) {
   const statements = rationale
     .split('\n')
     .map((line) => line.trim())
-    .filter((line) => /^[-*] /.test(line));
+    .filter((line) => /^(?:[-*]|\d+[.)])\s+/.test(line));
   if (statements.length < 2 || statements.length > 4) {
     fail('Why this direction must contain two to four short bullets.');
   }

@@ -106,6 +106,32 @@ void test('renders one readable Response from Reflection and Candidates', () => 
   assert.match(markdown, /## Direction CANDIDATE-0001/);
 });
 
+void test('accepts a heading-free Reflection and ordered rationale', () => {
+  const value = proposal([
+    candidate('CANDIDATE-0001', {
+      outputMarkdown: `# Direction CANDIDATE-0001
+
+One possible next step grown from the Start.
+
+## Why this direction
+
+1. The origin still needs a concrete entry point.
+2. The user can inspect this direction independently.
+
+## Assumptions
+
+- None`,
+    }),
+    candidate('CANDIDATE-0002'),
+  ]);
+  value.reflection.markdown =
+    'The current idea contains several connected but unsettled values.';
+  assert.equal(
+    validateWhatsNextHarnessResult(value, context).outcome,
+    'proposal',
+  );
+});
+
 void test('rejects a single-direction proposal', () => {
   assert.throws(
     () =>

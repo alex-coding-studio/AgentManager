@@ -357,6 +357,63 @@ export async function listLatestWhatsNextRuns(project: RegisteredProject) {
   );
 }
 
+export async function recoverWhatsNextRunResult(
+  project: RegisteredProject,
+  runId: string,
+  finalOutput: string,
+) {
+  const record = await readWhatsNextRun(project, runId);
+  if (record.status !== 'failed' || record.result) {
+    throw new Error(
+      'Only a failed Run without a validated result can recover.',
+    );
+  }
+  const nodes = await listTaskGraphNodes(project, GRAPH_ROOT);
+  const revisionTarget =
+    record.revisionOf && record.parentRunId
+      ? await readWhatsNextRun(project, record.parentRunId).then((parent) =>
+          parent.result?.outcome === 'proposal'
+            ? (parent.result.candidates.find(
+                (candidate) => candidate.candidateId === record.revisionOf,
+              ) ?? null)
+            : null,
+        )
+      : null;
+  const result = parseWhatsNextHarnessResult(finalOutput, {
+    request: {
+      sessionId: record.sessionId,
+      requestId: record.requestId,
+      inputFingerprint: record.inputFingerprint,
+    },
+    operation: record.operation,
+    revisionCandidateId: revisionTarget?.candidateId,
+    revisionTarget: revisionTarget ?? undefined,
+    knownNodeIds: nodes.map((node) => node.id),
+    knownResourcePaths: record.input?.resourcePaths ?? [],
+    acceptedCandidateIds: nodes.flatMap((node) =>
+      node.provenance?.candidateId ? [node.provenance.candidateId] : [],
+    ),
+    previousCandidateRevisions: revisionTarget
+      ? { [revisionTarget.candidateId]: revisionTarget.revision }
+      : undefined,
+    reservedCandidateIds:
+      record.operation === 'refine-candidate'
+        ? []
+        : await collectReservedCandidateIds(project),
+    knownCandidates: await collectLatestUnacceptedCandidates(project),
+  });
+  const timestamp = new Date().toISOString();
+  record.status = result.outcome;
+  record.result = result;
+  record.error = null;
+  record.updatedAt = timestamp;
+  record.endedAt = timestamp;
+  await ensureCandidateArtifacts(project, record);
+  await writeWhatsNextCheckpoint(project, record);
+  await writeRunRecord(project, record);
+  return record;
+}
+
 export async function cancelWhatsNextRun(
   project: RegisteredProject,
   runId: string,
