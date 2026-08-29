@@ -188,7 +188,6 @@ export function TaskDecompositionWorkspace({
   }
 
   async function previewResource(resourcePath: string) {
-    setSelectedNodeId('');
     setPreviewingPath(resourcePath);
     setError('');
     const response = await fetch(
