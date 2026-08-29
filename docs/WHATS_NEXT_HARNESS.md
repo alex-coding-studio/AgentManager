@@ -165,14 +165,68 @@ The Canvas Card may remain compact with title and description. The detail view
 can expose the rationale and assumptions so the user can correct one link in
 the reasoning without rejecting the entire direction.
 
+### Human meaning is stored as Markdown
+
+The Agent's human-facing output is Markdown, not a collection of prose fields
+that the user must read as JSON.
+
+- One `reflection.md` holds the current round's generative response.
+- Each Candidate owns an `output.md` containing its title, description,
+  **Why this direction** reasoning, assumptions, and any later type-specific
+  sections.
+- A small JSON sidecar owns identity, revision, paths, graph relationships,
+  provenance, hashes, and validation state.
+- Accepting a Candidate promotes its Markdown content without reconstructing
+  product meaning from metadata.
+
+AgentManager may transport Markdown inside a validated envelope and render a
+combined Response view, but it must not ask the Agent to independently generate
+duplicate combined and per-Candidate prose that can drift apart. The combined
+view and individual files derive from one content source.
+
+The Harness keeps the Markdown readable at conversation scale. A description
+is normally one or two sentences. **Why this direction** normally contains two
+to four ordered bullets, each expressing one short reasoning statement.
+Assumptions include only material uncertainty. Exact multilingual character
+ceilings should be set through UI and output evaluation, but the Agent must not
+turn one Candidate into an essay or repeat the same reasoning across sections.
+
+### Inline feedback anchors Refine
+
+The Markdown reader should let the user select one line range, attach feedback,
+and repeat that action for several ranges before sending a Refine request. Each
+feedback item records:
+
+- artifact path and Candidate identity;
+- exact base revision;
+- start and end lines;
+- an excerpt hash; and
+- the user's instruction.
+
+The selected range is the primary Context anchor, not a hard edit boundary.
+The Agent may update other affected sections in the same Candidate
+`output.md` to preserve internal consistency. It must not modify another
+Candidate, Reflection, or Formal Node, and every additional change must appear
+in the reviewable Markdown diff.
+
+If the revision or excerpt hash no longer matches, AgentManager marks the
+feedback stale instead of applying it to shifted text. Feedback remains
+temporary Session material and does not become Formal Node content unless its
+meaning is incorporated into the accepted Markdown.
+
 ### Refine is strictly one-to-one
 
 Refine means that the current direction is useful but its meaning, boundary, or
 expression needs improvement.
 
 - One Candidate enters and the same Candidate returns at its next revision.
-- Title, description, rationale, and assumptions may change.
+- The Agent returns a patch against that Candidate's Markdown rather than a new
+  Candidate set.
+- One or several Markdown sections may change while untouched sections remain
+  unchanged.
 - No sibling, child, dependency, or Formal Node may be created.
+- AgentManager validates the base revision and hash, applies the patch, and
+  presents the complete diff before the new revision is accepted.
 - The response should summarize what changed because of the user's feedback.
 
 If feedback suggests a materially different idea, the Agent may mention that
@@ -196,6 +250,58 @@ more, return to an earlier Formal Node, Decompose, Implement, or stop.
 from the same origins under a corrected understanding. `Explore from this
 Node` opens a new Session from any Formal Node without mutating its existing
 children or dependencies. There is no graph-mutating Session-level Reframe.
+
+### Context continuity uses bootstrap, deltas, and checkpoints
+
+Repeating the complete Context packet on every round is both expensive and
+loss-prone. It dilutes current feedback, can reintroduce superseded meaning, and
+makes continuity depend on assembling the same large prompt perfectly each
+time.
+
+One line of inquiry therefore uses three layers:
+
+1. The live provider Agent Session holds short-term conversational Context.
+2. Durable Session artifacts hold current effective understanding, Candidate
+   revisions, unresolved feedback, file hashes, and Context inspection history.
+3. The project Context Workspace provides discoverable Formal Nodes and
+   Resources that the running Agent reads only when a concrete question
+   requires them.
+
+Initial Explore receives one bootstrap packet containing the Harness, current
+Instruction, request identity, lightweight graph map, and Context manifest.
+Selected origins and explicit primary Resources are snapshotted as required
+Workspace files; their bodies do not need to be serialized into the packet.
+The Agent reads those primary files through its read-only file tools.
+
+Later Refine or Continue operations resume the same provider Session when
+available and send only the latest user input, feedback anchors, Markdown and
+graph deltas, new or changed Resource references, and current fingerprints.
+Unchanged Harness text, sources, and prior dialogue are not repeatedly
+injected.
+
+Related content remains discoverable from the manifest. Before reading it, the
+Agent must name a concrete unresolved question such as possible duplication
+with an existing direction. The machine record notes each expanded path, its
+hash, and the reason it was inspected.
+
+Every successful round updates a durable checkpoint:
+
+- latest `reflection.md`;
+- active Candidate Markdown and revisions;
+- effective user decisions and unresolved feedback;
+- selected origins and current graph fingerprints; and
+- a Context ledger of inspected paths, hashes, and reasons.
+
+The complete transcript is not the recovery source. When provider resume is
+unavailable, AgentManager creates a fresh Agent Session from the latest
+checkpoint, selected origins, current manifest, and unresolved feedback. When
+the live Context approaches its evaluated limit, AgentManager performs the same
+checkpoint-based rollover instead of allowing uncontrolled accumulation.
+
+Provider Session continuity is an optimization; durable Session artifacts are
+the source of truth. `Restart exploration` and `Explore from this Node` always
+start fresh provider Sessions so abandoned or sibling assumptions do not leak
+across branches.
 
 ### Effective decisions survive without the transcript
 
@@ -272,33 +378,39 @@ The Harness must not:
   choices;
 - confuse adjacent growth with decomposition;
 - treat Reflection as disposable wrapper text around the Cards;
+- use JSON metadata as the primary human-readable product content;
+- regenerate duplicate Markdown representations that can drift apart;
 - generate implementation slices, pull-request plans, or delivery state;
 - require every Candidate to be implementation-ready;
 - require a Candidate to pass through Decomposition before Implementation;
 - create siblings or children while refining one Candidate;
+- reinject the complete unchanged Context or transcript on every round;
+- rely on a provider Session identifier as the only durable memory;
 - mutate an accepted branch under a Session-level Reframe;
 - silently replace accepted origins when branches converge; or
 - preserve an entire discarded Session merely because its decisions once
   appeared in conversation.
 
-## Open decisions
+## Remaining implementation and evaluation decisions
 
-The following questions remain deliberately unresolved:
+The product boundary is sufficiently settled for V1 implementation. The next
+slice should choose and test:
 
-1. What exact schema and Markdown representation should store Reflection,
-   rationale, and assumptions without forcing the internal value-loop check
-   into the public contract?
-2. How should the UI express actions such as primary direction, also important,
-   combine, refine, postpone, and reject without turning discovery into a rigid
-   ranking workflow?
-3. What confirmation and cleanup interaction should distinguish Refine,
-   Restart exploration, and Explore from this Node?
-4. What exact provenance and conflict rules should apply when several Formal
-   Nodes are selected as origins?
-5. What user action selects the graph scope for future project-document
-   synthesis?
-6. Which real-project evaluations will show that the Harness finds useful
-   starting value, respects boundaries, and uses acceptable Context?
+1. the exact JSON sidecar and transport envelope that reference Reflection,
+   Candidate Markdown, section patches, hashes, and Context inspection records;
+2. the initial UI for viewing the combined Response, attaching inline feedback,
+   reviewing diffs, and choosing Refine, Restart exploration, or Explore from
+   this Node;
+3. confirmation and system-Trash cleanup behavior for accepted, restarted, and
+   abandoned Sessions; and
+4. real-project evaluation cases that test pain-point fit, useful Reflection,
+   strict one-to-one Refine, Context expansion discipline, and recovery from a
+   fresh provider Session.
 
-These decisions should be settled through discussion and AgentManager
-dogfooding before the placeholder executable Harness is replaced.
+The following decisions should wait for the capability that needs them rather
+than block V1:
+
+- exact provenance and conflict rules for a multi-origin exploration;
+- graph-scope selection for future project-document synthesis; and
+- the measured Context threshold and failure signals for automatic provider
+  Session rollover.

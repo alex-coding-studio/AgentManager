@@ -88,3 +88,24 @@ retain the usage accumulated before interruption.
 The future interface can expose a `Run statistics` view with totals, Context
 breakdown, duration, expansions, retries, tools, Sub Agents, outcome, and cost
 when known.
+
+## Deferred: Decomposition Recompose runtime
+
+The product contract now names proposal-level structural revision
+`Recompose`. Unlike the current strict one-Candidate `revise-candidate`
+operation, Recompose may return a different partition and Candidate count.
+
+Deliver it as one coherent runtime migration:
+
+- add an explicit proposal-level Recompose operation;
+- reconcile retained, replaced, split, merged, added, and removed Candidate
+  identities;
+- update the output schema, validator, persistence, and Canvas interaction
+  together;
+- treat accepted Formal Nodes as protected boundaries; and
+- cover dependency impact, stale inputs, comparison, rollback, and system-Trash
+  cleanup.
+
+Do not rename only the Prompt or UI while the runtime still enforces one-to-one
+revision. Restructuring accepted graph branches remains a separate future
+operation.
