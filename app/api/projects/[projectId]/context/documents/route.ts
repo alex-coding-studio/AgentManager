@@ -1,6 +1,8 @@
 import { getProject } from '@/lib/project-registry';
 import {
+  ContextDocumentConflictError,
   createContextDocument,
+  deleteContextDocument,
   importContextDocuments,
 } from '@/lib/product-context';
 
@@ -24,6 +26,7 @@ export async function POST(
       const files = formData
         .getAll('files')
         .filter((entry): entry is File => entry instanceof File);
+      const overwrite = formData.get('overwrite') === 'true';
       if (typeof section !== 'string' || files.length === 0) {
         return Response.json(
           { error: 'A context section and at least one file are required.' },
@@ -36,7 +39,12 @@ export async function POST(
           { status: 400 },
         );
       }
-      const result = await importContextDocuments(project, section, files);
+      const result = await importContextDocuments(
+        project,
+        section,
+        files,
+        overwrite,
+      );
       return Response.json(result, { status: 201 });
     }
 
@@ -63,8 +71,48 @@ export async function POST(
       { status: 201 },
     );
   } catch (error) {
+    if (error instanceof ContextDocumentConflictError) {
+      return Response.json(
+        { error: error.message, conflicts: error.conflicts },
+        { status: 409 },
+      );
+    }
     const message =
       error instanceof Error ? error.message : 'Could not add the document.';
+    return Response.json({ error: message }, { status: 400 });
+  }
+}
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ projectId: string }> },
+) {
+  const { projectId } = await params;
+  const project = await getProject(projectId);
+  if (!project) {
+    return Response.json({ error: 'Project not found.' }, { status: 404 });
+  }
+
+  try {
+    const payload = (await request.json()) as {
+      section?: string;
+      fileName?: string;
+    };
+    if (!payload.section || !payload.fileName) {
+      return Response.json(
+        { error: 'A context section and document name are required.' },
+        { status: 400 },
+      );
+    }
+    const result = await deleteContextDocument(
+      project,
+      payload.section,
+      payload.fileName,
+    );
+    return Response.json(result);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : 'Could not delete the document.';
     return Response.json({ error: message }, { status: 400 });
   }
 }

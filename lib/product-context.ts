@@ -1,4 +1,12 @@
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import {
+  access,
+  mkdir,
+  readFile,
+  readdir,
+  rename,
+  unlink,
+  writeFile,
+} from 'node:fs/promises';
 import path from 'node:path';
 import type { RegisteredProject } from '@/lib/project-registry';
 
@@ -16,6 +24,16 @@ export type ContextDocument = {
   summary: string;
   markdown: string;
 };
+
+export class ContextDocumentConflictError extends Error {
+  conflicts: string[];
+
+  constructor(conflicts: string[]) {
+    super('One or more Markdown files already exist.');
+    this.name = 'ContextDocumentConflictError';
+    this.conflicts = conflicts;
+  }
+}
 
 const sectionTemplates = [
   {
@@ -235,10 +253,9 @@ export async function readProductContext(project: RegisteredProject) {
           } satisfies ContextDocument;
         }),
       );
-      const readme =
-        documents.find(
-          (document) => document.fileName.toLowerCase() === 'readme.md',
-        ) ?? documents[0];
+      const readme = documents.find(
+        (document) => document.fileName.toLowerCase() === 'readme.md',
+      );
       return {
         slug: directory.name,
         title: readme?.title ?? readTitle('', directory.name),
@@ -266,30 +283,116 @@ export async function createContextDocument(
   return { fileName, sections: await readProductContext(project) };
 }
 
+export async function createContextSection(
+  project: RegisteredProject,
+  title: string,
+) {
+  const slug = slugify(title);
+  const contextPath = path.join(project.planningPath, 'context');
+  await mkdir(contextPath, { recursive: true });
+  try {
+    await mkdir(path.join(contextPath, slug));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+      throw new Error('A context folder with this name already exists.');
+    }
+    throw error;
+  }
+  return { slug, sections: await readProductContext(project) };
+}
+
+export async function renameContextSection(
+  project: RegisteredProject,
+  section: string,
+  title: string,
+) {
+  const sectionPath = await resolveSectionPath(project, section);
+  const slug = slugify(title);
+  if (slug === section) {
+    return { slug, sections: await readProductContext(project) };
+  }
+  const destinationPath = path.join(project.planningPath, 'context', slug);
+  try {
+    await access(destinationPath);
+    throw new Error('A context folder with this name already exists.');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+  await rename(sectionPath, destinationPath);
+  return { slug, sections: await readProductContext(project) };
+}
+
 export async function importContextDocuments(
   project: RegisteredProject,
   section: string,
   files: File[],
+  overwrite = false,
 ) {
   const sectionPath = await resolveSectionPath(project, section);
-  const created: string[] = [];
-  for (const file of files) {
-    if (!/\.(md|markdown)$/i.test(file.name)) {
-      throw new Error('Only Markdown files can be imported right now.');
-    }
-    if (file.size > 2 * 1024 * 1024) {
-      throw new Error('Each Markdown file must be 2 MB or smaller.');
-    }
-    const baseName = path.parse(path.basename(file.name)).name;
-    created.push(
-      await writeUniqueMarkdown(
-        sectionPath,
-        slugify(baseName),
-        await file.text(),
-      ),
+  const existingNames = new Map(
+    (await readdir(sectionPath)).map((fileName) => [
+      fileName.toLowerCase(),
+      fileName,
+    ]),
+  );
+  const imports = await Promise.all(
+    files.map(async (file) => {
+      if (!/\.(md|markdown)$/i.test(file.name)) {
+        throw new Error('Only Markdown files can be imported right now.');
+      }
+      if (file.size > 2 * 1024 * 1024) {
+        throw new Error('Each Markdown file must be 2 MB or smaller.');
+      }
+      const baseName = path.parse(path.basename(file.name)).name;
+      const requestedName = `${slugify(baseName)}.md`;
+      return {
+        requestedName,
+        fileName:
+          existingNames.get(requestedName.toLowerCase()) ?? requestedName,
+        content: await file.text(),
+      };
+    }),
+  );
+  const requestedNames = imports.map((entry) =>
+    entry.requestedName.toLowerCase(),
+  );
+  if (new Set(requestedNames).size !== requestedNames.length) {
+    throw new Error(
+      'The import contains multiple files with the same destination name.',
     );
   }
-  return { created, sections: await readProductContext(project) };
+  const conflicts = imports
+    .filter((entry) => existingNames.has(entry.requestedName.toLowerCase()))
+    .map((entry) => entry.fileName);
+  if (conflicts.length > 0 && !overwrite) {
+    throw new ContextDocumentConflictError(conflicts);
+  }
+
+  for (const entry of imports) {
+    await writeFile(path.join(sectionPath, entry.fileName), entry.content, {
+      flag: overwrite ? 'w' : 'wx',
+    });
+  }
+  return {
+    created: imports.map((entry) => entry.fileName),
+    sections: await readProductContext(project),
+  };
+}
+
+export async function deleteContextDocument(
+  project: RegisteredProject,
+  section: string,
+  fileName: string,
+) {
+  const sectionPath = await resolveSectionPath(project, section);
+  if (
+    path.basename(fileName) !== fileName ||
+    !/^[a-zA-Z0-9][a-zA-Z0-9._-]*\.(md|markdown)$/i.test(fileName)
+  ) {
+    throw new Error('Markdown document name is invalid.');
+  }
+  await unlink(path.join(sectionPath, fileName));
+  return { sections: await readProductContext(project) };
 }
 
 async function resolveSectionPath(project: RegisteredProject, section: string) {

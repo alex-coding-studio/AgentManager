@@ -7,6 +7,7 @@ import {
   FolderOpen,
   Maximize2,
   Minimize2,
+  Trash2,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -18,12 +19,16 @@ export function MarkdownReader({
   filePath,
   markdown,
   onReveal,
+  onDelete,
+  deleting = false,
   className,
 }: {
   title: string;
   filePath: string;
   markdown: string;
   onReveal?: () => Promise<void>;
+  onDelete?: () => void;
+  deleting?: boolean;
   className?: string;
 }) {
   const [focusMode, setFocusMode] = useState(false);
@@ -92,6 +97,22 @@ export function MarkdownReader({
               onClick={reveal}
             >
               <FolderOpen />
+            </Button>
+          ) : null}
+          {onDelete ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label="Delete Markdown document"
+              title="Delete document"
+              disabled={deleting}
+              onClick={() => {
+                setFocusMode(false);
+                onDelete();
+              }}
+            >
+              <Trash2 />
             </Button>
           ) : null}
           <Button

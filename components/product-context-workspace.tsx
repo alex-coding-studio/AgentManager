@@ -6,10 +6,23 @@ import {
   FileText,
   Folder,
   FolderPlus,
+  Pencil,
   Plus,
+  Trash2,
   Upload,
 } from 'lucide-react';
 import { MarkdownReader } from '@/components/markdown-reader';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogMedia,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -45,9 +58,21 @@ export function ProductContextWorkspace({
   );
   const [initializing, setInitializing] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const [renamingFolder, setRenamingFolder] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [folderOpen, setFolderOpen] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [pendingImport, setPendingImport] = useState<{
+    files: File[];
+    conflicts: string[];
+  }>();
   const [documentTitle, setDocumentTitle] = useState('');
+  const [folderName, setFolderName] = useState('');
+  const [renameFolderName, setRenameFolderName] = useState('');
   const [error, setError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const selectedSection = useMemo(
@@ -129,12 +154,131 @@ export function ProductContextWorkspace({
     }
   }
 
-  async function importFiles(files: File[]) {
+  async function createFolder(event: React.SyntheticEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!folderName.trim()) return;
+    setCreatingFolder(true);
+    setError('');
+    const response = await fetch(
+      `/api/projects/${projectId}/context/sections`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: folderName.trim() }),
+      },
+    );
+    const result = (await response.json()) as {
+      slug?: string;
+      sections?: ContextSection[];
+      error?: string;
+    };
+    setCreatingFolder(false);
+    if (!response.ok || !result.sections || !result.slug) {
+      setError(result.error ?? 'Could not create the folder.');
+      return;
+    }
+    setSections(result.sections);
+    setSelectedSlug(result.slug);
+    setSelectedFileName('');
+    setFolderOpen(false);
+    setFolderName('');
+  }
+
+  async function renameFolder(event: React.SyntheticEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedSection || !renameFolderName.trim()) return;
+    setRenamingFolder(true);
+    setError('');
+    const response = await fetch(
+      `/api/projects/${projectId}/context/sections`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          section: selectedSection.slug,
+          title: renameFolderName.trim(),
+        }),
+      },
+    );
+    const result = (await response.json()) as {
+      slug?: string;
+      sections?: ContextSection[];
+      error?: string;
+    };
+    setRenamingFolder(false);
+    if (!response.ok || !result.sections || !result.slug) {
+      setError(result.error ?? 'Could not rename the folder.');
+      return;
+    }
+    setSections(result.sections);
+    setSelectedSlug(result.slug);
+    setRenameOpen(false);
+    setRenameFolderName('');
+  }
+
+  async function importFiles(files: File[], overwrite = false) {
     if (!selectedSection || files.length === 0) return;
+    setAdding(true);
+    setError('');
     const formData = new FormData();
     formData.set('section', selectedSection.slug);
+    if (overwrite) formData.set('overwrite', 'true');
     for (const file of files) formData.append('files', file);
-    await addDocument(formData);
+    const response = await fetch(
+      `/api/projects/${projectId}/context/documents`,
+      { method: 'POST', body: formData },
+    );
+    const result = (await response.json()) as {
+      created?: string[];
+      sections?: ContextSection[];
+      conflicts?: string[];
+      error?: string;
+    };
+    setAdding(false);
+    if (response.status === 409 && result.conflicts?.length) {
+      setPendingImport({ files, conflicts: result.conflicts });
+      return;
+    }
+    if (!response.ok || !result.sections || !result.created?.length) {
+      setError(result.error ?? 'Could not import the document.');
+      return;
+    }
+    setSections(result.sections);
+    setSelectedFileName(result.created[0]);
+    setPendingImport(undefined);
+    return true;
+  }
+
+  async function deleteDocument() {
+    if (!selectedSection || !selectedDocument) return;
+    setDeleting(true);
+    setError('');
+    const response = await fetch(
+      `/api/projects/${projectId}/context/documents`,
+      {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          section: selectedSection.slug,
+          fileName: selectedDocument.fileName,
+        }),
+      },
+    );
+    const result = (await response.json()) as {
+      sections?: ContextSection[];
+      error?: string;
+    };
+    setDeleting(false);
+    if (!response.ok || !result.sections) {
+      setError(result.error ?? 'Could not delete the document.');
+      return;
+    }
+    const nextSection = result.sections.find(
+      (section) => section.slug === selectedSection.slug,
+    );
+    setSections(result.sections);
+    setSelectedFileName(nextSection?.documents[0]?.fileName ?? '');
+    setDeleteOpen(false);
   }
 
   async function dropFiles(event: DragEvent<HTMLButtonElement>) {
@@ -143,17 +287,21 @@ export function ProductContextWorkspace({
     await importFiles(Array.from(event.dataTransfer.files));
   }
 
-  async function revealSelectedSection() {
-    if (!selectedSection) return;
+  async function revealSection(section: string) {
     const response = await fetch(`/api/projects/${projectId}/context/reveal`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ section: selectedSection.slug }),
+      body: JSON.stringify({ section }),
     });
     if (!response.ok) {
       const result = (await response.json()) as { error?: string };
       throw new Error(result.error ?? 'Could not open the folder.');
     }
+  }
+
+  async function revealSelectedSection() {
+    if (!selectedSection) return;
+    await revealSection(selectedSection.slug);
   }
 
   if (sections.length === 0) {
@@ -212,23 +360,41 @@ export function ProductContextWorkspace({
             {sections.map((section) => {
               const selected = selectedSection?.slug === section.slug;
               return (
-                <li key={section.slug}>
+                <li
+                  key={section.slug}
+                  className={cn(
+                    'group flex items-center',
+                    selected && 'bg-secondary text-secondary-foreground',
+                  )}
+                >
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    className="ml-2"
+                    aria-label={`Open ${section.title} folder in file manager`}
+                    title="Show in file manager"
+                    onClick={() => {
+                      void revealSection(section.slug).catch((error) => {
+                        setError(
+                          error instanceof Error
+                            ? error.message
+                            : 'Could not open the folder.',
+                        );
+                      });
+                    }}
+                  >
+                    <Folder />
+                  </Button>
                   <button
                     type="button"
+                    aria-label={`Read ${section.title} context`}
                     onClick={() => selectSection(section)}
                     className={cn(
-                      'flex min-h-14 w-full items-center gap-3 px-3 py-2.5 text-left transition',
-                      selected
-                        ? 'bg-secondary text-secondary-foreground'
-                        : 'hover:bg-muted/50',
+                      'flex min-h-14 min-w-0 flex-1 items-center px-2 py-2.5 text-left transition',
+                      !selected && 'hover:bg-muted/50',
                     )}
                   >
-                    <Folder
-                      className={cn(
-                        'size-4 shrink-0',
-                        selected ? 'text-foreground' : 'text-muted-foreground',
-                      )}
-                    />
                     <div className="min-w-0">
                       <p className="text-sm font-medium">{section.title}</p>
                       <p className="mt-0.5 truncate text-[11px] leading-4 text-muted-foreground">
@@ -236,6 +402,21 @@ export function ProductContextWorkspace({
                       </p>
                     </div>
                   </button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    className="mr-2 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100"
+                    aria-label={`Rename ${section.title} folder`}
+                    title="Rename folder"
+                    onClick={() => {
+                      selectSection(section);
+                      setRenameFolderName(section.slug);
+                      setRenameOpen(true);
+                    }}
+                  >
+                    <Pencil />
+                  </Button>
                 </li>
               );
             })}
@@ -261,6 +442,9 @@ export function ProductContextWorkspace({
                   <Plus />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-44">
+                  <DropdownMenuItem onClick={() => setFolderOpen(true)}>
+                    <FolderPlus /> New Folder
+                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setCreateOpen(true)}>
                     <FilePlus2 /> New Markdown
                   </DropdownMenuItem>
@@ -337,12 +521,30 @@ export function ProductContextWorkspace({
           {error ? <p className="text-xs text-destructive">{error}</p> : null}
         </div>
 
-        <MarkdownReader
-          title={selectedDocument?.title ?? 'Markdown'}
-          filePath={`context/${selectedSection?.slug}/${selectedDocument?.fileName}`}
-          markdown={selectedDocument?.markdown ?? ''}
-          onReveal={revealSelectedSection}
-        />
+        {selectedDocument ? (
+          <MarkdownReader
+            title={selectedDocument.title}
+            filePath={`context/${selectedSection?.slug}/${selectedDocument.fileName}`}
+            markdown={selectedDocument.markdown}
+            onReveal={revealSelectedSection}
+            onDelete={() => setDeleteOpen(true)}
+            deleting={deleting}
+          />
+        ) : (
+          <section className="grid min-h-[560px] place-items-center rounded-2xl border border-dashed border-border bg-card p-8 text-center">
+            <div>
+              <div className="mx-auto grid size-10 place-items-center rounded-xl bg-secondary">
+                <FileText className="size-4" />
+              </div>
+              <h2 className="mt-4 text-sm font-medium">
+                No Markdown documents
+              </h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Add or import a document for this folder.
+              </p>
+            </div>
+          </section>
+        )}
       </div>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
@@ -377,6 +579,143 @@ export function ProductContextWorkspace({
           </form>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={folderOpen} onOpenChange={setFolderOpen}>
+        <DialogContent>
+          <form onSubmit={createFolder}>
+            <DialogHeader>
+              <DialogTitle>New context folder</DialogTitle>
+              <DialogDescription>
+                Create a flexible Product Context section. A README can be added
+                later.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="my-5 space-y-2">
+              <label htmlFor="folder-name" className="text-xs font-medium">
+                Folder name
+              </label>
+              <Input
+                id="folder-name"
+                value={folderName}
+                maxLength={80}
+                placeholder="Research Notes"
+                onChange={(event) => setFolderName(event.target.value)}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                The name becomes an English slug such as research-notes.
+              </p>
+            </div>
+            <DialogFooter>
+              <Button
+                type="submit"
+                disabled={!folderName.trim() || creatingFolder}
+              >
+                {creatingFolder ? 'Creating…' : 'Create folder'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
+        <DialogContent>
+          <form onSubmit={renameFolder}>
+            <DialogHeader>
+              <DialogTitle>Rename context folder</DialogTitle>
+              <DialogDescription>
+                Rename the folder on disk without changing its documents.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="my-5 space-y-2">
+              <label
+                htmlFor="rename-folder-name"
+                className="text-xs font-medium"
+              >
+                Folder name
+              </label>
+              <Input
+                id="rename-folder-name"
+                value={renameFolderName}
+                maxLength={80}
+                onChange={(event) => setRenameFolderName(event.target.value)}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                The folder path uses an English slug.
+              </p>
+            </div>
+            <DialogFooter>
+              <Button
+                type="submit"
+                disabled={!renameFolderName.trim() || renamingFolder}
+              >
+                {renamingFolder ? 'Renaming…' : 'Rename folder'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogMedia>
+              <Trash2 />
+            </AlertDialogMedia>
+            <AlertDialogTitle>
+              Delete {selectedDocument?.fileName}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes the Markdown file from the project. The{' '}
+              {selectedSection?.title} folder will remain.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={deleting}
+              onClick={deleteDocument}
+            >
+              {deleting ? 'Deleting…' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={Boolean(pendingImport)}
+        onOpenChange={(open) => {
+          if (!open && !adding) setPendingImport(undefined);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogMedia>
+              <Upload />
+            </AlertDialogMedia>
+            <AlertDialogTitle>Replace existing documents?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingImport?.conflicts.join(', ')} already{' '}
+              {pendingImport?.conflicts.length === 1 ? 'exists' : 'exist'} in
+              this folder. Importing will replace the existing{' '}
+              {pendingImport?.conflicts.length === 1 ? 'file' : 'files'}.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={adding}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={adding}
+              onClick={() => {
+                if (pendingImport) {
+                  void importFiles(pendingImport.files, true);
+                }
+              }}
+            >
+              {adding ? 'Replacing…' : 'Replace'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
