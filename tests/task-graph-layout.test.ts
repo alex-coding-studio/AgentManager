@@ -32,7 +32,7 @@ void test('builds formal lineage edges from derivedFrom', () => {
       id: 'derived:NODE-0001:NODE-0002',
       source: 'NODE-0001',
       target: 'NODE-0002',
-      temporary: false,
+      relation: 'lineage',
     },
   ]);
   assert.deepEqual(
@@ -87,11 +87,56 @@ void test('places a preview beside its source with a temporary edge', () => {
     y: 0,
     derivedFrom: ['NODE-0001'],
   });
-  assert.equal(graph.edges[0]?.temporary, true);
+  assert.equal(graph.edges[0]?.relation, 'request');
 });
 
 void test('drops lineage edges whose source is not present', () => {
   const graph = buildTaskGraphLayout([node('NODE-0002', ['NODE-9999'])], []);
 
   assert.deepEqual(graph.edges, []);
+});
+
+void test('renders execution dependencies separately from lineage', () => {
+  const prerequisite = node('NODE-0002', ['NODE-0001']);
+  const dependent = node('NODE-0003', ['NODE-0001']);
+  dependent.dependsOn = ['NODE-0002'];
+
+  const graph = buildTaskGraphLayout(
+    [node('NODE-0001'), prerequisite, dependent],
+    [],
+  );
+
+  assert.deepEqual(graph.edges.at(-1), {
+    id: 'depends:NODE-0003:NODE-0002',
+    source: 'NODE-0003',
+    target: 'NODE-0002',
+    relation: 'dependency',
+  });
+});
+
+void test('places a request preview after occupied nodes in the target column', () => {
+  const graph = buildTaskGraphLayout(
+    [
+      node('NODE-0001'),
+      node('NODE-0002', ['NODE-0001']),
+      node('NODE-0003', ['NODE-0001']),
+    ],
+    [
+      {
+        id: 'REQUEST-PREVIEW-NODE-0001',
+        sourceNodeId: 'NODE-0001',
+        instruction: 'Split into modules',
+        inheritedResourceCount: 1,
+        additionalResourceCount: 0,
+      },
+    ],
+  );
+
+  assert.deepEqual(graph.nodes.at(-1), {
+    id: 'REQUEST-PREVIEW-NODE-0001',
+    kind: 'preview',
+    x: 360,
+    y: 380,
+    derivedFrom: ['NODE-0001'],
+  });
 });

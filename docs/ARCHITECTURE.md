@@ -186,9 +186,10 @@ that it is needed.
 
 Graph structure and product semantics are separate. A node's `role` is either
 `start` or `node`. Its open-ended `type` can be `source`, `experience`, `module`,
-`task`, or a future product-specific value. A start node has no incoming graph
-requirement and a canvas may contain many of them. There is no `leaf` role: a
-node is simply an endpoint while nothing continues from it.
+`task`, or a future product-specific value. A Start has no incoming graph
+requirement and each Canvas owns exactly one. Independent roots will be modeled
+as separate Canvases rather than coexisting in one graph. There is no `leaf`
+role: a node is simply an endpoint while nothing continues from it.
 
 Each node owns its direct `dependsOn` identifiers, its optional `derivedFrom`
 lineage identifiers, and a list of typed Resources whose paths are relative to
@@ -208,6 +209,14 @@ positions are deterministic projections of lineage depth: each generation is a
 column and siblings are arranged vertically. Users can pan and zoom the canvas,
 but Nodes are not draggable and no presentation coordinates become canonical
 planning data.
+
+Lineage and dependency edges retain separate directions and visual grammar. A
+lineage edge runs from an origin to the Node derived from it and uses a neutral
+solid stroke. A dependency edge runs from the dependent Node to the
+prerequisite named in its `dependsOn` array and uses an amber dashed stroke with
+a shared legend. A development-only `?preview=graph-layout` fixture generates a
+single-root, four-generation graph in memory for visual checks; it never
+replaces or mutates project data in production.
 
 Every node is a folder so it can carry its JSON card, node-local Resources, and
 future generated artifacts without inventing a database relationship. Semantic

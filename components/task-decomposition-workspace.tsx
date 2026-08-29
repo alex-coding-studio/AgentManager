@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import { useRef, useState, type DragEvent } from 'react';
 import {
-  Boxes,
   ChevronDown,
   FileText,
   Folder,
@@ -42,10 +41,12 @@ export function TaskDecompositionWorkspace({
   projectId,
   folders,
   initialNodes,
+  initialPreviews,
 }: {
   projectId: string;
   folders: ContextBrowserFolder[];
   initialNodes: TaskGraphNode[];
+  initialPreviews: TaskGraphPreview[];
 }) {
   const [nodes, setNodes] = useState(initialNodes);
   const [title, setTitle] = useState('');
@@ -59,7 +60,13 @@ export function TaskDecompositionWorkspace({
   const [selectedNodeId, setSelectedNodeId] = useState('');
   const [requestPreviews, setRequestPreviews] = useState<
     DecompositionRequestPreview[]
-  >([]);
+  >(
+    initialPreviews.map((preview) => ({
+      ...preview,
+      contextRefs: [],
+      files: [],
+    })),
+  );
   const [decomposeSourceId, setDecomposeSourceId] = useState('');
   const [decompositionGoal, setDecompositionGoal] = useState('');
   const [requestSelectedRefs, setRequestSelectedRefs] = useState<string[]>([]);
@@ -336,8 +343,7 @@ export function TaskDecompositionWorkspace({
             Task canvas
           </h1>
           <p className="mt-2 max-w-xl text-sm text-muted-foreground">
-            Capture independent starting points, then decompose them into Task
-            nodes.
+            Capture one starting point, then decompose it into Task nodes.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -345,9 +351,6 @@ export function TaskDecompositionWorkspace({
             <span className="size-2 rounded-full bg-foreground" />
             {nodes.length} {nodes.length === 1 ? 'node' : 'nodes'}
           </div>
-          <Button type="button" onClick={createNode}>
-            <Plus /> New start node
-          </Button>
           <Link
             href={`/projects/${projectId}/decomposition/context`}
             className={buttonVariants({ variant: 'outline' })}
@@ -362,21 +365,17 @@ export function TaskDecompositionWorkspace({
           {nodes.length === 0 ? (
             <div className="min-h-full bg-[radial-gradient(circle,var(--border)_1px,transparent_1px)] bg-[size:22px_22px] p-8 lg:p-12">
               <div className="grid min-h-[440px] place-items-center">
-                <div className="max-w-xs rounded-2xl border border-dashed border-border bg-background/90 p-7 text-center shadow-sm backdrop-blur">
-                  <div className="mx-auto grid size-10 place-items-center rounded-xl bg-secondary">
-                    <Boxes className="size-4" />
-                  </div>
-                  <h2 className="mt-4 text-sm font-medium">
-                    Capture the first start node
-                  </h2>
-                  <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                    Its source documents become the fixed boundary for future
-                    decomposition.
-                  </p>
-                  <Button type="button" className="mt-5" onClick={createNode}>
-                    <Plus /> New start node
-                  </Button>
-                </div>
+                <button
+                  type="button"
+                  className="grid min-h-[156px] w-72 place-items-center rounded-2xl border border-dashed border-border bg-background/80 text-muted-foreground shadow-sm transition hover:border-foreground/40 hover:bg-secondary/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
+                  aria-label="Create Start"
+                  onClick={createNode}
+                >
+                  <span className="flex flex-col items-center gap-2">
+                    <Plus className="size-5" />
+                    <span className="text-xs font-medium">Start</span>
+                  </span>
+                </button>
               </div>
             </div>
           ) : (

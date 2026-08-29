@@ -15,7 +15,7 @@
     "cli": "node ./bin/agent-manager.mjs",
     "lint": "oxlint app components/markdown-reader.tsx components/product-context-workspace.tsx components/project-shell.tsx components/project-workspace.tsx components/task-decomposition-context-workspace.tsx components/task-decomposition-workspace.tsx components/task-graph-canvas.tsx components/ui/button.tsx components/ui/card.tsx components/ui/checkbox.tsx components/ui/dialog.tsx components/ui/dropdown-menu.tsx components/ui/input.tsx components/ui/textarea.tsx lib tests",
     "format": "oxfmt",
-    "test:graph": "node --experimental-strip-types --test tests/task-graph-layout.test.ts",
+    "test:graph": "node --experimental-strip-types --test tests/task-graph-layout.test.ts tests/task-graph-rules.test.ts",
     "test:harness": "node --experimental-strip-types --test tests/task-decomposition-harness.test.ts",
     "typecheck": "tsc --noEmit"
   },

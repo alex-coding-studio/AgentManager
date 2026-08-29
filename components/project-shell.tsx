@@ -12,7 +12,6 @@ import {
   GitFork,
   LayoutDashboard,
   Settings,
-  SlidersHorizontal,
 } from 'lucide-react';
 import { siGithub } from 'simple-icons/icons';
 import type { RegisteredProject } from '@/lib/project-registry';
@@ -30,12 +29,6 @@ const navigation = [
     label: 'Task decomposition',
     icon: Boxes,
     path: '/decomposition',
-    available: true,
-  },
-  {
-    label: 'Decomposition context',
-    icon: SlidersHorizontal,
-    path: '/decomposition/context',
     available: true,
   },
   {

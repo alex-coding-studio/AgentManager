@@ -7,6 +7,7 @@ import {
   Controls,
   Handle,
   MarkerType,
+  Panel,
   Position,
   ReactFlow,
   useEdgesState,
@@ -100,6 +101,19 @@ export function TaskGraphCanvas({
         size={1}
         color="var(--border)"
       />
+      <Panel
+        position="bottom-right"
+        className="!m-3 flex items-center gap-3 rounded-lg border border-border bg-background/90 px-2.5 py-2 text-[10px] text-muted-foreground shadow-sm backdrop-blur"
+      >
+        <span className="flex items-center gap-1.5">
+          <span className="h-px w-5 bg-muted-foreground" />
+          Lineage
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-5 border-t border-dashed border-amber-600" />
+          Depends on
+        </span>
+      </Panel>
       <Controls
         showInteractive={false}
         className="!overflow-hidden !rounded-xl !border !border-border !bg-background !shadow-sm [&>button]:!border-border [&>button]:!bg-background [&>button]:!fill-foreground hover:[&>button]:!bg-secondary"
@@ -122,7 +136,14 @@ function TaskCard({ id, data, selected }: NodeProps<TaskFlowNode>) {
       <Handle
         type="target"
         position={Position.Left}
+        id="lineage-target"
         className="!size-2.5 !border-2 !border-background !bg-muted-foreground"
+      />
+      <Handle
+        type="target"
+        position={Position.Top}
+        id="dependency-target"
+        className="!size-1 !border-0 !bg-transparent"
       />
       <div className="flex items-center justify-between gap-3">
         <span className="font-mono text-[10px] font-medium tracking-wide text-muted-foreground">
@@ -182,7 +203,14 @@ function TaskCard({ id, data, selected }: NodeProps<TaskFlowNode>) {
       <Handle
         type="source"
         position={Position.Right}
+        id="lineage-source"
         className="!size-2.5 !border-2 !border-background !bg-foreground"
+      />
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        id="dependency-source"
+        className="!size-1 !border-0 !bg-transparent"
       />
     </div>
   );
@@ -227,17 +255,36 @@ function buildFlowGraph(
     id: edge.id,
     source: edge.source,
     target: edge.target,
+    sourceHandle:
+      edge.relation === 'dependency' ? 'dependency-source' : 'lineage-source',
+    targetHandle:
+      edge.relation === 'dependency' ? 'dependency-target' : 'lineage-target',
     type: 'smoothstep',
     markerEnd: {
       type: MarkerType.ArrowClosed,
       width: 14,
       height: 14,
-      color: edge.temporary ? '#8b5cf6' : 'var(--muted-foreground)',
+      color:
+        edge.relation === 'request'
+          ? '#8b5cf6'
+          : edge.relation === 'dependency'
+            ? '#d97706'
+            : 'var(--muted-foreground)',
     },
     style: {
-      stroke: edge.temporary ? '#8b5cf6' : 'var(--muted-foreground)',
+      stroke:
+        edge.relation === 'request'
+          ? '#8b5cf6'
+          : edge.relation === 'dependency'
+            ? '#d97706'
+            : 'var(--muted-foreground)',
       strokeWidth: 1.5,
-      strokeDasharray: edge.temporary ? '7 6' : undefined,
+      strokeDasharray:
+        edge.relation === 'request'
+          ? '7 6'
+          : edge.relation === 'dependency'
+            ? '4 5'
+            : undefined,
     },
     selectable: false,
     deletable: false,

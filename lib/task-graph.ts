@@ -11,6 +11,7 @@ import {
 } from 'node:fs/promises';
 import path from 'node:path';
 import type { RegisteredProject } from '@/lib/project-registry';
+import { assertCanvasCanCreateStartNode } from '@/lib/task-graph-rules';
 
 export type TaskGraphNode = {
   schemaVersion: 1;
@@ -98,6 +99,7 @@ export async function createStartNode(
   const nodesPath = path.join(taskGraphPath, 'nodes');
   await mkdir(nodesPath, { recursive: true });
   const existingNodes = await listTaskGraphNodes(project);
+  assertCanvasCanCreateStartNode(existingNodes);
   const nextNumber =
     existingNodes.reduce((largest, node) => {
       const number = Number(node.id.replace(/^NODE-/, ''));

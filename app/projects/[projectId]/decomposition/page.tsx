@@ -8,15 +8,19 @@ import {
   listProjects,
 } from '@/lib/project-registry';
 import { listTaskGraphNodes } from '@/lib/task-graph';
+import { createTaskGraphPreview } from '@/lib/task-graph-preview';
 
 export const dynamic = 'force-dynamic';
 
 export default async function TaskDecompositionPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ projectId: string }>;
+  searchParams: Promise<{ preview?: string }>;
 }) {
   const { projectId } = await params;
+  const { preview } = await searchParams;
   const project = await getProject(projectId);
   if (!project) notFound();
   const [projects, folders, nodes] = await Promise.all([
@@ -24,6 +28,10 @@ export default async function TaskDecompositionPage({
     readContextBrowser(project),
     listTaskGraphNodes(project),
   ]);
+  const graphPreview =
+    process.env.NODE_ENV === 'development' && preview === 'graph-layout'
+      ? createTaskGraphPreview()
+      : null;
 
   return (
     <ProjectShell
@@ -34,7 +42,8 @@ export default async function TaskDecompositionPage({
       <TaskDecompositionWorkspace
         projectId={project.id}
         folders={folders}
-        initialNodes={nodes}
+        initialNodes={graphPreview?.nodes ?? nodes}
+        initialPreviews={graphPreview?.previews ?? []}
       />
     </ProjectShell>
   );
