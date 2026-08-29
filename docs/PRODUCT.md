@@ -149,6 +149,9 @@ will describe Card requirements, how to reason from incomplete input, inference
 boundaries, prohibited behavior, and the minimum useful delivery while leaving
 domain-specific structure to user context and source material.
 
+The accepted pre-implementation design is recorded in
+[`TASK_DECOMPOSITION_HARNESS.md`](TASK_DECOMPOSITION_HARNESS.md).
+
 ## Canvas direction
 
 Task Decomposition is an open canvas rather than a traditional project board or
