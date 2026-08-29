@@ -170,6 +170,29 @@ without invoking an Agent yet:
 Agent transport, Decomposition Session persistence, Candidate UI, context
 expansion, acceptance, and formal Node promotion remain outside this slice.
 
+## Sixth implementation slice
+
+The sixth slice makes the Task Canvas a real graph workspace before Agent
+transport is introduced:
+
+1. Render formal Nodes and lineage edges on a pannable, zoomable React Flow
+   canvas.
+2. Derive immutable Node placement from lineage depth, with each generation in
+   the next column and siblings arranged within that column.
+3. Keep Cards project-defined while using a shared visual language for formal
+   Nodes and temporary requests.
+4. Start decomposition from the plus control on any formal Node.
+5. Reuse the source Node's Resources, accept optional request-only Context or
+   local Markdown Resources, and collect one bounded instruction in the
+   Composer.
+6. Show a local-only request summary beside its source with a visible dashed
+   directional edge; generated titles belong only to later Candidate Cards.
+7. Keep the Draft explicitly ephemeral: it is neither persisted nor sent to an
+   Agent and disappears when the page reloads.
+
+Agent transport, validated Candidate output, Candidate persistence, acceptance,
+and formal Node promotion remain outside this slice.
+
 ## Canvas direction
 
 Task Decomposition is an open canvas rather than a traditional project board or

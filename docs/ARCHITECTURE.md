@@ -190,12 +190,24 @@ Graph structure and product semantics are separate. A node's `role` is either
 requirement and a canvas may contain many of them. There is no `leaf` role: a
 node is simply an endpoint while nothing continues from it.
 
-Each node owns its direct `dependsOn` identifiers and a list of typed Resources
-whose paths are relative to `.agent-manager/`. Reverse dependency edges are
-derived by scanning the node folders. This avoids maintaining a second
-relationship record that can drift away from the cards it connects. Flexible
-type-specific fields live under `metadata`; optional card rendering hints live
-under `presentation`.
+Each node owns its direct `dependsOn` identifiers, its optional `derivedFrom`
+lineage identifiers, and a list of typed Resources whose paths are relative to
+`.agent-manager/`. Reverse dependency and lineage edges are derived by scanning
+the node folders. This avoids maintaining a second relationship record that can
+drift away from the cards it connects. Flexible type-specific fields live under
+`metadata`; optional card rendering hints live under `presentation`.
+
+React Flow is the canvas rendering and interaction layer. Canonical graph facts
+remain in node JSON; the library does not own product state. Formal lineage
+edges come from `derivedFrom`. Before Agent transport exists, the Composer can
+render an in-memory Draft request beside its source with a dashed directional
+edge. The request inherits source-node Resources and can add request-only
+Context or local Markdown without mutating the source. That Draft is an
+interaction preview only and is deliberately discarded on reload. Node
+positions are deterministic projections of lineage depth: each generation is a
+column and siblings are arranged vertically. Users can pan and zoom the canvas,
+but Nodes are not draggable and no presentation coordinates become canonical
+planning data.
 
 Every node is a folder so it can carry its JSON card, node-local Resources, and
 future generated artifacts without inventing a database relationship. Semantic
@@ -328,6 +340,6 @@ The following are intentionally not implemented in the first project-creation sl
 - SQLite task indexes
 - MCP server
 - Agent invocation
-- Task-graph rendering
+- Manual canvas positioning
 - Pull-request reconciliation
 - Cross-machine synchronization
