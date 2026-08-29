@@ -201,8 +201,16 @@ drift away from the cards it connects. Flexible type-specific fields live under
 React Flow is the canvas rendering and interaction layer. Canonical graph facts
 remain in node JSON; the library does not own product state. Formal lineage
 edges come from `derivedFrom`. The Composer sends a bounded request to a
-selected local Agent. The request inherits source-node Resources and can add
-request-only Context or local Markdown without mutating the source. Those
+selected local Agent. Every Run owns a read-only `context/` workspace with a
+machine-readable `index.json`. A Start Run marks the Start node's selected
+source documents as primary. A descendant Run marks only the selected Node's
+`output.md` as inherited primary Context; original sources, neighboring Node
+outputs, and Task Decomposition attachments remain related files that the same
+Agent may read when its reasoning identifies a concrete need. Explicit
+request-only Context or local Markdown is primary for that Run without mutating
+the source. Related Node snapshots are limited to direct origins, children,
+dependencies, reverse dependents, same-origin siblings, and shared-Resource
+neighbors rather than copying the entire Canvas into every Run. Those
 optional inputs share one collapsed `Run-only context` disclosure rather than
 occupying the default Composer path. A connected
 transient card represents the Run while it executes, and a validated proposal
@@ -243,8 +251,11 @@ upstream relationships disappear with its directory.
 Local Agent invocation is isolated behind a transport boundary. Every transport
 launches an installed Agent CLI as a persistent-session, read-only child
 process and uses the user's existing subscription login rather than storing an
-API key. AgentManager sends the complete Harness and bounded request packet on
-standard input, consumes structured JSON-line events, records the provider
+API key. AgentManager sends the complete Harness, Context Workspace manifest,
+and bounded request packet on standard input. The Agent uses its own read-only
+file tools to inspect primary files and selectively read related files; no
+second Agent or Coordinator model call mediates access. AgentManager consumes
+structured JSON-line events, records the provider
 session identifier and reported usage when available, and validates the final
 JSON before rendering it.
 
@@ -271,9 +282,10 @@ after a page reload. Cancel marks the Run terminal before interrupting its proce
 so late output cannot replace the restored Composer input. Proposal,
 clarification, insufficient-evidence, failure, and cancellation remain distinct
 states; only a later explicit acceptance can create formal Node folders.
-The sibling `request.json` freezes the exact assembled prompt and complete
-request packet, including Resource contents and graph state, so later edits to
-project files cannot change the evidence for that invocation.
+The sibling `request.json` freezes the exact assembled prompt, manifest hashes,
+and graph state. The Run's `context/` directory snapshots the corresponding
+Resource contents, so later edits to project files cannot change the evidence
+available to that invocation without embedding every document in the prompt.
 
 One bounded Coordinator Agent Session belongs to each decomposition root. The
 first Run creates a persistent provider Session; later parent-level additions

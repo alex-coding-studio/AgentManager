@@ -19,7 +19,7 @@ const request = {
 const context = {
   request,
   knownNodeIds: ['NODE-0001', 'NODE-0002', 'NODE-0003'],
-  expandedNodeIds: ['NODE-0001', 'NODE-0002'],
+  availableNodeContentIds: ['NODE-0001', 'NODE-0002'],
   knownResourcePaths: ['context/product/project.md'],
 };
 
@@ -366,7 +366,7 @@ void test('rejects an invented Resource reference', () => {
   );
 });
 
-void test('rejects a review claim for a Node that was not expanded', () => {
+void test('rejects a review claim without available Node content', () => {
   assert.throws(
     () =>
       validateTaskDecompositionHarnessResult(
@@ -382,7 +382,7 @@ void test('rejects a review claim for a Node that was not expanded', () => {
         },
         context,
       ),
-    /must have expanded content/,
+    /must have full content available/,
   );
 });
 
