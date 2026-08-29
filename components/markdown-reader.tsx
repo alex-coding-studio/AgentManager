@@ -22,6 +22,7 @@ export function MarkdownReader({
   onReveal,
   onDelete,
   onClose,
+  showFocusButton = true,
   deleting = false,
   className,
 }: {
@@ -31,6 +32,7 @@ export function MarkdownReader({
   onReveal?: () => Promise<void>;
   onDelete?: () => void;
   onClose?: () => void;
+  showFocusButton?: boolean;
   deleting?: boolean;
   className?: string;
 }) {
@@ -118,17 +120,21 @@ export function MarkdownReader({
               <Trash2 />
             </Button>
           ) : null}
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            aria-label={focusMode ? 'Exit focus reading' : 'Open focus reading'}
-            aria-pressed={focusMode}
-            title={focusMode ? 'Exit focus mode (Esc)' : 'Open focus mode'}
-            onClick={() => setFocusMode((current) => !current)}
-          >
-            {focusMode ? <Minimize2 /> : <Maximize2 />}
-          </Button>
+          {showFocusButton ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label={
+                focusMode ? 'Exit focus reading' : 'Open focus reading'
+              }
+              aria-pressed={focusMode}
+              title={focusMode ? 'Exit focus mode (Esc)' : 'Open focus mode'}
+              onClick={() => setFocusMode((current) => !current)}
+            >
+              {focusMode ? <Minimize2 /> : <Maximize2 />}
+            </Button>
+          ) : null}
           {onClose ? (
             <Button
               type="button"

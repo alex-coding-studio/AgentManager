@@ -574,6 +574,7 @@ export function TaskDecompositionWorkspace({
               filePath={preview.path}
               markdown={preview.markdown}
               onClose={() => setPreview(null)}
+              showFocusButton={false}
               className="min-h-[70vh] border-0 shadow-none"
             />
           ) : null}
