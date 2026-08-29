@@ -20,7 +20,12 @@ import {
   Upload,
   X,
 } from 'lucide-react';
+import { AgentSelectField } from '@/components/agent-selector';
 import { MarkdownReader } from '@/components/markdown-reader';
+import {
+  NodeProvenanceFacts,
+  NodeResourceSections,
+} from '@/components/node-property-sections';
 import { TaskGraphCanvas } from '@/components/task-graph-canvas';
 import {
   AlertDialog,
@@ -1337,28 +1342,11 @@ export function TaskDecompositionWorkspace({
                   </p>
                 </div>
 
-                <div className="space-y-2">
-                  <label
-                    htmlFor="decomposition-agent"
-                    className="text-xs font-medium"
-                  >
-                    Agent
-                  </label>
-                  <div className="relative">
-                    <select
-                      id="decomposition-agent"
-                      value={selectedAgent}
-                      onChange={(event) =>
-                        setSelectedAgent(event.target.value as LocalAgentKind)
-                      }
-                      className="h-10 w-full appearance-none rounded-xl border border-border bg-background px-3 pr-9 text-xs font-medium outline-none transition focus:border-ring focus:ring-3 focus:ring-ring/20"
-                    >
-                      <option value="codex">Codex</option>
-                      <option value="claude">Claude</option>
-                    </select>
-                    <ChevronDown className="pointer-events-none absolute top-1/2 right-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
-                  </div>
-                </div>
+                <AgentSelectField
+                  id="decomposition-agent"
+                  value={selectedAgent}
+                  onChange={setSelectedAgent}
+                />
 
                 <div className="space-y-2">
                   <label
@@ -1717,43 +1705,16 @@ export function TaskDecompositionWorkspace({
                   </section>
                 ) : null}
 
-                <section className="mt-7">
-                  <div className="flex items-center justify-between gap-3">
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                      Sources
-                    </h3>
-                    <span className="text-[10px] text-muted-foreground">
-                      {selectedNode.resources.length}
-                    </span>
-                  </div>
-                  <div className="mt-3 divide-y divide-border overflow-hidden rounded-xl border border-border">
-                    {selectedNode.resources.map((resource) => (
-                      <button
-                        key={`${resource.kind}:${resource.path}`}
-                        type="button"
-                        className="flex w-full items-center gap-3 px-3 py-3 text-left transition hover:bg-muted/50"
-                        disabled={previewingPath === resource.path}
-                        onClick={() => previewResource(resource.path)}
-                      >
-                        <div className="grid size-8 shrink-0 place-items-center rounded-lg bg-secondary">
-                          <FileText className="size-3.5" />
-                        </div>
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-xs font-medium">
-                            {previewingPath === resource.path
-                              ? 'Opening…'
-                              : resourceName(resource.path)}
-                          </span>
-                          <span className="mt-0.5 block truncate font-mono text-[10px] text-muted-foreground">
-                            {resource.path}
-                          </span>
-                        </span>
-                        <span className="rounded bg-secondary px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-muted-foreground">
-                          {resource.kind}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
+                <div className="mt-7">
+                  <NodeResourceSections
+                    node={selectedNode}
+                    openingPath={previewingPath}
+                    onOpen={(path) => void previewResource(path)}
+                  />
+                </div>
+
+                <section className="mt-7 border-t border-border pt-5">
+                  <NodeProvenanceFacts node={selectedNode} />
                 </section>
 
                 <section className="mt-7 border-t border-border pt-5">

@@ -88,12 +88,10 @@ export function MarkdownReader({
     if (!onAddFeedback || !contentRef.current) return;
     const selected = window.getSelection();
     if (!selected || selected.isCollapsed || selected.rangeCount === 0) {
-      setSelection(null);
       return;
     }
     const range = selected.getRangeAt(0);
     if (!contentRef.current.contains(range.commonAncestorContainer)) {
-      setSelection(null);
       return;
     }
     const start = closestPositionedElement(range.startContainer);
@@ -102,7 +100,6 @@ export function MarkdownReader({
     const startLine = Number(start?.dataset.lineStart);
     const endLine = Number(end?.dataset.lineEnd);
     if (!excerpt || !Number.isFinite(startLine) || !Number.isFinite(endLine)) {
-      setSelection(null);
       return;
     }
     setSelection({
@@ -111,6 +108,13 @@ export function MarkdownReader({
       excerpt: excerpt.slice(0, 1_200),
     });
   });
+
+  function addSelectedFeedback() {
+    if (!selection || !onAddFeedback) return;
+    onAddFeedback(selection);
+    window.getSelection()?.removeAllRanges();
+    setSelection(null);
+  }
 
   useEffect(() => {
     const content = contentRef.current;
@@ -160,12 +164,8 @@ export function MarkdownReader({
               aria-label="Add feedback from selected text"
               title={selection ? 'Add feedback' : 'Select text to add feedback'}
               disabled={!selection}
-              onClick={() => {
-                if (!selection) return;
-                onAddFeedback(selection);
-                window.getSelection()?.removeAllRanges();
-                setSelection(null);
-              }}
+              onPointerDown={(event) => event.preventDefault()}
+              onClick={addSelectedFeedback}
             >
               <MessageSquarePlus />
             </Button>
@@ -228,6 +228,40 @@ export function MarkdownReader({
           ) : null}
         </div>
       </header>
+
+      {selection && onAddFeedback ? (
+        <div
+          className={cn(
+            'z-10 flex shrink-0 items-center gap-3 border-b border-violet-500/20 bg-violet-500/5 px-4 py-2.5',
+            compact && 'sticky top-[65px]',
+          )}
+        >
+          <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
+            Selected lines {selection.startLine}–{selection.endLine}
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            onPointerDown={(event) => event.preventDefault()}
+            onClick={addSelectedFeedback}
+          >
+            Add feedback
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            aria-label="Clear selected feedback text"
+            onPointerDown={(event) => event.preventDefault()}
+            onClick={() => {
+              window.getSelection()?.removeAllRanges();
+              setSelection(null);
+            }}
+          >
+            <X />
+          </Button>
+        </div>
+      ) : null}
 
       {revealError ? (
         <p
@@ -360,22 +394,6 @@ export function MarkdownReader({
         >
           {markdown}
         </ReactMarkdown>
-        {selection ? (
-          <div className="sticky bottom-3 mt-5 flex justify-end">
-            <Button
-              type="button"
-              size="sm"
-              className="shadow-lg"
-              onClick={() => {
-                onAddFeedback?.(selection);
-                window.getSelection()?.removeAllRanges();
-                setSelection(null);
-              }}
-            >
-              Add feedback · lines {selection.startLine}–{selection.endLine}
-            </Button>
-          </div>
-        ) : null}
       </div>
     </article>
   );
@@ -452,7 +470,7 @@ function FeedbackButton({
   return (
     <button
       type="button"
-      className="absolute top-1 right-0 grid size-7 place-items-center rounded-full text-muted-foreground opacity-0 transition hover:bg-secondary hover:text-foreground group-hover/feedback:opacity-100 focus:opacity-100"
+      className="absolute top-1 right-0 grid size-7 place-items-center rounded-full text-muted-foreground opacity-60 transition hover:bg-secondary hover:text-foreground focus:opacity-100 sm:opacity-0 sm:group-hover/feedback:opacity-100"
       aria-label={`Add feedback for lines ${startLine} to ${endLine}`}
       title="Add feedback"
       onClick={() =>
