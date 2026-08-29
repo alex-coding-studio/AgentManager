@@ -520,6 +520,13 @@ export function TaskDecompositionWorkspace({
             (candidate) => !acceptedCandidateIds.has(candidate.candidateId),
           )
           .map((candidate) => ({
+            candidate: {
+              ...candidate,
+              dependsOn: resolveCandidateDependencyIds(
+                candidate.dependsOn,
+                nodes,
+              ),
+            },
             id: candidate.candidateId,
             sourceNodeId: run.sourceNodeId,
             instruction: snapshot?.instruction ?? '',
@@ -534,8 +541,10 @@ export function TaskDecompositionWorkspace({
             color: candidate.presentation.color,
             status: 'proposal',
             derivedFrom: candidate.derivedFrom,
-            dependsOn: candidate.dependsOn,
-            candidate,
+            dependsOn: resolveCandidateDependencyIds(
+              candidate.dependsOn,
+              nodes,
+            ),
             outputPath: candidateOutputPath(run.runId, candidate.candidateId),
             runId: run.runId,
           })),
@@ -666,7 +675,25 @@ export function TaskDecompositionWorkspace({
     }
     setNodes(payload.nodes);
     setRequestPreviews((current) =>
-      current.filter((preview) => preview.id !== selectedCandidate.candidateId),
+      current
+        .filter((preview) => preview.id !== selectedCandidate.candidateId)
+        .map((preview) => {
+          if (!preview.dependsOn?.includes(selectedCandidate.candidateId)) {
+            return preview;
+          }
+          const dependsOn = preview.dependsOn.map((dependencyId) =>
+            dependencyId === selectedCandidate.candidateId
+              ? (payload.node?.id ?? dependencyId)
+              : dependencyId,
+          );
+          return {
+            ...preview,
+            dependsOn,
+            candidate: preview.candidate
+              ? { ...preview.candidate, dependsOn }
+              : undefined,
+          };
+        }),
     );
     setInspectorNodeId('');
     setFocusedNodeId(payload.node.id);
@@ -1745,12 +1772,14 @@ export function TaskDecompositionWorkspace({
                       title="Derived from"
                       nodeIds={selectedCandidate.derivedFrom}
                       nodes={nodes}
+                      previews={requestPreviews}
                       onSelect={locateNode}
                     />
                     <CandidateRelationshipList
                       title="Depends on"
                       nodeIds={selectedCandidate.dependsOn}
                       nodes={nodes}
+                      previews={requestPreviews}
                       onSelect={locateNode}
                     />
                   </div>
@@ -2002,16 +2031,24 @@ function CandidateRelationshipList({
   title,
   nodeIds,
   nodes,
+  previews,
   onSelect,
 }: {
   title: string;
   nodeIds: string[];
   nodes: TaskGraphNode[];
+  previews: TaskGraphPreview[];
   onSelect: (nodeId: string) => void;
 }) {
   const relatedNodes = nodeIds.flatMap((nodeId) => {
     const node = nodes.find((candidate) => candidate.id === nodeId);
-    return node ? [node] : [];
+    if (node) return [node];
+    const candidate = previews.find(
+      (preview) => preview.id === nodeId && preview.kind === 'candidate',
+    );
+    return candidate
+      ? [{ id: candidate.id, title: candidate.title ?? candidate.id }]
+      : [];
   });
   return (
     <RelationshipList title={title} nodes={relatedNodes} onSelect={onSelect} />
@@ -2024,7 +2061,7 @@ function RelationshipList({
   onSelect,
 }: {
   title: string;
-  nodes: TaskGraphNode[];
+  nodes: Array<{ id: string; title: string }>;
   onSelect: (nodeId: string) => void;
 }) {
   return (
@@ -2063,6 +2100,19 @@ function RelationshipList({
       )}
     </div>
   );
+}
+
+function resolveCandidateDependencyIds(
+  dependencyIds: string[],
+  nodes: TaskGraphNode[],
+) {
+  return dependencyIds.map((dependencyId) => {
+    if (!dependencyId.startsWith('CANDIDATE-')) return dependencyId;
+    return (
+      nodes.find((node) => node.provenance?.candidateId === dependencyId)?.id ??
+      dependencyId
+    );
+  });
 }
 
 function resourceName(resourcePath: string) {
