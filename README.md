@@ -8,8 +8,10 @@ history.
 It is a task-decomposition and dependency-synchronization tool, not a general
 project-management system. Projects provide context boundaries for Agent work.
 
-The current slice provides local project registration. A project can begin as a
-standalone product idea or attach to an existing local code repository.
+The current slices provide local project registration, a filesystem-backed
+Product Context library, and capture of source-backed start nodes on the Task
+Canvas. A project can begin as a standalone product idea or attach to an
+existing local code repository.
 
 ## Requirements
 
@@ -56,6 +58,10 @@ README files can be opened in a reusable focus reader or revealed in the system
 file manager for external editing.
 Markdown documents can be created from the interface or imported through a file
 picker and drag and drop.
+Task Canvas start nodes are stored as one folder per node. Each node contains a
+human-readable `node.json` and can carry its own Resource files. Context Library
+Markdown can be selected through the folder browser, while external Markdown
+can be attached directly during node creation.
 
 Set `AGENT_MANAGER_HOME` to use a different machine-registry directory.
 

@@ -30,9 +30,9 @@ HereItIs/
 └── .agent-manager/
     ├── .git/
     ├── project.json
-    ├── modules/
-    ├── tasks/
-    └── relationships.json
+    ├── context/
+    └── task-graph/
+        └── nodes/
 ```
 
 This is an independent nested repository, not a Git submodule.
@@ -119,9 +119,13 @@ Planned layout:
 │   └── other/
 │       └── README.md
 ├── task-graph/
-│   ├── tasks/
-│   │   ├── task-001.json
-│   │   └── task-002.json
+│   └── nodes/
+│       ├── NODE-0001/
+│       │   ├── node.json
+│       │   └── resources/
+│       │       └── product-foundation.md
+│       └── NODE-0002/
+│           └── node.json
 └── .cache/
     └── project.sqlite
 ```
@@ -134,9 +138,12 @@ specialized installations can change the implementation instead of adding a
 configuration system to the core product.
 
 Product Context uses the filesystem as its canonical index. Each section is a
-folder, and its `README.md` defines the section's purpose, content boundary, and
-Agent loading guidance. AgentManager discovers sections by scanning the
-directory. It does not duplicate the context tree in SQLite or a manifest.
+folder, and an optional `README.md` can define the section's purpose, content
+boundary, and Agent loading guidance. AgentManager discovers sections by
+scanning the directory. It does not duplicate the context tree in SQLite or a
+manifest. Context source selection uses a recursive folder browser so nested
+folders remain navigable while only concrete Markdown files can become
+Resources.
 
 Markdown is used for flexible human-readable product and acceptance content. JSON is used for stable structured records and agent interchange. SQLite is introduced only when graph queries require it.
 
@@ -157,15 +164,76 @@ Reasons:
 Any future SQLite cache must be regenerated from canonical Markdown and JSON
 files. Its WAL, shared-memory files, and cache directory remain untracked.
 
-Structured task state should use small JSON files with explicit
-`schemaVersion` fields. Prefer one file per task, including its direct dependency
-identifiers, instead of one large project blob, so Agent writes remain bounded
-and Git diffs remain readable.
+Structured graph state uses small JSON files with explicit `schemaVersion`
+fields. Prefer one file per node, including its direct dependency identifiers,
+instead of one large project blob, so Agent writes remain bounded and Git diffs
+remain readable. Scanning a few hundred small node files is acceptable for the
+intended personal scale; a derived index is added only after measurement shows
+that it is needed.
 
-Each task file owns its direct `dependsOn` identifiers and relative references
-to Context or repository files. Reverse dependency edges are derived by scanning
-the task files. This avoids maintaining a second relationship record that can
-drift away from the cards it connects.
+Graph structure and product semantics are separate. A node's `role` is either
+`start` or `node`. Its open-ended `type` can be `source`, `experience`, `module`,
+`task`, or a future product-specific value. A start node has no incoming graph
+requirement and a canvas may contain many of them. There is no `leaf` role: a
+node is simply an endpoint while nothing continues from it.
+
+Each node owns its direct `dependsOn` identifiers and a list of typed Resources
+whose paths are relative to `.agent-manager/`. Reverse dependency edges are
+derived by scanning the node folders. This avoids maintaining a second
+relationship record that can drift away from the cards it connects. Flexible
+type-specific fields live under `metadata`; optional card rendering hints live
+under `presentation`.
+
+Every node is a folder so it can carry its JSON card, node-local Resources, and
+future generated artifacts without inventing a database relationship. Semantic
+types are not registered in application code. The first accepted card of a new
+type becomes its project-local reference and points `typeTemplateRef` to itself.
+Later cards of that type point to the same reference card so an Agent can reuse
+its color, metadata shape, and output conventions.
+
+Editing a start node rewrites its `node.json` atomically, preserves its stable
+identifier, and removes a copied Resource only when it is removed from the
+node. The Markdown reader accepts only validated Context Library paths or
+node-local Resource paths inside the selected project's planning directory.
+
+The reference node is an editable type template. Its `presentation` supplies
+the default card appearance. The keys and value shapes in its `metadata` are
+the required structural example for newly generated cards of that type; an
+Agent fills those keys with node-specific values rather than copying instance
+data blindly. An optional `template.md` beside `node.json` can add field
+semantics and natural-language generation rules. Before generating a known
+type, an Agent resolves `typeTemplateRef` and reads both files when present.
+Changing the reference affects future generation and never silently rewrites
+existing nodes.
+
+Example start node:
+
+```json
+{
+  "schemaVersion": 1,
+  "id": "NODE-0001",
+  "role": "start",
+  "type": "source",
+  "title": "Task decomposition MVP",
+  "status": "captured",
+  "resources": [
+    {
+      "kind": "context",
+      "path": "context/product/project.md"
+    },
+    {
+      "kind": "attachment",
+      "path": "task-graph/nodes/NODE-0001/resources/interaction-notes.md"
+    }
+  ],
+  "dependsOn": [],
+  "typeTemplateRef": "NODE-0001",
+  "metadata": {},
+  "presentation": {
+    "color": "#525252"
+  }
+}
+```
 
 If later evidence shows that canonical SQLite is necessary, AgentManager must also produce a deterministic textual snapshot suitable for review and recovery before that architecture changes.
 

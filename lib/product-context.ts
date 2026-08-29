@@ -25,6 +25,27 @@ export type ContextDocument = {
   markdown: string;
 };
 
+export type ContextBrowserFolder = {
+  path: string;
+  name: string;
+  title: string;
+  entries: ContextBrowserEntry[];
+};
+
+export type ContextBrowserEntry =
+  | {
+      kind: 'folder';
+      path: string;
+      name: string;
+      title: string;
+    }
+  | {
+      kind: 'file';
+      path: string;
+      name: string;
+      title: string;
+    };
+
 export class ContextDocumentConflictError extends Error {
   conflicts: string[];
 
@@ -267,6 +288,96 @@ export async function readProductContext(project: RegisteredProject) {
   );
 
   return sections;
+}
+
+export async function readContextBrowser(project: RegisteredProject) {
+  const contextPath = path.join(project.planningPath, 'context');
+  const entries = await readdir(contextPath, { withFileTypes: true }).catch(
+    () => [],
+  );
+  const directories = entries
+    .filter(
+      (entry) => entry.isDirectory() && /^[a-z0-9][a-z0-9-]*$/.test(entry.name),
+    )
+    .map((entry) => entry.name);
+  const preferredOrder = sectionTemplates.map((section) => section.slug);
+  directories.sort((left, right) => {
+    const leftIndex = preferredOrder.indexOf(left as never);
+    const rightIndex = preferredOrder.indexOf(right as never);
+    if (leftIndex === -1 && rightIndex === -1) {
+      return left.localeCompare(right);
+    }
+    if (leftIndex === -1) return 1;
+    if (rightIndex === -1) return -1;
+    return leftIndex - rightIndex;
+  });
+
+  const folders: ContextBrowserFolder[] = [];
+  for (const directory of directories) {
+    await readContextBrowserFolder(
+      path.join(contextPath, directory),
+      `context/${directory}`,
+      folders,
+    );
+  }
+  return folders;
+}
+
+async function readContextBrowserFolder(
+  folderPath: string,
+  relativePath: string,
+  folders: ContextBrowserFolder[],
+) {
+  const entries = await readdir(folderPath, { withFileTypes: true });
+  const childDirectories = entries
+    .filter(
+      (entry) => entry.isDirectory() && /^[a-z0-9][a-z0-9-]*$/.test(entry.name),
+    )
+    .sort((left, right) => left.name.localeCompare(right.name));
+  const markdownFiles = entries
+    .filter((entry) => entry.isFile() && /\.(md|markdown)$/i.test(entry.name))
+    .sort((left, right) => {
+      if (left.name.toLowerCase() === 'readme.md') return -1;
+      if (right.name.toLowerCase() === 'readme.md') return 1;
+      return left.name.localeCompare(right.name);
+    });
+  const documents = await Promise.all(
+    markdownFiles.map(async (entry) => {
+      const markdown = await readFile(
+        path.join(folderPath, entry.name),
+        'utf8',
+      );
+      return {
+        kind: 'file' as const,
+        path: `${relativePath}/${entry.name}`,
+        name: entry.name,
+        title: readTitle(markdown, path.parse(entry.name).name),
+      };
+    }),
+  );
+  const readme = documents.find(
+    (document) => document.name.toLowerCase() === 'readme.md',
+  );
+  const name = path.basename(relativePath);
+  const childFolders = childDirectories.map((entry) => ({
+    kind: 'folder' as const,
+    path: `${relativePath}/${entry.name}`,
+    name: entry.name,
+    title: readTitle('', entry.name),
+  }));
+  folders.push({
+    path: relativePath,
+    name,
+    title: readme?.title ?? readTitle('', name),
+    entries: [...childFolders, ...documents],
+  });
+  for (const directory of childDirectories) {
+    await readContextBrowserFolder(
+      path.join(folderPath, directory.name),
+      `${relativePath}/${directory.name}`,
+      folders,
+    );
+  }
 }
 
 export async function createContextDocument(

@@ -29,7 +29,7 @@ const navigation = [
     label: 'Task decomposition',
     icon: Boxes,
     path: '/decomposition',
-    available: false,
+    available: true,
   },
   {
     label: 'Dependencies',
