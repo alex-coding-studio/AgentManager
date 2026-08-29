@@ -2,7 +2,11 @@ import { notFound } from 'next/navigation';
 import { ArrowRight, Boxes, GitFork, Library } from 'lucide-react';
 import { ProjectShell } from '@/components/project-shell';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { getProject, listProjects } from '@/lib/project-registry';
+import {
+  getGitHubRepositoryUrl,
+  getProject,
+  listProjects,
+} from '@/lib/project-registry';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,9 +22,14 @@ export default async function ProjectPage({
   ]);
 
   if (!project) notFound();
+  const repositoryUrl = getGitHubRepositoryUrl(project);
 
   return (
-    <ProjectShell project={project} projects={projects}>
+    <ProjectShell
+      project={project}
+      projects={projects}
+      repositoryUrl={repositoryUrl}
+    >
       <div className="mx-auto max-w-6xl px-5 py-9 lg:px-8 lg:py-12">
         <div className="max-w-2xl">
           <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">

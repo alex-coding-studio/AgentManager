@@ -6,12 +6,14 @@ import {
   Boxes,
   ChevronDown,
   CircleDot,
+  ExternalLink,
   FileText,
   FolderGit2,
   GitFork,
   LayoutDashboard,
   Settings,
 } from 'lucide-react';
+import { siGithub } from 'simple-icons/icons';
 import type { RegisteredProject } from '@/lib/project-registry';
 import { cn } from '@/lib/utils';
 
@@ -25,10 +27,12 @@ const navigation = [
 export function ProjectShell({
   project,
   projects,
+  repositoryUrl,
   children,
 }: {
   project: RegisteredProject;
   projects: RegisteredProject[];
+  repositoryUrl: string | null;
   children: React.ReactNode;
 }) {
   const router = useRouter();
@@ -115,12 +119,33 @@ export function ProjectShell({
             )}
             <span className="truncate">{project.rootPath}</span>
           </div>
-          <span className="ml-4 shrink-0 rounded-full bg-secondary px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
-            {project.kind === 'repository' ? 'Repository' : 'Product idea'}
-          </span>
+          {repositoryUrl ? (
+            <a
+              href={repositoryUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="ml-4 flex shrink-0 items-center gap-1.5 rounded-full bg-secondary px-2.5 py-1 text-[11px] font-medium text-secondary-foreground transition hover:bg-muted"
+            >
+              <GitHubIcon />
+              Repository
+              <ExternalLink className="size-3" />
+            </a>
+          ) : null}
         </header>
         {children}
       </main>
     </div>
+  );
+}
+
+function GitHubIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      className="size-3.5 fill-current"
+    >
+      <path d={siGithub.path} />
+    </svg>
   );
 }

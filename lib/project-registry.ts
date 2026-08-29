@@ -94,6 +94,41 @@ export async function getProject(projectId: string) {
   );
 }
 
+export function getGitHubRepositoryUrl(project: RegisteredProject) {
+  if (!project.codePath) return null;
+
+  let remoteUrl: string;
+  try {
+    remoteUrl = execFileSync(
+      'git',
+      ['-C', project.codePath, 'remote', 'get-url', 'origin'],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
+    ).trim();
+  } catch {
+    return null;
+  }
+
+  const scpMatch = remoteUrl.match(
+    /^git@github\.com:([a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+?)(?:\.git)?$/,
+  );
+  if (scpMatch) return `https://github.com/${scpMatch[1]}`;
+
+  try {
+    const url = new URL(remoteUrl);
+    if (url.hostname.toLowerCase() !== 'github.com') return null;
+    const repositoryPath = url.pathname
+      .replace(/^\//, '')
+      .replace(/\.git$/, '')
+      .replace(/\/$/, '');
+    if (!/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(repositoryPath)) {
+      return null;
+    }
+    return `https://github.com/${repositoryPath}`;
+  } catch {
+    return null;
+  }
+}
+
 export async function createProject(input: {
   kind: ProjectKind;
   name: string;
