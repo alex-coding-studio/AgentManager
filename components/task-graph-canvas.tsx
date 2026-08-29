@@ -56,6 +56,7 @@ export function TaskGraphCanvas({
   locateRequest,
   selectedNodeIds,
   plusLabel,
+  edgeAlignedOverlays = false,
   onMultiSelect,
   onFocusNode,
   onInspectNode,
@@ -69,6 +70,7 @@ export function TaskGraphCanvas({
   locateRequest: { nodeId: string; sequence: number } | null;
   selectedNodeIds?: string[];
   plusLabel?: string;
+  edgeAlignedOverlays?: boolean;
   onMultiSelect?: (nodeId: string) => void;
   onFocusNode: (nodeId: string) => void;
   onInspectNode: (nodeId: string) => void;
@@ -179,7 +181,10 @@ export function TaskGraphCanvas({
       />
       <Panel
         position="bottom-right"
-        className="!bottom-5 !m-3 flex items-center gap-3 rounded-lg border border-border bg-background/90 px-2.5 py-2 text-[10px] text-muted-foreground shadow-sm backdrop-blur"
+        className={cn(
+          '!m-3 flex items-center gap-3 rounded-lg border border-border bg-background/90 px-2.5 py-2 text-[10px] text-muted-foreground shadow-sm backdrop-blur',
+          edgeAlignedOverlays ? '!-bottom-2' : '!bottom-5',
+        )}
       >
         <span className="flex items-center gap-1.5">
           <span className="h-px w-5 bg-muted-foreground" />
@@ -196,7 +201,10 @@ export function TaskGraphCanvas({
       </Panel>
       <Controls
         showInteractive={false}
-        className="!bottom-5 !overflow-hidden !rounded-xl !border !border-border !bg-background !shadow-sm [&>button]:!border-border [&>button]:!bg-background [&>button]:!fill-foreground hover:[&>button]:!bg-secondary"
+        className={cn(
+          '!overflow-hidden !rounded-xl !border !border-border !bg-background !shadow-sm [&>button]:!border-border [&>button]:!bg-background [&>button]:!fill-foreground hover:[&>button]:!bg-secondary',
+          edgeAlignedOverlays ? '!-bottom-2' : '!bottom-5',
+        )}
       />
     </ReactFlow>
   );
