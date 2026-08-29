@@ -55,6 +55,7 @@ import type {
   TaskDecompositionRunRecord,
   TaskDecompositionRunTransport,
 } from '@/lib/task-decomposition-runs';
+import { replaceRunWithPreviewsInPlace } from '@/lib/task-graph-preview-state';
 import { cn } from '@/lib/utils';
 
 type DecompositionRequestPreview = TaskGraphPreview & {
@@ -78,6 +79,7 @@ type RunSnapshot = {
   contextRefs: string[];
   files: File[];
   revisionTarget?: { runId: string; candidateId: string };
+  revisionPreview?: DecompositionRequestPreview;
   operation: 'propose' | 'append-candidates';
 };
 
@@ -87,12 +89,17 @@ export function TaskDecompositionWorkspace({
   initialNodes,
   initialPreviews,
   developmentPreview,
+  developmentPreviewSequence,
 }: {
   projectId: string;
   folders: ContextBrowserFolder[];
   initialNodes: TaskGraphNode[];
   initialPreviews: TaskGraphPreview[];
   developmentPreview: boolean;
+  developmentPreviewSequence?: {
+    running: TaskGraphPreview;
+    completed: TaskGraphPreview;
+  };
 }) {
   const [nodes, setNodes] = useState(initialNodes);
   const [title, setTitle] = useState('');
@@ -399,6 +406,13 @@ export function TaskDecompositionWorkspace({
         contextRefs: [...requestSelectedRefs],
         files: [...requestFiles],
         revisionTarget: revisionTarget ?? undefined,
+        revisionPreview: revisionTarget
+          ? requestPreviews.find(
+              (preview) =>
+                preview.kind === 'candidate' &&
+                preview.id === revisionTarget.candidateId,
+            )
+          : undefined,
         operation: runOperation,
       };
       const formData = new FormData();
@@ -427,14 +441,37 @@ export function TaskDecompositionWorkspace({
       }
       const run = result.run;
       runSnapshots.current.set(run.runId, snapshot);
-      setRequestPreviews((current) => [
-        ...(revisionTarget || runOperation === 'append-candidates'
-          ? current
-          : current.filter(
-              (candidate) => candidate.sourceNodeId !== decomposeSource.id,
-            )),
-        runPreview(run, snapshot, decomposeSource.resources.length),
-      ]);
+      const runningPreview = runPreview(
+        run,
+        snapshot,
+        decomposeSource.resources.length,
+      );
+      setRequestPreviews((current) => {
+        if (snapshot.revisionPreview && revisionTarget) {
+          return replaceRunWithPreviewsInPlace(current, run.runId, [
+            {
+              ...runningPreview,
+              id: revisionTarget.candidateId,
+              title: snapshot.revisionPreview.title,
+              description: snapshot.revisionPreview.description,
+              color: snapshot.revisionPreview.color,
+              derivedFrom: snapshot.revisionPreview.derivedFrom,
+              dependsOn: snapshot.revisionPreview.dependsOn,
+              candidate: snapshot.revisionPreview.candidate,
+              outputPath: snapshot.revisionPreview.outputPath,
+            },
+          ]);
+        }
+        return [
+          ...(runOperation === 'append-candidates'
+            ? current
+            : current.filter(
+                (candidate) => candidate.sourceNodeId !== decomposeSource.id,
+              )),
+          runningPreview,
+        ];
+      });
+      if (revisionTarget) setFocusedNodeId('');
       closeDecomposition();
       return;
     }
@@ -462,23 +499,30 @@ export function TaskDecompositionWorkspace({
     description: string,
     status: string,
   ) {
-    setRequestPreviews((current) => [
-      ...current.filter((preview) => preview.id !== runId),
-      {
-        id: runId,
-        sourceNodeId,
-        instruction: description,
-        inheritedResourceCount: 0,
-        additionalResourceCount: 0,
-        contextRefs: [],
-        files: [],
-        kind: 'outcome',
-        title,
-        type: status,
-        description,
-        status,
-      },
-    ]);
+    const revisionPreview = runSnapshots.current.get(runId)?.revisionPreview;
+    const outcome: DecompositionRequestPreview = {
+      id: runId,
+      sourceNodeId,
+      instruction: description,
+      inheritedResourceCount: 0,
+      additionalResourceCount: 0,
+      contextRefs: [],
+      files: [],
+      kind: 'outcome',
+      title,
+      type: status,
+      description,
+      status,
+    };
+    setRequestPreviews((current) => {
+      const restored = revisionPreview
+        ? replaceRunWithPreviewsInPlace(current, runId, [revisionPreview])
+        : current.filter(
+            (preview) => preview.id !== runId && preview.runId !== runId,
+          );
+      return [...restored, outcome];
+    });
+    if (revisionPreview) setFocusedNodeId('');
     runSnapshots.current.delete(runId);
   }
 
@@ -486,7 +530,7 @@ export function TaskDecompositionWorkspace({
     if (['running', 'validating'].includes(run.status)) {
       setRequestPreviews((current) =>
         current.map((preview) =>
-          preview.id === run.runId
+          preview.id === run.runId || preview.runId === run.runId
             ? { ...preview, status: run.status }
             : preview,
         ),
@@ -496,8 +540,16 @@ export function TaskDecompositionWorkspace({
     const snapshot = runSnapshots.current.get(run.runId);
     if (run.status === 'canceled') {
       setRequestPreviews((current) =>
-        current.filter((preview) => preview.id !== run.runId),
+        snapshot?.revisionPreview
+          ? replaceRunWithPreviewsInPlace(current, run.runId, [
+              snapshot.revisionPreview,
+            ])
+          : current.filter(
+              (preview) =>
+                preview.id !== run.runId && preview.runId !== run.runId,
+            ),
       );
+      if (snapshot?.revisionPreview) setFocusedNodeId('');
       return;
     }
     if (run.status === 'proposal' && run.result?.outcome === 'proposal') {
@@ -507,48 +559,38 @@ export function TaskDecompositionWorkspace({
           node.provenance?.candidateId ? [node.provenance.candidateId] : [],
         ),
       );
-      const candidateIds = new Set(
-        result.candidates.map((candidate) => candidate.candidateId),
-      );
-      setRequestPreviews((current) => [
-        ...current.filter(
-          (preview) =>
-            preview.id !== run.runId && !candidateIds.has(preview.id),
-        ),
-        ...result.candidates
-          .filter(
-            (candidate) => !acceptedCandidateIds.has(candidate.candidateId),
-          )
-          .map((candidate) => ({
-            candidate: {
-              ...candidate,
-              dependsOn: resolveCandidateDependencyIds(
-                candidate.dependsOn,
-                nodes,
-              ),
-            },
-            id: candidate.candidateId,
-            sourceNodeId: run.sourceNodeId,
-            instruction: snapshot?.instruction ?? '',
-            inheritedResourceCount: 0,
-            additionalResourceCount: candidate.resources.length,
-            contextRefs: [],
-            files: [],
-            kind: 'candidate' as const,
-            title: candidate.title,
-            type: candidate.type,
-            description: candidate.summary,
-            color: candidate.presentation.color,
-            status: 'proposal',
-            derivedFrom: candidate.derivedFrom,
+      const candidatePreviews = result.candidates
+        .filter((candidate) => !acceptedCandidateIds.has(candidate.candidateId))
+        .map((candidate) => ({
+          candidate: {
+            ...candidate,
             dependsOn: resolveCandidateDependencyIds(
               candidate.dependsOn,
               nodes,
             ),
-            outputPath: candidateOutputPath(run.runId, candidate.candidateId),
-            runId: run.runId,
-          })),
-      ]);
+          },
+          id: candidate.candidateId,
+          sourceNodeId: run.sourceNodeId,
+          instruction: snapshot?.instruction ?? '',
+          inheritedResourceCount: 0,
+          additionalResourceCount: candidate.resources.length,
+          contextRefs: [],
+          files: [],
+          kind: 'candidate' as const,
+          title: candidate.title,
+          type: candidate.type,
+          description: candidate.summary,
+          color: candidate.presentation.color,
+          status: 'proposal',
+          derivedFrom: candidate.derivedFrom,
+          dependsOn: resolveCandidateDependencyIds(candidate.dependsOn, nodes),
+          outputPath: candidateOutputPath(run.runId, candidate.candidateId),
+          runId: run.runId,
+        }));
+      setRequestPreviews((current) =>
+        replaceRunWithPreviewsInPlace(current, run.runId, candidatePreviews),
+      );
+      if (run.revisionOf) setFocusedNodeId('');
       runSnapshots.current.delete(run.runId);
       return;
     }
@@ -612,9 +654,16 @@ export function TaskDecompositionWorkspace({
     );
     if (!response.ok) return;
     setRequestPreviews((current) =>
-      current.filter((preview) => preview.id !== runId),
+      snapshot?.revisionPreview
+        ? replaceRunWithPreviewsInPlace(current, runId, [
+            snapshot.revisionPreview,
+          ])
+        : current.filter(
+            (preview) => preview.id !== runId && preview.runId !== runId,
+          ),
     );
     if (snapshot) {
+      if (snapshot.revisionTarget) setFocusedNodeId('');
       setDecomposeSourceId(snapshot.sourceNodeId);
       setDecompositionGoal(snapshot.instruction);
       setRequestSelectedRefs(snapshot.contextRefs);
@@ -787,6 +836,46 @@ export function TaskDecompositionWorkspace({
   }, [developmentPreview, projectId]);
 
   useEffect(() => {
+    if (!developmentPreviewSequence) return;
+    const transitionTimeout = window.setTimeout(() => {
+      setRequestPreviews((current) =>
+        replaceRunWithPreviewsInPlace(
+          current,
+          developmentPreviewSequence.running.runId ?? '',
+          [
+            {
+              ...developmentPreviewSequence.running,
+              contextRefs: [],
+              files: [],
+            },
+          ],
+        ),
+      );
+      setFocusedNodeId('');
+    }, 800);
+    const completionTimeout = window.setTimeout(() => {
+      setRequestPreviews((current) =>
+        replaceRunWithPreviewsInPlace(
+          current,
+          developmentPreviewSequence.running.runId ?? '',
+          [
+            {
+              ...developmentPreviewSequence.completed,
+              contextRefs: [],
+              files: [],
+            },
+          ],
+        ),
+      );
+    }, 1_800);
+    return () => {
+      window.clearTimeout(transitionTimeout);
+      window.clearTimeout(completionTimeout);
+    };
+  }, [developmentPreviewSequence]);
+
+  useEffect(() => {
+    if (developmentPreview) return;
     const running = requestPreviews.filter(
       (preview) =>
         preview.kind === 'run' &&
@@ -797,8 +886,9 @@ export function TaskDecompositionWorkspace({
     const timer = window.setInterval(() => {
       void Promise.all(
         running.map(async (preview) => {
+          const runId = preview.runId ?? preview.id;
           const response = await fetch(
-            `/api/projects/${projectId}/decomposition-runs?runId=${encodeURIComponent(preview.id)}`,
+            `/api/projects/${projectId}/decomposition-runs?runId=${encodeURIComponent(runId)}`,
           );
           const payload = (await response.json()) as {
             run?: TaskDecompositionRunRecord;
@@ -806,7 +896,7 @@ export function TaskDecompositionWorkspace({
           };
           if (!response.ok || !payload.run) {
             replaceRunWithOutcomeEvent(
-              preview.id,
+              runId,
               preview.sourceNodeId,
               'Agent Run unavailable',
               payload.error ?? 'Could not read the Agent Run.',
@@ -819,7 +909,7 @@ export function TaskDecompositionWorkspace({
       );
     }, 750);
     return () => window.clearInterval(timer);
-  }, [projectId, requestPreviews]);
+  }, [developmentPreview, projectId, requestPreviews]);
 
   async function previewResource(resourcePath: string) {
     setPreviewingPath(resourcePath);
@@ -2020,6 +2110,7 @@ function runPreview(
     description: snapshot.instruction,
     status: run.status,
     revisionOf: run.revisionOf,
+    runId: run.runId,
   };
 }
 

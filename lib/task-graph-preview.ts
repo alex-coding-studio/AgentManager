@@ -1,5 +1,6 @@
 import type { TaskGraphNode } from '@/lib/task-graph';
 import type { TaskGraphPreview } from '@/lib/task-graph-layout';
+import type { HarnessCandidate } from '@/lib/task-decomposition-harness';
 
 const timestamp = '2026-08-28T00:00:00.000Z';
 
@@ -79,7 +80,66 @@ export function createTaskGraphPreview() {
       additionalResourceCount: 1,
     },
   ];
-  return { nodes, previews };
+  return { nodes, previews, sequence: undefined };
+}
+
+export function createTaskGraphRefiningPreview() {
+  const source = node('NODE-9001', 'start', 'source', 'Product definition', []);
+  const first = previewCandidate('CANDIDATE-9001', 1, 'Context boundaries');
+  const second = previewCandidate('CANDIDATE-9002', 1, 'Dependency boundaries');
+  const running: TaskGraphPreview = {
+    ...first,
+    kind: 'run',
+    type: 'Running',
+    status: 'running',
+    runId: 'RUN-00000000-0000-4000-8000-000000000031',
+    revisionOf: first.id,
+  };
+  return {
+    nodes: [source],
+    previews: [first, second],
+    sequence: {
+      running,
+      completed: previewCandidate(first.id, 2, 'Context boundaries'),
+    },
+  };
+}
+
+function previewCandidate(
+  candidateId: string,
+  revision: number,
+  title: string,
+): TaskGraphPreview {
+  const candidate: HarnessCandidate = {
+    candidateId,
+    revision,
+    type: 'module',
+    title,
+    summary: `Development preview for ${title}.`,
+    derivedFrom: ['NODE-9001'],
+    dependsOn: [],
+    resources: [],
+    typeTemplateRef: null,
+    metadata: {},
+    presentation: {},
+    assumptions: [],
+  };
+  return {
+    id: candidateId,
+    sourceNodeId: 'NODE-9001',
+    instruction: 'Refine this boundary.',
+    inheritedResourceCount: 1,
+    additionalResourceCount: 0,
+    kind: 'candidate',
+    title,
+    type: candidate.type,
+    description: candidate.summary,
+    status: 'proposal',
+    derivedFrom: candidate.derivedFrom,
+    dependsOn: candidate.dependsOn,
+    candidate,
+    runId: `RUN-${revision}`,
+  };
 }
 
 function node(

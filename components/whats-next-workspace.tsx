@@ -38,6 +38,7 @@ import {
 import type { ContextBrowserFolder } from '@/lib/product-context';
 import type { TaskGraphNode } from '@/lib/task-graph';
 import type { TaskGraphPreview } from '@/lib/task-graph-layout';
+import { replaceRunWithPreviewsInPlace } from '@/lib/task-graph-preview-state';
 import { getTaskGraphRelationships } from '@/lib/task-graph-rules';
 import type { LocalAgentKind } from '@/lib/local-agent-transport';
 import { WHATS_NEXT_HARNESS_REVISION } from '@/lib/whats-next-harness';
@@ -1722,10 +1723,7 @@ function mergeTerminalRunPreviews(
   current: TaskGraphPreview[],
   run: WhatsNextRunRecord,
 ) {
-  return mergePreviews(
-    current.filter((preview) => preview.id !== run.runId),
-    runToPreviews(run),
-  );
+  return replaceRunWithPreviewsInPlace(current, run.runId, runToPreviews(run));
 }
 
 function upsertRun(current: WhatsNextRunRecord[], run: WhatsNextRunRecord) {
