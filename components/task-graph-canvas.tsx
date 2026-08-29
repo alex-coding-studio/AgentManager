@@ -184,7 +184,11 @@ function TaskCard({ id, data, selected }: NodeProps<TaskFlowNode>) {
         selected && 'ring-3 ring-ring/20',
         preview && 'border-dashed bg-secondary/35',
       )}
-      style={{ borderTopColor: data.color }}
+      style={
+        running
+          ? { borderColor: data.color, borderWidth: 2 }
+          : { borderTopColor: data.color }
+      }
     >
       <Handle
         type="target"
