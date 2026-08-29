@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { replaceRunWithPreviewsInPlace } from '../lib/task-graph-preview-state.ts';
 import {
   buildTaskDecompositionContinuationPrompt,
   buildTaskDecompositionPrompt,
@@ -32,4 +33,37 @@ void test('builds a continuation prompt without reinjecting the Harness', () => 
   assert.match(prompt, /append-candidates/);
   assert.doesNotMatch(prompt, /complete output contract/);
   assert.doesNotMatch(prompt, /Decomposition Agent/);
+});
+void test('replaces a revised Candidate without changing sibling order', () => {
+  const current = [
+    { id: 'CANDIDATE-0001', revision: 1 },
+    { id: 'CANDIDATE-0002', revision: 1 },
+    { id: 'RUN-0001', revision: 0 },
+  ];
+
+  assert.deepEqual(
+    replaceRunWithPreviewsInPlace(current, 'RUN-0001', [
+      { id: 'CANDIDATE-0001', revision: 2 },
+    ]),
+    [
+      { id: 'CANDIDATE-0001', revision: 2 },
+      { id: 'CANDIDATE-0002', revision: 1 },
+    ],
+  );
+});
+
+void test('inserts genuinely new Candidates at the Run placeholder', () => {
+  const current = [
+    { id: 'CANDIDATE-0001' },
+    { id: 'RUN-0001' },
+    { id: 'CANDIDATE-0002' },
+  ];
+
+  assert.deepEqual(
+    replaceRunWithPreviewsInPlace(current, 'RUN-0001', [
+      { id: 'CANDIDATE-0003' },
+      { id: 'CANDIDATE-0004' },
+    ]).map((preview) => preview.id),
+    ['CANDIDATE-0001', 'CANDIDATE-0003', 'CANDIDATE-0004', 'CANDIDATE-0002'],
+  );
 });

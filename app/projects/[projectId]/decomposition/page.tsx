@@ -8,7 +8,10 @@ import {
   listProjects,
 } from '@/lib/project-registry';
 import { listTaskGraphNodes } from '@/lib/task-graph';
-import { createTaskGraphPreview } from '@/lib/task-graph-preview';
+import {
+  createTaskGraphPreview,
+  createTaskGraphRefiningPreview,
+} from '@/lib/task-graph-preview';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,9 +32,13 @@ export default async function TaskDecompositionPage({
     listTaskGraphNodes(project),
   ]);
   const graphPreview =
-    process.env.NODE_ENV === 'development' && preview === 'graph-layout'
-      ? createTaskGraphPreview()
-      : null;
+    process.env.NODE_ENV !== 'development'
+      ? null
+      : preview === 'graph-layout'
+        ? createTaskGraphPreview()
+        : preview === 'refining-flow'
+          ? createTaskGraphRefiningPreview()
+          : null;
 
   return (
     <ProjectShell
@@ -45,6 +52,7 @@ export default async function TaskDecompositionPage({
         initialNodes={graphPreview?.nodes ?? nodes}
         initialPreviews={graphPreview?.previews ?? []}
         developmentPreview={graphPreview !== null}
+        developmentPreviewSequence={graphPreview?.sequence}
       />
     </ProjectShell>
   );

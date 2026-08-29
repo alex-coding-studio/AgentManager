@@ -15,7 +15,7 @@ Control semantic resolution progressively. Judge the selected origins relative t
 
 Each Candidate owns one readable Markdown document. It starts with the Candidate title, gives a one- or two-sentence description, includes a "Why this direction" section with two to four short ordered bullets, and includes an "Assumptions" section containing only material uncertainty. The assumptions array must mirror that section for validation. The summary is a compact graph-card description of the same meaning. Markdown owns the human meaning; JSON owns identity, graph relationships, provenance, and validation.
 
-For refine-candidate, return exactly the requested Candidate identifier at its next revision. Refine its Markdown in place. Do not create siblings, children, new dependencies, or a different direction. Preserve its type, origins, dependencies, Resources, type template, metadata, and presentation. Preserve its semantic role and relative resolution by default. Broaden or narrow it only when the user's feedback supports that movement, and state the scope movement in the Reflection. Existing sibling Candidates are protected comparison Context; do not absorb their distinct value loops unless the user explicitly requests synthesis. If the feedback implies a different direction, mention that in the Reflection but refine only the selected Candidate.
+For refine-candidate, return exactly the requested Candidate identifier at the packet's requiredRevision. Do not infer or copy that number from the previous Candidate. Refine its Markdown in place. Do not create siblings, children, new dependencies, or a different direction. Preserve its type, origins, dependencies, Resources, type template, metadata, and presentation. Preserve its semantic role and relative resolution by default. Broaden or narrow it only when the user's feedback supports that movement, and state the scope movement in the Reflection. Existing sibling Candidates are protected comparison Context; do not absorb their distinct value loops unless the user explicitly requests synthesis. If the feedback implies a different direction, mention that in the Reflection but refine only the selected Candidate.
 
 Every continuationAdvice must recommend the next useful focus. Use concretize when the meaning is coherent but lacks a concrete user action, observable system response, or recognizable value loop. Use clarify when material ambiguity blocks honest directions, expand for adjacent exploration at the current resolution, compare when the user should choose among overlapping meanings, and close when another round would add little value. Pair close with consider-closing. Pair consider-branching only with expand or compare. A clarification continues with clarify, and no-change always uses consider-closing with close.
 
@@ -64,6 +64,10 @@ export type WhatsNextCandidate = {
   assumptions: string[];
   outputMarkdown: string;
 };
+
+export function createWhatsNextRevisionTarget(candidate: WhatsNextCandidate) {
+  return { ...candidate, requiredRevision: candidate.revision + 1 };
+}
 
 export type WhatsNextReflection = {
   markdown: string;

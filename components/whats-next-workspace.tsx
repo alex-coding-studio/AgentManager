@@ -1,27 +1,25 @@
 'use client';
 
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import {
-  useEffect,
-  useEffectEvent,
-  useRef,
-  useState,
-  type DragEvent,
-} from 'react';
-import {
-  ChevronDown,
   FileText,
   LoaderCircle,
   MessageSquareText,
   Pencil,
   Sparkles,
   Trash2,
-  Upload,
   X,
 } from 'lucide-react';
+import { AgentSelectField, AgentToggle } from '@/components/agent-selector';
+import { ContextAttachmentPicker } from '@/components/context-attachment-picker';
 import {
   MarkdownReader,
   type MarkdownFeedbackSelection,
 } from '@/components/markdown-reader';
+import {
+  NodeProvenanceFacts,
+  NodeResourceSections,
+} from '@/components/node-property-sections';
 import { TaskGraphCanvas } from '@/components/task-graph-canvas';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -38,6 +36,7 @@ import {
 import type { ContextBrowserFolder } from '@/lib/product-context';
 import type { TaskGraphNode } from '@/lib/task-graph';
 import type { TaskGraphPreview } from '@/lib/task-graph-layout';
+import { replaceRunWithPreviewsInPlace } from '@/lib/task-graph-preview-state';
 import { getTaskGraphRelationships } from '@/lib/task-graph-rules';
 import type { LocalAgentKind } from '@/lib/local-agent-transport';
 import { WHATS_NEXT_HARNESS_REVISION } from '@/lib/whats-next-harness';
@@ -65,12 +64,16 @@ export function WhatsNextWorkspace({
   initialNodes,
   initialRuns = [],
   developmentPreview = false,
+  developmentTransitionRun,
+  developmentCompletionRun,
 }: {
   projectId: string;
   folders: ContextBrowserFolder[];
   initialNodes: TaskGraphNode[];
   initialRuns?: WhatsNextRunRecord[];
   developmentPreview?: boolean;
+  developmentTransitionRun?: WhatsNextRunRecord;
+  developmentCompletionRun?: WhatsNextRunRecord;
 }) {
   const [nodes, setNodes] = useState(initialNodes);
   const [previews, setPreviews] = useState<TaskGraphPreview[]>(
@@ -144,9 +147,6 @@ export function WhatsNextWorkspace({
     return node ? [node] : [];
   });
   const selectedNode = nodes.find((node) => node.id === inspectorId) ?? null;
-  const selectedNodeMarkdown = selectedNode?.resources.find((resource) =>
-    ['idea', 'output'].includes(resource.kind),
-  );
   const deletionBlockers = selectedNode
     ? (() => {
         const related = getTaskGraphRelationships(nodes, selectedNode.id);
@@ -213,6 +213,31 @@ export function WhatsNextWorkspace({
     void restoreRuns();
   }, [developmentPreview]);
 
+  useEffect(() => {
+    if (!developmentTransitionRun) return;
+    const transitionTimeout = window.setTimeout(() => {
+      setRuns((current) => upsertRun(current, developmentTransitionRun));
+      setPreviews((current) =>
+        mergePreviews(current, runToPreviews(developmentTransitionRun)),
+      );
+      setFocusedNodeId('');
+    }, 800);
+    const completionTimeout = developmentCompletionRun
+      ? window.setTimeout(() => {
+          setRuns((current) => upsertRun(current, developmentCompletionRun));
+          setPreviews((current) =>
+            mergeTerminalRunPreviews(current, developmentCompletionRun),
+          );
+        }, 1_800)
+      : null;
+    return () => {
+      window.clearTimeout(transitionTimeout);
+      if (completionTimeout !== null) {
+        window.clearTimeout(completionTimeout);
+      }
+    };
+  }, [developmentCompletionRun, developmentTransitionRun]);
+
   async function pollRun(runId: string) {
     for (let attempt = 0; attempt < 3_600; attempt += 1) {
       await new Promise((resolve) => setTimeout(resolve, 1_500));
@@ -223,16 +248,13 @@ export function WhatsNextWorkspace({
       const { run } = (await response.json()) as { run: WhatsNextRunRecord };
       if (['running', 'validating'].includes(run.status)) continue;
       if (run.revisionOf && run.result?.outcome !== 'proposal') {
+        setFocusedNodeId('');
         await loadRunsFromServer();
         return;
       }
       setRuns((current) => upsertRun(current, run));
-      setPreviews((current) =>
-        mergePreviews(
-          current.filter((item) => item.runId !== runId),
-          runToPreviews(run),
-        ),
-      );
+      setPreviews((current) => mergeTerminalRunPreviews(current, run));
+      if (run.revisionOf) setFocusedNodeId('');
       return;
     }
   }
@@ -280,6 +302,7 @@ export function WhatsNextWorkspace({
     setPreviews((current) =>
       mergePreviews(current, runToPreviews(payload.run!)),
     );
+    if (input.revisionTarget) setFocusedNodeId('');
     void pollRun(payload.run.runId);
   }
 
@@ -369,6 +392,7 @@ export function WhatsNextWorkspace({
       body: JSON.stringify({ runId }),
     }).catch(() => null);
     if (snapshot?.revisionTarget) {
+      setFocusedNodeId('');
       await loadRunsFromServer();
       return;
     }
@@ -645,7 +669,7 @@ export function WhatsNextWorkspace({
             />
           </div>
           <div className="mt-4 flex items-center justify-between gap-3">
-            <AgentSelect value={selectedAgent} onChange={setSelectedAgent} />
+            <AgentToggle value={selectedAgent} onChange={setSelectedAgent} />
             <Button
               onClick={() => void beginFromIdea()}
               disabled={!idea.trim() || starting}
@@ -778,7 +802,7 @@ export function WhatsNextWorkspace({
           />
 
           <div className="mt-3 flex items-center justify-between gap-3">
-            <AgentSelect value={selectedAgent} onChange={setSelectedAgent} />
+            <AgentToggle value={selectedAgent} onChange={setSelectedAgent} />
             <Button
               size="sm"
               disabled={!combineInstruction.trim()}
@@ -820,28 +844,11 @@ export function WhatsNextWorkspace({
                 </p>
               </div>
 
-              <div className="space-y-2">
-                <label
-                  htmlFor="whats-next-agent"
-                  className="text-xs font-medium"
-                >
-                  Agent
-                </label>
-                <div className="relative">
-                  <select
-                    id="whats-next-agent"
-                    value={selectedAgent}
-                    onChange={(event) =>
-                      setSelectedAgent(event.target.value as LocalAgentKind)
-                    }
-                    className="h-10 w-full appearance-none rounded-xl border border-border bg-background px-3 pr-9 text-xs font-medium outline-none transition focus:border-ring focus:ring-3 focus:ring-ring/20"
-                  >
-                    <option value="codex">Codex</option>
-                    <option value="claude">Claude</option>
-                  </select>
-                  <ChevronDown className="pointer-events-none absolute top-1/2 right-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
-                </div>
-              </div>
+              <AgentSelectField
+                id="whats-next-agent"
+                value={selectedAgent}
+                onChange={setSelectedAgent}
+              />
 
               <div className="space-y-2">
                 <label
@@ -1070,49 +1077,61 @@ export function WhatsNextWorkspace({
                   </div>
                 </details>
 
-                {feedbackDraft ? (
-                  <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 p-3">
-                    <p className="text-[11px] font-medium">
-                      Lines {feedbackDraft.selection.startLine}–
-                      {feedbackDraft.selection.endLine}
-                    </p>
-                    <p className="mt-1 line-clamp-3 text-[11px] leading-5 text-muted-foreground">
-                      “{feedbackDraft.selection.excerpt}”
-                    </p>
-                    <Textarea
-                      value={feedbackDraft.instruction}
-                      onChange={(event) =>
-                        setFeedbackDraft((current) =>
-                          current
-                            ? { ...current, instruction: event.target.value }
-                            : null,
-                        )
-                      }
-                      rows={3}
-                      placeholder="What should the Agent reconsider here?"
-                      className="mt-3 resize-none text-sm"
-                      aria-label="Inline feedback"
-                    />
-                    <div className="mt-2 flex justify-end gap-2">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setFeedbackDraft(null)}
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        disabled={!feedbackDraft.instruction.trim()}
-                        onClick={() => void addPendingFeedback()}
-                      >
-                        Add feedback
-                      </Button>
-                    </div>
-                  </div>
-                ) : null}
+                <Dialog
+                  open={feedbackDraft !== null}
+                  onOpenChange={(open) => {
+                    if (!open) setFeedbackDraft(null);
+                  }}
+                >
+                  <DialogContent className="sm:max-w-lg">
+                    {feedbackDraft ? (
+                      <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 p-3">
+                        <p className="text-[11px] font-medium">
+                          Lines {feedbackDraft.selection.startLine}–
+                          {feedbackDraft.selection.endLine}
+                        </p>
+                        <p className="mt-1 line-clamp-3 text-[11px] leading-5 text-muted-foreground">
+                          “{feedbackDraft.selection.excerpt}”
+                        </p>
+                        <Textarea
+                          value={feedbackDraft.instruction}
+                          onChange={(event) =>
+                            setFeedbackDraft((current) =>
+                              current
+                                ? {
+                                    ...current,
+                                    instruction: event.target.value,
+                                  }
+                                : null,
+                            )
+                          }
+                          rows={3}
+                          placeholder="What should the Agent reconsider here?"
+                          className="mt-3 resize-none text-sm"
+                          aria-label="Inline feedback"
+                        />
+                        <div className="mt-2 flex justify-end gap-2">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setFeedbackDraft(null)}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={!feedbackDraft.instruction.trim()}
+                            onClick={() => void addPendingFeedback()}
+                          >
+                            Add feedback
+                          </Button>
+                        </div>
+                      </div>
+                    ) : null}
+                  </DialogContent>
+                </Dialog>
 
                 {pendingFeedback.length > 0 ? (
                   <div className="space-y-2">
@@ -1252,31 +1271,11 @@ export function WhatsNextWorkspace({
                   label="Grew from"
                   value={selectedNode.derivedFrom?.join(', ') || 'Nothing'}
                 />
-                {selectedNodeMarkdown ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      void openMarkdown(
-                        selectedNodeMarkdown.path,
-                        selectedNode.title,
-                      )
-                    }
-                  >
-                    <FileText /> Read source Markdown
-                  </Button>
-                ) : null}
-                <Fact
-                  label="Came from"
-                  value={
-                    selectedNode.provenance?.feature === 'whats-next'
-                      ? "What's next"
-                      : selectedNode.provenance
-                        ? 'Decomposition'
-                        : 'Created by hand'
-                  }
+                <NodeResourceSections
+                  node={selectedNode}
+                  onOpen={(path) => void openMarkdown(path, resourceName(path))}
                 />
+                <NodeProvenanceFacts node={selectedNode} />
               </div>
               <SheetFooter className="shrink-0 border-t border-border px-6 py-4">
                 <div className="flex w-full gap-2">
@@ -1419,37 +1418,6 @@ export function WhatsNextWorkspace({
   );
 }
 
-function AgentSelect({
-  value,
-  onChange,
-}: {
-  value: LocalAgentKind;
-  onChange: (agent: LocalAgentKind) => void;
-}) {
-  return (
-    <fieldset
-      className="flex rounded-lg border border-border p-0.5"
-      aria-label="Agent"
-    >
-      {(['claude', 'codex'] as LocalAgentKind[]).map((agent) => (
-        <button
-          key={agent}
-          type="button"
-          onClick={() => onChange(agent)}
-          className={cn(
-            'rounded-[7px] px-2.5 py-1 text-[11px] transition',
-            value === agent
-              ? 'bg-foreground text-background'
-              : 'text-muted-foreground hover:text-foreground',
-          )}
-        >
-          {AGENT_LABELS[agent]}
-        </button>
-      ))}
-    </fieldset>
-  );
-}
-
 function SourcePicker({
   folders,
   folderPath,
@@ -1471,150 +1439,18 @@ function SourcePicker({
   onRemoveFile: (index: number) => void;
   label: string;
 }) {
-  const [open, setOpen] = useState(false);
-  const [dragging, setDragging] = useState(false);
-  const fileInput = useRef<HTMLInputElement>(null);
-  const folder =
-    folders.find((entry) => entry.path === folderPath) ?? folders[0];
-
   return (
-    <div className="rounded-xl border border-border">
-      <button
-        type="button"
-        className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs text-muted-foreground transition hover:text-foreground"
-        aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
-      >
-        <ChevronDown
-          className={cn('size-3.5 transition-transform', open && 'rotate-180')}
-        />
-        {label}
-        {refs.length + files.length > 0 ? (
-          <span className="ml-auto rounded-full bg-secondary px-2 py-0.5 text-[10px] text-secondary-foreground">
-            {refs.length + files.length} attached
-          </span>
-        ) : null}
-      </button>
-      {open ? (
-        <div className="space-y-4 border-t border-border p-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            {folders.length > 0 ? (
-              <div className="flex flex-col">
-                <div className="relative">
-                  <select
-                    aria-label="Context Library folder"
-                    value={folderPath}
-                    onChange={(event) => onFolderPath(event.target.value)}
-                    className="h-9 w-full appearance-none rounded-lg border border-border bg-background px-2.5 pr-8 text-xs outline-none focus:border-ring"
-                  >
-                    {folders.map((entry) => (
-                      <option key={entry.path} value={entry.path}>
-                        {entry.path}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="pointer-events-none absolute top-1/2 right-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
-                </div>
-                <div className="mt-2 flex max-h-64 min-h-[8.5rem] flex-col gap-0.5 overflow-y-auto">
-                  {(folder?.entries ?? [])
-                    .filter((entry) => entry.kind === 'file')
-                    .map((entry) => (
-                      <label
-                        key={entry.path}
-                        className="flex shrink-0 items-center gap-2 rounded-md px-2 py-1.5 text-xs hover:bg-secondary"
-                      >
-                        <Checkbox
-                          checked={refs.includes(entry.path)}
-                          onCheckedChange={() => onToggleRef(entry.path)}
-                          aria-label={entry.name}
-                        />
-                        <FileText className="size-3.5 shrink-0 text-muted-foreground" />
-                        <span className="truncate">{entry.name}</span>
-                      </label>
-                    ))}
-                  {(folder?.entries ?? []).filter(
-                    (entry) => entry.kind === 'file',
-                  ).length === 0 ? (
-                    <p className="px-2 py-1.5 text-[11px] text-muted-foreground">
-                      This folder has no Markdown documents.
-                    </p>
-                  ) : null}
-                </div>
-              </div>
-            ) : (
-              <div className="grid min-h-[8.5rem] place-items-center rounded-lg border border-border px-4 text-center">
-                <p className="text-[11px] leading-5 text-muted-foreground">
-                  This project has no Product Context library yet.
-                </p>
-              </div>
-            )}
-
-            <div
-              className={cn(
-                'grid min-h-[8.5rem] place-items-center rounded-lg border border-dashed border-border p-4 text-center transition',
-                dragging && 'border-violet-500 bg-violet-500/5',
-              )}
-              onDragOver={(event: DragEvent<HTMLDivElement>) => {
-                event.preventDefault();
-                setDragging(true);
-              }}
-              onDragLeave={() => setDragging(false)}
-              onDrop={(event: DragEvent<HTMLDivElement>) => {
-                event.preventDefault();
-                setDragging(false);
-                onAddFiles(
-                  [...event.dataTransfer.files].filter((file) =>
-                    /\.(md|markdown)$/i.test(file.name),
-                  ),
-                );
-              }}
-            >
-              <input
-                ref={fileInput}
-                type="file"
-                accept=".md,.markdown"
-                multiple
-                className="hidden"
-                onChange={(event) => {
-                  onAddFiles([...(event.target.files ?? [])]);
-                  event.target.value = '';
-                }}
-              />
-              <button
-                type="button"
-                className="flex w-full items-center justify-center gap-1.5 text-[11px] text-muted-foreground transition hover:text-foreground"
-                onClick={() => fileInput.current?.click()}
-              >
-                <Upload className="size-3.5" />
-                Drop Markdown files here, or browse
-              </button>
-            </div>
-          </div>
-
-          {files.length > 0 ? (
-            <div className="grid gap-1 sm:grid-cols-2">
-              {files.map((file, index) => (
-                <span
-                  key={`${file.name}:${index}`}
-                  className="flex items-center gap-2 rounded-md bg-secondary px-2 py-1 text-xs"
-                >
-                  <FileText className="size-3 shrink-0 text-muted-foreground" />
-                  <span className="truncate">{file.name}</span>
-                  <button
-                    type="button"
-                    className="ml-auto text-muted-foreground hover:text-foreground"
-                    aria-label={`Remove ${file.name}`}
-                    onClick={() => onRemoveFile(index)}
-                  >
-                    <X className="size-3" />
-                  </button>
-                </span>
-              ))}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-    </div>
+    <ContextAttachmentPicker
+      folders={folders}
+      folderPath={folderPath}
+      onFolderPath={onFolderPath}
+      refs={refs}
+      onToggleRef={onToggleRef}
+      files={files}
+      onAddFiles={onAddFiles}
+      onRemoveFile={onRemoveFile}
+      label={label}
+    />
   );
 }
 
@@ -1688,6 +1524,13 @@ function mergePreviews(
     );
   }
   return [...merged.values()];
+}
+
+function mergeTerminalRunPreviews(
+  current: TaskGraphPreview[],
+  run: WhatsNextRunRecord,
+) {
+  return replaceRunWithPreviewsInPlace(current, run.runId, runToPreviews(run));
 }
 
 function upsertRun(current: WhatsNextRunRecord[], run: WhatsNextRunRecord) {

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { partitionNodeResources } from '../lib/task-graph-resources.ts';
 import {
   assertCanvasCanCreateStartNode,
   assertTaskGraphNodeCanBeDeleted,
@@ -69,4 +70,25 @@ void test('rejects deleting a node referenced through lineage or dependency', ()
       error instanceof NodeReferencedError &&
       error.blockerNodeIds.includes('NODE-0003'),
   );
+});
+void test('separates a Node output from inherited input Resources', () => {
+  const resources = [
+    {
+      kind: 'output',
+      path: 'whats-next/nodes/NODE-0001/output.md',
+    },
+    {
+      kind: 'output',
+      path: 'whats-next/nodes/NODE-0002/output.md',
+    },
+    {
+      kind: 'context',
+      path: 'context/product/project.md',
+    },
+  ];
+
+  assert.deepEqual(partitionNodeResources('NODE-0002', resources), {
+    inputs: [resources[0], resources[2]],
+    outputs: [resources[1]],
+  });
 });

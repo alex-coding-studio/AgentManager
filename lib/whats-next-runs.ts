@@ -16,6 +16,7 @@ import {
   WHATS_NEXT_HARNESS_ID,
   WHATS_NEXT_HARNESS_REVISION,
   canReuseWhatsNextSession,
+  createWhatsNextRevisionTarget,
   parseWhatsNextHarnessResult,
   type WhatsNextCandidate,
   type WhatsNextHarnessResult,
@@ -230,7 +231,9 @@ export async function startWhatsNextRun(
       primary: contextWorkspace.manifest.primary,
       related: contextWorkspace.manifest.related,
     },
-    revisionTarget: revisionTarget?.candidate ?? null,
+    revisionTarget: revisionTarget
+      ? createWhatsNextRevisionTarget(revisionTarget.candidate)
+      : null,
     feedback: input.feedback ?? [],
     reservedCandidateIds: reservedCandidateIds.filter(
       (candidateId) => candidateId !== revisionTarget?.candidate.candidateId,

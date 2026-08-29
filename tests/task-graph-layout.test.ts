@@ -85,6 +85,39 @@ void test('places a preview beside its source with a temporary edge', () => {
   assert.equal(graph.edges[0]?.relation, 'request');
 });
 
+void test('keeps every sibling lineage edge while one Candidate is refining', () => {
+  const graph = buildTaskGraphLayout(
+    [node('NODE-0001')],
+    [
+      {
+        id: 'CANDIDATE-0001',
+        sourceNodeId: 'NODE-0001',
+        instruction: 'Refine this direction',
+        inheritedResourceCount: 1,
+        additionalResourceCount: 0,
+        kind: 'run',
+        status: 'running',
+        revisionOf: 'CANDIDATE-0001',
+        derivedFrom: ['NODE-0001'],
+      },
+      {
+        id: 'CANDIDATE-0002',
+        sourceNodeId: 'NODE-0001',
+        instruction: '',
+        inheritedResourceCount: 1,
+        additionalResourceCount: 0,
+        kind: 'candidate',
+        derivedFrom: ['NODE-0001'],
+      },
+    ],
+  );
+
+  assert.deepEqual(graph.edges.map((edge) => edge.id).sort(), [
+    'derived:NODE-0001:CANDIDATE-0001',
+    'derived:NODE-0001:CANDIDATE-0002',
+  ]);
+});
+
 void test('drops lineage edges whose source is not present', () => {
   const graph = buildTaskGraphLayout([node('NODE-0002', ['NODE-9999'])], []);
 
