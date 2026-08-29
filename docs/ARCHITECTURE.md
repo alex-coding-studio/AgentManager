@@ -246,10 +246,11 @@ JSON before rendering it. Claude remains a separate future transport behind
 the same Agent selector and Run contract.
 
 Each invocation owns a durable `task-decomposition/runs/RUN-*/run.json` record
-with AgentManager request identity, input fingerprint, Harness revision,
+with AgentManager request identity, the exact User Instruction, project
+decomposition instruction, Resource paths, input fingerprint, Harness revision,
 transport, lifecycle timestamps, provider session identifier, usage, validated
-result, and terminal error. Durable Run results can be restored after a page
-reload. Cancel marks the Run terminal before interrupting its process,
+result, and terminal error. Durable Run results can be reproduced and restored
+after a page reload. Cancel marks the Run terminal before interrupting its process,
 so late output cannot replace the restored Composer input. Proposal,
 clarification, insufficient-evidence, failure, and cancellation remain distinct
 states; only a later explicit acceptance can create formal Node folders.

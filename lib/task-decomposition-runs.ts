@@ -63,6 +63,11 @@ export type TaskDecompositionRunRecord = {
     id: typeof TASK_DECOMPOSITION_HARNESS_ID;
     revision: typeof TASK_DECOMPOSITION_HARNESS_REVISION;
   };
+  input?: {
+    instruction: string;
+    projectInstructions: string;
+    resourcePaths: string[];
+  };
   inputFingerprint: string;
   startedAt: string;
   updatedAt: string;
@@ -224,6 +229,11 @@ export async function startTaskDecompositionRun(
     harness: {
       id: TASK_DECOMPOSITION_HARNESS_ID,
       revision: TASK_DECOMPOSITION_HARNESS_REVISION,
+    },
+    input: {
+      instruction: input.instruction.trim(),
+      projectInstructions: featureContext.instructions,
+      resourcePaths: resources.map((resource) => resource.path),
     },
     inputFingerprint: requestIdentity.inputFingerprint,
     startedAt: timestamp,
