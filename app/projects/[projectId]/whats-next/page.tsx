@@ -53,6 +53,7 @@ export default async function WhatsNextPage({
         initialRuns={reviewPreview?.runs ?? []}
         developmentPreview={reviewPreview !== null}
         developmentTransitionRun={reviewPreview?.transitionRun}
+        developmentCompletionRun={reviewPreview?.completionRun}
       />
     </ProjectShell>
   );

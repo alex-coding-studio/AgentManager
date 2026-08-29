@@ -66,6 +66,7 @@ export function WhatsNextWorkspace({
   initialRuns = [],
   developmentPreview = false,
   developmentTransitionRun,
+  developmentCompletionRun,
 }: {
   projectId: string;
   folders: ContextBrowserFolder[];
@@ -73,6 +74,7 @@ export function WhatsNextWorkspace({
   initialRuns?: WhatsNextRunRecord[];
   developmentPreview?: boolean;
   developmentTransitionRun?: WhatsNextRunRecord;
+  developmentCompletionRun?: WhatsNextRunRecord;
 }) {
   const [nodes, setNodes] = useState(initialNodes);
   const [previews, setPreviews] = useState<TaskGraphPreview[]>(
@@ -217,15 +219,28 @@ export function WhatsNextWorkspace({
 
   useEffect(() => {
     if (!developmentTransitionRun) return;
-    const timeout = window.setTimeout(() => {
+    const transitionTimeout = window.setTimeout(() => {
       setRuns((current) => upsertRun(current, developmentTransitionRun));
       setPreviews((current) =>
         mergePreviews(current, runToPreviews(developmentTransitionRun)),
       );
       setFocusedNodeId('');
-    }, 600);
-    return () => window.clearTimeout(timeout);
-  }, [developmentTransitionRun]);
+    }, 800);
+    const completionTimeout = developmentCompletionRun
+      ? window.setTimeout(() => {
+          setRuns((current) => upsertRun(current, developmentCompletionRun));
+          setPreviews((current) =>
+            mergeTerminalRunPreviews(current, developmentCompletionRun),
+          );
+        }, 1_800)
+      : null;
+    return () => {
+      window.clearTimeout(transitionTimeout);
+      if (completionTimeout !== null) {
+        window.clearTimeout(completionTimeout);
+      }
+    };
+  }, [developmentCompletionRun, developmentTransitionRun]);
 
   async function pollRun(runId: string) {
     for (let attempt = 0; attempt < 3_600; attempt += 1) {
@@ -242,12 +257,7 @@ export function WhatsNextWorkspace({
         return;
       }
       setRuns((current) => upsertRun(current, run));
-      setPreviews((current) =>
-        mergePreviews(
-          current.filter((item) => item.runId !== runId),
-          runToPreviews(run),
-        ),
-      );
+      setPreviews((current) => mergeTerminalRunPreviews(current, run));
       if (run.revisionOf) setFocusedNodeId('');
       return;
     }
@@ -1706,6 +1716,16 @@ function mergePreviews(
     );
   }
   return [...merged.values()];
+}
+
+function mergeTerminalRunPreviews(
+  current: TaskGraphPreview[],
+  run: WhatsNextRunRecord,
+) {
+  return mergePreviews(
+    current.filter((preview) => preview.id !== run.runId),
+    runToPreviews(run),
+  );
 }
 
 function upsertRun(current: WhatsNextRunRecord[], run: WhatsNextRunRecord) {
