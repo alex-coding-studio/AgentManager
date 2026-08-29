@@ -43,6 +43,20 @@ void test('keeps the always-loaded Harness compact', () => {
   assert.ok(TASK_DECOMPOSITION_HARNESS_PROMPT.length < 3_000);
   assert.match(TASK_DECOMPOSITION_HARNESS_PROMPT, /Return only JSON/);
   assert.match(TASK_DECOMPOSITION_HARNESS_PROMPT, /Never mutate/);
+  assert.match(TASK_DECOMPOSITION_HARNESS_PROMPT, /Atomicity is relative/);
+  assert.match(
+    TASK_DECOMPOSITION_HARNESS_PROMPT,
+    /mechanical subdivision remains possible/,
+  );
+  assert.match(TASK_DECOMPOSITION_HARNESS_PROMPT, /final judge/);
+  assert.match(
+    TASK_DECOMPOSITION_HARNESS_PROMPT,
+    /may still contain multiple implementation steps/,
+  );
+  assert.match(
+    TASK_DECOMPOSITION_HARNESS_PROMPT,
+    /never a universal product-level limit/,
+  );
   assert.match(TASK_DECOMPOSITION_HARNESS_PROMPT, /Do not create sibling/);
   assert.match(TASK_DECOMPOSITION_HARNESS_PROMPT, /append-candidates/);
 });

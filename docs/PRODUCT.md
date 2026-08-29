@@ -2,12 +2,15 @@
 
 ## Product intent
 
-AgentManager is a local-first workspace for one independent developer working with AI agents. It helps turn an evolving product definition into small, executable, independently verifiable tasks with explicit relationships and delivery evidence.
+AgentManager is a local-first workspace for one independent developer working
+with AI agents. It helps grow an evolving product definition into coherent
+directions and decompose selected scopes into independently understandable,
+human-manageable units with explicit relationships.
 
 The product exists because repository documents and pull requests are good homes for durable product facts and code, but they are too heavy for frequently changing planning state. AgentManager provides the missing planning and task-graph layer without replacing the repository.
 
 AgentManager is not a project-management product. A project is only the boundary
-that supplies product context and local assets. The product's center is task
+that supplies product context and local assets. The product's center is
 decomposition, dependency synchronization, and additional personal Agent
 workflows built on those two capabilities. It does not add planning ceremony for
 its own sake.
@@ -31,7 +34,8 @@ AgentManager is not being designed for a multi-user organization. Team permissio
 3. The product is intended to be open source.
 4. A fresh clone can be installed and run locally using documented dependencies.
 5. Repository documents remain the source of truth for durable product behavior, architecture, code, and tests.
-6. AgentManager owns planning state, task decomposition, task relationships, and delivery traceability.
+6. AgentManager owns product-growth and decomposition state, graph
+   relationships, and—when Implementation is introduced—delivery traceability.
 7. Product facts and task-planning state must remain distinct.
 8. Every new capability must solve a problem observed while using AgentManager to build AgentManager.
 9. Repository documentation, product contracts, interface copy, examples, data fields, and delivery notes are written in English.
@@ -44,8 +48,9 @@ AgentManager is its own first real project. Its product loop is:
 
 1. Discuss an idea with an agent.
 2. Produce or revise a user-approved Product Foundation.
-3. Decompose the next product capability into executable tasks.
-4. Implement one ready task.
+3. Decompose the next product capability to a resolution that is useful for the
+   current decision.
+4. Pull one accepted item into implementation and resolve its delivery slices.
 5. Validate the delivered behavior through real use.
 6. Feed observed friction back into the Product Foundation or task graph.
 
@@ -59,26 +64,33 @@ The intended lifecycle for any managed product is:
 2. Attach existing Markdown or JSON sources, or begin from an idea.
 3. Use dialogue to produce a normalized Product Foundation.
 4. Confirm the Product Foundation with the user.
-5. Ask an agent to decompose a capability into small tasks.
-6. Review and calibrate the proposed task graph.
-7. Select a task whose dependencies are satisfied.
-8. Hand the bounded task to an implementation agent.
-9. Link implementation, review, pull request, merge, and human acceptance evidence back to the task.
+5. Ask an agent to decompose a selected scope into coherent, manageable units.
+6. Review and calibrate the proposed graph at the desired resolution.
+7. Select an accepted item for further decomposition or future implementation.
+8. In the future Implementation workspace, turn that item into delivery slices.
+9. Link implementation, review, pull request, merge, and human acceptance
+   evidence back to the originating item.
 10. Reconcile new discoveries into product facts or planning state according to their meaning.
 
 ## Core MVP
 
-The core MVP is AI-assisted task decomposition:
+The core MVP is AI-assisted decomposition:
 
-1. The user selects a product capability or oversized task.
+1. The user selects a product idea, capability, research direction,
+   implementation goal, or another oversized scope.
 2. The user optionally adds a natural-language decomposition instruction.
-3. An agent receives the selected task, bounded neighboring context, relevant product sources, and task-size policy.
-4. The agent returns a structured proposal containing smaller tasks, acceptance criteria, and dependencies.
+3. An agent receives the selected scope, bounded neighboring context, relevant
+   sources, and the user's desired resolution.
+4. The agent returns a structured proposal containing coherent next-level
+   units, their boundaries, and any relevant dependencies.
 5. The interface renders the proposal as a graph.
 6. The user can accept it, reject it, edit it, or provide one more calibration instruction.
 7. The accepted result becomes planning state.
 
-The MVP succeeds when the resulting tasks are small enough for one agent session, independently verifiable, and understandable from the visual graph with at most one normal calibration round.
+The MVP succeeds when the resulting Cards are coherent, distinguishable,
+independently inspectable, and manageable for the user's current purpose. The
+user—not a universal Agent Session or pull-request limit—decides when the
+resolution is feasible.
 
 ## First implementation slice
 
@@ -355,7 +367,7 @@ allowing stochastic regeneration to overwrite work the user already reviewed.
 
 ## Canvas direction
 
-Task Decomposition is an open canvas rather than a traditional project board.
+Decomposition is an open canvas rather than a traditional project board.
 Each Canvas owns exactly one Start and expands from that root. Future Agent
 operations can continue from any selected node and produce additional nodes and
 dependency edges. Independent roots will belong to separate Canvases rather

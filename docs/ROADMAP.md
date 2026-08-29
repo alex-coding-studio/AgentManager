@@ -1,6 +1,6 @@
 # Roadmap
 
-AgentManager's next priority is the smallest complete Task Decomposition loop.
+AgentManager's next priority is the smallest complete Decomposition loop.
 Operational analytics remain planned work and must not delay that loop.
 
 ## Current MVP
@@ -15,7 +15,7 @@ Operational analytics remain planned work and must not delay that loop.
 - Let the user cancel a Run, interrupt the transport, remove the Placeholder,
   and restore the exact Instruction and Resources in the Composer.
 - Ignore every late result from a canceled `runId`.
-- Validate the Agent response through the Task Decomposition Harness before
+- Validate the Agent response through the Decomposition Harness before
   rendering Candidate Cards.
 - Represent proposal, clarification, insufficient-evidence, failure, and
   cancellation outcomes without manufacturing a successful result.

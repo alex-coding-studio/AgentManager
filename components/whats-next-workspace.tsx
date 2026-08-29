@@ -464,7 +464,7 @@ export function WhatsNextWorkspace({
             value={idea}
             onChange={(event) => setIdea(event.target.value)}
             rows={4}
-            placeholder="A manager that brings an Agent into task decomposition…"
+            placeholder="A manager that helps one developer grow and decompose product intent…"
             maxLength={160}
             className="mt-5 resize-none text-sm"
             aria-label="Your idea"
@@ -971,7 +971,7 @@ export function WhatsNextWorkspace({
                     selectedNode.provenance?.feature === 'whats-next'
                       ? "What's next"
                       : selectedNode.provenance
-                        ? 'Task decomposition'
+                        ? 'Decomposition'
                         : 'Created by hand'
                   }
                 />

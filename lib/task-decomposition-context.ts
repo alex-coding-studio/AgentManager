@@ -75,9 +75,7 @@ export async function saveTaskDecompositionInstructions(
   instructions: string,
 ) {
   if (instructions.length > 100_000) {
-    throw new Error(
-      'Task Decomposition instructions must be 100 KB or smaller.',
-    );
+    throw new Error('Decomposition instructions must be 100 KB or smaller.');
   }
   const contextPath = await ensureFeatureContext(project);
   await writeAtomically(
@@ -255,7 +253,7 @@ function validateSettings(value: unknown) {
     candidate.instructionsPath !== 'instructions.md' ||
     candidate.attachmentsDirectory !== 'attachments'
   ) {
-    throw new Error('Task Decomposition context settings are invalid.');
+    throw new Error('Decomposition context settings are invalid.');
   }
 }
 
