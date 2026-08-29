@@ -1,5 +1,6 @@
 import { getProject } from '@/lib/project-registry';
 import {
+  assertGraphRoot,
   createStartNode,
   deleteTaskGraphNode,
   updateStartNode,
@@ -37,12 +38,16 @@ export async function POST(
       );
     }
     const idea = formData.get('idea');
-    const result = await createStartNode(project, {
-      title,
-      contextRefs,
-      files,
-      idea: typeof idea === 'string' ? idea : undefined,
-    });
+    const result = await createStartNode(
+      project,
+      {
+        title,
+        contextRefs,
+        files,
+        idea: typeof idea === 'string' ? idea : undefined,
+      },
+      assertGraphRoot(formData.get('graph') ?? undefined),
+    );
     return Response.json(result, { status: 201 });
   } catch (error) {
     const message =

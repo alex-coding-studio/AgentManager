@@ -46,6 +46,8 @@ import {
   type TaskGraphNode,
 } from './task-graph.ts';
 
+const GRAPH_ROOT = 'whats-next' as const;
+
 export type WhatsNextRunStatus =
   | 'running'
   | 'validating'
@@ -113,7 +115,7 @@ export async function startWhatsNextRun(
   input: RunRequest,
 ) {
   validateRunRequest(input);
-  const nodes = await listTaskGraphNodes(project);
+  const nodes = await listTaskGraphNodes(project, GRAPH_ROOT);
   const sourceNodes = input.sourceNodeIds.map((nodeId) => {
     const node = nodes.find((value) => value.id === nodeId);
     if (!node) throw new Error(`${nodeId} could not be found.`);
@@ -337,7 +339,7 @@ export async function acceptWhatsNextCandidate(
   );
   if (!candidate) throw new Error('The Candidate could not be found.');
 
-  const existingNodes = await listTaskGraphNodes(project);
+  const existingNodes = await listTaskGraphNodes(project, GRAPH_ROOT);
   const accepted = existingNodes.find(
     (node) =>
       node.provenance?.candidateId === candidateId &&
@@ -373,7 +375,7 @@ export async function acceptWhatsNextCandidate(
       return Number.isFinite(number) ? Math.max(largest, number) : largest;
     }, 0) + 1;
   const nodeId = `NODE-${String(nextNumber).padStart(4, '0')}`;
-  const nodesPath = path.join(project.planningPath, 'task-graph', 'nodes');
+  const nodesPath = path.join(project.planningPath, GRAPH_ROOT, 'nodes');
   const nodePath = path.join(nodesPath, nodeId);
   const temporaryPath = path.join(nodesPath, `.${nodeId}-${randomUUID()}.tmp`);
   const candidateOutput = path.join(
@@ -402,7 +404,7 @@ export async function acceptWhatsNextCandidate(
       updatedAt: timestamp,
       resources: [
         ...candidate.resources,
-        { kind: 'output', path: `task-graph/nodes/${nodeId}/output.md` },
+        { kind: 'output', path: `${GRAPH_ROOT}/nodes/${nodeId}/output.md` },
       ],
       derivedFrom: candidate.derivedFrom,
       dependsOn: resolvedDependencies,
@@ -427,7 +429,7 @@ export async function acceptWhatsNextCandidate(
     );
     await mkdir(nodesPath, { recursive: true });
     await rename(temporaryPath, nodePath);
-    return { node, nodes: await listTaskGraphNodes(project) };
+    return { node, nodes: await listTaskGraphNodes(project, GRAPH_ROOT) };
   } catch (error) {
     await rm(temporaryPath, { recursive: true, force: true });
     throw error;
@@ -459,7 +461,7 @@ export async function discardWhatsNextCandidate(
   ) {
     throw new Error('The Candidate could not be found.');
   }
-  const accepted = (await listTaskGraphNodes(project)).some(
+  const accepted = (await listTaskGraphNodes(project, GRAPH_ROOT)).some(
     (node) => node.provenance?.candidateId === candidateId,
   );
   if (accepted) {
@@ -841,7 +843,7 @@ async function collectLatestUnacceptedCandidates(project: RegisteredProject) {
     }
   }
   const acceptedIds = new Set(
-    (await listTaskGraphNodes(project)).flatMap((node) =>
+    (await listTaskGraphNodes(project, GRAPH_ROOT)).flatMap((node) =>
       node.provenance?.candidateId ? [node.provenance.candidateId] : [],
     ),
   );

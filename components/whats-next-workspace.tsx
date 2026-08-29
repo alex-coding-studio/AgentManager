@@ -22,6 +22,7 @@ import { MarkdownReader } from '@/components/markdown-reader';
 import { TaskGraphCanvas } from '@/components/task-graph-canvas';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Sheet,
@@ -49,8 +50,6 @@ type RunSnapshot = {
   revisionTarget?: { runId: string; candidateId: string };
 };
 
-type WhatsNextPreview = TaskGraphPreview;
-
 export function WhatsNextWorkspace({
   projectId,
   folders,
@@ -61,27 +60,33 @@ export function WhatsNextWorkspace({
   initialNodes: TaskGraphNode[];
 }) {
   const [nodes, setNodes] = useState(initialNodes);
+  const [previews, setPreviews] = useState<TaskGraphPreview[]>([]);
+  const [selectedAgent, setSelectedAgent] = useState<LocalAgentKind>('claude');
+  const [error, setError] = useState('');
+
   const [idea, setIdea] = useState('');
-  const [creatingStart, setCreatingStart] = useState(false);
+  const [starting, setStarting] = useState(false);
   const [startRefs, setStartRefs] = useState<string[]>([]);
   const [startFiles, setStartFiles] = useState<File[]>([]);
   const [startFolderPath, setStartFolderPath] = useState(
     folders[0]?.path ?? '',
   );
-  const [runRefs, setRunRefs] = useState<string[]>([]);
-  const [runFiles, setRunFiles] = useState<File[]>([]);
-  const [runFolderPath, setRunFolderPath] = useState(folders[0]?.path ?? '');
-  const [instruction, setInstruction] = useState('');
-  const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
-  const [selectedAgent, setSelectedAgent] = useState<LocalAgentKind>('claude');
-  const [previews, setPreviews] = useState<WhatsNextPreview[]>([]);
+
+  const [growSourceId, setGrowSourceId] = useState('');
+  const [growInstruction, setGrowInstruction] = useState('');
+  const [growRefs, setGrowRefs] = useState<string[]>([]);
+  const [growFiles, setGrowFiles] = useState<File[]>([]);
+  const [growFolderPath, setGrowFolderPath] = useState(folders[0]?.path ?? '');
+
+  const [combineIds, setCombineIds] = useState<string[]>([]);
+  const [combineInstruction, setCombineInstruction] = useState('');
+
   const [focusedNodeId, setFocusedNodeId] = useState('');
   const [inspectorId, setInspectorId] = useState('');
   const [locateRequest, setLocateRequest] = useState<{
     nodeId: string;
     sequence: number;
   } | null>(null);
-  const locateSequence = useRef(0);
   const [revisionTarget, setRevisionTarget] = useState<{
     runId: string;
     candidateId: string;
@@ -94,18 +99,21 @@ export function WhatsNextWorkspace({
   } | null>(null);
   const [accepting, setAccepting] = useState(false);
   const [discarding, setDiscarding] = useState(false);
-  const [error, setError] = useState('');
   const runSnapshots = useRef(new Map<string, RunSnapshot>());
   const restoredRuns = useRef(false);
+  const locateSequence = useRef(0);
 
+  const growSource = nodes.find((node) => node.id === growSourceId) ?? null;
+  const combineNodes = combineIds.flatMap((nodeId) => {
+    const node = nodes.find((value) => value.id === nodeId);
+    return node ? [node] : [];
+  });
   const selectedNode = nodes.find((node) => node.id === inspectorId) ?? null;
   const selectedCandidatePreview =
     previews.find(
       (item) => item.id === inspectorId && item.kind === 'candidate',
     ) ?? null;
-
   const selectedCandidate = selectedCandidatePreview?.candidate ?? null;
-  const hasGraph = nodes.length > 0;
   const acceptedCandidateIds = new Set(
     nodes.flatMap((node) =>
       node.provenance?.candidateId ? [node.provenance.candidateId] : [],
@@ -116,7 +124,7 @@ export function WhatsNextWorkspace({
       item.kind !== 'candidate' ||
       !acceptedCandidateIds.has(item.candidate?.candidateId ?? ''),
   );
-  const busy = previews.some((item) => item.kind === 'run');
+  const hasGraph = nodes.length > 0;
 
   const restoreRuns = useEffectEvent(async () => {
     const response = await fetch(
@@ -150,15 +158,55 @@ export function WhatsNextWorkspace({
     }
   }
 
-  async function createStart() {
+  async function startRun(input: {
+    sourceNodeIds: string[];
+    instruction: string;
+    contextRefs?: string[];
+    files?: File[];
+    revisionTarget?: { runId: string; candidateId: string };
+  }) {
+    const body = new FormData();
+    for (const nodeId of input.sourceNodeIds) {
+      body.append('sourceNodeIds', nodeId);
+    }
+    body.append('instruction', input.instruction);
+    body.append('agent', selectedAgent);
+    for (const ref of input.contextRefs ?? []) body.append('contextRefs', ref);
+    for (const file of input.files ?? []) body.append('files', file);
+    if (input.revisionTarget) {
+      body.append('revisionRunId', input.revisionTarget.runId);
+      body.append('revisionCandidateId', input.revisionTarget.candidateId);
+    }
+    const response = await fetch(`/api/projects/${projectId}/whats-next-runs`, {
+      method: 'POST',
+      body,
+    });
+    const payload = (await response.json()) as {
+      run?: WhatsNextRunRecord;
+      error?: string;
+    };
+    if (!response.ok || !payload.run) {
+      throw new Error(payload.error ?? 'Could not start the Agent Run.');
+    }
+    runSnapshots.current.set(payload.run.runId, {
+      sourceNodeIds: input.sourceNodeIds,
+      instruction: input.instruction,
+      revisionTarget: input.revisionTarget,
+    });
+    setPreviews((current) => [...current, ...runToPreviews(payload.run!)]);
+    void pollRun(payload.run.runId);
+  }
+
+  async function beginFromIdea() {
     const sentence = idea.trim();
-    if (!sentence || creatingStart) return;
-    setCreatingStart(true);
+    if (!sentence || starting) return;
+    setStarting(true);
     setError('');
     try {
       const body = new FormData();
       body.append('title', sentence.slice(0, 160));
       body.append('idea', sentence);
+      body.append('graph', 'whats-next');
       for (const ref of startRefs) body.append('contextRefs', ref);
       for (const file of startFiles) body.append('files', file);
       const response = await fetch(`/api/projects/${projectId}/nodes`, {
@@ -170,75 +218,60 @@ export function WhatsNextWorkspace({
         node?: TaskGraphNode;
         error?: string;
       };
-      if (!response.ok || !payload.nodes) {
-        throw new Error(payload.error ?? 'Could not create the start node.');
+      if (!response.ok || !payload.nodes || !payload.node) {
+        throw new Error(payload.error ?? 'Could not create the Start.');
       }
       setNodes(payload.nodes);
-      setSelectedNodeIds(payload.node ? [payload.node.id] : []);
       setIdea('');
       setStartRefs([]);
       setStartFiles([]);
+      await startRun({
+        sourceNodeIds: [payload.node.id],
+        instruction: sentence,
+      });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Something failed.');
     } finally {
-      setCreatingStart(false);
+      setStarting(false);
     }
   }
 
-  async function sendRun(target?: { runId: string; candidateId: string }) {
-    const text = (target ? reviseNote : instruction).trim();
-    const origins = target
-      ? (previews.find(
-          (item) =>
-            item.kind === 'candidate' &&
-            item.candidate?.candidateId === target.candidateId,
-        )?.derivedFrom ?? [])
-      : selectedNodeIds;
-    if (!text || origins.length === 0) return;
+  async function submitGrow() {
+    if (!growSource || !growInstruction.trim()) return;
     setError('');
     try {
-      const body = new FormData();
-      for (const nodeId of origins) body.append('sourceNodeIds', nodeId);
-      body.append('instruction', text);
-      body.append('agent', selectedAgent);
-      if (!target) {
-        for (const ref of runRefs) body.append('contextRefs', ref);
-        for (const file of runFiles) body.append('files', file);
-      }
-      if (target) {
-        body.append('revisionRunId', target.runId);
-        body.append('revisionCandidateId', target.candidateId);
-      }
-      const response = await fetch(
-        `/api/projects/${projectId}/whats-next-runs`,
-        { method: 'POST', body },
-      );
-      const payload = (await response.json()) as {
-        run?: WhatsNextRunRecord;
-        error?: string;
-      };
-      if (!response.ok || !payload.run) {
-        throw new Error(payload.error ?? 'Could not start the Agent Run.');
-      }
-      runSnapshots.current.set(payload.run.runId, {
-        sourceNodeIds: origins,
-        instruction: text,
-        revisionTarget: target,
+      await startRun({
+        sourceNodeIds: [growSource.id],
+        instruction: growInstruction,
+        contextRefs: growRefs,
+        files: growFiles,
       });
-      setPreviews((current) => [...current, ...runToPreviews(payload.run!)]);
-      if (target) {
-        setRevisionTarget(null);
-        setReviseNote('');
-        setInspectorId('');
-      } else {
-        setInstruction('');
-        setRunRefs([]);
-        setRunFiles([]);
-      }
-      void pollRun(payload.run.runId);
+      closeGrow();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Something failed.');
     }
+  }
+
+  async function submitCombine() {
+    if (combineIds.length < 2 || !combineInstruction.trim()) return;
+    setError('');
+    try {
+      await startRun({
+        sourceNodeIds: combineIds,
+        instruction: combineInstruction,
+      });
+      setCombineIds([]);
+      setCombineInstruction('');
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Something failed.');
+    }
+  }
+
+  function closeGrow() {
+    setGrowSourceId('');
+    setGrowInstruction('');
+    setGrowRefs([]);
+    setGrowFiles([]);
   }
 
   async function cancelRun(runId: string) {
@@ -249,9 +282,13 @@ export function WhatsNextWorkspace({
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ runId }),
     }).catch(() => null);
-    if (snapshot && !snapshot.revisionTarget) {
-      setSelectedNodeIds(snapshot.sourceNodeIds);
-      setInstruction(snapshot.instruction);
+    if (!snapshot || snapshot.revisionTarget) return;
+    if (snapshot.sourceNodeIds.length > 1) {
+      setCombineIds(snapshot.sourceNodeIds);
+      setCombineInstruction(snapshot.instruction);
+    } else {
+      setGrowSourceId(snapshot.sourceNodeIds[0] ?? '');
+      setGrowInstruction(snapshot.instruction);
     }
   }
 
@@ -292,6 +329,24 @@ export function WhatsNextWorkspace({
     }
   }
 
+  async function reviseCandidate() {
+    if (!revisionTarget || !reviseNote.trim()) return;
+    const origins = selectedCandidate?.derivedFrom ?? [];
+    setError('');
+    try {
+      await startRun({
+        sourceNodeIds: origins,
+        instruction: reviseNote,
+        revisionTarget,
+      });
+      setRevisionTarget(null);
+      setReviseNote('');
+      setInspectorId('');
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Something failed.');
+    }
+  }
+
   async function openOutput(path: string, title: string) {
     const response = await fetch(
       `/api/projects/${projectId}/resources?path=${encodeURIComponent(path)}`,
@@ -299,14 +354,6 @@ export function WhatsNextWorkspace({
     if (!response?.ok) return;
     const payload = (await response.json()) as { markdown: string };
     setPreview({ title, path, markdown: payload.markdown });
-  }
-
-  function toggleSelect(nodeId: string) {
-    setSelectedNodeIds((current) =>
-      current.includes(nodeId)
-        ? current.filter((value) => value !== nodeId)
-        : [...current, nodeId],
-    );
   }
 
   if (!hasGraph) {
@@ -322,7 +369,7 @@ export function WhatsNextWorkspace({
           </h1>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
             Write the idea in your own words. It becomes the Start of this
-            Canvas, and every direction grows outward from it.
+            Canvas, and {AGENT_LABELS[selectedAgent]} answers it straight away.
           </p>
           <Textarea
             value={idea}
@@ -340,11 +387,7 @@ export function WhatsNextWorkspace({
               onFolderPath={setStartFolderPath}
               refs={startRefs}
               onToggleRef={(refPath) =>
-                setStartRefs((current) =>
-                  current.includes(refPath)
-                    ? current.filter((value) => value !== refPath)
-                    : [...current, refPath],
-                )
+                setStartRefs((current) => toggle(current, refPath))
               }
               files={startFiles}
               onAddFiles={(added) =>
@@ -358,19 +401,18 @@ export function WhatsNextWorkspace({
               label="Optional sources"
             />
           </div>
-
           <div className="mt-4 flex items-center justify-between gap-3">
-            <span className="text-[11px] text-muted-foreground">
-              {idea.trim().length}/160 characters
-            </span>
+            <AgentSelect value={selectedAgent} onChange={setSelectedAgent} />
             <Button
-              onClick={() => void createStart()}
-              disabled={!idea.trim() || creatingStart}
+              onClick={() => void beginFromIdea()}
+              disabled={!idea.trim() || starting}
             >
-              {creatingStart ? (
+              {starting ? (
                 <LoaderCircle className="size-4 animate-spin" />
-              ) : null}
-              Set as Start
+              ) : (
+                <Sparkles className="size-4" />
+              )}
+              Start and ask
             </Button>
           </div>
           {error ? (
@@ -382,126 +424,240 @@ export function WhatsNextWorkspace({
   }
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] flex-col">
-      <div className="min-h-0 flex-1">
-        <TaskGraphCanvas
-          nodes={nodes}
-          previews={visiblePreviews}
-          focusedNodeId={focusedNodeId}
-          locateRequest={locateRequest}
-          selectedNodeIds={selectedNodeIds}
-          plusLabel="Ask what's next from"
-          onToggleSelect={toggleSelect}
-          onFocusNode={setFocusedNodeId}
-          onInspectNode={setInspectorId}
-          onSelectPreview={setInspectorId}
-          onDecompose={(nodeId) => setSelectedNodeIds([nodeId])}
-          onCancelRun={(runId) => void cancelRun(runId)}
-        />
+    <div className="relative h-[calc(100vh-4rem)]">
+      <TaskGraphCanvas
+        nodes={nodes}
+        previews={visiblePreviews}
+        focusedNodeId={focusedNodeId}
+        locateRequest={locateRequest}
+        selectedNodeIds={combineIds}
+        plusLabel="Ask what's next from"
+        onMultiSelect={(nodeId) =>
+          setCombineIds((current) => toggle(current, nodeId))
+        }
+        onFocusNode={setFocusedNodeId}
+        onInspectNode={setInspectorId}
+        onSelectPreview={setInspectorId}
+        onDecompose={setGrowSourceId}
+        onCancelRun={(runId) => void cancelRun(runId)}
+      />
+
+      <div className="pointer-events-none absolute top-4 left-1/2 -translate-x-1/2">
+        {error ? (
+          <p className="pointer-events-auto rounded-full bg-destructive/10 px-3 py-1.5 text-xs text-destructive">
+            {error}
+          </p>
+        ) : null}
       </div>
 
-      <div className="border-t border-border bg-background px-5 py-4 lg:px-8">
-        <div className="mx-auto flex w-full max-w-4xl flex-col gap-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[11px] font-medium text-muted-foreground">
-              Origins
-            </span>
-            {selectedNodeIds.length === 0 ? (
-              <span className="text-[11px] text-muted-foreground">
-                Select one or more cards on the Canvas.
-              </span>
-            ) : (
-              selectedNodeIds.map((nodeId) => {
-                const node = nodes.find((value) => value.id === nodeId);
-                return (
-                  <span
-                    key={nodeId}
-                    className="flex items-center gap-1.5 rounded-full bg-violet-500/10 px-2.5 py-1 text-[11px] text-violet-700 dark:text-violet-300"
-                  >
-                    {node?.title ?? nodeId}
-                    <button
-                      type="button"
-                      aria-label={`Remove ${node?.title ?? nodeId}`}
-                      onClick={() => toggleSelect(nodeId)}
-                    >
-                      <X className="size-3" />
-                    </button>
-                  </span>
-                );
-              })
-            )}
-          </div>
-          <SourcePicker
-            folders={folders}
-            folderPath={runFolderPath}
-            onFolderPath={setRunFolderPath}
-            refs={runRefs}
-            onToggleRef={(refPath) =>
-              setRunRefs((current) =>
-                current.includes(refPath)
-                  ? current.filter((value) => value !== refPath)
-                  : [...current, refPath],
-              )
-            }
-            files={runFiles}
-            onAddFiles={(added) =>
-              setRunFiles((current) => [...current, ...added])
-            }
-            onRemoveFile={(index) =>
-              setRunFiles((current) =>
-                current.filter((_, value) => value !== index),
-              )
-            }
-            label="Run-only sources"
-          />
-          <div className="flex items-end gap-3">
-            <Textarea
-              value={instruction}
-              onChange={(event) => setInstruction(event.target.value)}
-              rows={2}
-              placeholder="What's next? Add a hint, or ask to combine the selected cards…"
-              className="resize-none text-sm"
-              aria-label="What's next instruction"
-            />
-            <div className="flex shrink-0 flex-col gap-2">
-              <fieldset
-                className="flex rounded-lg border border-border p-0.5"
-                aria-label="Agent"
-              >
-                {(['claude', 'codex'] as LocalAgentKind[]).map((agent) => (
-                  <button
-                    key={agent}
-                    type="button"
-                    onClick={() => setSelectedAgent(agent)}
-                    className={cn(
-                      'rounded-[7px] px-2.5 py-1 text-[11px] transition',
-                      selectedAgent === agent
-                        ? 'bg-foreground text-background'
-                        : 'text-muted-foreground hover:text-foreground',
-                    )}
-                  >
-                    {AGENT_LABELS[agent]}
-                  </button>
-                ))}
-              </fieldset>
-              <Button
-                onClick={() => void sendRun()}
-                disabled={
-                  busy || !instruction.trim() || selectedNodeIds.length === 0
-                }
-              >
-                {busy ? (
-                  <LoaderCircle className="size-4 animate-spin" />
-                ) : (
-                  <Sparkles className="size-4" />
-                )}
-                What&apos;s next
-              </Button>
+      {combineIds.length >= 2 ? (
+        <div className="absolute right-5 bottom-5 w-[360px] rounded-2xl border border-border bg-background p-4 shadow-[0_18px_50px_rgb(15_23_42/12%)]">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold">
+                Combine {combineIds.length} cards
+              </p>
+              <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
+                Their output becomes the input for one question.
+              </p>
             </div>
+            <button
+              type="button"
+              className="text-muted-foreground transition hover:text-foreground"
+              aria-label="Clear the selection"
+              onClick={() => {
+                setCombineIds([]);
+                setCombineInstruction('');
+              }}
+            >
+              <X className="size-4" />
+            </button>
           </div>
-          {error ? <p className="text-xs text-destructive">{error}</p> : null}
+
+          <div className="mt-3 flex max-h-40 flex-col gap-0.5 overflow-y-auto">
+            {combineNodes.map((node) => (
+              <span
+                key={node.id}
+                className="flex shrink-0 items-center gap-2 rounded-lg bg-secondary px-2.5 py-2 text-xs"
+              >
+                <FileText className="size-3.5 shrink-0 text-muted-foreground" />
+                <span className="min-w-0 flex-1 truncate">{node.title}</span>
+                <button
+                  type="button"
+                  className="text-muted-foreground transition hover:text-foreground"
+                  aria-label={`Remove ${node.title}`}
+                  onClick={() =>
+                    setCombineIds((current) => toggle(current, node.id))
+                  }
+                >
+                  <X className="size-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+
+          <Textarea
+            value={combineInstruction}
+            onChange={(event) => setCombineInstruction(event.target.value)}
+            rows={3}
+            maxLength={1_000}
+            placeholder="What do you want to do with these together?"
+            className="mt-3 resize-none text-sm"
+            aria-label="What to do with the selected cards"
+          />
+
+          <div className="mt-3 flex items-center justify-between gap-3">
+            <AgentSelect value={selectedAgent} onChange={setSelectedAgent} />
+            <Button
+              size="sm"
+              disabled={!combineInstruction.trim()}
+              onClick={() => void submitCombine()}
+            >
+              <Sparkles className="size-3.5" />
+              Ask
+            </Button>
+          </div>
         </div>
-      </div>
+      ) : null}
+
+      <Dialog
+        open={growSource !== null}
+        onOpenChange={(open) => {
+          if (!open) closeGrow();
+        }}
+      >
+        <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-2xl">
+          {growSource ? (
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                void submitGrow();
+              }}
+              className="space-y-6"
+            >
+              <div>
+                <h2 className="text-sm font-semibold">
+                  Grow from {growSource.id}
+                </h2>
+                <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                  {AGENT_LABELS[selectedAgent]} proposes two to five distinct
+                  directions. Inherited Resources stay on the source Node;
+                  additions apply only to this request.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <label
+                  htmlFor="whats-next-agent"
+                  className="text-xs font-medium"
+                >
+                  Agent
+                </label>
+                <div className="relative">
+                  <select
+                    id="whats-next-agent"
+                    value={selectedAgent}
+                    onChange={(event) =>
+                      setSelectedAgent(event.target.value as LocalAgentKind)
+                    }
+                    className="h-10 w-full appearance-none rounded-xl border border-border bg-background px-3 pr-9 text-xs font-medium outline-none transition focus:border-ring focus:ring-3 focus:ring-ring/20"
+                  >
+                    <option value="codex">Codex</option>
+                    <option value="claude">Claude</option>
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute top-1/2 right-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label
+                  htmlFor="whats-next-instruction"
+                  className="text-xs font-medium"
+                >
+                  Instruction
+                </label>
+                <Textarea
+                  id="whats-next-instruction"
+                  value={growInstruction}
+                  maxLength={1_000}
+                  placeholder="What should the next directions explore?"
+                  className="min-h-28"
+                  onChange={(event) => setGrowInstruction(event.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs font-medium">
+                    Input from {growSource.id}
+                  </p>
+                  <span className="text-[10px] text-muted-foreground">
+                    always included
+                  </span>
+                </div>
+                <div className="max-h-40 divide-y divide-border overflow-y-auto rounded-xl border border-border bg-muted/30">
+                  {growSource.resources.map((resource) => (
+                    <div
+                      key={`${resource.kind}:${resource.path}`}
+                      className="flex items-center gap-2.5 px-3 py-2.5"
+                    >
+                      <Checkbox
+                        checked
+                        disabled
+                        aria-label={`${resourceName(resource.path)} is always included`}
+                      />
+                      <FileText className="size-3.5 shrink-0 text-muted-foreground" />
+                      <span className="min-w-0 flex-1 truncate text-[11px]">
+                        {resourceName(resource.path)}
+                      </span>
+                      <span className="text-[9px] uppercase tracking-wide text-muted-foreground">
+                        {resource.kind}
+                      </span>
+                    </div>
+                  ))}
+                  {growSource.resources.length === 0 ? (
+                    <p className="px-3 py-2.5 text-[11px] text-muted-foreground">
+                      This Node carries no Resources yet.
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+
+              <SourcePicker
+                folders={folders}
+                folderPath={growFolderPath}
+                onFolderPath={setGrowFolderPath}
+                refs={growRefs}
+                onToggleRef={(refPath) =>
+                  setGrowRefs((current) => toggle(current, refPath))
+                }
+                files={growFiles}
+                onAddFiles={(added) =>
+                  setGrowFiles((current) => [...current, ...added])
+                }
+                onRemoveFile={(index) =>
+                  setGrowFiles((current) =>
+                    current.filter((_, value) => value !== index),
+                  )
+                }
+                label="Run-only context"
+              />
+
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={!growInstruction.trim()}
+              >
+                <Sparkles className="size-4" />
+                Find next directions
+              </Button>
+              {error ? (
+                <p className="text-xs text-destructive">{error}</p>
+              ) : null}
+            </form>
+          ) : null}
+        </DialogContent>
+      </Dialog>
 
       <Sheet
         open={Boolean(inspectorId)}
@@ -594,7 +750,7 @@ export function WhatsNextWorkspace({
                       <Button
                         size="sm"
                         disabled={!reviseNote.trim()}
-                        onClick={() => void sendRun(revisionTarget)}
+                        onClick={() => void reviseCandidate()}
                       >
                         Regenerate this card
                       </Button>
@@ -670,12 +826,24 @@ export function WhatsNextWorkspace({
                   }
                 />
               </div>
-              <SheetFooter>
+              <SheetFooter className="flex-row gap-2">
                 <Button
-                  className="w-full"
+                  className="flex-1"
                   onClick={() => {
-                    toggleSelect(selectedNode.id);
                     setInspectorId('');
+                    setGrowSourceId(selectedNode.id);
+                  }}
+                >
+                  <Sparkles className="size-4" />
+                  Ask what&apos;s next
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setInspectorId('');
+                    setCombineIds((current) =>
+                      toggle(current, selectedNode.id),
+                    );
                     locateSequence.current += 1;
                     setLocateRequest({
                       nodeId: selectedNode.id,
@@ -683,9 +851,9 @@ export function WhatsNextWorkspace({
                     });
                   }}
                 >
-                  {selectedNodeIds.includes(selectedNode.id)
-                    ? 'Remove from origins'
-                    : 'Use as origin'}
+                  {combineIds.includes(selectedNode.id)
+                    ? 'Unselect'
+                    : 'Add to selection'}
                 </Button>
               </SheetFooter>
             </>
@@ -702,6 +870,37 @@ export function WhatsNextWorkspace({
         />
       ) : null}
     </div>
+  );
+}
+
+function AgentSelect({
+  value,
+  onChange,
+}: {
+  value: LocalAgentKind;
+  onChange: (agent: LocalAgentKind) => void;
+}) {
+  return (
+    <fieldset
+      className="flex rounded-lg border border-border p-0.5"
+      aria-label="Agent"
+    >
+      {(['claude', 'codex'] as LocalAgentKind[]).map((agent) => (
+        <button
+          key={agent}
+          type="button"
+          onClick={() => onChange(agent)}
+          className={cn(
+            'rounded-[7px] px-2.5 py-1 text-[11px] transition',
+            value === agent
+              ? 'bg-foreground text-background'
+              : 'text-muted-foreground hover:text-foreground',
+          )}
+        >
+          {AGENT_LABELS[agent]}
+        </button>
+      ))}
+    </fieldset>
   );
 }
 
@@ -881,16 +1080,26 @@ function Fact({ label, value }: { label: string; value: string }) {
   );
 }
 
-function runToPreviews(run: WhatsNextRunRecord): WhatsNextPreview[] {
-  const origin = run.sourceNodeIds[0] ?? '';
+function toggle(current: string[], value: string) {
+  return current.includes(value)
+    ? current.filter((entry) => entry !== value)
+    : [...current, value];
+}
+
+function resourceName(resourcePath: string) {
+  return resourcePath.split('/').at(-1) ?? resourcePath;
+}
+
+function runToPreviews(run: WhatsNextRunRecord): TaskGraphPreview[] {
   const base = {
-    sourceNodeId: origin,
+    sourceNodeId: run.sourceNodeIds[0] ?? '',
     instruction: run.input?.instruction ?? '',
     inheritedResourceCount: run.input?.resourcePaths.length ?? 0,
     additionalResourceCount: 0,
     runId: run.runId,
     derivedFrom: run.sourceNodeIds,
   };
+  const agentLabel = run.transport === 'claude-cli' ? 'Claude' : 'Codex';
 
   if (['running', 'validating'].includes(run.status)) {
     return [
@@ -898,10 +1107,10 @@ function runToPreviews(run: WhatsNextRunRecord): WhatsNextPreview[] {
         ...base,
         id: run.runId,
         kind: 'run',
-        title: run.transport === 'claude-cli' ? 'Claude' : 'Codex',
+        title: agentLabel,
         type: 'Running',
         description: run.input?.instruction ?? '',
-        agentLabel: run.transport === 'claude-cli' ? 'Claude' : 'Codex',
+        agentLabel,
         status: run.status,
       },
     ];

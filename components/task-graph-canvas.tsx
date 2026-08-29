@@ -18,15 +18,7 @@ import {
   type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import {
-  Check,
-  FileText,
-  GitFork,
-  Info,
-  LoaderCircle,
-  Plus,
-  X,
-} from 'lucide-react';
+import { FileText, GitFork, Info, LoaderCircle, Plus, X } from 'lucide-react';
 import type { TaskGraphNode } from '@/lib/task-graph';
 import {
   buildTaskGraphLayout,
@@ -48,7 +40,6 @@ type TaskCardData = Record<string, unknown> & {
   relationshipCount: number;
   selectedForRun?: boolean;
   plusLabel?: string;
-  onToggleSelect?: (nodeId: string) => void;
   onDecompose: (nodeId: string) => void;
   onInspect: (nodeId: string) => void;
   onCancelRun: (runId: string) => void;
@@ -65,7 +56,7 @@ export function TaskGraphCanvas({
   locateRequest,
   selectedNodeIds,
   plusLabel,
-  onToggleSelect,
+  onMultiSelect,
   onFocusNode,
   onInspectNode,
   onSelectPreview,
@@ -78,7 +69,7 @@ export function TaskGraphCanvas({
   locateRequest: { nodeId: string; sequence: number } | null;
   selectedNodeIds?: string[];
   plusLabel?: string;
-  onToggleSelect?: (nodeId: string) => void;
+  onMultiSelect?: (nodeId: string) => void;
   onFocusNode: (nodeId: string) => void;
   onInspectNode: (nodeId: string) => void;
   onSelectPreview: (previewId: string) => void;
@@ -96,7 +87,6 @@ export function TaskGraphCanvas({
         onInspectNode,
         onCancelRun,
         selectionKey ? selectionKey.split(',') : [],
-        onToggleSelect,
         plusLabel,
       ),
     [
@@ -105,7 +95,6 @@ export function TaskGraphCanvas({
       onCancelRun,
       onDecompose,
       onInspectNode,
-      onToggleSelect,
       plusLabel,
       previews,
       selectionKey,
@@ -154,7 +143,15 @@ export function TaskGraphCanvas({
       }}
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
-      onNodeClick={(_, node) => {
+      onNodeClick={(event, node) => {
+        if (
+          onMultiSelect &&
+          node.data.kind === 'formal' &&
+          (event.ctrlKey || event.metaKey)
+        ) {
+          onMultiSelect(node.id);
+          return;
+        }
         if (
           node.data.kind === 'preview' &&
           node.data.transientKind === 'request'
@@ -229,33 +226,8 @@ function TaskCard({ id, data, selected }: NodeProps<TaskFlowNode>) {
         className="!size-2.5 !border-2 !border-background !bg-muted-foreground"
       />
       <div className="flex items-center justify-between gap-3">
-        <span className="flex items-center gap-2">
-          {!preview && data.onToggleSelect ? (
-            <button
-              type="button"
-              className={cn(
-                'nodrag nopan grid size-4 shrink-0 place-items-center rounded-[5px] border transition',
-                data.selectedForRun
-                  ? 'border-violet-500 bg-violet-500 text-white'
-                  : 'border-border text-transparent hover:border-violet-400',
-              )}
-              aria-label={
-                data.selectedForRun
-                  ? `Remove ${data.title} from the origin selection`
-                  : `Add ${data.title} to the origin selection`
-              }
-              aria-pressed={data.selectedForRun}
-              onClick={(event) => {
-                event.stopPropagation();
-                data.onToggleSelect?.(id);
-              }}
-            >
-              <Check className="size-3" strokeWidth={3} />
-            </button>
-          ) : null}
-          <span className="font-mono text-[10px] font-medium tracking-wide text-muted-foreground">
-            {id}
-          </span>
+        <span className="font-mono text-[10px] font-medium tracking-wide text-muted-foreground">
+          {id}
         </span>
         <span className="flex items-center gap-1.5">
           {!preview && data.relationshipCount > 0 ? (
@@ -392,7 +364,6 @@ function buildFlowGraph(
   onInspect: (nodeId: string) => void,
   onCancelRun: (runId: string) => void,
   selectedNodeIds: string[] = [],
-  onToggleSelect?: (nodeId: string) => void,
   plusLabel?: string,
 ) {
   const layout = buildTaskGraphLayout(nodes, previews);
@@ -448,7 +419,6 @@ function buildFlowGraph(
             : nodeTypeColor(node?.type ?? 'node')),
         selectedForRun: selectedIds.has(layoutNode.id),
         plusLabel,
-        onToggleSelect,
         onDecompose,
         onInspect,
         onCancelRun,

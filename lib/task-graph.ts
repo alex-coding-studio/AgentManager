@@ -17,6 +17,14 @@ import {
   assertTaskGraphNodeCanBeDeleted,
 } from '@/lib/task-graph-rules';
 
+export type GraphRoot = 'task-graph' | 'whats-next';
+
+export function assertGraphRoot(value: unknown): GraphRoot {
+  if (value === 'whats-next') return 'whats-next';
+  if (value === undefined || value === 'task-graph') return 'task-graph';
+  throw new Error('The graph is invalid.');
+}
+
 export type TaskGraphNode = {
   schemaVersion: 1;
   id: string;
@@ -47,8 +55,11 @@ export type TaskGraphNode = {
   };
 };
 
-export async function listTaskGraphNodes(project: RegisteredProject) {
-  const nodesPath = path.join(project.planningPath, 'task-graph', 'nodes');
+export async function listTaskGraphNodes(
+  project: RegisteredProject,
+  graphRoot: GraphRoot = 'task-graph',
+) {
+  const nodesPath = path.join(project.planningPath, graphRoot, 'nodes');
   const entries = await readdir(nodesPath, { withFileTypes: true }).catch(
     () => [],
   );
@@ -87,6 +98,7 @@ export async function createStartNode(
     files: File[];
     idea?: string;
   },
+  graphRoot: GraphRoot = 'task-graph',
 ) {
   const title = input.title.trim();
   if (!title) throw new Error('A start-node title is required.');
@@ -112,10 +124,10 @@ export async function createStartNode(
   const contextRefs = await validateContextRefs(project, input.contextRefs);
   const uploads = await prepareUploads(input.files);
 
-  const taskGraphPath = path.join(project.planningPath, 'task-graph');
+  const taskGraphPath = path.join(project.planningPath, graphRoot);
   const nodesPath = path.join(taskGraphPath, 'nodes');
   await mkdir(nodesPath, { recursive: true });
-  const existingNodes = await listTaskGraphNodes(project);
+  const existingNodes = await listTaskGraphNodes(project, graphRoot);
   assertCanvasCanCreateStartNode(existingNodes);
   const nextNumber =
     existingNodes.reduce((largest, node) => {
@@ -139,7 +151,7 @@ export async function createStartNode(
       );
       uploadedResources.push({
         kind: 'idea',
-        path: `task-graph/nodes/${id}/resources/idea.md`,
+        path: `${graphRoot}/nodes/${id}/resources/idea.md`,
       });
     }
     if (uploads.length > 0) {
@@ -153,7 +165,7 @@ export async function createStartNode(
         });
         uploadedResources.push({
           kind: 'attachment',
-          path: `task-graph/nodes/${id}/resources/${fileName}`,
+          path: `${graphRoot}/nodes/${id}/resources/${fileName}`,
         });
       }
     }
@@ -185,7 +197,7 @@ export async function createStartNode(
       { flag: 'wx' },
     );
     await rename(temporaryNodePath, nodePath);
-    return { node, nodes: await listTaskGraphNodes(project) };
+    return { node, nodes: await listTaskGraphNodes(project, graphRoot) };
   } catch (error) {
     await rm(temporaryNodePath, { recursive: true, force: true });
     throw error;
@@ -201,6 +213,7 @@ export async function updateStartNode(
     retainedAttachmentRefs: string[];
     files: File[];
   },
+  graphRoot: GraphRoot = 'task-graph',
 ) {
   if (!/^NODE-\d{4,}$/.test(input.id)) {
     throw new Error('The start node is invalid.');
@@ -219,7 +232,7 @@ export async function updateStartNode(
 
   const nodePath = path.join(
     project.planningPath,
-    'task-graph',
+    graphRoot,
     'nodes',
     input.id,
   );
@@ -322,25 +335,21 @@ export async function updateStartNode(
 export async function deleteTaskGraphNode(
   project: RegisteredProject,
   nodeId: string,
+  graphRoot: GraphRoot = 'task-graph',
 ) {
   if (!/^NODE-\d{4,}$/.test(nodeId)) {
     throw new Error('The node is invalid.');
   }
 
-  const nodes = await listTaskGraphNodes(project);
+  const nodes = await listTaskGraphNodes(project, graphRoot);
   if (!nodes.some((node) => node.id === nodeId)) {
     throw new Error('The node could not be found.');
   }
   assertTaskGraphNodeCanBeDeleted(nodes, nodeId);
 
-  const nodePath = path.join(
-    project.planningPath,
-    'task-graph',
-    'nodes',
-    nodeId,
-  );
+  const nodePath = path.join(project.planningPath, graphRoot, 'nodes', nodeId);
   await trash(nodePath);
-  return { nodes: await listTaskGraphNodes(project) };
+  return { nodes: await listTaskGraphNodes(project, graphRoot) };
 }
 
 export async function readTaskGraphMarkdownResource(
@@ -351,7 +360,7 @@ export async function readTaskGraphMarkdownResource(
     !/^context(?:\/[a-z0-9][a-z0-9-]*)+\/[a-zA-Z0-9][a-zA-Z0-9._-]*\.(md|markdown)$/i.test(
       resourcePath,
     ) &&
-    !/^task-graph\/nodes\/NODE-\d{4,}\/resources\/[a-zA-Z0-9][a-zA-Z0-9._-]*\.(md|markdown)$/i.test(
+    !/^(?:task-graph|whats-next)\/nodes\/NODE-\d{4,}\/resources\/[a-zA-Z0-9][a-zA-Z0-9._-]*\.(md|markdown)$/i.test(
       resourcePath,
     ) &&
     !/^task-decomposition\/runs\/RUN-[0-9a-f-]{36}\/candidates\/CANDIDATE-\d{4,}\/output\.md$/i.test(
@@ -360,7 +369,9 @@ export async function readTaskGraphMarkdownResource(
     !/^whats-next\/runs\/RUN-[0-9a-f-]{36}\/candidates\/CANDIDATE-\d{4,}\/output\.md$/i.test(
       resourcePath,
     ) &&
-    !/^task-graph\/nodes\/NODE-\d{4,}\/output\.md$/i.test(resourcePath)
+    !/^(?:task-graph|whats-next)\/nodes\/NODE-\d{4,}\/output\.md$/i.test(
+      resourcePath,
+    )
   ) {
     throw new Error('The source document path is invalid.');
   }

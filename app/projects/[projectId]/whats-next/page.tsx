@@ -22,7 +22,7 @@ export default async function WhatsNextPage({
   const [projects, folders, nodes] = await Promise.all([
     listProjects(),
     readContextBrowser(project),
-    listTaskGraphNodes(project),
+    listTaskGraphNodes(project, 'whats-next'),
   ]);
 
   return (
