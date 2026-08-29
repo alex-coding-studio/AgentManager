@@ -1,5 +1,6 @@
 import { getProject } from '@/lib/project-registry';
 import { createStartNode, updateStartNode } from '@/lib/task-graph';
+import { CanvasStartConflictError } from '@/lib/task-graph-rules';
 
 export const runtime = 'nodejs';
 
@@ -39,7 +40,10 @@ export async function POST(
       error instanceof Error
         ? error.message
         : 'Could not create the start node.';
-    return Response.json({ error: message }, { status: 400 });
+    return Response.json(
+      { error: message },
+      { status: error instanceof CanvasStartConflictError ? 409 : 400 },
+    );
   }
 }
 

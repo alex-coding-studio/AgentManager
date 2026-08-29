@@ -20,7 +20,7 @@ export type TaskGraphLayoutEdge = {
   id: string;
   source: string;
   target: string;
-  temporary: boolean;
+  relation: 'lineage' | 'dependency' | 'request';
 };
 
 export function buildTaskGraphLayout(
@@ -74,28 +74,46 @@ export function buildTaskGraphLayout(
       x: 0,
       y: 0,
     };
+    const previewX = sourcePosition.x + 360;
+    const nextAvailableY =
+      Math.max(
+        sourcePosition.y - 190,
+        ...layoutNodes
+          .filter((node) => node.x === previewX)
+          .map((node) => node.y),
+      ) + 190;
     const sourcePreviewCount =
       previewCountBySource.get(preview.sourceNodeId) ?? 0;
     previewCountBySource.set(preview.sourceNodeId, sourcePreviewCount + 1);
     layoutNodes.push({
       id: preview.id,
       kind: 'preview',
-      x: sourcePosition.x + 360,
-      y: sourcePosition.y + sourcePreviewCount * 180,
+      x: previewX,
+      y: nextAvailableY + sourcePreviewCount * 190,
       derivedFrom: [preview.sourceNodeId],
     });
   }
 
   const knownIds = new Set(layoutNodes.map((node) => node.id));
-  const edges = layoutNodes.flatMap((node) =>
+  const lineageEdges: TaskGraphLayoutEdge[] = layoutNodes.flatMap((node) =>
     node.derivedFrom
       .filter((source) => knownIds.has(source))
       .map((source) => ({
         id: `derived:${source}:${node.id}`,
         source,
         target: node.id,
-        temporary: node.kind === 'preview',
+        relation: node.kind === 'preview' ? 'request' : 'lineage',
       })),
   );
-  return { nodes: layoutNodes, edges };
+  const dependencyEdges: TaskGraphLayoutEdge[] = nodes.flatMap((node) =>
+    node.dependsOn
+      .filter((dependency) => knownIds.has(dependency))
+      .map((dependency) => ({
+        id: `depends:${node.id}:${dependency}`,
+        source: node.id,
+        target: dependency,
+        relation: 'dependency',
+      })),
+  );
+  return { nodes: layoutNodes, edges: [...lineageEdges, ...dependencyEdges] };
 }

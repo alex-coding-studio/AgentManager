@@ -193,12 +193,31 @@ transport is introduced:
 Agent transport, validated Candidate output, Candidate persistence, acceptance,
 and formal Node promotion remain outside this slice.
 
+## Seventh implementation slice
+
+The seventh slice completes relationship visualization before Agent transport:
+
+1. Render execution prerequisites from each formal Node's `dependsOn` field.
+2. Keep lineage as a neutral solid arrow and show dependencies as amber dashed
+   arrows with a shared legend so the two meanings cannot be confused.
+3. Provide a development-only `?preview=graph-layout` fixture with one root,
+   four generations, sibling branches, multiple origins, cross-branch
+   dependencies, and one Request Preview.
+4. Generate the fixture in memory without reading or writing project graph
+   data.
+5. Enforce one Start per Canvas in both the interface and server writes; future
+   independent roots belong to separate Canvases.
+
+The fixture exists for visual acceptance and regression checks. It is disabled
+in production and is not a simulation of Agent behavior.
+
 ## Canvas direction
 
-Task Decomposition is an open canvas rather than a traditional project board or
-a single-root tree. A canvas can contain many independent start nodes. Future
-Agent operations can continue from any selected node and produce additional
-nodes and dependency edges.
+Task Decomposition is an open canvas rather than a traditional project board.
+Each Canvas owns exactly one Start and expands from that root. Future Agent
+operations can continue from any selected node and produce additional nodes and
+dependency edges. Independent roots will belong to separate Canvases rather
+than sharing one graph.
 
 Graph role and semantic type are independent. `start` and `node` describe where
 an item sits in the graph. Open-ended semantic types such as `source`,
