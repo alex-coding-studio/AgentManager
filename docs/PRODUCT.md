@@ -12,6 +12,12 @@ decomposition, dependency synchronization, and additional personal Agent
 workflows built on those two capabilities. It does not add planning ceremony for
 its own sake.
 
+The broader relationship between product growth, human-manageable
+decomposition, and delivery-sized implementation is defined in
+[`DECOMPOSITION_MODEL.md`](DECOMPOSITION_MODEL.md). Existing Task Decomposition
+terminology describes the current implementation and does not make one Agent
+Session the universal size limit for every product-level Card.
+
 ## Primary user
 
 The primary user is one developer working across one or more software repositories with coding agents. The user owns product judgment and acceptance. Agents help clarify intent, decompose work, implement bounded tasks, review changes, and preserve delivery evidence.
