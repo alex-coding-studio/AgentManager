@@ -18,6 +18,8 @@ idea or attach to an existing local code repository.
 
 - Node.js 22.13 or later
 - npm
+- The Codex CLI or the Claude CLI, signed in with an existing subscription, for
+  Task Decomposition Agent Runs
 
 ## Install the local command
 

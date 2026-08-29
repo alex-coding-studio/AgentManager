@@ -50,12 +50,26 @@ import type { ContextBrowserFolder } from '@/lib/product-context';
 import type { TaskGraphNode } from '@/lib/task-graph';
 import type { TaskGraphPreview } from '@/lib/task-graph-layout';
 import { getTaskGraphRelationships } from '@/lib/task-graph-rules';
-import type { TaskDecompositionRunRecord } from '@/lib/task-decomposition-runs';
+import type { LocalAgentKind } from '@/lib/local-agent-transport';
+import type {
+  TaskDecompositionRunRecord,
+  TaskDecompositionRunTransport,
+} from '@/lib/task-decomposition-runs';
 import { cn } from '@/lib/utils';
 
 type DecompositionRequestPreview = TaskGraphPreview & {
   contextRefs: string[];
   files: File[];
+};
+
+const AGENT_LABELS: Record<LocalAgentKind, string> = {
+  codex: 'Codex',
+  claude: 'Claude',
+};
+
+const TRANSPORT_LABELS: Record<TaskDecompositionRunTransport, string> = {
+  'codex-cli': 'Codex',
+  'claude-cli': 'Claude',
 };
 
 type RunSnapshot = {
@@ -106,7 +120,7 @@ export function TaskDecompositionWorkspace({
   );
   const [decomposeSourceId, setDecomposeSourceId] = useState('');
   const [decompositionGoal, setDecompositionGoal] = useState('');
-  const [selectedAgent, setSelectedAgent] = useState('codex');
+  const [selectedAgent, setSelectedAgent] = useState<LocalAgentKind>('codex');
   const [revisionTarget, setRevisionTarget] = useState<{
     runId: string;
     candidateId: string;
@@ -572,7 +586,7 @@ export function TaskDecompositionWorkspace({
       run.runId,
       run.sourceNodeId,
       'Agent Run failed',
-      run.error ?? 'Codex did not return a valid result.',
+      run.error ?? 'The Agent did not return a valid result.',
       'failed',
     );
   }
@@ -1201,7 +1215,7 @@ export function TaskDecompositionWorkspace({
                     {revisionTarget
                       ? 'Redefine this Candidate only. Revisions cannot create siblings or child Nodes.'
                       : runOperation === 'append-candidates'
-                        ? 'Existing child boundaries will not be replaced. Add new evidence or guidance so Codex can propose only genuinely new siblings.'
+                        ? `Existing child boundaries will not be replaced. Add new evidence or guidance so ${AGENT_LABELS[selectedAgent]} can propose only genuinely new siblings.`
                         : 'Define this round of work. Inherited Resources stay on the source Node; additions apply only to this request.'}
                   </p>
                 </div>
@@ -1217,13 +1231,13 @@ export function TaskDecompositionWorkspace({
                     <select
                       id="decomposition-agent"
                       value={selectedAgent}
-                      onChange={(event) => setSelectedAgent(event.target.value)}
+                      onChange={(event) =>
+                        setSelectedAgent(event.target.value as LocalAgentKind)
+                      }
                       className="h-10 w-full appearance-none rounded-xl border border-border bg-background px-3 pr-9 text-xs font-medium outline-none transition focus:border-ring focus:ring-3 focus:ring-ring/20"
                     >
                       <option value="codex">Codex</option>
-                      <option value="claude" disabled>
-                        Claude · Coming next
-                      </option>
+                      <option value="claude">Claude</option>
                     </select>
                     <ChevronDown className="pointer-events-none absolute top-1/2 right-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
                   </div>
@@ -1505,15 +1519,15 @@ export function TaskDecompositionWorkspace({
                     {developmentPreview
                       ? 'Create fixture request'
                       : revisionTarget
-                        ? 'Send revision to Codex'
+                        ? `Send revision to ${AGENT_LABELS[selectedAgent]}`
                         : runOperation === 'append-candidates'
                           ? 'Find additional nodes'
-                          : 'Send to Codex'}
+                          : `Send to ${AGENT_LABELS[selectedAgent]}`}
                   </Button>
                   <p className="mt-2 text-center text-[10px] leading-4 text-muted-foreground">
                     {developmentPreview
                       ? 'Development fixture only. Nothing is sent to an Agent.'
-                      : 'Codex runs locally with your existing subscription login.'}
+                      : `${AGENT_LABELS[selectedAgent]} runs locally with your existing subscription login.`}
                   </p>
                 </div>
               </form>
@@ -1971,7 +1985,7 @@ function runPreview(
     contextRefs: snapshot.contextRefs,
     files: snapshot.files,
     kind: 'run',
-    title: 'Codex decomposition',
+    title: `${TRANSPORT_LABELS[run.transport]} decomposition`,
     type: 'Running',
     description: snapshot.instruction,
     status: run.status,
