@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useRef, useState, type DragEvent } from 'react';
 import {
   Boxes,
@@ -8,11 +9,12 @@ import {
   Folder,
   Pencil,
   Plus,
+  SlidersHorizontal,
   Upload,
   X,
 } from 'lucide-react';
 import { MarkdownReader } from '@/components/markdown-reader';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -209,9 +211,17 @@ export function TaskDecompositionWorkspace({
             nodes.
           </p>
         </div>
-        <div className="hidden items-center gap-2 text-xs text-muted-foreground sm:flex">
-          <span className="size-2 rounded-full bg-foreground" />
-          {nodes.length} {nodes.length === 1 ? 'node' : 'nodes'}
+        <div className="flex items-center gap-3">
+          <div className="hidden items-center gap-2 text-xs text-muted-foreground sm:flex">
+            <span className="size-2 rounded-full bg-foreground" />
+            {nodes.length} {nodes.length === 1 ? 'node' : 'nodes'}
+          </div>
+          <Link
+            href={`/projects/${projectId}/decomposition/context`}
+            className={buttonVariants({ variant: 'outline' })}
+          >
+            <SlidersHorizontal /> Context
+          </Link>
         </div>
       </header>
 

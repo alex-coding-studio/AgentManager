@@ -10,8 +10,9 @@ project-management system. Projects provide context boundaries for Agent work.
 
 The current slices provide local project registration, a filesystem-backed
 Product Context library, and capture of source-backed start nodes on the Task
-Canvas. A project can begin as a standalone product idea or attach to an
-existing local code repository.
+Canvas. Task Decomposition also has its own user-managed Markdown instructions
+and Markdown or JSON attachments. A project can begin as a standalone product
+idea or attach to an existing local code repository.
 
 ## Requirements
 
@@ -62,6 +63,9 @@ Task Canvas start nodes are stored as one folder per node. Each node contains a
 human-readable `node.json` and can carry its own Resource files. Context Library
 Markdown can be selected through the folder browser, while external Markdown
 can be attached directly during node creation.
+Task Decomposition Context is stored in
+`<project-root>/.agent-manager/task-decomposition/`. It remains separate from
+the feature Harness that will later define Agent output boundaries.
 
 Set `AGENT_MANAGER_HOME` to use a different machine-registry directory.
 

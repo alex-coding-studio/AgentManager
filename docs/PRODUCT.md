@@ -130,6 +130,22 @@ The third slice captures stable starting points for later Agent decomposition:
 Agent invocation, generated child nodes, dependency edges, manual canvas
 positioning, and prompt calibration remain outside this slice.
 
+## Fourth implementation slice
+
+The fourth slice creates user-managed context for Task Decomposition:
+
+1. Open a dedicated Context workspace from the Task Canvas or project navigation.
+2. Save project-specific decomposition guidance as Markdown.
+3. Add, preview, and remove Markdown or JSON context attachments.
+4. Persist the feature context under the project's `.agent-manager/` directory.
+5. Keep user context independent from the future AgentManager-owned Harness.
+
+The Harness and Agent invocation remain outside this slice. The future Harness
+will define a high-level generation contract rather than a fixed sequence. It
+will describe Card requirements, how to reason from incomplete input, inference
+boundaries, prohibited behavior, and the minimum useful delivery while leaving
+domain-specific structure to user context and source material.
+
 ## Canvas direction
 
 Task Decomposition is an open canvas rather than a traditional project board or

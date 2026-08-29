@@ -31,6 +31,7 @@ HereItIs/
     ├── .git/
     ├── project.json
     ├── context/
+    ├── task-decomposition/
     └── task-graph/
         └── nodes/
 ```
@@ -118,6 +119,10 @@ Planned layout:
 │   │   └── README.md
 │   └── other/
 │       └── README.md
+├── task-decomposition/
+│   ├── settings.json
+│   ├── instructions.md
+│   └── attachments/
 ├── task-graph/
 │   └── nodes/
 │       ├── NODE-0001/
@@ -144,6 +149,14 @@ scanning the directory. It does not duplicate the context tree in SQLite or a
 manifest. Context source selection uses a recursive folder browser so nested
 folders remain navigable while only concrete Markdown files can become
 Resources.
+
+Task Decomposition Context is user-owned feature context. Its Markdown
+instructions and Markdown or JSON attachments apply to future decomposition
+requests without being copied into every node. It is separate from the
+AgentManager-owned Harness. A future Harness defines only the stable generation
+contract: required Card fields, inference discipline, prohibited scope, and the
+minimum valid output. It must not impose a rigid domain workflow or assume what
+kind of input a user supplies.
 
 Markdown is used for flexible human-readable product and acceptance content. JSON is used for stable structured records and agent interchange. SQLite is introduced only when graph queries require it.
 
