@@ -36,6 +36,7 @@ type TaskCardData = Record<string, unknown> & {
   resourceSummary?: string;
   transientKind?: TaskGraphPreview['kind'];
   status?: string;
+  agentLabel?: string;
   relationshipCount: number;
   onDecompose: (nodeId: string) => void;
   onInspect: (nodeId: string) => void;
@@ -263,7 +264,8 @@ function TaskCard({ id, data, selected }: NodeProps<TaskFlowNode>) {
             {running ? (
               <span className="flex items-center gap-1.5">
                 <LoaderCircle className="size-3 animate-spin" />
-                Codex is working…
+                {data.agentLabel ?? data.title.split(' ')[0] ?? 'Agent'} is
+                working…
               </span>
             ) : (
               data.resourceSummary
@@ -364,6 +366,7 @@ function buildFlowGraph(
         description: preview?.description ?? preview?.instruction,
         transientKind: preview?.kind ?? 'request',
         status: preview?.status,
+        agentLabel: preview?.agentLabel,
         resourceSummary: preview
           ? preview.kind === 'candidate' && preview.candidate
             ? `Revision ${preview.candidate.revision} · ${preview.candidate.resources.length} Resources`

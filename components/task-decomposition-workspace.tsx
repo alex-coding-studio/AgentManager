@@ -1986,6 +1986,7 @@ function runPreview(
     files: snapshot.files,
     kind: 'run',
     title: `${TRANSPORT_LABELS[run.transport]} decomposition`,
+    agentLabel: TRANSPORT_LABELS[run.transport],
     type: 'Running',
     description: snapshot.instruction,
     status: run.status,
