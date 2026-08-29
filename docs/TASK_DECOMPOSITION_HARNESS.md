@@ -85,6 +85,12 @@ Agent presents two or three concrete options, explains their effects, and gives
 a recommendation. It must not make the user guess what kind of clarification is
 needed.
 
+The Harness does not require the Agent to manufacture a fixed number of Cards.
+When the available evidence cannot support a useful proposal, the Agent either
+asks one bounded clarification with concrete options or returns no Candidates
+and identifies the missing evidence. It does not keep expanding context in an
+attempt to force an answer.
+
 ## Candidate and Node separation
 
 Candidate Cards are temporary session artifacts. Formal Nodes are durable graph
@@ -101,6 +107,29 @@ state. They do not share one lifecycle field.
 The active session may keep structured Candidate versions and feedback for
 comparison or undo. It must not inject the complete conversation transcript into
 every Agent call.
+
+Every Candidate has a stable session-local identifier and a monotonically
+increasing revision. User acceptance targets one exact revision rather than the
+Candidate name in general. The session also records the input revision or
+fingerprint used to generate that revision. If a relevant source, origin,
+dependency, or protected Node changes before acceptance, AgentManager marks the
+Candidate stale and requires reconciliation instead of silently promoting it.
+
+## Proposal and mutation boundary
+
+The Agent proposes graph changes but cannot mutate formal graph state.
+
+1. The Agent returns Candidate Cards and proposed relationships.
+2. AgentManager validates structure, identifiers, references, relationship
+   semantics, and protected-node constraints.
+3. The user accepts an exact Candidate revision.
+4. AgentManager promotes the accepted revision through one crash-safe operation.
+
+Malformed, partial, or unsupported Agent output remains session evidence and
+never becomes a formal Node. Promotion either writes the complete validated
+result or leaves the formal graph unchanged. Existing accepted Nodes cannot be
+edited or deleted as a side effect of accepting a new Candidate; such changes
+require a separate explicit proposal and user decision.
 
 ## Confirmation and cleanup
 
@@ -129,10 +158,30 @@ Every decomposition round initially includes:
 
 - the built-in Harness;
 - the user's current decomposition goal;
-- the project's user-managed Task Decomposition Context;
+- the project's user-managed `instructions.md`;
 - the selected source node, current node, or current Candidate;
 - explicitly selected source documents; and
 - feedback for the current revision.
+
+Task Decomposition Context attachments are not all loaded eagerly. Explicitly
+selected attachments are included in full. Other attachments appear only as a
+lightweight inventory and are expanded when the Agent identifies a concrete
+need. The interface should warn when the always-loaded instructions themselves
+become unusually large rather than silently truncating user constraints.
+
+### Instruction authority
+
+The context packet preserves an explicit authority order:
+
+1. the immutable built-in Harness and structural contract;
+2. the user's current goal and explicit answers for this session;
+3. the project's user-managed decomposition instructions;
+4. the selected semantic type template; and
+5. source documents and neighboring graph content as evidence.
+
+Source documents may describe a product or contain quoted prompts, but they are
+not operational instructions unless the user explicitly selected them for that
+purpose. A lower-authority source cannot override a higher-authority boundary.
 
 ### Initial graph map
 
@@ -172,6 +221,10 @@ on demand, but content is not eagerly injected.
 
 Each round receives a fresh bounded packet rebuilt from structured session
 state. Prompt size does not grow by appending the complete prior conversation.
+After a bounded expansion cycle, unresolved material ambiguity is returned to
+the user through the clarification behavior instead of triggering an unlimited
+graph traversal. The concrete expansion budget remains an evaluated runtime
+policy rather than a fixed semantic rule in the Harness.
 
 ## Relationship semantics
 
@@ -239,11 +292,35 @@ without retaining the complete dialogue:
 
 The final field placement and migration behavior remain implementation work.
 
+## Evaluation contract
+
+The first Harness is an evaluated baseline rather than a claim of final quality.
+Real decomposition cases compare an unguided baseline with Harness-guided output
+and record at least:
+
+- the share of Candidates accepted without revision;
+- the amount and type of user correction;
+- material capability omissions;
+- incorrect execution dependencies;
+- unsupported invention;
+- initial and expanded context size;
+- Agent rounds, elapsed time, and token usage when available; and
+- malformed output, stale-input, and validation failure behavior.
+
+Assertions test product meaning and relationship correctness rather than exact
+wording. The initial smoke set should include a real AgentManager or HereItIs
+decomposition, a large but mostly irrelevant context library, a sibling-impact
+case, and a case where the correct result is clarification or no Candidate.
+Observed failures first enter the evaluation taxonomy. A new rule moves into the
+always-loaded Harness only when evidence shows that a validator, type template,
+Coordinator rule, or on-demand reference cannot enforce it more cheaply.
+
 ## Decisions intentionally deferred
 
 The following details should be settled when implementation begins:
 
-- the exact Candidate JSON and readable Markdown representation;
+- the complete Candidate JSON and readable Markdown representation beyond the
+  required stable identifier, revision, and input fingerprint;
 - active-session directory names and file lifecycle;
 - the precise provenance object shape;
 - context-size budgets and expansion limits;
