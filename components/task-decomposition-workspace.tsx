@@ -660,8 +660,7 @@ export function TaskDecompositionWorkspace({
           (preview) => preview.id !== selectedCandidate.candidateId,
         ),
       );
-      setCandidateDeleteOpen(false);
-      setInspectorNodeId('');
+      finishCandidateDiscard();
       return;
     }
     setDiscardingCandidate(true);
@@ -689,8 +688,14 @@ export function TaskDecompositionWorkspace({
     setRequestPreviews((current) =>
       current.filter((preview) => preview.id !== selectedCandidate.candidateId),
     );
+    finishCandidateDiscard();
+  }
+
+  function finishCandidateDiscard() {
     setCandidateDeleteOpen(false);
     setInspectorNodeId('');
+    setFocusedNodeId('');
+    setLocateRequest(null);
   }
 
   const applyRunRecordEvent = useEffectEvent(applyRunRecord);
@@ -851,6 +856,7 @@ export function TaskDecompositionWorkspace({
     setDeleteOpen(false);
     setInspectorNodeId('');
     setFocusedNodeId('');
+    setLocateRequest(null);
   }
 
   return (
