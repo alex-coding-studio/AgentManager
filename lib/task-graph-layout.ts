@@ -1,4 +1,5 @@
 import dagre from '@dagrejs/dagre';
+import type { HarnessCandidate } from '@/lib/task-decomposition-harness';
 import type { TaskGraphNode } from '@/lib/task-graph';
 
 export type TaskGraphPreview = {
@@ -7,6 +8,18 @@ export type TaskGraphPreview = {
   instruction: string;
   inheritedResourceCount: number;
   additionalResourceCount: number;
+  kind?: 'request' | 'run' | 'candidate' | 'outcome';
+  title?: string;
+  type?: string;
+  description?: string;
+  color?: string;
+  status?: string;
+  derivedFrom?: string[];
+  dependsOn?: string[];
+  candidate?: HarnessCandidate;
+  outputPath?: string;
+  runId?: string;
+  revisionOf?: string;
 };
 
 export type TaskGraphLayoutNode = {
@@ -44,7 +57,7 @@ export function buildTaskGraphLayout(
     ...previews.map((preview) => ({
       id: preview.id,
       kind: 'preview' as const,
-      derivedFrom: [preview.sourceNodeId],
+      derivedFrom: preview.derivedFrom ?? [preview.sourceNodeId],
     })),
   ];
   const knownIds = new Set(layoutNodes.map((node) => node.id));
@@ -85,15 +98,23 @@ export function buildTaskGraphLayout(
       y: position.y - nodeHeight / 2 + verticalOffset(node.id),
     };
   });
-  const dependencyEdges: TaskGraphLayoutEdge[] = nodes.flatMap((node) =>
-    node.dependsOn
-      .filter((dependency) => knownIds.has(dependency))
-      .map((dependency) => ({
-        id: `depends:${node.id}:${dependency}`,
-        source: node.id,
-        target: dependency,
-        relation: 'dependency',
-      })),
+  const dependencySources = [
+    ...nodes.map((node) => ({ id: node.id, dependsOn: node.dependsOn })),
+    ...previews.map((preview) => ({
+      id: preview.id,
+      dependsOn: preview.dependsOn ?? [],
+    })),
+  ];
+  const dependencyEdges: TaskGraphLayoutEdge[] = dependencySources.flatMap(
+    (node) =>
+      node.dependsOn
+        .filter((dependency) => knownIds.has(dependency))
+        .map((dependency) => ({
+          id: `depends:${node.id}:${dependency}`,
+          source: node.id,
+          target: dependency,
+          relation: 'dependency',
+        })),
   );
   return {
     nodes: positionedNodes,

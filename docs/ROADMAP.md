@@ -5,7 +5,7 @@ Operational analytics remain planned work and must not delay that loop.
 
 ## Current MVP
 
-### 1. Agent Run loop
+### 1. Agent Run loop — implemented, pending live acceptance
 
 - Replace the local-only Request Preview action with `Send to Agent`.
 - Create a minimal Run record with `runId`, status, transport, start and end
@@ -50,6 +50,11 @@ the cost benefit is measured rather than assumed.
   readable Markdown artifact, and any Node-local Resources.
 - Move superseded Candidate versions and transient Session history to the
   operating system Trash after successful promotion.
+- Resume one bounded Coordinator Session for supplemental parent-level
+  decomposition. Existing children remain immutable; the Agent can return only
+  new siblings, `no-change`, or clarification.
+- Restrict Candidate revision to the same Candidate identifier and next
+  revision. Structural sibling or child changes return clarification.
 
 ## Deferred: Run observability
 

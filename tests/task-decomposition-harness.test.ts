@@ -43,10 +43,12 @@ void test('keeps the always-loaded Harness compact', () => {
   assert.ok(TASK_DECOMPOSITION_HARNESS_PROMPT.length < 3_000);
   assert.match(TASK_DECOMPOSITION_HARNESS_PROMPT, /Return only JSON/);
   assert.match(TASK_DECOMPOSITION_HARNESS_PROMPT, /Never mutate/);
+  assert.match(TASK_DECOMPOSITION_HARNESS_PROMPT, /Do not create sibling/);
+  assert.match(TASK_DECOMPOSITION_HARNESS_PROMPT, /append-candidates/);
 });
 
-void test('exposes a machine-readable three-outcome contract', () => {
-  assert.equal(TASK_DECOMPOSITION_HARNESS_OUTPUT_SCHEMA.oneOf.length, 3);
+void test('exposes a machine-readable four-outcome contract', () => {
+  assert.equal(TASK_DECOMPOSITION_HARNESS_OUTPUT_SCHEMA.oneOf.length, 4);
   assert.equal(
     TASK_DECOMPOSITION_HARNESS_OUTPUT_SCHEMA.$defs.candidate
       .additionalProperties,
@@ -113,6 +115,36 @@ void test('requires the next revision for an existing Candidate', () => {
         },
       ),
     /revision 2/,
+  );
+});
+
+void test('rejects a Candidate identifier already owned by another proposal', () => {
+  assert.throws(
+    () =>
+      validateTaskDecompositionHarnessResult(
+        {
+          ...baseResult(),
+          outcome: 'proposal',
+          candidates: [
+            {
+              candidateId: 'CANDIDATE-0001',
+              revision: 1,
+              type: 'module',
+              title: 'Duplicate module',
+              summary: 'Attempts to reuse an existing Candidate identifier.',
+              derivedFrom: ['NODE-0001'],
+              dependsOn: [],
+              resources: [],
+              typeTemplateRef: null,
+              metadata: {},
+              presentation: {},
+              assumptions: [],
+            },
+          ],
+        },
+        { ...context, reservedCandidateIds: ['CANDIDATE-0001'] },
+      ),
+    /already exists/,
   );
 });
 
@@ -237,6 +269,19 @@ void test('accepts an explicit insufficient-evidence result', () => {
   );
 
   assert.equal(result.outcome, 'insufficient-evidence');
+});
+
+void test('accepts an explicit no-change result', () => {
+  const result = validateTaskDecompositionHarnessResult(
+    {
+      ...baseResult(),
+      outcome: 'no-change',
+      reason: 'The supplemental evidence adds no new product boundary.',
+    },
+    context,
+  );
+
+  assert.equal(result.outcome, 'no-change');
 });
 
 void test('rejects a response from stale request input', () => {

@@ -1,7 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { useRef, useState, type DragEvent } from 'react';
+import {
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+  type DragEvent,
+} from 'react';
 import {
   ArrowUpRight,
   ChevronDown,
@@ -44,11 +50,21 @@ import type { ContextBrowserFolder } from '@/lib/product-context';
 import type { TaskGraphNode } from '@/lib/task-graph';
 import type { TaskGraphPreview } from '@/lib/task-graph-layout';
 import { getTaskGraphRelationships } from '@/lib/task-graph-rules';
+import type { TaskDecompositionRunRecord } from '@/lib/task-decomposition-runs';
 import { cn } from '@/lib/utils';
 
 type DecompositionRequestPreview = TaskGraphPreview & {
   contextRefs: string[];
   files: File[];
+};
+
+type RunSnapshot = {
+  sourceNodeId: string;
+  instruction: string;
+  contextRefs: string[];
+  files: File[];
+  revisionTarget?: { runId: string; candidateId: string };
+  operation: 'propose' | 'append-candidates';
 };
 
 export function TaskDecompositionWorkspace({
@@ -90,6 +106,14 @@ export function TaskDecompositionWorkspace({
   );
   const [decomposeSourceId, setDecomposeSourceId] = useState('');
   const [decompositionGoal, setDecompositionGoal] = useState('');
+  const [selectedAgent, setSelectedAgent] = useState('codex');
+  const [revisionTarget, setRevisionTarget] = useState<{
+    runId: string;
+    candidateId: string;
+  } | null>(null);
+  const [runOperation, setRunOperation] = useState<
+    'propose' | 'append-candidates'
+  >('propose');
   const [requestSelectedRefs, setRequestSelectedRefs] = useState<string[]>([]);
   const [requestFiles, setRequestFiles] = useState<File[]>([]);
   const [requestFolderPath, setRequestFolderPath] = useState(
@@ -111,9 +135,15 @@ export function TaskDecompositionWorkspace({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
+  const [accepting, setAccepting] = useState(false);
+  const [candidateDeleteOpen, setCandidateDeleteOpen] = useState(false);
+  const [discardingCandidate, setDiscardingCandidate] = useState(false);
+  const [candidateActionError, setCandidateActionError] = useState('');
   const [error, setError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const requestFileInputRef = useRef<HTMLInputElement>(null);
+  const runSnapshots = useRef(new Map<string, RunSnapshot>());
+  const restoredRuns = useRef(false);
   const selectedFolder =
     folders.find((folder) => folder.path === selectedFolderPath) ?? folders[0];
   const requestFolder =
@@ -127,6 +157,19 @@ export function TaskDecompositionWorkspace({
     selectedRefs.length + retainedAttachmentRefs.length + files.length;
   const selectedNode =
     nodes.find((node) => node.id === inspectorNodeId) ?? null;
+  const selectedCandidatePreview =
+    requestPreviews.find(
+      (preview) =>
+        preview.id === inspectorNodeId && preview.kind === 'candidate',
+    ) ?? null;
+  const selectedCandidate = selectedCandidatePreview?.candidate ?? null;
+  const selectedCandidateIsRevising = selectedCandidate
+    ? requestPreviews.some(
+        (preview) =>
+          preview.kind === 'run' &&
+          preview.revisionOf === selectedCandidate.candidateId,
+      )
+    : false;
   const selectedRelationships = selectedNode
     ? getTaskGraphRelationships(nodes, selectedNode.id)
     : null;
@@ -254,14 +297,20 @@ export function TaskDecompositionWorkspace({
   }
 
   function openDecomposition(nodeId: string) {
-    const preview = requestPreviews.find(
-      (candidate) => candidate.sourceNodeId === nodeId,
-    );
+    const hasExistingChildren =
+      nodes.some((node) => node.derivedFrom?.includes(nodeId)) ||
+      requestPreviews.some(
+        (candidate) =>
+          candidate.kind === 'candidate' &&
+          candidate.derivedFrom?.includes(nodeId),
+      );
     setDecomposeSourceId(nodeId);
-    setDecompositionGoal(preview?.instruction ?? '');
-    setRequestSelectedRefs(preview?.contextRefs ?? []);
-    setRequestFiles(preview?.files ?? []);
+    setDecompositionGoal('');
+    setRequestSelectedRefs([]);
+    setRequestFiles([]);
     setRequestError('');
+    setRevisionTarget(null);
+    setRunOperation(hasExistingChildren ? 'append-candidates' : 'propose');
   }
 
   function selectRequestPreview(previewId: string) {
@@ -283,6 +332,8 @@ export function TaskDecompositionWorkspace({
     setRequestFiles([]);
     setRequestDragging(false);
     setRequestError('');
+    setRevisionTarget(null);
+    setRunOperation('propose');
   }
 
   function toggleRequestSource(ref: string, selected: boolean) {
@@ -314,10 +365,59 @@ export function TaskDecompositionWorkspace({
     });
   }
 
-  function previewDecomposition(event: React.SyntheticEvent<HTMLFormElement>) {
+  async function previewDecomposition(
+    event: React.SyntheticEvent<HTMLFormElement>,
+  ) {
     event.preventDefault();
     const goal = decompositionGoal.trim();
     if (!decomposeSource || !goal) return;
+    if (!developmentPreview) {
+      setRequestError('');
+      const snapshot: RunSnapshot = {
+        sourceNodeId: decomposeSource.id,
+        instruction: goal,
+        contextRefs: [...requestSelectedRefs],
+        files: [...requestFiles],
+        revisionTarget: revisionTarget ?? undefined,
+        operation: runOperation,
+      };
+      const formData = new FormData();
+      formData.set('sourceNodeId', decomposeSource.id);
+      formData.set('instruction', goal);
+      formData.set('agent', selectedAgent);
+      formData.set('operation', runOperation);
+      if (revisionTarget) {
+        formData.set('revisionRunId', revisionTarget.runId);
+        formData.set('revisionCandidateId', revisionTarget.candidateId);
+      }
+      for (const ref of requestSelectedRefs)
+        formData.append('contextRefs', ref);
+      for (const file of requestFiles) formData.append('files', file);
+      const response = await fetch(
+        `/api/projects/${projectId}/decomposition-runs`,
+        { method: 'POST', body: formData },
+      );
+      const result = (await response.json()) as {
+        run?: TaskDecompositionRunRecord;
+        error?: string;
+      };
+      if (!response.ok || !result.run) {
+        setRequestError(result.error ?? 'Could not start the Agent Run.');
+        return;
+      }
+      const run = result.run;
+      runSnapshots.current.set(run.runId, snapshot);
+      setRequestPreviews((current) => [
+        ...(revisionTarget || runOperation === 'append-candidates'
+          ? current
+          : current.filter(
+              (candidate) => candidate.sourceNodeId !== decomposeSource.id,
+            )),
+        runPreview(run, snapshot, decomposeSource.resources.length),
+      ]);
+      closeDecomposition();
+      return;
+    }
     const preview: DecompositionRequestPreview = {
       id: `REQUEST-PREVIEW-${decomposeSource.id}`,
       sourceNodeId: decomposeSource.id,
@@ -326,6 +426,7 @@ export function TaskDecompositionWorkspace({
       additionalResourceCount: requestSelectedRefs.length + requestFiles.length,
       contextRefs: requestSelectedRefs,
       files: requestFiles,
+      kind: 'request',
     };
     setRequestPreviews((current) => [
       ...current.filter((candidate) => candidate.id !== preview.id),
@@ -333,6 +434,336 @@ export function TaskDecompositionWorkspace({
     ]);
     closeDecomposition();
   }
+
+  function replaceRunWithOutcome(
+    runId: string,
+    sourceNodeId: string,
+    title: string,
+    description: string,
+    status: string,
+  ) {
+    setRequestPreviews((current) => [
+      ...current.filter((preview) => preview.id !== runId),
+      {
+        id: runId,
+        sourceNodeId,
+        instruction: description,
+        inheritedResourceCount: 0,
+        additionalResourceCount: 0,
+        contextRefs: [],
+        files: [],
+        kind: 'outcome',
+        title,
+        type: status,
+        description,
+        status,
+      },
+    ]);
+    runSnapshots.current.delete(runId);
+  }
+
+  function applyRunRecord(run: TaskDecompositionRunRecord) {
+    if (['running', 'validating'].includes(run.status)) {
+      setRequestPreviews((current) =>
+        current.map((preview) =>
+          preview.id === run.runId
+            ? { ...preview, status: run.status }
+            : preview,
+        ),
+      );
+      return;
+    }
+    const snapshot = runSnapshots.current.get(run.runId);
+    if (run.status === 'canceled') {
+      setRequestPreviews((current) =>
+        current.filter((preview) => preview.id !== run.runId),
+      );
+      return;
+    }
+    if (run.status === 'proposal' && run.result?.outcome === 'proposal') {
+      const result = run.result;
+      const acceptedCandidateIds = new Set(
+        nodes.flatMap((node) =>
+          node.provenance?.candidateId ? [node.provenance.candidateId] : [],
+        ),
+      );
+      const candidateIds = new Set(
+        result.candidates.map((candidate) => candidate.candidateId),
+      );
+      setRequestPreviews((current) => [
+        ...current.filter(
+          (preview) =>
+            preview.id !== run.runId && !candidateIds.has(preview.id),
+        ),
+        ...result.candidates
+          .filter(
+            (candidate) => !acceptedCandidateIds.has(candidate.candidateId),
+          )
+          .map((candidate) => ({
+            id: candidate.candidateId,
+            sourceNodeId: run.sourceNodeId,
+            instruction: snapshot?.instruction ?? '',
+            inheritedResourceCount: 0,
+            additionalResourceCount: candidate.resources.length,
+            contextRefs: [],
+            files: [],
+            kind: 'candidate' as const,
+            title: candidate.title,
+            type: candidate.type,
+            description: candidate.summary,
+            color: candidate.presentation.color,
+            status: 'proposal',
+            derivedFrom: candidate.derivedFrom,
+            dependsOn: candidate.dependsOn,
+            candidate,
+            outputPath: candidateOutputPath(run.runId, candidate.candidateId),
+            runId: run.runId,
+          })),
+      ]);
+      runSnapshots.current.delete(run.runId);
+      return;
+    }
+    if (
+      run.status === 'clarification' &&
+      run.result?.outcome === 'clarification'
+    ) {
+      const options = run.result.clarification.options
+        .map((option) => option.label)
+        .join(' · ');
+      replaceRunWithOutcome(
+        run.runId,
+        run.sourceNodeId,
+        'Clarification needed',
+        `${run.result.clarification.question} ${options}`,
+        run.status,
+      );
+      return;
+    }
+    if (
+      run.status === 'insufficient-evidence' &&
+      run.result?.outcome === 'insufficient-evidence'
+    ) {
+      replaceRunWithOutcome(
+        run.runId,
+        run.sourceNodeId,
+        'More evidence needed',
+        run.result.missingEvidence.join(' · '),
+        run.status,
+      );
+      return;
+    }
+    if (run.status === 'no-change' && run.result?.outcome === 'no-change') {
+      replaceRunWithOutcome(
+        run.runId,
+        run.sourceNodeId,
+        'No new boundary found',
+        run.result.reason,
+        run.status,
+      );
+      return;
+    }
+    replaceRunWithOutcome(
+      run.runId,
+      run.sourceNodeId,
+      'Agent Run failed',
+      run.error ?? 'Codex did not return a valid result.',
+      'failed',
+    );
+  }
+
+  async function cancelRun(runId: string) {
+    const snapshot = runSnapshots.current.get(runId);
+    const response = await fetch(
+      `/api/projects/${projectId}/decomposition-runs`,
+      {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runId }),
+      },
+    );
+    if (!response.ok) return;
+    setRequestPreviews((current) =>
+      current.filter((preview) => preview.id !== runId),
+    );
+    if (snapshot) {
+      setDecomposeSourceId(snapshot.sourceNodeId);
+      setDecompositionGoal(snapshot.instruction);
+      setRequestSelectedRefs(snapshot.contextRefs);
+      setRequestFiles(snapshot.files);
+      setRevisionTarget(snapshot.revisionTarget ?? null);
+      setRunOperation(snapshot.operation);
+    }
+    runSnapshots.current.delete(runId);
+  }
+
+  function reviseCandidate() {
+    if (!selectedCandidatePreview?.runId || !selectedCandidate) return;
+    setRevisionTarget({
+      runId: selectedCandidatePreview.runId,
+      candidateId: selectedCandidate.candidateId,
+    });
+    setDecomposeSourceId(selectedCandidate.derivedFrom[0] ?? '');
+    setDecompositionGoal('');
+    setRequestSelectedRefs([]);
+    setRequestFiles([]);
+    setRequestError('');
+    setRunOperation('propose');
+    setCandidateActionError('');
+    setInspectorNodeId('');
+  }
+
+  async function acceptCandidate() {
+    if (!selectedCandidatePreview?.runId || !selectedCandidate) return;
+    setAccepting(true);
+    setCandidateActionError('');
+    const response = await fetch(
+      `/api/projects/${projectId}/decomposition-runs`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'accept',
+          runId: selectedCandidatePreview.runId,
+          candidateId: selectedCandidate.candidateId,
+        }),
+      },
+    );
+    const payload = (await response.json()) as {
+      node?: TaskGraphNode;
+      nodes?: TaskGraphNode[];
+      error?: string;
+    };
+    setAccepting(false);
+    if (!response.ok || !payload.node || !payload.nodes) {
+      setCandidateActionError(
+        payload.error ?? 'Could not accept the Candidate.',
+      );
+      return;
+    }
+    setNodes(payload.nodes);
+    setRequestPreviews((current) =>
+      current.filter((preview) => preview.id !== selectedCandidate.candidateId),
+    );
+    setInspectorNodeId('');
+    setFocusedNodeId(payload.node.id);
+    setLocateRequest((current) => ({
+      nodeId: payload.node?.id ?? '',
+      sequence: (current?.sequence ?? 0) + 1,
+    }));
+  }
+
+  async function discardCandidate() {
+    if (!selectedCandidate) return;
+    if (developmentPreview || !selectedCandidatePreview?.runId) {
+      setRequestPreviews((current) =>
+        current.filter(
+          (preview) => preview.id !== selectedCandidate.candidateId,
+        ),
+      );
+      setCandidateDeleteOpen(false);
+      setInspectorNodeId('');
+      return;
+    }
+    setDiscardingCandidate(true);
+    setCandidateActionError('');
+    const response = await fetch(
+      `/api/projects/${projectId}/decomposition-runs`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'discard',
+          runId: selectedCandidatePreview.runId,
+          candidateId: selectedCandidate.candidateId,
+        }),
+      },
+    );
+    const payload = (await response.json()) as { error?: string };
+    setDiscardingCandidate(false);
+    if (!response.ok) {
+      setCandidateActionError(
+        payload.error ?? 'Could not discard the Candidate.',
+      );
+      return;
+    }
+    setRequestPreviews((current) =>
+      current.filter((preview) => preview.id !== selectedCandidate.candidateId),
+    );
+    setCandidateDeleteOpen(false);
+    setInspectorNodeId('');
+  }
+
+  const applyRunRecordEvent = useEffectEvent(applyRunRecord);
+  const replaceRunWithOutcomeEvent = useEffectEvent(replaceRunWithOutcome);
+
+  useEffect(() => {
+    if (developmentPreview || restoredRuns.current) return;
+    restoredRuns.current = true;
+    void fetch(`/api/projects/${projectId}/decomposition-runs`)
+      .then(async (response) => {
+        const payload = (await response.json()) as {
+          runs?: TaskDecompositionRunRecord[];
+        };
+        if (!response.ok || !payload.runs) return;
+        for (const run of payload.runs) {
+          if (['running', 'validating'].includes(run.status)) {
+            const snapshot: RunSnapshot = {
+              sourceNodeId: run.sourceNodeId,
+              instruction: 'Agent Run restored from disk.',
+              contextRefs: [],
+              files: [],
+              operation:
+                run.operation === 'append-candidates'
+                  ? 'append-candidates'
+                  : 'propose',
+            };
+            setRequestPreviews((current) =>
+              current.some((preview) => preview.id === run.runId)
+                ? current
+                : [...current, runPreview(run, snapshot, 0)],
+            );
+          } else {
+            applyRunRecordEvent(run);
+          }
+        }
+      })
+      .catch(() => undefined);
+  }, [developmentPreview, projectId]);
+
+  useEffect(() => {
+    const running = requestPreviews.filter(
+      (preview) =>
+        preview.kind === 'run' &&
+        ['running', 'validating'].includes(preview.status ?? ''),
+    );
+    if (running.length === 0) return;
+
+    const timer = window.setInterval(() => {
+      void Promise.all(
+        running.map(async (preview) => {
+          const response = await fetch(
+            `/api/projects/${projectId}/decomposition-runs?runId=${encodeURIComponent(preview.id)}`,
+          );
+          const payload = (await response.json()) as {
+            run?: TaskDecompositionRunRecord;
+            error?: string;
+          };
+          if (!response.ok || !payload.run) {
+            replaceRunWithOutcomeEvent(
+              preview.id,
+              preview.sourceNodeId,
+              'Agent Run unavailable',
+              payload.error ?? 'Could not read the Agent Run.',
+              'failed',
+            );
+            return;
+          }
+          applyRunRecordEvent(payload.run);
+        }),
+      );
+    }, 750);
+    return () => window.clearInterval(timer);
+  }, [projectId, requestPreviews]);
 
   async function previewResource(resourcePath: string) {
     setPreviewingPath(resourcePath);
@@ -481,6 +912,7 @@ export function TaskDecompositionWorkspace({
               }}
               onSelectPreview={selectRequestPreview}
               onDecompose={openDecomposition}
+              onCancelRun={cancelRun}
             />
           )}
         </section>
@@ -760,12 +1192,42 @@ export function TaskDecompositionWorkspace({
               <form onSubmit={previewDecomposition} className="space-y-6">
                 <div>
                   <h2 className="text-sm font-semibold">
-                    Decompose from {decomposeSource.id}
+                    {revisionTarget
+                      ? `Revise ${revisionTarget.candidateId}`
+                      : runOperation === 'append-candidates'
+                        ? `Extend ${decomposeSource.id}`
+                        : `Decompose from ${decomposeSource.id}`}
                   </h2>
                   <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                    Define this round of work. Inherited Resources stay on the
-                    source Node; additions apply only to this request.
+                    {revisionTarget
+                      ? 'Redefine this Candidate only. Revisions cannot create siblings or child Nodes.'
+                      : runOperation === 'append-candidates'
+                        ? 'Existing child boundaries will not be replaced. Add new evidence or guidance so Codex can propose only genuinely new siblings.'
+                        : 'Define this round of work. Inherited Resources stay on the source Node; additions apply only to this request.'}
                   </p>
+                </div>
+
+                <div className="space-y-2">
+                  <label
+                    htmlFor="decomposition-agent"
+                    className="text-xs font-medium"
+                  >
+                    Agent
+                  </label>
+                  <div className="relative">
+                    <select
+                      id="decomposition-agent"
+                      value={selectedAgent}
+                      onChange={(event) => setSelectedAgent(event.target.value)}
+                      className="h-10 w-full appearance-none rounded-xl border border-border bg-background px-3 pr-9 text-xs font-medium outline-none transition focus:border-ring focus:ring-3 focus:ring-ring/20"
+                    >
+                      <option value="codex">Codex</option>
+                      <option value="claude" disabled>
+                        Claude · Coming next
+                      </option>
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute top-1/2 right-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -779,7 +1241,13 @@ export function TaskDecompositionWorkspace({
                     id="decomposition-goal"
                     value={decompositionGoal}
                     maxLength={1_000}
-                    placeholder="Generate several candidate modules from this product definition."
+                    placeholder={
+                      revisionTarget
+                        ? 'Describe how this Candidate itself should change.'
+                        : runOperation === 'append-candidates'
+                          ? 'Describe the new evidence or boundary that may require additional siblings.'
+                          : 'Generate several candidate modules from this product definition.'
+                    }
                     className="min-h-28"
                     onChange={(event) =>
                       setDecompositionGoal(event.target.value)
@@ -992,10 +1460,18 @@ export function TaskDecompositionWorkspace({
                     className="w-full"
                     disabled={!decompositionGoal.trim()}
                   >
-                    Preview request on canvas
+                    {developmentPreview
+                      ? 'Create fixture request'
+                      : revisionTarget
+                        ? 'Send revision to Codex'
+                        : runOperation === 'append-candidates'
+                          ? 'Find additional nodes'
+                          : 'Send to Codex'}
                   </Button>
                   <p className="mt-2 text-center text-[10px] leading-4 text-muted-foreground">
-                    Preview only. Nothing is saved or sent to an Agent yet.
+                    {developmentPreview
+                      ? 'Development fixture only. Nothing is sent to an Agent.'
+                      : 'Codex runs locally with your existing subscription login.'}
                   </p>
                 </div>
               </form>
@@ -1005,7 +1481,7 @@ export function TaskDecompositionWorkspace({
       </div>
 
       <Sheet
-        open={selectedNode !== null}
+        open={selectedNode !== null || selectedCandidate !== null}
         onOpenChange={(open) => {
           if (!open) setInspectorNodeId('');
         }}
@@ -1159,9 +1635,222 @@ export function TaskDecompositionWorkspace({
                 ) : null}
               </SheetFooter>
             </>
+          ) : selectedCandidate ? (
+            <>
+              <SheetHeader className="border-b border-border px-6 py-6 pr-14">
+                <div className="mb-3 flex items-center gap-2">
+                  <span className="font-mono text-[10px] font-medium tracking-wide text-muted-foreground">
+                    {selectedCandidate.candidateId}
+                  </span>
+                  <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-medium capitalize text-secondary-foreground">
+                    Candidate · revision {selectedCandidate.revision}
+                  </span>
+                </div>
+                <SheetTitle className="text-xl font-semibold tracking-[-0.025em]">
+                  {selectedCandidate.title}
+                </SheetTitle>
+                <SheetDescription>{selectedCandidate.summary}</SheetDescription>
+              </SheetHeader>
+
+              <div className="flex-1 overflow-y-auto px-6 py-5">
+                <dl className="grid grid-cols-2 gap-3">
+                  <NodeFact label="Type" value={selectedCandidate.type} />
+                  <NodeFact
+                    label="Revision"
+                    value={String(selectedCandidate.revision)}
+                  />
+                </dl>
+
+                {selectedCandidatePreview?.outputPath ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="mt-5 w-full"
+                    disabled={
+                      previewingPath === selectedCandidatePreview.outputPath
+                    }
+                    onClick={() =>
+                      previewResource(selectedCandidatePreview.outputPath ?? '')
+                    }
+                  >
+                    <FileText />
+                    {previewingPath === selectedCandidatePreview.outputPath
+                      ? 'Opening output…'
+                      : 'Open output.md'}
+                  </Button>
+                ) : null}
+
+                <section className="mt-7">
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                    Relationships
+                  </h3>
+                  <div className="mt-3 grid gap-4">
+                    <CandidateRelationshipList
+                      title="Derived from"
+                      nodeIds={selectedCandidate.derivedFrom}
+                      nodes={nodes}
+                      onSelect={locateNode}
+                    />
+                    <CandidateRelationshipList
+                      title="Depends on"
+                      nodeIds={selectedCandidate.dependsOn}
+                      nodes={nodes}
+                      onSelect={locateNode}
+                    />
+                  </div>
+                </section>
+
+                <section className="mt-7">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                      Resources
+                    </h3>
+                    <span className="text-[10px] text-muted-foreground">
+                      {selectedCandidate.resources.length}
+                    </span>
+                  </div>
+                  <div className="mt-3 divide-y divide-border overflow-hidden rounded-xl border border-border">
+                    {selectedCandidate.resources.map((resource) => (
+                      <button
+                        key={`${resource.kind}:${resource.path}`}
+                        type="button"
+                        className="flex w-full items-center gap-3 px-3 py-3 text-left transition hover:bg-muted/50"
+                        disabled={previewingPath === resource.path}
+                        onClick={() => previewResource(resource.path)}
+                      >
+                        <FileText className="size-3.5 shrink-0" />
+                        <span className="min-w-0 flex-1 truncate text-xs font-medium">
+                          {resourceName(resource.path)}
+                        </span>
+                        <span className="text-[9px] uppercase tracking-wide text-muted-foreground">
+                          {resource.kind}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+
+                {selectedCandidate.assumptions.length > 0 ? (
+                  <section className="mt-7">
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                      Assumptions
+                    </h3>
+                    <ul className="mt-3 space-y-2 text-xs leading-5 text-muted-foreground">
+                      {selectedCandidate.assumptions.map((assumption) => (
+                        <li key={assumption}>{assumption}</li>
+                      ))}
+                    </ul>
+                  </section>
+                ) : null}
+
+                {Object.keys(selectedCandidate.metadata).length > 0 ? (
+                  <section className="mt-7">
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                      Metadata
+                    </h3>
+                    <pre className="mt-3 overflow-x-auto rounded-xl bg-secondary p-3 text-[10px] leading-4">
+                      {JSON.stringify(selectedCandidate.metadata, null, 2)}
+                    </pre>
+                  </section>
+                ) : null}
+              </div>
+              <SheetFooter className="border-t border-border px-6 py-4">
+                <div className="flex w-full gap-2">
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="icon"
+                    disabled={
+                      accepting ||
+                      discardingCandidate ||
+                      selectedCandidateIsRevising
+                    }
+                    aria-label="Discard Candidate"
+                    title="Discard Candidate"
+                    onClick={() => setCandidateDeleteOpen(true)}
+                  >
+                    <Trash2 />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="flex-1"
+                    disabled={
+                      accepting ||
+                      discardingCandidate ||
+                      selectedCandidateIsRevising
+                    }
+                    onClick={reviseCandidate}
+                  >
+                    <Pencil /> Revise
+                  </Button>
+                  <Button
+                    type="button"
+                    className="flex-1"
+                    disabled={
+                      accepting ||
+                      discardingCandidate ||
+                      selectedCandidateIsRevising
+                    }
+                    onClick={acceptCandidate}
+                  >
+                    {accepting ? 'Accepting…' : 'Accept revision'}
+                  </Button>
+                </div>
+                {selectedCandidateIsRevising ? (
+                  <p className="text-[10px] text-muted-foreground">
+                    The next revision is running.
+                  </p>
+                ) : null}
+                {candidateActionError ? (
+                  <p className="text-[10px] text-destructive">
+                    {candidateActionError}
+                  </p>
+                ) : null}
+              </SheetFooter>
+            </>
           ) : null}
         </SheetContent>
       </Sheet>
+
+      <AlertDialog
+        open={candidateDeleteOpen}
+        onOpenChange={(open) => {
+          if (!discardingCandidate) setCandidateDeleteOpen(open);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogMedia>
+              <Trash2 />
+            </AlertDialogMedia>
+            <AlertDialogTitle>
+              Discard {selectedCandidate?.title}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This Candidate and its output will move to the operating system
+              Trash. Other Candidates from the same proposal stay unchanged.
+              {candidateActionError ? (
+                <span className="mt-2 block text-destructive">
+                  {candidateActionError}
+                </span>
+              ) : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={discardingCandidate}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={discardingCandidate}
+              onClick={discardCandidate}
+            >
+              {discardingCandidate ? 'Discarding…' : 'Discard'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog
         open={deleteOpen}
@@ -1222,6 +1911,53 @@ export function TaskDecompositionWorkspace({
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function runPreview(
+  run: TaskDecompositionRunRecord,
+  snapshot: RunSnapshot,
+  inheritedResourceCount: number,
+): DecompositionRequestPreview {
+  return {
+    id: run.runId,
+    sourceNodeId: run.sourceNodeId,
+    instruction: snapshot.instruction,
+    inheritedResourceCount,
+    additionalResourceCount:
+      snapshot.contextRefs.length + snapshot.files.length,
+    contextRefs: snapshot.contextRefs,
+    files: snapshot.files,
+    kind: 'run',
+    title: 'Codex decomposition',
+    type: 'Running',
+    description: snapshot.instruction,
+    status: run.status,
+    revisionOf: run.revisionOf,
+  };
+}
+
+function candidateOutputPath(runId: string, candidateId: string) {
+  return `task-decomposition/runs/${runId}/candidates/${candidateId}/output.md`;
+}
+
+function CandidateRelationshipList({
+  title,
+  nodeIds,
+  nodes,
+  onSelect,
+}: {
+  title: string;
+  nodeIds: string[];
+  nodes: TaskGraphNode[];
+  onSelect: (nodeId: string) => void;
+}) {
+  const relatedNodes = nodeIds.flatMap((nodeId) => {
+    const node = nodes.find((candidate) => candidate.id === nodeId);
+    return node ? [node] : [];
+  });
+  return (
+    <RelationshipList title={title} nodes={relatedNodes} onSelect={onSelect} />
   );
 }
 

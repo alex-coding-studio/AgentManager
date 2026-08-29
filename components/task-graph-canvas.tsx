@@ -18,7 +18,7 @@ import {
   type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { FileText, GitFork, Info, Plus } from 'lucide-react';
+import { FileText, GitFork, Info, LoaderCircle, Plus, X } from 'lucide-react';
 import type { TaskGraphNode } from '@/lib/task-graph';
 import {
   buildTaskGraphLayout,
@@ -34,9 +34,12 @@ type TaskCardData = Record<string, unknown> & {
   color: string;
   description?: string;
   resourceSummary?: string;
+  transientKind?: TaskGraphPreview['kind'];
+  status?: string;
   relationshipCount: number;
   onDecompose: (nodeId: string) => void;
   onInspect: (nodeId: string) => void;
+  onCancelRun: (runId: string) => void;
 };
 
 type TaskFlowNode = Node<TaskCardData, 'task'>;
@@ -52,6 +55,7 @@ export function TaskGraphCanvas({
   onInspectNode,
   onSelectPreview,
   onDecompose,
+  onCancelRun,
 }: {
   nodes: TaskGraphNode[];
   previews: TaskGraphPreview[];
@@ -61,6 +65,7 @@ export function TaskGraphCanvas({
   onInspectNode: (nodeId: string) => void;
   onSelectPreview: (previewId: string) => void;
   onDecompose: (nodeId: string) => void;
+  onCancelRun: (runId: string) => void;
 }) {
   const graph = useMemo(
     () =>
@@ -70,8 +75,9 @@ export function TaskGraphCanvas({
         focusedNodeId,
         onDecompose,
         onInspectNode,
+        onCancelRun,
       ),
-    [focusedNodeId, nodes, onDecompose, onInspectNode, previews],
+    [focusedNodeId, nodes, onCancelRun, onDecompose, onInspectNode, previews],
   );
   const [flowNodes, setFlowNodes, onNodesChange] = useNodesState(graph.nodes);
   const [flowEdges, setFlowEdges, onEdgesChange] = useEdgesState(graph.edges);
@@ -117,8 +123,12 @@ export function TaskGraphCanvas({
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
       onNodeClick={(_, node) => {
-        if (node.data.kind === 'preview') onSelectPreview(node.id);
-        else onFocusNode(node.id);
+        if (
+          node.data.kind === 'preview' &&
+          node.data.transientKind === 'request'
+        ) {
+          onSelectPreview(node.id);
+        } else onFocusNode(node.id);
       }}
       onPaneClick={() => onFocusNode('')}
       nodesDraggable={false}
@@ -150,6 +160,10 @@ export function TaskGraphCanvas({
           <span className="w-5 border-t border-dashed border-amber-600" />
           Selected dependencies
         </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-5 border-t-2 border-dashed border-violet-500" />
+          Candidate
+        </span>
       </Panel>
       <Controls
         showInteractive={false}
@@ -161,6 +175,7 @@ export function TaskGraphCanvas({
 
 function TaskCard({ id, data, selected }: NodeProps<TaskFlowNode>) {
   const preview = data.kind === 'preview';
+  const running = data.transientKind === 'run';
   return (
     <div
       className={cn(
@@ -190,10 +205,39 @@ function TaskCard({ id, data, selected }: NodeProps<TaskFlowNode>) {
               {data.relationshipCount}
             </span>
           ) : null}
-          <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-medium capitalize text-secondary-foreground">
-            {preview ? 'Preview' : data.type}
+          <span
+            className={cn(
+              'rounded-full px-2 py-0.5 text-[10px] font-medium capitalize',
+              preview
+                ? 'bg-secondary text-secondary-foreground'
+                : 'bg-foreground text-background',
+            )}
+            style={
+              preview
+                ? {
+                    backgroundColor: `color-mix(in srgb, ${data.color} 12%, transparent)`,
+                    color: data.color,
+                  }
+                : undefined
+            }
+          >
+            {running ? 'Running' : data.type}
           </span>
-          {!preview ? (
+          {running ? (
+            <button
+              type="button"
+              className="nodrag nopan grid size-6 place-items-center rounded-full text-muted-foreground transition hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
+              aria-label="Cancel Agent Run"
+              title="Cancel Agent Run"
+              onClick={(event) => {
+                event.stopPropagation();
+                data.onCancelRun(id);
+              }}
+            >
+              <X className="size-3.5" />
+            </button>
+          ) : null}
+          {!preview || data.transientKind === 'candidate' ? (
             <button
               type="button"
               className="nodrag nopan grid size-6 place-items-center rounded-full text-muted-foreground transition hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
@@ -216,7 +260,14 @@ function TaskCard({ id, data, selected }: NodeProps<TaskFlowNode>) {
             {data.description}
           </p>
           <p className="mt-2 text-[10px] text-muted-foreground">
-            {data.resourceSummary}
+            {running ? (
+              <span className="flex items-center gap-1.5">
+                <LoaderCircle className="size-3 animate-spin" />
+                Codex is working…
+              </span>
+            ) : (
+              data.resourceSummary
+            )}
           </p>
         </div>
       ) : (
@@ -272,6 +323,7 @@ function buildFlowGraph(
   focusedNodeId: string,
   onDecompose: (nodeId: string) => void,
   onInspect: (nodeId: string) => void,
+  onCancelRun: (runId: string) => void,
 ) {
   const layout = buildTaskGraphLayout(nodes, previews);
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
@@ -301,25 +353,30 @@ function buildFlowGraph(
       },
       data: {
         kind: layoutNode.kind,
-        title: node?.title ?? 'Decomposition request',
-        type: node?.type ?? 'request',
+        title: node?.title ?? preview?.title ?? 'Decomposition request',
+        type: node?.type ?? preview?.type ?? 'Preview',
         resources: node?.resources ?? [],
         relationshipCount: node
           ? node.dependsOn.length +
             nodes.filter((candidate) => candidate.dependsOn.includes(node.id))
               .length
           : 0,
-        description: preview?.instruction,
+        description: preview?.description ?? preview?.instruction,
+        transientKind: preview?.kind ?? 'request',
+        status: preview?.status,
         resourceSummary: preview
-          ? `${preview.inheritedResourceCount} inherited · ${preview.additionalResourceCount} added`
+          ? preview.kind === 'candidate' && preview.candidate
+            ? `Revision ${preview.candidate.revision} · ${preview.candidate.resources.length} Resources`
+            : `${preview.inheritedResourceCount} inherited · ${preview.additionalResourceCount} added`
           : undefined,
         color:
           node?.presentation?.color ??
           (layoutNode.kind === 'preview'
-            ? '#8b5cf6'
+            ? transientColor(preview)
             : nodeTypeColor(node?.type ?? 'node')),
         onDecompose,
         onInspect,
+        onCancelRun,
       },
     };
   });
@@ -387,4 +444,12 @@ function nodeTypeColor(type: string) {
     hash = (hash * 31 + character.charCodeAt(0)) % 360;
   }
   return `hsl(${hash} 55% 48%)`;
+}
+
+function transientColor(preview: TaskGraphPreview | undefined) {
+  if (preview?.kind === 'run') return '#2563eb';
+  if (preview?.kind === 'outcome') {
+    return preview.status === 'failed' ? '#dc2626' : '#d97706';
+  }
+  return '#8b5cf6';
 }

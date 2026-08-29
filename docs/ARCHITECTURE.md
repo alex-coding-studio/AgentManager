@@ -200,11 +200,11 @@ drift away from the cards it connects. Flexible type-specific fields live under
 
 React Flow is the canvas rendering and interaction layer. Canonical graph facts
 remain in node JSON; the library does not own product state. Formal lineage
-edges come from `derivedFrom`. Before Agent transport exists, the Composer can
-render an in-memory Draft request beside its source with a dashed directional
-edge. The request inherits source-node Resources and can add request-only
-Context or local Markdown without mutating the source. That Draft is an
-interaction preview only and is deliberately discarded on reload. Node
+edges come from `derivedFrom`. The Composer sends a bounded request to a
+selected local Agent. The request inherits source-node Resources and can add
+request-only Context or local Markdown without mutating the source. A connected
+transient card represents the Run while it executes, and a validated proposal
+replaces it with Candidate cards. Node
 positions are a deterministic Dagre projection driven only by lineage and
 Request edges. The layout uses a left-to-right rank direction, generous rank
 and sibling spacing, and bounded stable offsets so every target remains to the
@@ -233,6 +233,45 @@ lists are empty. The server repeats that reference check immediately before
 moving the complete Node directory to the operating system Trash. Deletion
 never reconnects Nodes or cascades through the graph; the deleted Node's own
 upstream relationships disappear with its directory.
+
+Local Agent invocation is isolated behind a transport boundary. The first
+transport launches the installed Codex CLI as a persistent-session, read-only child
+process and uses the user's existing subscription login rather than storing an
+API key. AgentManager sends the complete Harness and bounded request packet on
+standard input, consumes structured JSON-line events, records the provider
+thread identifier and reported usage when available, and validates the final
+JSON before rendering it. Claude remains a separate future transport behind
+the same Agent selector and Run contract.
+
+Each invocation owns a durable `task-decomposition/runs/RUN-*/run.json` record
+with AgentManager request identity, input fingerprint, Harness revision,
+transport, lifecycle timestamps, provider session identifier, usage, validated
+result, and terminal error. Durable Run results can be restored after a page
+reload. Cancel marks the Run terminal before interrupting its process,
+so late output cannot replace the restored Composer input. Proposal,
+clarification, insufficient-evidence, failure, and cancellation remain distinct
+states; only a later explicit acceptance can create formal Node folders.
+
+One bounded Coordinator Agent Session belongs to each decomposition root. The
+first Run creates a persistent provider Session; later parent-level additions
+resume its `agentSessionId` and send supplemental Instructions, Resources, graph
+deltas, and the current immutable sibling versions. The transport starts a fresh
+Session when no resumable identifier exists or when bounded Session policy
+requires a handoff. The initial Codex capability probe used an ephemeral Session
+and remains evidence only; it is not a reusable Coordinator baseline.
+
+Run operations are explicit. `propose` discovers the first direct children,
+`append-candidates` may add new siblings without modifying existing children,
+and `revise-candidate` may return only the same Candidate at its next revision.
+The validator rejects identifier collisions and output outside the operation
+boundary. `no-change` is a valid incremental result; conflicts with existing
+boundaries become clarification rather than implicit rewrites.
+
+Discarding an unaccepted Candidate moves its generated directory to the
+operating system Trash and removes it from the Proposal result. Sibling
+Candidates remain unchanged. When the discarded Candidate is the Proposal's
+last result, the complete Run directory moves to Trash. Accepted Candidates are
+formal Nodes and cannot use this transient deletion path.
 
 Every node is a folder so it can carry its JSON card, node-local Resources, and
 future generated artifacts without inventing a database relationship. Semantic
