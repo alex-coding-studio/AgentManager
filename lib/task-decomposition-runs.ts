@@ -1,0 +1,952 @@
+import { createHash, randomUUID } from 'node:crypto';
+import {
+  access,
+  copyFile,
+  mkdir,
+  readdir,
+  readFile,
+  rename,
+  writeFile,
+} from 'node:fs/promises';
+import path from 'node:path';
+import trash from 'trash';
+import type { RegisteredProject } from './project-registry.ts';
+import {
+  TASK_DECOMPOSITION_HARNESS_ID,
+  TASK_DECOMPOSITION_HARNESS_REVISION,
+  parseTaskDecompositionHarnessResult,
+  type TaskDecompositionHarnessResult,
+} from './task-decomposition-harness.ts';
+import {
+  buildTaskDecompositionContinuationPrompt,
+  buildTaskDecompositionPrompt,
+} from './task-decomposition-prompt.ts';
+import {
+  readTaskDecompositionAttachment,
+  readTaskDecompositionContext,
+} from './task-decomposition-context.ts';
+import {
+  startCodexRun,
+  type LocalAgentRun,
+  type LocalAgentUsage,
+} from './local-agent-transport.ts';
+import {
+  listTaskGraphNodes,
+  readTaskGraphMarkdownResource,
+  type TaskGraphNode,
+} from './task-graph.ts';
+
+export type TaskDecompositionRunStatus =
+  | 'running'
+  | 'validating'
+  | 'proposal'
+  | 'clarification'
+  | 'insufficient-evidence'
+  | 'no-change'
+  | 'failed'
+  | 'canceled';
+
+export type TaskDecompositionRunRecord = {
+  schemaVersion: 1;
+  runId: string;
+  sessionId: string;
+  requestId: string;
+  agentSessionId: string | null;
+  agentSessionMode?: 'persistent';
+  sourceNodeId: string;
+  operation: 'propose' | 'append-candidates' | 'revise-candidate';
+  parentRunId?: string;
+  revisionOf?: string;
+  status: TaskDecompositionRunStatus;
+  transport: 'codex-cli';
+  harness: {
+    id: typeof TASK_DECOMPOSITION_HARNESS_ID;
+    revision: typeof TASK_DECOMPOSITION_HARNESS_REVISION;
+  };
+  input?: {
+    instruction: string;
+    projectInstructions: string;
+    resourcePaths: string[];
+    requestArtifact: 'request.json';
+  };
+  inputFingerprint: string;
+  startedAt: string;
+  updatedAt: string;
+  endedAt: string | null;
+  usage: LocalAgentUsage | null;
+  result: TaskDecompositionHarnessResult | null;
+  error: string | null;
+};
+
+type RunRequest = {
+  sourceNodeId: string;
+  instruction: string;
+  contextRefs: string[];
+  files: File[];
+  revisionRunId?: string;
+  revisionCandidateId?: string;
+  operation?: 'propose' | 'append-candidates';
+};
+
+type ResourceContent = {
+  kind: string;
+  path: string;
+  content: string;
+};
+
+type ActiveRun = {
+  record: TaskDecompositionRunRecord;
+  agent: LocalAgentRun;
+};
+
+const activeRuns = getActiveRuns();
+
+export async function startTaskDecompositionRun(
+  project: RegisteredProject,
+  input: RunRequest,
+) {
+  validateRunRequest(input);
+  const nodes = await listTaskGraphNodes(project);
+  const sourceNode = nodes.find((node) => node.id === input.sourceNodeId);
+  if (!sourceNode) throw new Error('The source Node could not be found.');
+  const revisionTarget = await resolveRevisionTarget(project, input);
+  const operation = revisionTarget
+    ? 'revise-candidate'
+    : (input.operation ?? 'propose');
+  const coordinatorCandidate =
+    operation === 'propose'
+      ? null
+      : (revisionTarget?.run ??
+        (await findLatestCoordinatorRun(project, sourceNode.id)));
+  const coordinatorRun =
+    coordinatorCandidate?.agentSessionMode === 'persistent'
+      ? coordinatorCandidate
+      : null;
+  const continuesExistingSession = Boolean(coordinatorRun?.agentSessionId);
+  const existingCandidateChildren = await collectExistingCandidateChildren(
+    project,
+    sourceNode.id,
+  );
+  const reservedCandidateIds = await collectReservedCandidateIds(project);
+  const formalChildren = nodes.filter((node) =>
+    node.derivedFrom?.includes(sourceNode.id),
+  );
+  if (
+    [...activeRuns.values()].some(
+      (active) =>
+        active.record.sourceNodeId === sourceNode.id &&
+        ['running', 'validating'].includes(active.record.status),
+    )
+  ) {
+    throw new Error('This Node already has an active Agent Run.');
+  }
+
+  const runId = `RUN-${randomUUID()}`;
+  const sessionId = coordinatorRun?.sessionId ?? `SESSION-${randomUUID()}`;
+  const requestId = `REQUEST-${randomUUID()}`;
+  const runPath = taskDecompositionRunPath(project, runId);
+  const resourcesPath = path.join(runPath, 'resources');
+  await mkdir(resourcesPath, { recursive: true });
+
+  const uploadedResources = await saveUploadedResources(
+    runId,
+    resourcesPath,
+    input.files,
+  );
+  const featureContext = await readTaskDecompositionContext(project);
+  const resources = await collectResourceContents(
+    project,
+    sourceNode,
+    [
+      ...input.contextRefs,
+      ...(revisionTarget?.candidate.resources.map(
+        (resource) => resource.path,
+      ) ?? []),
+    ],
+    uploadedResources,
+    featureContext.attachments.map((attachment) => attachment.fileName),
+  );
+  const requestIdentity = {
+    sessionId,
+    requestId,
+    inputFingerprint: '',
+  };
+  const packetWithoutFingerprint = {
+    request: requestIdentity,
+    operation,
+    instruction: input.instruction.trim(),
+    projectInstructions: continuesExistingSession
+      ? undefined
+      : featureContext.instructions,
+    graphMap: continuesExistingSession ? undefined : nodes.map(graphMapEntry),
+    expandedNodes: continuesExistingSession ? undefined : [sourceNode],
+    revisionTarget: revisionTarget?.candidate ?? null,
+    reservedCandidateIds: reservedCandidateIds.filter(
+      (candidateId) => candidateId !== revisionTarget?.candidate.candidateId,
+    ),
+    existingChildren:
+      operation === 'append-candidates'
+        ? continuesExistingSession
+          ? [
+              ...formalChildren.map((node) => ({
+                id: node.id,
+                updatedAt: node.updatedAt,
+              })),
+              ...existingCandidateChildren.map((candidate) => ({
+                candidateId: candidate.candidateId,
+                revision: candidate.revision,
+              })),
+            ]
+          : [...formalChildren.map(graphMapEntry), ...existingCandidateChildren]
+        : undefined,
+    resources: !continuesExistingSession
+      ? resources
+      : resources.filter(
+          (resource) =>
+            input.contextRefs.includes(resource.path) ||
+            uploadedResources.some((upload) => upload.path === resource.path),
+        ),
+  };
+  requestIdentity.inputFingerprint = createHash('sha256')
+    .update(JSON.stringify(packetWithoutFingerprint))
+    .digest('hex');
+  const prompt = continuesExistingSession
+    ? buildTaskDecompositionContinuationPrompt(packetWithoutFingerprint)
+    : buildTaskDecompositionPrompt(packetWithoutFingerprint);
+  const timestamp = new Date().toISOString();
+  await writeFile(
+    path.join(runPath, 'request.json'),
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        createdAt: timestamp,
+        packet: packetWithoutFingerprint,
+        prompt,
+      },
+      null,
+      2,
+    )}\n`,
+    { flag: 'wx' },
+  );
+  const record: TaskDecompositionRunRecord = {
+    schemaVersion: 1,
+    runId,
+    sessionId,
+    requestId,
+    agentSessionId: null,
+    agentSessionMode: 'persistent',
+    sourceNodeId: sourceNode.id,
+    operation,
+    parentRunId: coordinatorCandidate?.runId,
+    revisionOf: revisionTarget?.candidate.candidateId,
+    status: 'running',
+    transport: 'codex-cli',
+    harness: {
+      id: TASK_DECOMPOSITION_HARNESS_ID,
+      revision: TASK_DECOMPOSITION_HARNESS_REVISION,
+    },
+    input: {
+      instruction: input.instruction.trim(),
+      projectInstructions: featureContext.instructions,
+      resourcePaths: resources.map((resource) => resource.path),
+      requestArtifact: 'request.json',
+    },
+    inputFingerprint: requestIdentity.inputFingerprint,
+    startedAt: timestamp,
+    updatedAt: timestamp,
+    endedAt: null,
+    usage: null,
+    result: null,
+    error: null,
+  };
+  await writeRunRecord(project, record);
+
+  const agent = startCodexRun({
+    workingDirectory: runPath,
+    prompt,
+    resumeThreadId: coordinatorRun?.agentSessionId ?? undefined,
+  });
+  activeRuns.set(runKey(project, runId), { record, agent });
+  void finishTaskDecompositionRun(
+    project,
+    record,
+    agent,
+    nodes,
+    resources,
+    revisionTarget?.candidate,
+    operation === 'revise-candidate' ? [] : reservedCandidateIds,
+  );
+  return record;
+}
+
+export async function readTaskDecompositionRun(
+  project: RegisteredProject,
+  runId: string,
+) {
+  validateRunId(runId);
+  const record = JSON.parse(
+    await readFile(
+      path.join(taskDecompositionRunPath(project, runId), 'run.json'),
+      'utf8',
+    ),
+  ) as TaskDecompositionRunRecord;
+  record.operation ??= record.revisionOf ? 'revise-candidate' : 'propose';
+  await ensureCandidateArtifacts(project, record);
+  return record;
+}
+
+export async function listLatestTaskDecompositionRuns(
+  project: RegisteredProject,
+) {
+  const root = path.join(project.planningPath, 'task-decomposition', 'runs');
+  const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
+  const records = await Promise.all(
+    entries
+      .filter((entry) => entry.isDirectory() && /^RUN-/i.test(entry.name))
+      .map((entry) =>
+        readTaskDecompositionRun(project, entry.name).catch(() => null),
+      ),
+  );
+  return records
+    .filter((record): record is TaskDecompositionRunRecord => record !== null)
+    .sort((left, right) => left.startedAt.localeCompare(right.startedAt));
+}
+
+export async function cancelTaskDecompositionRun(
+  project: RegisteredProject,
+  runId: string,
+) {
+  const record = await readTaskDecompositionRun(project, runId);
+  if (!['running', 'validating'].includes(record.status)) return record;
+
+  const active = activeRuns.get(runKey(project, runId));
+  const timestamp = new Date().toISOString();
+  const canceledRecord = active?.record ?? record;
+  canceledRecord.status = 'canceled';
+  canceledRecord.updatedAt = timestamp;
+  canceledRecord.endedAt = timestamp;
+  canceledRecord.error = null;
+  await writeRunRecord(project, canceledRecord);
+  active?.agent.cancel();
+  return canceledRecord;
+}
+
+export async function acceptTaskDecompositionCandidate(
+  project: RegisteredProject,
+  runId: string,
+  candidateId: string,
+) {
+  if (
+    [...activeRuns.values()].some(
+      (active) =>
+        active.record.revisionOf === candidateId &&
+        ['running', 'validating'].includes(active.record.status),
+    )
+  ) {
+    throw new Error('Wait for the active Candidate revision to finish.');
+  }
+  const run = await readTaskDecompositionRun(project, runId);
+  if (run.result?.outcome !== 'proposal') {
+    throw new Error('The Candidate proposal is unavailable.');
+  }
+  const candidate = run.result.candidates.find(
+    (value) => value.candidateId === candidateId,
+  );
+  if (!candidate) throw new Error('The Candidate could not be found.');
+
+  const existingNodes = await listTaskGraphNodes(project);
+  const accepted = existingNodes.find(
+    (node) =>
+      node.provenance?.candidateId === candidateId &&
+      node.provenance?.runId === runId,
+  );
+  if (accepted) return { node: accepted, nodes: existingNodes };
+
+  const nextNumber =
+    existingNodes.reduce((largest, node) => {
+      const number = Number(node.id.replace(/^NODE-/, ''));
+      return Number.isFinite(number) ? Math.max(largest, number) : largest;
+    }, 0) + 1;
+  const nodeId = `NODE-${String(nextNumber).padStart(4, '0')}`;
+  const nodesPath = path.join(project.planningPath, 'task-graph', 'nodes');
+  const nodePath = path.join(nodesPath, nodeId);
+  const temporaryPath = path.join(nodesPath, `.${nodeId}-${randomUUID()}.tmp`);
+  const candidateOutput = path.join(
+    taskDecompositionRunPath(project, runId),
+    'candidates',
+    candidateId,
+    'output.md',
+  );
+  await mkdir(temporaryPath, { recursive: true });
+
+  try {
+    await copyFile(candidateOutput, path.join(temporaryPath, 'output.md'));
+    const timestamp = new Date().toISOString();
+    const matchingType = existingNodes.find(
+      (node) => node.type === candidate.type,
+    );
+    const node: TaskGraphNode = {
+      schemaVersion: 1,
+      id: nodeId,
+      role: 'node',
+      type: candidate.type,
+      title: candidate.title,
+      summary: candidate.summary,
+      status: 'accepted',
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      resources: [
+        ...candidate.resources,
+        {
+          kind: 'output',
+          path: `task-graph/nodes/${nodeId}/output.md`,
+        },
+      ],
+      derivedFrom: candidate.derivedFrom,
+      dependsOn: candidate.dependsOn,
+      typeTemplateRef:
+        candidate.typeTemplateRef ??
+        matchingType?.typeTemplateRef ??
+        matchingType?.id ??
+        nodeId,
+      metadata: candidate.metadata,
+      presentation: candidate.presentation,
+      provenance: {
+        runId,
+        candidateId,
+        revision: candidate.revision,
+      },
+    };
+    await writeFile(
+      path.join(temporaryPath, 'node.json'),
+      `${JSON.stringify(node, null, 2)}\n`,
+      { flag: 'wx' },
+    );
+    await mkdir(nodesPath, { recursive: true });
+    await rename(temporaryPath, nodePath);
+    return { node, nodes: await listTaskGraphNodes(project) };
+  } catch (error) {
+    await import('node:fs/promises').then(({ rm }) =>
+      rm(temporaryPath, { recursive: true, force: true }),
+    );
+    throw error;
+  }
+}
+
+export async function discardTaskDecompositionCandidate(
+  project: RegisteredProject,
+  runId: string,
+  candidateId: string,
+) {
+  if (
+    [...activeRuns.values()].some(
+      (active) =>
+        active.record.revisionOf === candidateId &&
+        ['running', 'validating'].includes(active.record.status),
+    )
+  ) {
+    throw new Error('Cancel or finish the active Candidate revision first.');
+  }
+  const requestedRun = await readTaskDecompositionRun(project, runId);
+  if (requestedRun.result?.outcome !== 'proposal') {
+    throw new Error('The Candidate proposal is unavailable.');
+  }
+  const requestedCandidate = requestedRun.result.candidates.find(
+    (candidate) => candidate.candidateId === candidateId,
+  );
+  if (!requestedCandidate) throw new Error('The Candidate could not be found.');
+  if (
+    [...activeRuns.values()].some(
+      (active) =>
+        active.record.sourceNodeId === requestedRun.sourceNodeId &&
+        ['running', 'validating'].includes(active.record.status),
+    )
+  ) {
+    throw new Error('Cancel or finish the active Agent Run first.');
+  }
+  const accepted = (await listTaskGraphNodes(project)).some(
+    (node) => node.provenance?.candidateId === candidateId,
+  );
+  if (accepted) {
+    throw new Error('An accepted Candidate must be managed as a formal Node.');
+  }
+
+  const candidateRuns = (await readAllTaskDecompositionRuns(project)).filter(
+    (run) =>
+      run.result?.outcome === 'proposal' &&
+      run.result.candidates.some(
+        (candidate) => candidate.candidateId === candidateId,
+      ),
+  );
+  let requestedRunDeleted = false;
+  for (const run of candidateRuns) {
+    const runDeleted = await discardCandidateFromRun(project, run, candidateId);
+    if (run.runId === runId) requestedRunDeleted = runDeleted;
+  }
+  return { candidateId, runDeleted: requestedRunDeleted };
+}
+
+async function discardCandidateFromRun(
+  project: RegisteredProject,
+  run: TaskDecompositionRunRecord,
+  candidateId: string,
+) {
+  if (run.result?.outcome !== 'proposal') return false;
+  const candidateIndex = run.result.candidates.findIndex(
+    (candidate) => candidate.candidateId === candidateId,
+  );
+  if (candidateIndex < 0) return false;
+  const runPath = taskDecompositionRunPath(project, run.runId);
+  if (run.result.candidates.length === 1) {
+    await trash(runPath);
+    return true;
+  }
+  const candidatePath = path.join(runPath, 'candidates', candidateId);
+  const stagedPath = path.join(
+    runPath,
+    'candidates',
+    `.${candidateId}-${randomUUID()}.discarding`,
+  );
+  await rename(candidatePath, stagedPath);
+  try {
+    run.result.candidates.splice(candidateIndex, 1);
+    run.updatedAt = new Date().toISOString();
+    await writeRunRecord(project, run);
+  } catch (error) {
+    await rename(stagedPath, candidatePath);
+    throw error;
+  }
+  await trash(stagedPath);
+  return false;
+}
+
+async function finishTaskDecompositionRun(
+  project: RegisteredProject,
+  record: TaskDecompositionRunRecord,
+  agent: LocalAgentRun,
+  nodes: TaskGraphNode[],
+  resources: ResourceContent[],
+  revisionTarget?: Extract<
+    TaskDecompositionHarnessResult,
+    { outcome: 'proposal' }
+  >['candidates'][number],
+  reservedCandidateIds: string[] = [],
+) {
+  try {
+    const agentResult = await agent.completion;
+    if (isRunCanceled(record)) return;
+    record.status = 'validating';
+    record.agentSessionId = agentResult.threadId;
+    record.usage = agentResult.usage;
+    record.updatedAt = new Date().toISOString();
+    await writeRunRecord(project, record);
+    if (isRunCanceled(record)) return;
+
+    const result = parseTaskDecompositionHarnessResult(
+      agentResult.finalOutput,
+      {
+        request: {
+          sessionId: record.sessionId,
+          requestId: record.requestId,
+          inputFingerprint: record.inputFingerprint,
+        },
+        knownNodeIds: nodes.map((node) => node.id),
+        expandedNodeIds: [record.sourceNodeId],
+        knownResourcePaths: resources.map((resource) => resource.path),
+        previousCandidateRevisions: revisionTarget
+          ? { [revisionTarget.candidateId]: revisionTarget.revision }
+          : undefined,
+        reservedCandidateIds,
+      },
+    );
+    if (
+      revisionTarget &&
+      result.outcome === 'proposal' &&
+      (result.candidates.length !== 1 ||
+        result.candidates[0]?.candidateId !== revisionTarget.candidateId)
+    ) {
+      throw new Error(
+        'A revision must return exactly the requested Candidate identifier.',
+      );
+    }
+    const endedAt = new Date().toISOString();
+    record.status = result.outcome;
+    record.result = result;
+    await ensureCandidateArtifacts(project, record);
+    record.updatedAt = endedAt;
+    record.endedAt = endedAt;
+    await writeRunRecord(project, record);
+  } catch (error) {
+    if (isRunCanceled(record)) return;
+    const endedAt = new Date().toISOString();
+    record.status = 'failed';
+    record.error =
+      error instanceof Error ? error.message : 'The Agent Run failed.';
+    record.updatedAt = endedAt;
+    record.endedAt = endedAt;
+    await writeRunRecord(project, record);
+  } finally {
+    activeRuns.delete(runKey(project, record.runId));
+  }
+}
+
+async function collectResourceContents(
+  project: RegisteredProject,
+  sourceNode: TaskGraphNode,
+  contextRefs: string[],
+  uploads: ResourceContent[],
+  featureAttachmentNames: string[],
+) {
+  const graphPaths = [
+    ...sourceNode.resources.map((resource) => resource.path),
+    ...contextRefs,
+  ];
+  const uniqueGraphPaths = [...new Set(graphPaths)];
+  const graphResources = await Promise.all(
+    uniqueGraphPaths.map(async (resourcePath) => {
+      const resource = await readTaskGraphMarkdownResource(
+        project,
+        resourcePath,
+      );
+      return {
+        kind:
+          sourceNode.resources.find(
+            (candidate) => candidate.path === resourcePath,
+          )?.kind ?? 'context',
+        path: resource.path,
+        content: resource.markdown,
+      };
+    }),
+  );
+  const featureResources = await Promise.all(
+    featureAttachmentNames.map(async (fileName) => {
+      const attachment = await readTaskDecompositionAttachment(
+        project,
+        fileName,
+      );
+      return {
+        kind: 'decomposition-context',
+        path: `task-decomposition/attachments/${attachment.fileName}`,
+        content: attachment.content,
+      };
+    }),
+  );
+  return [...graphResources, ...featureResources, ...uploads];
+}
+
+async function saveUploadedResources(
+  runId: string,
+  resourcesPath: string,
+  files: File[],
+) {
+  const usedNames = new Set<string>();
+  const resources: ResourceContent[] = [];
+  for (const file of files) {
+    if (!/\.(md|markdown)$/i.test(file.name)) {
+      throw new Error('Only Markdown Resources can be added to an Agent Run.');
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      throw new Error('Each Markdown Resource must be 2 MB or smaller.');
+    }
+    const fileName = chooseUniqueFileName(file.name, usedNames);
+    const content = await file.text();
+    await writeFile(path.join(resourcesPath, fileName), content, {
+      flag: 'wx',
+    });
+    resources.push({
+      kind: 'run-attachment',
+      path: path.posix.join(
+        'task-decomposition',
+        'runs',
+        runId,
+        'resources',
+        fileName,
+      ),
+      content,
+    });
+  }
+  return resources;
+}
+
+function graphMapEntry(node: TaskGraphNode) {
+  return {
+    id: node.id,
+    role: node.role,
+    type: node.type,
+    title: node.title,
+    summary: node.summary ?? '',
+    derivedFrom: node.derivedFrom ?? [],
+    dependsOn: node.dependsOn,
+    resourcePaths: node.resources.map((resource) => resource.path),
+  };
+}
+
+async function writeRunRecord(
+  project: RegisteredProject,
+  record: TaskDecompositionRunRecord,
+) {
+  const runPath = taskDecompositionRunPath(project, record.runId);
+  await mkdir(runPath, { recursive: true });
+  const filePath = path.join(runPath, 'run.json');
+  const temporaryPath = `${filePath}.${randomUUID()}.tmp`;
+  await writeFile(temporaryPath, `${JSON.stringify(record, null, 2)}\n`);
+  await rename(temporaryPath, filePath);
+}
+
+function validateRunRequest(input: RunRequest) {
+  if (!/^NODE-\d{4,}$/.test(input.sourceNodeId)) {
+    throw new Error('The source Node is invalid.');
+  }
+  const instruction = input.instruction.trim();
+  if (!instruction) throw new Error('An Instruction is required.');
+  if (instruction.length > 1_000) {
+    throw new Error('The Instruction must be 1,000 characters or fewer.');
+  }
+  if (input.contextRefs.length > 50) {
+    throw new Error('Select no more than 50 additional Context Resources.');
+  }
+  if (input.files.length > 20) {
+    throw new Error('Upload no more than 20 Markdown Resources.');
+  }
+  if (
+    (input.revisionRunId && !input.revisionCandidateId) ||
+    (!input.revisionRunId && input.revisionCandidateId)
+  ) {
+    throw new Error('A complete Candidate revision target is required.');
+  }
+  if (
+    input.operation !== undefined &&
+    !['propose', 'append-candidates'].includes(input.operation)
+  ) {
+    throw new Error('The decomposition operation is invalid.');
+  }
+}
+
+async function resolveRevisionTarget(
+  project: RegisteredProject,
+  input: RunRequest,
+) {
+  if (!input.revisionRunId || !input.revisionCandidateId) return null;
+  const run = await readTaskDecompositionRun(project, input.revisionRunId);
+  if (run.result?.outcome !== 'proposal') {
+    throw new Error('The Candidate revision source is unavailable.');
+  }
+  const candidate = run.result.candidates.find(
+    (value) => value.candidateId === input.revisionCandidateId,
+  );
+  if (!candidate || run.sourceNodeId !== input.sourceNodeId) {
+    throw new Error('The Candidate revision target is invalid.');
+  }
+  return { run, candidate };
+}
+
+async function findLatestCoordinatorRun(
+  project: RegisteredProject,
+  sourceNodeId: string,
+) {
+  const runs = await readAllTaskDecompositionRuns(project);
+  return (
+    runs
+      .filter(
+        (run) =>
+          run.sourceNodeId === sourceNodeId &&
+          run.agentSessionId &&
+          run.agentSessionMode === 'persistent',
+      )
+      .sort((left, right) =>
+        right.startedAt.localeCompare(left.startedAt),
+      )[0] ?? null
+  );
+}
+
+async function collectExistingCandidateChildren(
+  project: RegisteredProject,
+  sourceNodeId: string,
+) {
+  const runs = await readAllTaskDecompositionRuns(project);
+  const latestByCandidate = new Map<
+    string,
+    Extract<
+      TaskDecompositionHarnessResult,
+      { outcome: 'proposal' }
+    >['candidates'][number]
+  >();
+  for (const run of runs.sort((left, right) =>
+    left.startedAt.localeCompare(right.startedAt),
+  )) {
+    if (
+      run.sourceNodeId !== sourceNodeId ||
+      run.result?.outcome !== 'proposal'
+    ) {
+      continue;
+    }
+    for (const candidate of run.result.candidates) {
+      const current = latestByCandidate.get(candidate.candidateId);
+      if (!current || candidate.revision > current.revision) {
+        latestByCandidate.set(candidate.candidateId, candidate);
+      }
+    }
+  }
+  const acceptedIds = new Set(
+    (await listTaskGraphNodes(project)).flatMap((node) =>
+      node.provenance?.candidateId ? [node.provenance.candidateId] : [],
+    ),
+  );
+  return [...latestByCandidate.values()].filter(
+    (candidate) =>
+      candidate.derivedFrom.includes(sourceNodeId) &&
+      !acceptedIds.has(candidate.candidateId),
+  );
+}
+
+async function collectReservedCandidateIds(project: RegisteredProject) {
+  const runs = await readAllTaskDecompositionRuns(project);
+  return [
+    ...new Set(
+      runs.flatMap((run) =>
+        run.result?.outcome === 'proposal'
+          ? run.result.candidates.map((candidate) => candidate.candidateId)
+          : [],
+      ),
+    ),
+  ];
+}
+
+async function readAllTaskDecompositionRuns(project: RegisteredProject) {
+  const root = path.join(project.planningPath, 'task-decomposition', 'runs');
+  const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
+  const records = await Promise.all(
+    entries
+      .filter((entry) => entry.isDirectory() && /^RUN-/i.test(entry.name))
+      .map((entry) =>
+        readTaskDecompositionRun(project, entry.name).catch(() => null),
+      ),
+  );
+  return records.filter(
+    (record): record is TaskDecompositionRunRecord => record !== null,
+  );
+}
+
+function chooseUniqueFileName(value: string, usedNames: Set<string>) {
+  const parsed = path.parse(path.basename(value));
+  const baseName =
+    parsed.name
+      .normalize('NFKD')
+      .replace(/[^a-zA-Z0-9\s_-]/g, '')
+      .trim()
+      .toLowerCase()
+      .replace(/[\s_-]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'resource';
+  const extension =
+    parsed.ext.toLowerCase() === '.markdown' ? '.markdown' : '.md';
+  for (let suffix = 1; suffix <= 999; suffix += 1) {
+    const fileName = `${baseName}${suffix === 1 ? '' : `-${suffix}`}${extension}`;
+    if (!usedNames.has(fileName)) {
+      usedNames.add(fileName);
+      return fileName;
+    }
+  }
+  throw new Error('Could not choose a unique Run Resource name.');
+}
+
+function taskDecompositionRunPath(project: RegisteredProject, runId: string) {
+  validateRunId(runId);
+  return path.join(project.planningPath, 'task-decomposition', 'runs', runId);
+}
+
+function validateRunId(runId: string) {
+  if (!/^RUN-[0-9a-f-]{36}$/i.test(runId)) {
+    throw new Error('The Agent Run identifier is invalid.');
+  }
+}
+
+function runKey(project: RegisteredProject, runId: string) {
+  return `${project.id}:${runId}`;
+}
+
+function getActiveRuns() {
+  const runtime = globalThis as typeof globalThis & {
+    __agentManagerRuns?: Map<string, ActiveRun>;
+  };
+  runtime.__agentManagerRuns ??= new Map<string, ActiveRun>();
+  return runtime.__agentManagerRuns;
+}
+
+async function ensureCandidateArtifacts(
+  project: RegisteredProject,
+  record: TaskDecompositionRunRecord,
+) {
+  if (record.result?.outcome !== 'proposal') return;
+  await Promise.all(
+    record.result.candidates.map(async (candidate) => {
+      const candidatePath = path.join(
+        taskDecompositionRunPath(project, record.runId),
+        'candidates',
+        candidate.candidateId,
+      );
+      const outputPath = path.join(candidatePath, 'output.md');
+      if (
+        await access(outputPath)
+          .then(() => true)
+          .catch(() => false)
+      )
+        return;
+      await mkdir(candidatePath, { recursive: true });
+      await writeFile(outputPath, renderCandidateMarkdown(candidate), {
+        flag: 'wx',
+      });
+    }),
+  );
+}
+
+function renderCandidateMarkdown(
+  candidate: Extract<
+    TaskDecompositionHarnessResult,
+    { outcome: 'proposal' }
+  >['candidates'][number],
+) {
+  const relationships = [
+    `- Derived from: ${candidate.derivedFrom.join(', ')}`,
+    `- Depends on: ${candidate.dependsOn.join(', ') || 'None'}`,
+  ];
+  const resources = candidate.resources.length
+    ? candidate.resources.map(
+        (resource) => `- \`${resource.path}\` (${resource.kind})`,
+      )
+    : ['- None'];
+  const assumptions = candidate.assumptions.length
+    ? candidate.assumptions.map((assumption) => `- ${assumption}`)
+    : ['- None'];
+  const metadata = Object.keys(candidate.metadata).length
+    ? `\n\`\`\`json\n${JSON.stringify(candidate.metadata, null, 2)}\n\`\`\``
+    : '\nNone.';
+  return `# ${candidate.title}
+
+${candidate.summary}
+
+## Candidate
+
+- ID: \`${candidate.candidateId}\`
+- Revision: ${candidate.revision}
+- Type: ${candidate.type}
+
+## Relationships
+
+${relationships.join('\n')}
+
+## Resources
+
+${resources.join('\n')}
+
+## Assumptions
+
+${assumptions.join('\n')}
+
+## Metadata
+${metadata}
+`;
+}
+
+function isRunCanceled(record: TaskDecompositionRunRecord) {
+  return record.status === ('canceled' as TaskDecompositionRunStatus);
+}

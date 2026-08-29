@@ -182,9 +182,9 @@ transport is introduced:
 3. Keep Cards project-defined while using a shared visual language for formal
    Nodes and temporary requests.
 4. Start decomposition from the plus control on any formal Node.
-5. Reuse the source Node's Resources, accept optional request-only Context or
-   local Markdown Resources, and collect one bounded instruction in the
-   Composer.
+5. Reuse the source Node's Resources and collect one bounded instruction in the
+   Composer. Keep optional request-only Context and local Markdown inside one
+   collapsed `Run-only context` disclosure.
 6. Show a local-only request summary beside its source with a visible dashed
    directional edge; generated titles belong only to later Candidate Cards.
 7. Keep the Draft explicitly ephemeral: it is neither persisted nor sent to an
@@ -246,6 +246,56 @@ manual deletion:
    the Canvas to its empty state.
 6. Let the development fixture simulate deletion in memory without touching
    project data.
+
+## Tenth implementation slice
+
+The tenth slice completes the first local Codex Agent Run loop:
+
+1. Choose Codex in the decomposition Composer and send the Instruction,
+   inherited Resources, any explicitly expanded Run-only Resources, feature
+   Context, graph map, and immutable Harness as one bounded request.
+2. Use the installed Codex CLI with the user's existing subscription login; do
+   not require an API key, hosted AgentManager service, or model configuration.
+3. Render a connected running card immediately and let the user cancel it,
+   interrupt the local process, and restore the exact in-memory Composer input.
+4. Persist Run identity, lifecycle, provider session identity, raw usage when
+   available, validated result, and errors beneath the project's planning data.
+5. Restore durable Run results after reload and replace a successful Run with
+   one or more validated Candidate cards.
+6. Keep clarification, insufficient evidence, failure, and cancellation visible
+   as honest outcomes rather than manufacturing a proposal.
+7. Keep every Candidate temporary while supporting inspection, constrained
+   revision, deterministic Markdown generation, and explicit promotion to a
+   formal Node.
+8. Let the user discard an unaccepted Candidate. Move that Candidate and its
+   output to the operating system Trash without changing sibling Candidates;
+   discarding the final Candidate removes the complete Proposal Run.
+
+## Decomposition continuity
+
+Every action preserves the meaning of already visible boundaries:
+
+1. The plus control on a parent asks its Coordinator Agent to discover new
+   direct children from supplemental Instructions or Resources. Existing formal
+   Nodes and Candidates are immutable inputs and are never silently replaced,
+   renamed, merged, or deleted.
+2. The Composer states that existing children will not be replaced. An
+   incremental Run returns only genuinely new sibling Candidates. It may return
+   `no-change` when no additional boundary is supported, or clarification when
+   new evidence conflicts with an existing child.
+3. Candidate `Revise` redefines exactly that Candidate. It returns the same
+   Candidate identifier at the next revision and cannot create siblings or
+   children. A material structural change becomes clarification rather than a
+   hidden expansion.
+4. Child decomposition begins only from that child after its current boundary
+   is accepted. Its plus control then generates that child's own next layer.
+5. Parent-level incremental discovery reuses the parent's bounded Coordinator
+   Agent Session when possible. It sends only new Instructions, new Resources,
+   graph deltas, and current version fingerprints instead of reinjecting
+   unchanged Context. An independent review never reuses that Session.
+
+These rules let a project boundary become more complete as facts arrive without
+allowing stochastic regeneration to overwrite work the user already reviewed.
 
 ## Canvas direction
 

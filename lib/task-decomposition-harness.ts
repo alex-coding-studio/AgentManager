@@ -1,7 +1,7 @@
 import Ajv2020 from 'ajv/dist/2020.js';
 
 export const TASK_DECOMPOSITION_HARNESS_ID = 'agent-manager.task-decomposition';
-export const TASK_DECOMPOSITION_HARNESS_REVISION = 1;
+export const TASK_DECOMPOSITION_HARNESS_REVISION = 2;
 
 export const TASK_DECOMPOSITION_HARNESS_PROMPT = `You are AgentManager's Task Decomposition Agent. Turn the user's current goal and selected evidence into the smallest useful next-level proposal. Do not attempt to decompose an entire product to leaf tasks in one run.
 
@@ -12,6 +12,10 @@ Return only JSON that matches the supplied output schema. You may return a propo
 Every Candidate must have a stable identifier and revision, a concise type and title, a one-or-two-sentence ownership summary, one or more derivedFrom origins, execution-only dependsOn relationships, supported Resource references, and type-specific metadata. Use derivedFrom for decomposition lineage and dependsOn only for execution prerequisites.
 
 Use the lightweight graph map before requesting full content. Request expansion only for a specific unresolved impact. Review direct dependencies, reverse dependents, siblings with the same origin, shared-Resource neighbors, adjacent Candidates, and protected Nodes. If you claim an existing item is affected, include it in reviewedNodeIds. Stop and clarify when bounded expansion cannot resolve a material ambiguity.
+
+When the request operation is revise-candidate, redefine only the supplied Candidate and return the same candidateId at the next revision. Do not create sibling Candidates or decompose it into children. If the requested change requires a material restructuring outside that Candidate, return clarification so decomposition can restart from its parent.
+
+When the request operation is append-candidates, treat every supplied existing child as immutable. Return only genuinely new sibling Candidates, never replacements or edits. If no new boundary is supported, return no-change. If new evidence conflicts with an existing child, return clarification instead of rewriting it.
 
 Keep assumptions explicit, preserve accepted product meaning, and prefer a smaller supported proposal over a complete-looking invention.`;
 
@@ -73,6 +77,7 @@ export type TaskDecompositionHarnessResult = HarnessResultBase &
         };
       }
     | { outcome: 'insufficient-evidence'; missingEvidence: string[] }
+    | { outcome: 'no-change'; reason: string }
   );
 
 export type HarnessValidationContext = {
@@ -81,6 +86,7 @@ export type HarnessValidationContext = {
   expandedNodeIds: Iterable<string>;
   knownResourcePaths: Iterable<string>;
   previousCandidateRevisions?: Readonly<Record<string, number>>;
+  reservedCandidateIds?: Iterable<string>;
 };
 
 const nonEmptyString = { type: 'string', minLength: 1, pattern: '\\S' };
@@ -159,6 +165,23 @@ export const TASK_DECOMPOSITION_HARNESS_OUTPUT_SCHEMA = {
         ...baseProperties,
         outcome: { const: 'insufficient-evidence' },
         missingEvidence: { ...stringArray, minItems: 1 },
+      },
+    },
+    {
+      type: 'object',
+      additionalProperties: false,
+      required: [
+        'schemaVersion',
+        'harness',
+        'request',
+        'impactReview',
+        'outcome',
+        'reason',
+      ],
+      properties: {
+        ...baseProperties,
+        outcome: { const: 'no-change' },
+        reason: { ...nonEmptyString, maxLength: 600 },
       },
     },
   ],
@@ -372,11 +395,18 @@ function validateCandidates(
     'Candidate identifiers must be unique in one proposal.',
   );
   const knownResourcePaths = new Set(context.knownResourcePaths);
+  const reservedCandidateIds = new Set(context.reservedCandidateIds ?? []);
   for (const candidate of candidates) {
     const previousRevision =
       context.previousCandidateRevisions?.[candidate.candidateId];
     const expectedRevision =
       previousRevision === undefined ? 1 : previousRevision + 1;
+    if (
+      previousRevision === undefined &&
+      reservedCandidateIds.has(candidate.candidateId)
+    ) {
+      fail(`Candidate ${candidate.candidateId} already exists.`);
+    }
     if (candidate.revision !== expectedRevision) {
       fail(
         `Candidate ${candidate.candidateId} must use revision ${expectedRevision}.`,

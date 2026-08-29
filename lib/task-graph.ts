@@ -39,6 +39,11 @@ export type TaskGraphNode = {
   presentation?: {
     color?: string;
   };
+  provenance?: {
+    runId: string;
+    candidateId: string;
+    revision: number;
+  };
 };
 
 export async function listTaskGraphNodes(project: RegisteredProject) {
@@ -327,7 +332,11 @@ export async function readTaskGraphMarkdownResource(
     ) &&
     !/^task-graph\/nodes\/NODE-\d{4,}\/resources\/[a-zA-Z0-9][a-zA-Z0-9._-]*\.(md|markdown)$/i.test(
       resourcePath,
-    )
+    ) &&
+    !/^task-decomposition\/runs\/RUN-[0-9a-f-]{36}\/candidates\/CANDIDATE-\d{4,}\/output\.md$/i.test(
+      resourcePath,
+    ) &&
+    !/^task-graph\/nodes\/NODE-\d{4,}\/output\.md$/i.test(resourcePath)
   ) {
     throw new Error('The source document path is invalid.');
   }
