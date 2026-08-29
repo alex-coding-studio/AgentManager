@@ -152,6 +152,24 @@ domain-specific structure to user context and source material.
 The accepted pre-implementation design is recorded in
 [`TASK_DECOMPOSITION_HARNESS.md`](TASK_DECOMPOSITION_HARNESS.md).
 
+## Fifth implementation slice
+
+The fifth slice turns the agreed Harness design into an executable contract
+without invoking an Agent yet:
+
+1. Compile an immutable, compact Task Decomposition Harness into AgentManager.
+2. Expose one machine-readable output contract for proposals, bounded
+   clarifications, and insufficient-evidence results.
+3. Validate request identity, Candidate revisions, graph references, Resource
+   references, and impact claims before any future persistence step.
+4. Reject stale, malformed, unsupported, or invented output before it can reach
+   the formal graph.
+5. Keep deterministic tests for the three outcomes and the Harness context
+   budget.
+
+Agent transport, Decomposition Session persistence, Candidate UI, context
+expansion, acceptance, and formal Node promotion remain outside this slice.
+
 ## Canvas direction
 
 Task Decomposition is an open canvas rather than a traditional project board or
