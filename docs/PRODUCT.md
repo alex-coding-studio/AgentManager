@@ -211,6 +211,24 @@ The seventh slice completes relationship visualization before Agent transport:
 The fixture exists for visual acceptance and regression checks. It is disabled
 in production and is not a simulation of Agent behavior.
 
+## Eighth implementation slice
+
+The eighth slice makes larger graphs readable without persisting presentation
+coordinates:
+
+1. Derive a deterministic left-to-right layout from lineage and Request edges
+   with wider spacing and small stable offsets instead of a rigid grid.
+2. Guarantee that every derived Node remains to the right of its origin while
+   allowing flexible vertical placement.
+3. Hide dependency edges in the resting graph, then reveal direct dependencies
+   as amber dashed curves when the user focuses a card.
+4. Dim unrelated cards and edges while preserving the focused card and all of
+   its direct lineage and dependency relationships.
+5. Let a card click focus relationships and provide a separate details control
+   for opening the inspector.
+6. Keep the initial fitted view readable while allowing manual zoom down to
+   twenty percent for large graphs.
+
 ## Canvas direction
 
 Task Decomposition is an open canvas rather than a traditional project board.

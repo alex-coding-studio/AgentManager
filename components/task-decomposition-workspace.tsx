@@ -57,7 +57,8 @@ export function TaskDecompositionWorkspace({
   const [files, setFiles] = useState<File[]>([]);
   const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState('');
-  const [selectedNodeId, setSelectedNodeId] = useState('');
+  const [focusedNodeId, setFocusedNodeId] = useState('');
+  const [inspectorNodeId, setInspectorNodeId] = useState('');
   const [requestPreviews, setRequestPreviews] = useState<
     DecompositionRequestPreview[]
   >(
@@ -101,7 +102,8 @@ export function TaskDecompositionWorkspace({
   );
   const sourceCount =
     selectedRefs.length + retainedAttachmentRefs.length + files.length;
-  const selectedNode = nodes.find((node) => node.id === selectedNodeId) ?? null;
+  const selectedNode =
+    nodes.find((node) => node.id === inspectorNodeId) ?? null;
   const decomposeSource =
     nodes.find((node) => node.id === decomposeSourceId) ?? null;
 
@@ -167,7 +169,7 @@ export function TaskDecompositionWorkspace({
       return;
     }
     setNodes(result.nodes);
-    setSelectedNodeId(result.node.id);
+    setFocusedNodeId(result.node.id);
     setTitle('');
     setSelectedRefs([]);
     setEditingId('');
@@ -191,7 +193,7 @@ export function TaskDecompositionWorkspace({
     );
     setFiles([]);
     setError('');
-    setSelectedNodeId('');
+    setInspectorNodeId('');
     setFormOpen(true);
   }
 
@@ -219,7 +221,6 @@ export function TaskDecompositionWorkspace({
     const preview = requestPreviews.find(
       (candidate) => candidate.sourceNodeId === nodeId,
     );
-    setSelectedNodeId('');
     setDecomposeSourceId(nodeId);
     setDecompositionGoal(preview?.instruction ?? '');
     setRequestSelectedRefs(preview?.contextRefs ?? []);
@@ -382,8 +383,12 @@ export function TaskDecompositionWorkspace({
             <TaskGraphCanvas
               nodes={nodes}
               previews={requestPreviews}
-              selectedNodeId={selectedNodeId}
-              onSelectNode={setSelectedNodeId}
+              focusedNodeId={focusedNodeId}
+              onFocusNode={setFocusedNodeId}
+              onInspectNode={(nodeId) => {
+                setFocusedNodeId(nodeId);
+                setInspectorNodeId(nodeId);
+              }}
               onSelectPreview={selectRequestPreview}
               onDecompose={openDecomposition}
             />
@@ -912,7 +917,7 @@ export function TaskDecompositionWorkspace({
       <Sheet
         open={selectedNode !== null}
         onOpenChange={(open) => {
-          if (!open) setSelectedNodeId('');
+          if (!open) setInspectorNodeId('');
         }}
       >
         <SheetContent className="sm:max-w-md">

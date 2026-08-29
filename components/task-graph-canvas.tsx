@@ -17,7 +17,7 @@ import {
   type NodeProps,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { FileText, Plus } from 'lucide-react';
+import { FileText, GitFork, Info, Plus } from 'lucide-react';
 import type { TaskGraphNode } from '@/lib/task-graph';
 import {
   buildTaskGraphLayout,
@@ -33,7 +33,9 @@ type TaskCardData = Record<string, unknown> & {
   color: string;
   description?: string;
   resourceSummary?: string;
+  relationshipCount: number;
   onDecompose: (nodeId: string) => void;
+  onInspect: (nodeId: string) => void;
 };
 
 type TaskFlowNode = Node<TaskCardData, 'task'>;
@@ -43,21 +45,30 @@ const nodeTypes = { task: memo(TaskCard) };
 export function TaskGraphCanvas({
   nodes,
   previews,
-  selectedNodeId,
-  onSelectNode,
+  focusedNodeId,
+  onFocusNode,
+  onInspectNode,
   onSelectPreview,
   onDecompose,
 }: {
   nodes: TaskGraphNode[];
   previews: TaskGraphPreview[];
-  selectedNodeId: string;
-  onSelectNode: (nodeId: string) => void;
+  focusedNodeId: string;
+  onFocusNode: (nodeId: string) => void;
+  onInspectNode: (nodeId: string) => void;
   onSelectPreview: (previewId: string) => void;
   onDecompose: (nodeId: string) => void;
 }) {
   const graph = useMemo(
-    () => buildFlowGraph(nodes, previews, onDecompose),
-    [nodes, onDecompose, previews],
+    () =>
+      buildFlowGraph(
+        nodes,
+        previews,
+        focusedNodeId,
+        onDecompose,
+        onInspectNode,
+      ),
+    [focusedNodeId, nodes, onDecompose, onInspectNode, previews],
   );
   const [flowNodes, setFlowNodes, onNodesChange] = useNodesState(graph.nodes);
   const [flowEdges, setFlowEdges, onEdgesChange] = useEdgesState(graph.edges);
@@ -66,11 +77,11 @@ export function TaskGraphCanvas({
     setFlowNodes(
       graph.nodes.map((node) => ({
         ...node,
-        selected: node.id === selectedNodeId,
+        selected: node.id === focusedNodeId,
       })),
     );
     setFlowEdges(graph.edges);
-  }, [graph, selectedNodeId, setFlowEdges, setFlowNodes]);
+  }, [focusedNodeId, graph, setFlowEdges, setFlowNodes]);
 
   return (
     <ReactFlow<TaskFlowNode, Edge>
@@ -81,14 +92,14 @@ export function TaskGraphCanvas({
       onEdgesChange={onEdgesChange}
       onNodeClick={(_, node) => {
         if (node.data.kind === 'preview') onSelectPreview(node.id);
-        else onSelectNode(node.id);
+        else onFocusNode(node.id);
       }}
-      onPaneClick={() => onSelectNode('')}
+      onPaneClick={() => onFocusNode('')}
       nodesDraggable={false}
-      minZoom={0.35}
+      minZoom={0.2}
       maxZoom={1.8}
       fitView
-      fitViewOptions={{ padding: 0.25, maxZoom: 1 }}
+      fitViewOptions={{ padding: 0.35, minZoom: 0.55, maxZoom: 1 }}
       nodesConnectable={false}
       deleteKeyCode={null}
       proOptions={{ hideAttribution: true }}
@@ -111,7 +122,7 @@ export function TaskGraphCanvas({
         </span>
         <span className="flex items-center gap-1.5">
           <span className="w-5 border-t border-dashed border-amber-600" />
-          Depends on
+          Selected dependencies
         </span>
       </Panel>
       <Controls
@@ -139,18 +150,37 @@ function TaskCard({ id, data, selected }: NodeProps<TaskFlowNode>) {
         id="lineage-target"
         className="!size-2.5 !border-2 !border-background !bg-muted-foreground"
       />
-      <Handle
-        type="target"
-        position={Position.Top}
-        id="dependency-target"
-        className="!size-1 !border-0 !bg-transparent"
-      />
       <div className="flex items-center justify-between gap-3">
         <span className="font-mono text-[10px] font-medium tracking-wide text-muted-foreground">
           {id}
         </span>
-        <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-medium capitalize text-secondary-foreground">
-          {preview ? 'Preview' : data.type}
+        <span className="flex items-center gap-1.5">
+          {!preview && data.relationshipCount > 0 ? (
+            <span
+              className="flex items-center gap-1 text-[9px] text-muted-foreground"
+              title={`${data.relationshipCount} direct relationships`}
+            >
+              <GitFork className="size-3" />
+              {data.relationshipCount}
+            </span>
+          ) : null}
+          <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-medium capitalize text-secondary-foreground">
+            {preview ? 'Preview' : data.type}
+          </span>
+          {!preview ? (
+            <button
+              type="button"
+              className="nodrag nopan grid size-6 place-items-center rounded-full text-muted-foreground transition hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
+              aria-label={`Open details for ${data.title}`}
+              title="Open details"
+              onClick={(event) => {
+                event.stopPropagation();
+                data.onInspect(id);
+              }}
+            >
+              <Info className="size-3.5" />
+            </button>
+          ) : null}
         </span>
       </div>
       <h2 className="mt-4 text-sm font-semibold leading-5">{data.title}</h2>
@@ -206,12 +236,6 @@ function TaskCard({ id, data, selected }: NodeProps<TaskFlowNode>) {
         id="lineage-source"
         className="!size-2.5 !border-2 !border-background !bg-foreground"
       />
-      <Handle
-        type="source"
-        position={Position.Bottom}
-        id="dependency-source"
-        className="!size-1 !border-0 !bg-transparent"
-      />
     </div>
   );
 }
@@ -219,11 +243,23 @@ function TaskCard({ id, data, selected }: NodeProps<TaskFlowNode>) {
 function buildFlowGraph(
   nodes: TaskGraphNode[],
   previews: TaskGraphPreview[],
+  focusedNodeId: string,
   onDecompose: (nodeId: string) => void,
+  onInspect: (nodeId: string) => void,
 ) {
   const layout = buildTaskGraphLayout(nodes, previews);
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const previewById = new Map(previews.map((preview) => [preview.id, preview]));
+  const focusedEdges = focusedNodeId
+    ? layout.edges.filter(
+        (edge) =>
+          edge.source === focusedNodeId || edge.target === focusedNodeId,
+      )
+    : [];
+  const relatedIds = new Set([
+    focusedNodeId,
+    ...focusedEdges.flatMap((edge) => [edge.source, edge.target]),
+  ]);
   const flowNodes: TaskFlowNode[] = layout.nodes.map((layoutNode) => {
     const node = nodeById.get(layoutNode.id);
     const preview = previewById.get(layoutNode.id);
@@ -233,11 +269,20 @@ function buildFlowGraph(
       position: { x: layoutNode.x, y: layoutNode.y },
       draggable: false,
       deletable: false,
+      style: {
+        opacity: focusedNodeId && !relatedIds.has(layoutNode.id) ? 0.18 : 1,
+        transition: 'opacity 180ms ease',
+      },
       data: {
         kind: layoutNode.kind,
         title: node?.title ?? 'Decomposition request',
         type: node?.type ?? 'request',
         resources: node?.resources ?? [],
+        relationshipCount: node
+          ? node.dependsOn.length +
+            nodes.filter((candidate) => candidate.dependsOn.includes(node.id))
+              .length
+          : 0,
         description: preview?.instruction,
         resourceSummary: preview
           ? `${preview.inheritedResourceCount} inherited · ${preview.additionalResourceCount} added`
@@ -248,47 +293,61 @@ function buildFlowGraph(
             ? '#8b5cf6'
             : nodeTypeColor(node?.type ?? 'node')),
         onDecompose,
+        onInspect,
       },
     };
   });
-  const edges: Edge[] = layout.edges.map((edge) => ({
-    id: edge.id,
-    source: edge.source,
-    target: edge.target,
-    sourceHandle:
-      edge.relation === 'dependency' ? 'dependency-source' : 'lineage-source',
-    targetHandle:
-      edge.relation === 'dependency' ? 'dependency-target' : 'lineage-target',
-    type: 'smoothstep',
-    markerEnd: {
-      type: MarkerType.ArrowClosed,
-      width: 14,
-      height: 14,
-      color:
-        edge.relation === 'request'
-          ? '#8b5cf6'
-          : edge.relation === 'dependency'
-            ? '#d97706'
-            : 'var(--muted-foreground)',
-    },
-    style: {
-      stroke:
-        edge.relation === 'request'
-          ? '#8b5cf6'
-          : edge.relation === 'dependency'
-            ? '#d97706'
-            : 'var(--muted-foreground)',
-      strokeWidth: 1.5,
-      strokeDasharray:
-        edge.relation === 'request'
-          ? '7 6'
-          : edge.relation === 'dependency'
-            ? '4 5'
-            : undefined,
-    },
-    selectable: false,
-    deletable: false,
-  }));
+  const visibleEdges = layout.edges.filter(
+    (edge) =>
+      edge.relation !== 'dependency' ||
+      (focusedNodeId &&
+        (edge.source === focusedNodeId || edge.target === focusedNodeId)),
+  );
+  const edges: Edge[] = visibleEdges.map((edge) => {
+    const related =
+      !focusedNodeId ||
+      edge.source === focusedNodeId ||
+      edge.target === focusedNodeId;
+    return {
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      sourceHandle: 'lineage-source',
+      targetHandle: 'lineage-target',
+      type: 'bezier',
+      markerEnd: {
+        type: MarkerType.ArrowClosed,
+        width: 14,
+        height: 14,
+        color:
+          edge.relation === 'request'
+            ? '#8b5cf6'
+            : edge.relation === 'dependency'
+              ? '#d97706'
+              : 'var(--muted-foreground)',
+      },
+      style: {
+        stroke:
+          edge.relation === 'request'
+            ? '#8b5cf6'
+            : edge.relation === 'dependency'
+              ? '#d97706'
+              : 'var(--muted-foreground)',
+        strokeWidth: 1.5,
+        opacity: related ? 1 : 0.1,
+        transition: 'opacity 180ms ease',
+        strokeDasharray:
+          edge.relation === 'request'
+            ? '7 6'
+            : edge.relation === 'dependency'
+              ? '4 5'
+              : undefined,
+      },
+      selectable: false,
+      deletable: false,
+      zIndex: edge.relation === 'dependency' ? 10 : related ? 2 : 0,
+    };
+  });
   return { nodes: flowNodes, edges };
 }
 
