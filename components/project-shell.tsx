@@ -33,7 +33,7 @@ const navigation = [
     available: true,
   },
   {
-    label: 'Task decomposition',
+    label: 'Decomposition',
     icon: Boxes,
     path: '/decomposition',
     available: true,

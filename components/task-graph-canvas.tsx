@@ -171,7 +171,7 @@ export function TaskGraphCanvas({
       deleteKeyCode={null}
       proOptions={{ hideAttribution: true }}
       className="bg-background"
-      aria-label="Task graph canvas"
+      aria-label="Graph canvas"
     >
       <Background
         variant={BackgroundVariant.Dots}

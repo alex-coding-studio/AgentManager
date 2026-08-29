@@ -150,7 +150,7 @@ manifest. Context source selection uses a recursive folder browser so nested
 folders remain navigable while only concrete Markdown files can become
 Resources.
 
-Task Decomposition Context is user-owned feature context. Its Markdown
+Decomposition Context is user-owned feature context. Its Markdown
 instructions and Markdown or JSON attachments apply to future decomposition
 requests without being copied into every node. It is separate from the
 AgentManager-owned Harness. A future Harness defines only the stable generation
@@ -205,7 +205,7 @@ selected local Agent. Every Run owns a read-only `context/` workspace with a
 machine-readable `index.json`. A Start Run marks the Start node's selected
 source documents as primary. A descendant Run marks only the selected Node's
 `output.md` as inherited primary Context; original sources, neighboring Node
-outputs, and Task Decomposition attachments remain related files that the same
+outputs, and Decomposition attachments remain related files that the same
 Agent may read when its reasoning identifies a concrete need. Explicit
 request-only Context or local Markdown is primary for that Run without mutating
 the source. Related Node snapshots are limited to direct origins, children,
