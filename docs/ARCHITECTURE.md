@@ -122,7 +122,6 @@ Planned layout:
 │   ├── tasks/
 │   │   ├── task-001.json
 │   │   └── task-002.json
-│   └── dependencies.json
 └── .cache/
     └── project.sqlite
 ```
@@ -143,7 +142,10 @@ Markdown is used for flexible human-readable product and acceptance content. JSO
 
 ## SQLite policy
 
-SQLite is a derived local index by default, not the canonical versioned state.
+SQLite is not part of the current architecture. Markdown and small JSON files
+are sufficient for the intended personal scale. If measured graph-query or
+filesystem-scan performance later requires an index, SQLite may be introduced
+only as a derived local cache, never as canonical versioned state.
 
 Reasons:
 
@@ -152,7 +154,18 @@ Reasons:
 - Concurrent agent changes to a SQLite file are difficult to merge.
 - Markdown and JSON make planning history reviewable and portable.
 
-The SQLite cache can be regenerated from canonical Markdown and JSON files. Its WAL, shared-memory files, and cache directory remain untracked.
+Any future SQLite cache must be regenerated from canonical Markdown and JSON
+files. Its WAL, shared-memory files, and cache directory remain untracked.
+
+Structured task state should use small JSON files with explicit
+`schemaVersion` fields. Prefer one file per task, including its direct dependency
+identifiers, instead of one large project blob, so Agent writes remain bounded
+and Git diffs remain readable.
+
+Each task file owns its direct `dependsOn` identifiers and relative references
+to Context or repository files. Reverse dependency edges are derived by scanning
+the task files. This avoids maintaining a second relationship record that can
+drift away from the cards it connects.
 
 If later evidence shows that canonical SQLite is necessary, AgentManager must also produce a deterministic textual snapshot suitable for review and recovery before that architecture changes.
 

@@ -7,6 +7,14 @@ export type ContextSection = {
   title: string;
   summary: string;
   markdown: string;
+  documents: ContextDocument[];
+};
+
+export type ContextDocument = {
+  fileName: string;
+  title: string;
+  summary: string;
+  markdown: string;
 };
 
 const sectionTemplates = [
@@ -199,20 +207,131 @@ export async function readProductContext(project: RegisteredProject) {
 
   const sections = await Promise.all(
     directories.map(async (directory) => {
-      const markdown = await readFile(
-        path.join(contextPath, directory.name, 'README.md'),
-        'utf8',
-      ).catch(() => '');
+      const sectionPath = path.join(contextPath, directory.name);
+      const documentEntries = await readdir(sectionPath, {
+        withFileTypes: true,
+      });
+      const fileNames = documentEntries
+        .filter(
+          (entry) => entry.isFile() && /\.(md|markdown)$/i.test(entry.name),
+        )
+        .map((entry) => entry.name)
+        .sort((left, right) => {
+          if (left.toLowerCase() === 'readme.md') return -1;
+          if (right.toLowerCase() === 'readme.md') return 1;
+          return left.localeCompare(right);
+        });
+      const documents = await Promise.all(
+        fileNames.map(async (fileName) => {
+          const markdown = await readFile(
+            path.join(sectionPath, fileName),
+            'utf8',
+          );
+          return {
+            fileName,
+            title: readTitle(markdown, path.parse(fileName).name),
+            summary: readSummary(markdown),
+            markdown,
+          } satisfies ContextDocument;
+        }),
+      );
+      const readme =
+        documents.find(
+          (document) => document.fileName.toLowerCase() === 'readme.md',
+        ) ?? documents[0];
       return {
         slug: directory.name,
-        title: readTitle(markdown, directory.name),
-        summary: readSummary(markdown),
-        markdown,
+        title: readme?.title ?? readTitle('', directory.name),
+        summary: readme?.summary ?? 'No section guidance yet.',
+        markdown: readme?.markdown ?? '',
+        documents,
       } satisfies ContextSection;
     }),
   );
 
   return sections;
+}
+
+export async function createContextDocument(
+  project: RegisteredProject,
+  section: string,
+  title: string,
+) {
+  const sectionPath = await resolveSectionPath(project, section);
+  const fileName = await writeUniqueMarkdown(
+    sectionPath,
+    slugify(title),
+    `# ${title.trim()}\n\n`,
+  );
+  return { fileName, sections: await readProductContext(project) };
+}
+
+export async function importContextDocuments(
+  project: RegisteredProject,
+  section: string,
+  files: File[],
+) {
+  const sectionPath = await resolveSectionPath(project, section);
+  const created: string[] = [];
+  for (const file of files) {
+    if (!/\.(md|markdown)$/i.test(file.name)) {
+      throw new Error('Only Markdown files can be imported right now.');
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      throw new Error('Each Markdown file must be 2 MB or smaller.');
+    }
+    const baseName = path.parse(path.basename(file.name)).name;
+    created.push(
+      await writeUniqueMarkdown(
+        sectionPath,
+        slugify(baseName),
+        await file.text(),
+      ),
+    );
+  }
+  return { created, sections: await readProductContext(project) };
+}
+
+async function resolveSectionPath(project: RegisteredProject, section: string) {
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(section)) {
+    throw new Error('Context section is invalid.');
+  }
+  const sectionPath = path.join(project.planningPath, 'context', section);
+  const entries = await readdir(sectionPath).catch(() => null);
+  if (!entries) throw new Error('Context section was not found.');
+  return sectionPath;
+}
+
+async function writeUniqueMarkdown(
+  sectionPath: string,
+  baseName: string,
+  content: string,
+) {
+  for (let suffix = 1; suffix <= 999; suffix += 1) {
+    const fileName =
+      suffix === 1 ? `${baseName}.md` : `${baseName}-${suffix}.md`;
+    try {
+      await writeFile(path.join(sectionPath, fileName), content, {
+        flag: 'wx',
+      });
+      return fileName;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    }
+  }
+  throw new Error('Could not choose a unique Markdown file name.');
+}
+
+function slugify(value: string) {
+  return (
+    value
+      .normalize('NFKD')
+      .replace(/[^a-zA-Z0-9\s_-]/g, '')
+      .trim()
+      .toLowerCase()
+      .replace(/[\s_-]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'document'
+  );
 }
 
 function readTitle(markdown: string, fallback: string) {

@@ -103,9 +103,12 @@ library:
 5. Open any README in a reusable focus-reading overlay for long documents.
 6. Reveal the selected section in the operating system's file manager for
    external editing.
+7. Create a titled Markdown document in the selected section.
+8. Import one or more Markdown files through a file picker or drag and drop,
+   choosing collision-free file names without overwriting existing content.
 
-Creating, importing, renaming, moving, or deleting ordinary context documents
-and previewing non-Markdown assets remain deferred.
+Editing, renaming, moving, or deleting ordinary context documents and
+previewing non-Markdown assets remain deferred.
 
 ## Planned domain concepts
 
