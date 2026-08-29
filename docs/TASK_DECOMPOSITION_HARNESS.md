@@ -160,14 +160,16 @@ Every decomposition round initially includes:
 - the user's current decomposition goal;
 - the project's user-managed `instructions.md`;
 - the selected source node, current node, or current Candidate;
-- explicitly selected source documents; and
+- a Context Workspace manifest whose primary files must be read;
+- explicitly selected source documents as primary files; and
 - feedback for the current revision.
 
-Task Decomposition Context attachments are not all loaded eagerly. Explicitly
-selected attachments are included in full. Other attachments appear only as a
-lightweight inventory and are expanded when the Agent identifies a concrete
-need. The interface should warn when the always-loaded instructions themselves
-become unusually large rather than silently truncating user constraints.
+For root decomposition, the Start node's selected documents are primary. For a
+descendant, its accepted `output.md` is primary and its inherited original
+sources are related. Task Decomposition Context attachments are related unless
+the user explicitly selects one for the Run. The interface should warn when the
+always-loaded instructions themselves become unusually large rather than
+silently truncating user constraints.
 
 ### Instruction authority
 
@@ -203,7 +205,7 @@ and accepted or frozen Nodes.
 
 ### Expansion rule
 
-Full Node or Candidate content is loaded only when the Agent identifies a
+Full related Node or Resource content is read only when the Agent identifies a
 specific possible impact that cannot be resolved from the lightweight map.
 
 Before proposing a result, the Agent must perform an impact pass covering:
@@ -217,14 +219,17 @@ Before proposing a result, the Agent must perform an impact pass covering:
 
 If the Agent claims that an existing item is affected, it must read that item's
 full content before making the proposal. Context access is therefore available
-on demand, but content is not eagerly injected.
+on demand, but content is not eagerly injected. The running Codex or Claude
+process performs this read directly through its restricted file tools; the
+Coordinator is deterministic application code, not another reasoning Agent.
 
-Each round receives a fresh bounded packet rebuilt from structured session
-state. Prompt size does not grow by appending the complete prior conversation.
-After a bounded expansion cycle, unresolved material ambiguity is returned to
-the user through the clarification behavior instead of triggering an unlimited
-graph traversal. The concrete expansion budget remains an evaluated runtime
-policy rather than a fixed semantic rule in the Harness.
+Each round receives a fresh bounded packet and a file snapshot rebuilt from
+structured session state. Prompt size does not grow by appending the complete
+prior conversation or every discoverable document. When selective inspection
+cannot resolve material ambiguity, the Agent returns clarification instead of
+performing an unlimited graph traversal. The concrete inspection budget
+remains an evaluated runtime policy rather than a fixed semantic rule in the
+Harness.
 
 ## Relationship semantics
 

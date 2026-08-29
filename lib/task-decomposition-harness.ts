@@ -1,7 +1,7 @@
 import Ajv2020 from 'ajv/dist/2020.js';
 
 export const TASK_DECOMPOSITION_HARNESS_ID = 'agent-manager.task-decomposition';
-export const TASK_DECOMPOSITION_HARNESS_REVISION = 3;
+export const TASK_DECOMPOSITION_HARNESS_REVISION = 4;
 
 export const TASK_DECOMPOSITION_HARNESS_PROMPT = `You are AgentManager's Task Decomposition Agent. Turn the user's current goal and selected evidence into the smallest useful next-level proposal. Do not attempt to decompose an entire product to leaf tasks in one run.
 
@@ -11,7 +11,7 @@ Return only JSON that matches the supplied output schema. You may return a propo
 
 Every Candidate must have a stable identifier and revision, a concise type and title, a one-or-two-sentence ownership summary, one or more derivedFrom origins, execution-only dependsOn relationships, supported Resource references, and type-specific metadata. Use derivedFrom for decomposition lineage and dependsOn only for execution prerequisites. A Candidate may depend on an accepted NODE or another Candidate in the same bounded proposal. Put those relationships in dependsOn, never only in metadata.
 
-Use the lightweight graph map before requesting full content. Request expansion only for a specific unresolved impact. Review direct dependencies, reverse dependents, siblings with the same origin, shared-Resource neighbors, adjacent Candidates, and protected Nodes. If you claim an existing item is affected, include it in reviewedNodeIds. Stop and clarify when bounded expansion cannot resolve a material ambiguity.
+Read every primary file in the supplied Context Workspace before proposing a result. Use the lightweight graph map first for surrounding state. Related files are available inside the same read-only Workspace; decide for yourself whether to read one, and do so only for a specific unresolved impact. Review direct dependencies, reverse dependents, siblings with the same origin, shared-Resource neighbors, adjacent Candidates, and protected Nodes. Before claiming that an existing item is affected, read its related file and include it in reviewedNodeIds. Stop and clarify when bounded inspection cannot resolve a material ambiguity.
 
 When the request operation is revise-candidate, redefine only the supplied Candidate and return the same candidateId at the next revision. Do not create sibling Candidates or decompose it into children. If the requested change requires a material restructuring outside that Candidate, return clarification so decomposition can restart from its parent.
 
@@ -83,7 +83,7 @@ export type TaskDecompositionHarnessResult = HarnessResultBase &
 export type HarnessValidationContext = {
   request: HarnessRequestIdentity;
   knownNodeIds: Iterable<string>;
-  expandedNodeIds: Iterable<string>;
+  availableNodeContentIds: Iterable<string>;
   knownResourcePaths: Iterable<string>;
   previousCandidateRevisions?: Readonly<Record<string, number>>;
   reservedCandidateIds?: Iterable<string>;
@@ -345,16 +345,16 @@ export function validateTaskDecompositionHarnessResult(
   const result = value as TaskDecompositionHarnessResult;
   validateRequest(result.request, context.request);
   const knownNodeIds = new Set(context.knownNodeIds);
-  const expandedNodeIds = new Set(context.expandedNodeIds);
+  const availableNodeContentIds = new Set(context.availableNodeContentIds);
   requireKnownNodes(result.impactReview.reviewedNodeIds, knownNodeIds);
   requireKnownNodes(result.impactReview.affectedNodeIds, knownNodeIds);
   if (
     result.impactReview.reviewedNodeIds.some(
-      (nodeId) => !expandedNodeIds.has(nodeId),
+      (nodeId) => !availableNodeContentIds.has(nodeId),
     )
   ) {
     fail(
-      'Every reviewed Node must have expanded content in the current request.',
+      'Every reviewed Node must have full content available in the Context Workspace.',
     );
   }
   if (

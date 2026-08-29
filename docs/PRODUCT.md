@@ -252,8 +252,8 @@ manual deletion:
 The tenth slice completes the first local Codex Agent Run loop:
 
 1. Choose Codex in the decomposition Composer and send the Instruction,
-   inherited Resources, any explicitly expanded Run-only Resources, feature
-   Context, graph map, and immutable Harness as one bounded request.
+   inherited Resources, explicit Run-only Resources, feature Context, graph
+   map, and immutable Harness through one bounded Run package.
 2. Use the installed Codex CLI with the user's existing subscription login; do
    not require an API key, hosted AgentManager service, or model configuration.
 3. Render a connected running card immediately and let the user cancel it,
@@ -305,6 +305,21 @@ The twelfth slice makes dependencies between proposed siblings first-class:
    identifiers to formal Node identifiers during promotion.
 5. Prevent discarding a Candidate while another unaccepted Candidate still
    depends on it.
+
+## Thirteenth implementation slice
+
+The thirteenth slice makes bounded Context access uniform at every graph level:
+
+1. Give every Run one read-only Context Workspace and manifest.
+2. Treat all selected Start-node sources as primary for root decomposition.
+3. Treat only a descendant Node's `output.md` as inherited primary Context for
+   its next layer.
+4. Keep ancestor sources, neighboring Node outputs, and feature attachments as
+   related files that the running Agent may inspect with its own read tools.
+   Bound neighboring Nodes to direct graph and shared-Resource relationships.
+5. Treat explicitly added Run-only Context as primary for that Run.
+6. Snapshot files and hashes with the Run while keeping document bodies out of
+   the initial prompt.
 
 ## Decomposition continuity
 

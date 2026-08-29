@@ -26,6 +26,13 @@ import {
   readTaskDecompositionContext,
 } from './task-decomposition-context.ts';
 import {
+  primarySourceResourcePaths,
+  relatedContextNodeIds,
+  writeTaskDecompositionContextWorkspace,
+  type ContextWorkspaceEntry,
+  type ContextWorkspaceInput,
+} from './task-decomposition-context-workspace.ts';
+import {
   candidateDependencyBlockers,
   resolveCandidateDependencies,
 } from './task-decomposition-dependencies.ts';
@@ -101,12 +108,6 @@ type RunRequest = {
   operation?: 'propose' | 'append-candidates';
 };
 
-type ResourceContent = {
-  kind: string;
-  path: string;
-  content: string;
-};
-
 type ActiveRun = {
   record: TaskDecompositionRunRecord;
   agent: LocalAgentRun;
@@ -169,18 +170,30 @@ export async function startTaskDecompositionRun(
     input.files,
   );
   const featureContext = await readTaskDecompositionContext(project);
-  const resources = await collectResourceContents(
+  const contextInputs = await collectContextWorkspaceInputs(
     project,
     sourceNode,
-    [
-      ...input.contextRefs,
-      ...(revisionTarget?.candidate.resources.map(
-        (resource) => resource.path,
-      ) ?? []),
-    ],
+    nodes,
+    input.contextRefs,
     uploadedResources,
     featureContext.attachments.map((attachment) => attachment.fileName),
+    revisionTarget
+      ? {
+          outputPath: `task-decomposition/runs/${revisionTarget.run.runId}/candidates/${revisionTarget.candidate.candidateId}/output.md`,
+          resourcePaths: revisionTarget.candidate.resources.map(
+            (resource) => resource.path,
+          ),
+        }
+      : undefined,
   );
+  const contextWorkspace = await writeTaskDecompositionContextWorkspace(
+    runPath,
+    contextInputs,
+  );
+  const resources = [
+    ...contextWorkspace.manifest.primary,
+    ...contextWorkspace.manifest.related,
+  ];
   const requestIdentity = {
     sessionId,
     requestId,
@@ -194,7 +207,13 @@ export async function startTaskDecompositionRun(
       ? undefined
       : featureContext.instructions,
     graphMap: continuesExistingSession ? undefined : nodes.map(graphMapEntry),
-    expandedNodes: continuesExistingSession ? undefined : [sourceNode],
+    currentNode: continuesExistingSession ? undefined : sourceNode,
+    contextWorkspace: {
+      root: contextWorkspace.root,
+      indexPath: contextWorkspace.indexPath,
+      primary: contextWorkspace.manifest.primary,
+      related: contextWorkspace.manifest.related,
+    },
     revisionTarget: revisionTarget?.candidate ?? null,
     reservedCandidateIds: reservedCandidateIds.filter(
       (candidateId) => candidateId !== revisionTarget?.candidate.candidateId,
@@ -215,13 +234,12 @@ export async function startTaskDecompositionRun(
             ]
           : [...formalChildren.map(graphMapEntry), ...existingCandidateChildren]
         : undefined,
-    resources: !continuesExistingSession
-      ? resources
-      : resources.filter(
-          (resource) =>
-            input.contextRefs.includes(resource.path) ||
-            uploadedResources.some((upload) => upload.path === resource.path),
-        ),
+    resources: resources.map((resource) => ({
+      kind: resource.kind,
+      path: resource.logicalPath,
+      role: resource.role,
+      workspacePath: resource.workspacePath,
+    })),
   };
   requestIdentity.inputFingerprint = createHash('sha256')
     .update(JSON.stringify(packetWithoutFingerprint))
@@ -264,7 +282,7 @@ export async function startTaskDecompositionRun(
     input: {
       instruction: input.instruction.trim(),
       projectInstructions: featureContext.instructions,
-      resourcePaths: resources.map((resource) => resource.path),
+      resourcePaths: resources.map((resource) => resource.logicalPath),
       requestArtifact: 'request.json',
     },
     inputFingerprint: requestIdentity.inputFingerprint,
@@ -556,7 +574,7 @@ async function finishTaskDecompositionRun(
   record: TaskDecompositionRunRecord,
   agent: LocalAgentRun,
   nodes: TaskGraphNode[],
-  resources: ResourceContent[],
+  resources: ContextWorkspaceEntry[],
   knownCandidates: Array<
     Extract<
       TaskDecompositionHarnessResult,
@@ -588,8 +606,13 @@ async function finishTaskDecompositionRun(
           inputFingerprint: record.inputFingerprint,
         },
         knownNodeIds: nodes.map((node) => node.id),
-        expandedNodeIds: [record.sourceNodeId],
-        knownResourcePaths: resources.map((resource) => resource.path),
+        availableNodeContentIds: [
+          record.sourceNodeId,
+          ...resources.flatMap((resource) =>
+            resource.nodeId ? [resource.nodeId] : [],
+          ),
+        ],
+        knownResourcePaths: resources.map((resource) => resource.logicalPath),
         acceptedCandidateIds: nodes.flatMap((node) =>
           node.provenance?.candidateId ? [node.provenance.candidateId] : [],
         ),
@@ -631,31 +654,83 @@ async function finishTaskDecompositionRun(
   }
 }
 
-async function collectResourceContents(
+async function collectContextWorkspaceInputs(
   project: RegisteredProject,
   sourceNode: TaskGraphNode,
+  nodes: TaskGraphNode[],
   contextRefs: string[],
-  uploads: ResourceContent[],
+  uploads: ContextWorkspaceInput[],
   featureAttachmentNames: string[],
+  revision?: { outputPath: string; resourcePaths: string[] },
 ) {
-  const graphPaths = [
-    ...sourceNode.resources.map((resource) => resource.path),
-    ...contextRefs,
+  const sourceOutputPaths = new Set(
+    sourceNode.resources
+      .filter((resource) => resource.kind === 'output')
+      .map((resource) => resource.path),
+  );
+  const primarySourcePaths = primarySourceResourcePaths(
+    sourceNode.role,
+    sourceNode.resources,
+  );
+  const relatedNodeIds = relatedContextNodeIds(sourceNode, nodes);
+  const graphRequests: Array<{
+    path: string;
+    role: 'primary' | 'related';
+    kind: string;
+    nodeId?: string;
+  }> = [
+    ...sourceNode.resources.map((resource) => ({
+      path: resource.path,
+      role: primarySourcePaths.has(resource.path)
+        ? ('primary' as const)
+        : ('related' as const),
+      kind: resource.kind,
+      nodeId: sourceOutputPaths.has(resource.path) ? sourceNode.id : undefined,
+    })),
+    ...contextRefs.map((resourcePath) => ({
+      path: resourcePath,
+      role: 'primary' as const,
+      kind: 'run-context',
+    })),
+    ...(revision?.resourcePaths.map((resourcePath) => ({
+      path: resourcePath,
+      role: 'related' as const,
+      kind: 'candidate-context',
+    })) ?? []),
+    ...(revision
+      ? [
+          {
+            path: revision.outputPath,
+            role: 'primary' as const,
+            kind: 'candidate-output',
+          },
+        ]
+      : []),
+    ...nodes.flatMap((node) =>
+      !relatedNodeIds.has(node.id)
+        ? []
+        : node.resources
+            .filter((resource) => resource.kind === 'output')
+            .map((resource) => ({
+              path: resource.path,
+              role: 'related' as const,
+              kind: 'node-output',
+              nodeId: node.id,
+            })),
+    ),
   ];
-  const uniqueGraphPaths = [...new Set(graphPaths)];
   const graphResources = await Promise.all(
-    uniqueGraphPaths.map(async (resourcePath) => {
+    graphRequests.map(async (request) => {
       const resource = await readTaskGraphMarkdownResource(
         project,
-        resourcePath,
+        request.path,
       );
       return {
-        kind:
-          sourceNode.resources.find(
-            (candidate) => candidate.path === resourcePath,
-          )?.kind ?? 'context',
-        path: resource.path,
+        role: request.role,
+        kind: request.kind,
+        logicalPath: resource.path,
         content: resource.markdown,
+        ...(request.nodeId ? { nodeId: request.nodeId } : {}),
       };
     }),
   );
@@ -666,8 +741,9 @@ async function collectResourceContents(
         fileName,
       );
       return {
+        role: 'related' as const,
         kind: 'decomposition-context',
-        path: `task-decomposition/attachments/${attachment.fileName}`,
+        logicalPath: `task-decomposition/attachments/${attachment.fileName}`,
         content: attachment.content,
       };
     }),
@@ -681,7 +757,7 @@ async function saveUploadedResources(
   files: File[],
 ) {
   const usedNames = new Set<string>();
-  const resources: ResourceContent[] = [];
+  const resources: ContextWorkspaceInput[] = [];
   for (const file of files) {
     if (!/\.(md|markdown)$/i.test(file.name)) {
       throw new Error('Only Markdown Resources can be added to an Agent Run.');
@@ -695,8 +771,9 @@ async function saveUploadedResources(
       flag: 'wx',
     });
     resources.push({
+      role: 'primary',
       kind: 'run-attachment',
-      path: path.posix.join(
+      logicalPath: path.posix.join(
         'task-decomposition',
         'runs',
         runId,
