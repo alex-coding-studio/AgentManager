@@ -8,6 +8,7 @@ import {
   Maximize2,
   Minimize2,
   Trash2,
+  X,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -20,6 +21,7 @@ export function MarkdownReader({
   markdown,
   onReveal,
   onDelete,
+  onClose,
   deleting = false,
   className,
 }: {
@@ -28,6 +30,7 @@ export function MarkdownReader({
   markdown: string;
   onReveal?: () => Promise<void>;
   onDelete?: () => void;
+  onClose?: () => void;
   deleting?: boolean;
   className?: string;
 }) {
@@ -126,6 +129,18 @@ export function MarkdownReader({
           >
             {focusMode ? <Minimize2 /> : <Maximize2 />}
           </Button>
+          {onClose ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label="Close Markdown reader"
+              title="Close"
+              onClick={onClose}
+            >
+              <X />
+            </Button>
+          ) : null}
         </div>
       </header>
 

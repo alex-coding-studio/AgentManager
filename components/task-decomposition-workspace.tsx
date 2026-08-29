@@ -565,7 +565,7 @@ export function TaskDecompositionWorkspace({
         }}
       >
         <DialogContent
-          showCloseButton
+          showCloseButton={false}
           className="max-h-[88vh] overflow-y-auto p-0 sm:max-w-5xl"
         >
           {preview ? (
@@ -573,6 +573,7 @@ export function TaskDecompositionWorkspace({
               title={preview.title}
               filePath={preview.path}
               markdown={preview.markdown}
+              onClose={() => setPreview(null)}
               className="min-h-[70vh] border-0 shadow-none"
             />
           ) : null}
