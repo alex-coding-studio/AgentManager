@@ -101,16 +101,45 @@ This is a provisional finding. It should become a Harness rule only after the
 remaining audit and the first multi-turn Refine test show that the distinction
 is stable and useful.
 
+## First multi-turn Refine observation
+
+`CANDIDATE-0001` was refined in the original persistent Codex Session with an
+Instruction correcting its center from task count and execution planning to
+bounded cognitive Context. The operation returned only `CANDIDATE-0001` at
+revision 2, preserved its graph relationships, and completed in approximately
+31 seconds. This verifies the structural one-to-one Refine boundary and
+provider Session reuse for this run.
+
+The revised `AI Context 聚焦工作台` is not simply lower quality. It expresses
+the intended Context principle more accurately, but moves from a bounded Task
+Decomposition direction toward a product-level principle spanning project
+meaning, task relationships, evolution, and GitHub activity. That broader
+resolution remains coherent, yet it is less immediately testable. The old
+Harness did not identify or disclose this semantic-resolution movement, and it
+did not explicitly recommend that the next Grow move one level more concrete.
+
+This observation produced the Harness revision 3 rule: preserve semantic role
+and resolution by default during Refine; disclose user-supported broadening or
+narrowing in Reflection; protect sibling value loops from accidental
+synthesis; and return a machine-readable continuation focus. The readable
+Response presents that recommendation in Markdown while the Canvas UI remains
+general.
+
+The Refine used 58,600 total input tokens, including 39,424 cached input tokens,
+with 1,302 output tokens and 170 reasoning tokens. These figures establish only
+the observed run cost; optimization remains deferred until the product loop is
+validated.
+
 ## Remaining audit
 
 - Review the complete Response and all five Candidate Markdown artifacts in a
   full-width browser.
 - Inspect Candidate dependency readability and the absence of relationships in
   the real proposal.
-- Refine Candidate 1 through inline feedback without creating siblings or
-  changing graph relationships.
-- Verify provider Session reuse and delta Context on the second round.
-- Compare second-round token use with the initial 44,471-token input.
+- Exercise inline-feedback Refine separately from the completed direct-Refine
+  path when desktop review is available.
+- Verify Harness revision 3 can guide the accepted principle one semantic level
+  more concrete without a user-authored expert Prompt.
 - Decide final Candidate dispositions only after those checks.
 
 ## Deferred UX observation

@@ -1,7 +1,7 @@
 import Ajv2020 from 'ajv/dist/2020.js';
 
 export const WHATS_NEXT_HARNESS_ID = 'agent-manager.whats-next';
-export const WHATS_NEXT_HARNESS_REVISION = 2;
+export const WHATS_NEXT_HARNESS_REVISION = 3;
 
 export const WHATS_NEXT_HARNESS_PROMPT = `You are AgentManager's What's Next Agent. Help one user make an emerging product idea more concrete without guessing the complete final system.
 
@@ -11,9 +11,13 @@ Return one concise, user-facing Reflection as Markdown. It should explain your c
 
 For explore, propose two to five materially distinct directions. When the idea is still chaotic, prefer four or five different starting-value directions. When one local value loop is already coherent, propose only the adjacent directions supported by the evidence. Directions may coexist and later converge.
 
+Control semantic resolution progressively. Judge the selected origins relative to four signals: a clear pain or desire, a concrete user action, an observable system response, and a way for the user to recognize value. A coherent principle may remain a valid Candidate. When it lacks the latter signals, make the next directions exactly one semantic level more concrete instead of repeating the principle or jumping directly to implementation steps. Do not require the user to know how to request this transition.
+
 Each Candidate owns one readable Markdown document. It starts with the Candidate title, gives a one- or two-sentence description, includes a "Why this direction" section with two to four short ordered bullets, and includes an "Assumptions" section containing only material uncertainty. The assumptions array must mirror that section for validation. The summary is a compact graph-card description of the same meaning. Markdown owns the human meaning; JSON owns identity, graph relationships, provenance, and validation.
 
-For refine-candidate, return exactly the requested Candidate identifier at its next revision. Refine its Markdown in place. Do not create siblings, children, new dependencies, or a different direction. Preserve its type, origins, dependencies, Resources, type template, metadata, and presentation. If the feedback implies a different direction, mention that in the Reflection but refine only the selected Candidate.
+For refine-candidate, return exactly the requested Candidate identifier at its next revision. Refine its Markdown in place. Do not create siblings, children, new dependencies, or a different direction. Preserve its type, origins, dependencies, Resources, type template, metadata, and presentation. Preserve its semantic role and relative resolution by default. Broaden or narrow it only when the user's feedback supports that movement, and state the scope movement in the Reflection. Existing sibling Candidates are protected comparison Context; do not absorb their distinct value loops unless the user explicitly requests synthesis. If the feedback implies a different direction, mention that in the Reflection but refine only the selected Candidate.
+
+Every continuationAdvice must recommend the next useful focus. Use concretize when the meaning is coherent but lacks a concrete user action, observable system response, or recognizable value loop. Use clarify when material ambiguity blocks honest directions, expand for adjacent exploration at the current resolution, compare when the user should choose among overlapping meanings, and close when another round would add little value.
 
 Read every primary Workspace file. Use the graph map and manifest first. Read related files only to resolve a concrete question such as possible duplication or branch convergence, then record the path and reason in exploration notes. Prefer a smaller supported proposal over plausible invention. Ask one bounded clarification only when honest directions cannot be proposed. Return no-change when further exploration would only repeat accepted meaning.
 
@@ -50,6 +54,7 @@ export type WhatsNextReflection = {
   markdown: string;
   continuationAdvice: {
     action: 'continue' | 'consider-closing' | 'consider-branching';
+    recommendedFocus: 'clarify' | 'concretize' | 'expand' | 'compare' | 'close';
     reason: string;
   };
 };
@@ -214,10 +219,13 @@ export const WHATS_NEXT_HARNESS_OUTPUT_SCHEMA = {
         continuationAdvice: {
           type: 'object',
           additionalProperties: false,
-          required: ['action', 'reason'],
+          required: ['action', 'recommendedFocus', 'reason'],
           properties: {
             action: {
               enum: ['continue', 'consider-closing', 'consider-branching'],
+            },
+            recommendedFocus: {
+              enum: ['clarify', 'concretize', 'expand', 'compare', 'close'],
             },
             reason: { ...nonEmptyString, maxLength: 600 },
           },

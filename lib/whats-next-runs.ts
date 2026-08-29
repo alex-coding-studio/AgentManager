@@ -159,7 +159,10 @@ export async function startWhatsNextRun(
     (revisionTarget
       ? 'Refine the current Candidate using the attached inline feedback.'
       : continuesExistingSession
-        ? 'Continue this line of inquiry from the current accepted understanding.'
+        ? continuationInstruction(
+            coordinatorRun?.result?.reflection.continuationAdvice
+              .recommendedFocus,
+          )
         : 'Explore the most useful next directions from the selected origin.');
   const reservedCandidateIds = await collectReservedCandidateIds(project);
   if (
@@ -241,9 +244,11 @@ export async function startWhatsNextRun(
   requestIdentity.inputFingerprint = createHash('sha256')
     .update(JSON.stringify(packet))
     .digest('hex');
-  const prompt = continuesExistingSession
-    ? buildWhatsNextContinuationPrompt(packet)
-    : buildWhatsNextPrompt(packet);
+  const prompt =
+    continuesExistingSession &&
+    coordinatorRun?.harness.revision === WHATS_NEXT_HARNESS_REVISION
+      ? buildWhatsNextContinuationPrompt(packet)
+      : buildWhatsNextPrompt(packet);
   const timestamp = new Date().toISOString();
   await writeFile(
     path.join(runPath, 'request.json'),
@@ -329,9 +334,13 @@ export async function readWhatsNextRun(
         : '# Reflection\n\nThis legacy Run did not record a Reflection.',
       continuationAdvice: {
         action: 'continue',
+        recommendedFocus: 'expand',
         reason: 'This legacy Run predates explicit continuation advice.',
       },
     };
+  }
+  if (record.result?.reflection.continuationAdvice) {
+    record.result.reflection.continuationAdvice.recommendedFocus ??= 'expand';
   }
   if (record.result?.outcome === 'proposal') {
     for (const candidate of record.result.candidates) {
@@ -349,6 +358,24 @@ export async function readWhatsNextRun(
   }
   await ensureCandidateArtifacts(project, record);
   return record;
+}
+
+function continuationInstruction(
+  focus: 'clarify' | 'concretize' | 'expand' | 'compare' | 'close' | undefined,
+) {
+  if (focus === 'concretize') {
+    return 'Continue this line of inquiry exactly one semantic level more concrete. Propose user-observable product directions that validate the current meaning without repeating the principle or jumping to implementation steps.';
+  }
+  if (focus === 'clarify') {
+    return 'Continue by resolving the smallest material ambiguity that blocks honest product directions. Prefer one bounded clarification with concrete options.';
+  }
+  if (focus === 'compare') {
+    return 'Continue by making the meaningful differences and overlap between the current directions easier for the user to judge.';
+  }
+  if (focus === 'close') {
+    return 'Reassess whether this line of inquiry has sufficient clarity. Return no-change when another round would only repeat accepted meaning.';
+  }
+  return 'Continue this line of inquiry from the current accepted understanding and explore the most useful adjacent meaning at the current semantic resolution.';
 }
 
 export async function listLatestWhatsNextRuns(project: RegisteredProject) {

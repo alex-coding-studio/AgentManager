@@ -114,6 +114,31 @@ The threshold is local clarity, not a settled specification for the whole
 product. A branch can grow coherently while other parts of the product remain
 unknown.
 
+### Semantic resolution progresses one useful level at a time
+
+The user is not responsible for knowing how to prompt an abstract direction
+into a concrete one. After each round, the Harness assesses the current meaning
+relative to four signals:
+
+- a clear pain or desire;
+- a concrete user action;
+- an observable system response; and
+- a way for the user to recognize value.
+
+A coherent principle remains a valid Candidate even when it lacks a concrete
+value loop. In that case, the next recommended Grow moves exactly one semantic
+level more concrete. It proposes user-observable product directions that can
+validate the principle without merely restating it or jumping directly to
+implementation steps. Conversely, the Harness may stay at the current level,
+clarify an ambiguity, compare overlapping directions, or recommend closing the
+line of inquiry when that is the more useful movement.
+
+The machine-readable continuation advice records both the broad action and a
+`recommendedFocus`: `clarify`, `concretize`, `expand`, `compare`, or `close`.
+AgentManager renders the recommendation prominently in the readable Response
+Markdown and uses it to construct the default continuation Instruction. The
+Canvas UI remains general, and the user may always replace the default.
+
 ### Atomicity is relative to product judgment
 
 A What's Next Candidate is atomic when the user can understand and judge it as
@@ -230,6 +255,12 @@ expression needs improvement.
 - AgentManager validates the base revision and feedback anchors, persists the
   next revision, and derives the complete line diff before acceptance.
 - The response should summarize what changed because of the user's feedback.
+
+Refine preserves the Candidate's semantic role and relative resolution by
+default. It may broaden or narrow the Candidate when the user's feedback
+supports that movement, but the Reflection must disclose the shift. Existing
+sibling Candidates remain protected comparison Context and their distinct
+value loops are not absorbed unless the user explicitly requests synthesis.
 
 If feedback suggests a materially different idea, the Agent may mention that
 possibility but must not create it during Refine. Starting another exploration

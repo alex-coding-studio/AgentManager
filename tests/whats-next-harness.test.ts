@@ -14,6 +14,8 @@ void test('ships the settled Reflection and Markdown Harness contract', () => {
   assert.match(WHATS_NEXT_HARNESS_PROMPT, /user-facing Reflection/);
   assert.match(WHATS_NEXT_HARNESS_PROMPT, /Why this direction/);
   assert.match(WHATS_NEXT_HARNESS_PROMPT, /For refine-candidate/);
+  assert.match(WHATS_NEXT_HARNESS_PROMPT, /exactly one semantic level/);
+  assert.match(WHATS_NEXT_HARNESS_PROMPT, /protected comparison Context/);
   assert.doesNotMatch(WHATS_NEXT_HARNESS_PROMPT, /placeholder/);
 });
 
@@ -42,6 +44,7 @@ function baseResult() {
         '# Reflection\n\nThe user most needs a bounded way to make the idea concrete.',
       continuationAdvice: {
         action: 'continue',
+        recommendedFocus: 'concretize',
         reason: 'Several useful starting directions remain unexplored.',
       },
     },
@@ -95,6 +98,19 @@ void test('accepts a proposal of distinct directions', () => {
   assert.equal(result.outcome, 'proposal');
 });
 
+void test('requires a machine-readable progressive continuation focus', () => {
+  const value = proposal([
+    candidate('CANDIDATE-0001'),
+    candidate('CANDIDATE-0002'),
+  ]);
+  delete (value.reflection.continuationAdvice as { recommendedFocus?: string })
+    .recommendedFocus;
+  assert.throws(
+    () => validateWhatsNextHarnessResult(value, context),
+    WhatsNextResultValidationError,
+  );
+});
+
 void test('renders one readable Response from Reflection and Candidates', () => {
   const result = validateWhatsNextHarnessResult(
     proposal([candidate('CANDIDATE-0001'), candidate('CANDIDATE-0002')]),
@@ -102,6 +118,8 @@ void test('renders one readable Response from Reflection and Candidates', () => 
   );
   const markdown = renderWhatsNextResponseMarkdown(result);
   assert.match(markdown, /# Reflection/);
+  assert.match(markdown, /## Suggested next step/);
+  assert.match(markdown, /Make this direction one level more concrete/);
   assert.match(markdown, /# Candidate Proposals/);
   assert.match(markdown, /## Direction CANDIDATE-0001/);
 });

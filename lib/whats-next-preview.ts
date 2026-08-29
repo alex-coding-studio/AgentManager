@@ -115,6 +115,7 @@ The strongest immediate need is not a complete project-management system. It is 
 Task Decomposition addresses that first pain directly. An Implementation Workspace becomes adjacent once an accepted direction needs to be tested in real delivery without mixing pull-request state into the product graph.`,
         continuationAdvice: {
           action: 'continue',
+          recommendedFocus: 'concretize',
           reason:
             'The relationship between product exploration and execution is concrete enough to explore one level further.',
         },
@@ -177,6 +178,7 @@ Reduce how much product Context one person must understand at a time while prese
 The direction remains useful, but its center has shifted. The value is not producing smaller tasks for its own sake; it is controlling how much product Context one person must understand at a time.`,
         continuationAdvice: {
           action: 'consider-closing',
+          recommendedFocus: 'close',
           reason:
             'The product meaning is now concrete enough to accept, decompose further, or implement.',
         },
