@@ -7,6 +7,7 @@ import {
   FolderOpen,
   Maximize2,
   Minimize2,
+  Trash2,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -18,12 +19,16 @@ export function MarkdownReader({
   filePath,
   markdown,
   onReveal,
+  onDelete,
+  deleting = false,
   className,
 }: {
   title: string;
   filePath: string;
   markdown: string;
   onReveal?: () => Promise<void>;
+  onDelete?: () => void;
+  deleting?: boolean;
   className?: string;
 }) {
   const [focusMode, setFocusMode] = useState(false);
@@ -62,7 +67,7 @@ export function MarkdownReader({
   const reader = (
     <article
       className={cn(
-        'overflow-hidden border border-border bg-card shadow-[0_1px_0_rgb(15_23_42/5%),0_14px_40px_rgb(15_23_42/5%)]',
+        'min-w-0 overflow-hidden border border-border bg-card shadow-[0_1px_0_rgb(15_23_42/5%),0_14px_40px_rgb(15_23_42/5%)]',
         focusMode
           ? 'flex h-[min(88vh,960px)] w-full flex-col rounded-2xl sm:w-[80vw] sm:max-w-6xl'
           : 'min-h-[560px] rounded-2xl',
@@ -94,6 +99,22 @@ export function MarkdownReader({
               <FolderOpen />
             </Button>
           ) : null}
+          {onDelete ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label="Delete Markdown document"
+              title="Delete document"
+              disabled={deleting}
+              onClick={() => {
+                setFocusMode(false);
+                onDelete();
+              }}
+            >
+              <Trash2 />
+            </Button>
+          ) : null}
           <Button
             type="button"
             variant="ghost"
@@ -119,7 +140,7 @@ export function MarkdownReader({
 
       <div
         className={cn(
-          'px-6 py-7 sm:px-9 sm:py-9',
+          'min-w-0 px-6 py-7 sm:px-9 sm:py-9',
           focusMode && 'mx-auto w-full max-w-4xl flex-1 overflow-y-auto',
         )}
       >
@@ -168,8 +189,13 @@ export function MarkdownReader({
                 {children}
               </blockquote>
             ),
+            pre: ({ children }) => (
+              <pre className="my-5 max-w-full overflow-x-auto rounded-xl bg-secondary p-4 font-mono text-sm leading-6 whitespace-pre-wrap break-words [&>code]:bg-transparent [&>code]:p-0">
+                {children}
+              </pre>
+            ),
             code: ({ children }) => (
-              <code className="rounded bg-secondary px-1.5 py-0.5 font-mono text-[0.85em]">
+              <code className="break-words rounded bg-secondary px-1.5 py-0.5 font-mono text-[0.85em]">
                 {children}
               </code>
             ),

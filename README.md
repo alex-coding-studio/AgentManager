@@ -54,6 +54,8 @@ Product Context sections are discovered directly from folders and their
 `README.md` files; no database or manifest duplicates that structure.
 README files can be opened in a reusable focus reader or revealed in the system
 file manager for external editing.
+Markdown documents can be created from the interface or imported through a file
+picker and drag and drop.
 
 Set `AGENT_MANAGER_HOME` to use a different machine-registry directory.
 
