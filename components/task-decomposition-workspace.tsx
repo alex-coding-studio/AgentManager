@@ -14,10 +14,12 @@ import {
   X,
 } from 'lucide-react';
 import { MarkdownReader } from '@/components/markdown-reader';
+import { TaskGraphCanvas } from '@/components/task-graph-canvas';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Sheet,
   SheetContent,
@@ -28,7 +30,13 @@ import {
 } from '@/components/ui/sheet';
 import type { ContextBrowserFolder } from '@/lib/product-context';
 import type { TaskGraphNode } from '@/lib/task-graph';
+import type { TaskGraphPreview } from '@/lib/task-graph-layout';
 import { cn } from '@/lib/utils';
+
+type DecompositionRequestPreview = TaskGraphPreview & {
+  contextRefs: string[];
+  files: File[];
+};
 
 export function TaskDecompositionWorkspace({
   projectId,
@@ -49,6 +57,18 @@ export function TaskDecompositionWorkspace({
   const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState('');
   const [selectedNodeId, setSelectedNodeId] = useState('');
+  const [requestPreviews, setRequestPreviews] = useState<
+    DecompositionRequestPreview[]
+  >([]);
+  const [decomposeSourceId, setDecomposeSourceId] = useState('');
+  const [decompositionGoal, setDecompositionGoal] = useState('');
+  const [requestSelectedRefs, setRequestSelectedRefs] = useState<string[]>([]);
+  const [requestFiles, setRequestFiles] = useState<File[]>([]);
+  const [requestFolderPath, setRequestFolderPath] = useState(
+    folders[0]?.path ?? '',
+  );
+  const [requestDragging, setRequestDragging] = useState(false);
+  const [requestError, setRequestError] = useState('');
   const [retainedAttachmentRefs, setRetainedAttachmentRefs] = useState<
     string[]
   >([]);
@@ -60,11 +80,13 @@ export function TaskDecompositionWorkspace({
   const [previewingPath, setPreviewingPath] = useState('');
   const [dragging, setDragging] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [createdId, setCreatedId] = useState('');
   const [error, setError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const requestFileInputRef = useRef<HTMLInputElement>(null);
   const selectedFolder =
     folders.find((folder) => folder.path === selectedFolderPath) ?? folders[0];
+  const requestFolder =
+    folders.find((folder) => folder.path === requestFolderPath) ?? folders[0];
   const availableSourceCount = folders.reduce(
     (count, folder) =>
       count + folder.entries.filter((entry) => entry.kind === 'file').length,
@@ -73,6 +95,8 @@ export function TaskDecompositionWorkspace({
   const sourceCount =
     selectedRefs.length + retainedAttachmentRefs.length + files.length;
   const selectedNode = nodes.find((node) => node.id === selectedNodeId) ?? null;
+  const decomposeSource =
+    nodes.find((node) => node.id === decomposeSourceId) ?? null;
 
   function toggleSource(ref: string, selected: boolean) {
     setSelectedRefs((current) =>
@@ -107,7 +131,6 @@ export function TaskDecompositionWorkspace({
     event.preventDefault();
     if (!title.trim() || sourceCount === 0) return;
     setCreating(true);
-    setCreatedId('');
     setError('');
     const formData = new FormData();
     if (editingId) formData.set('id', editingId);
@@ -137,7 +160,6 @@ export function TaskDecompositionWorkspace({
       return;
     }
     setNodes(result.nodes);
-    setCreatedId(result.node.id);
     setSelectedNodeId(result.node.id);
     setTitle('');
     setSelectedRefs([]);
@@ -161,7 +183,6 @@ export function TaskDecompositionWorkspace({
         .map((resource) => resource.path),
     );
     setFiles([]);
-    setCreatedId('');
     setError('');
     setSelectedNodeId('');
     setFormOpen(true);
@@ -185,6 +206,88 @@ export function TaskDecompositionWorkspace({
     setFiles([]);
     setError('');
     setFormOpen(true);
+  }
+
+  function openDecomposition(nodeId: string) {
+    const preview = requestPreviews.find(
+      (candidate) => candidate.sourceNodeId === nodeId,
+    );
+    setSelectedNodeId('');
+    setDecomposeSourceId(nodeId);
+    setDecompositionGoal(preview?.instruction ?? '');
+    setRequestSelectedRefs(preview?.contextRefs ?? []);
+    setRequestFiles(preview?.files ?? []);
+    setRequestError('');
+  }
+
+  function selectRequestPreview(previewId: string) {
+    const preview = requestPreviews.find(
+      (candidate) => candidate.id === previewId,
+    );
+    if (!preview) return;
+    setDecomposeSourceId(preview.sourceNodeId);
+    setDecompositionGoal(preview.instruction);
+    setRequestSelectedRefs(preview.contextRefs);
+    setRequestFiles(preview.files);
+    setRequestError('');
+  }
+
+  function closeDecomposition() {
+    setDecomposeSourceId('');
+    setDecompositionGoal('');
+    setRequestSelectedRefs([]);
+    setRequestFiles([]);
+    setRequestDragging(false);
+    setRequestError('');
+  }
+
+  function toggleRequestSource(ref: string, selected: boolean) {
+    setRequestSelectedRefs((current) =>
+      selected
+        ? [...current, ref]
+        : current.filter((candidate) => candidate !== ref),
+    );
+    setRequestError('');
+  }
+
+  function addRequestFiles(candidates: File[]) {
+    const markdownFiles = candidates.filter((file) =>
+      /\.(md|markdown)$/i.test(file.name),
+    );
+    if (markdownFiles.length !== candidates.length) {
+      setRequestError('Only Markdown Resources can be added right now.');
+    } else {
+      setRequestError('');
+    }
+    setRequestFiles((current) => {
+      const known = new Set(
+        current.map((file) => `${file.name}:${file.size}:${file.lastModified}`),
+      );
+      const additions = markdownFiles.filter(
+        (file) => !known.has(`${file.name}:${file.size}:${file.lastModified}`),
+      );
+      return [...current, ...additions].slice(0, 20);
+    });
+  }
+
+  function previewDecomposition(event: React.SyntheticEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const goal = decompositionGoal.trim();
+    if (!decomposeSource || !goal) return;
+    const preview: DecompositionRequestPreview = {
+      id: `REQUEST-PREVIEW-${decomposeSource.id}`,
+      sourceNodeId: decomposeSource.id,
+      instruction: goal,
+      inheritedResourceCount: decomposeSource.resources.length,
+      additionalResourceCount: requestSelectedRefs.length + requestFiles.length,
+      contextRefs: requestSelectedRefs,
+      files: requestFiles,
+    };
+    setRequestPreviews((current) => [
+      ...current.filter((candidate) => candidate.id !== preview.id),
+      preview,
+    ]);
+    closeDecomposition();
   }
 
   async function previewResource(resourcePath: string) {
@@ -255,12 +358,9 @@ export function TaskDecompositionWorkspace({
       </header>
 
       <div className="min-h-0 flex-1">
-        <section
-          aria-label="Task canvas"
-          className="relative min-h-[calc(100vh-10rem)] overflow-auto bg-[radial-gradient(circle,var(--border)_1px,transparent_1px)] bg-[size:22px_22px]"
-        >
-          <div className="min-h-full min-w-[680px] p-8 lg:p-12">
-            {nodes.length === 0 ? (
+        <section className="relative h-[calc(100vh-10rem)] min-h-[480px] overflow-hidden">
+          {nodes.length === 0 ? (
+            <div className="min-h-full bg-[radial-gradient(circle,var(--border)_1px,transparent_1px)] bg-[size:22px_22px] p-8 lg:p-12">
               <div className="grid min-h-[440px] place-items-center">
                 <div className="max-w-xs rounded-2xl border border-dashed border-border bg-background/90 p-7 text-center shadow-sm backdrop-blur">
                   <div className="mx-auto grid size-10 place-items-center rounded-xl bg-secondary">
@@ -278,56 +378,17 @@ export function TaskDecompositionWorkspace({
                   </Button>
                 </div>
               </div>
-            ) : (
-              <div className="grid max-w-5xl grid-cols-2 items-start gap-8 xl:grid-cols-3">
-                {nodes.map((node) => (
-                  <button
-                    key={node.id}
-                    type="button"
-                    className={cn(
-                      'min-h-36 rounded-2xl border border-t-[3px] border-border bg-background p-4 text-left shadow-[0_10px_30px_rgb(15_23_42/6%)] transition hover:-translate-y-0.5 hover:shadow-[0_16px_38px_rgb(15_23_42/9%)] focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30',
-                      node.id === createdId && 'ring-2 ring-foreground/20',
-                    )}
-                    style={{
-                      borderTopColor:
-                        node.presentation?.color ?? nodeTypeColor(node.type),
-                    }}
-                    onClick={() => setSelectedNodeId(node.id)}
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="font-mono text-[10px] font-medium tracking-wide text-muted-foreground">
-                        {node.id}
-                      </span>
-                      <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-medium capitalize text-secondary-foreground">
-                        {node.type}
-                      </span>
-                    </div>
-                    <h2 className="mt-4 text-sm font-semibold leading-5">
-                      {node.title}
-                    </h2>
-                    <div className="mt-5 space-y-1.5">
-                      {node.resources.slice(0, 3).map((resource) => (
-                        <span
-                          key={`${resource.kind}:${resource.path}`}
-                          className="flex max-w-full items-center gap-1.5 px-1.5 py-1 text-[11px] text-muted-foreground"
-                        >
-                          <FileText className="size-3 shrink-0" />
-                          <span className="truncate">
-                            {resourceName(resource.path)}
-                          </span>
-                        </span>
-                      ))}
-                      {node.resources.length > 3 ? (
-                        <span className="px-1.5 text-[10px] text-muted-foreground">
-                          +{node.resources.length - 3} more
-                        </span>
-                      ) : null}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+            </div>
+          ) : (
+            <TaskGraphCanvas
+              nodes={nodes}
+              previews={requestPreviews}
+              selectedNodeId={selectedNodeId}
+              onSelectNode={setSelectedNodeId}
+              onSelectPreview={selectRequestPreview}
+              onDecompose={openDecomposition}
+            />
+          )}
         </section>
 
         <Dialog
@@ -593,6 +654,260 @@ export function TaskDecompositionWorkspace({
             </form>
           </DialogContent>
         </Dialog>
+
+        <Dialog
+          open={decomposeSource !== null}
+          onOpenChange={(open) => {
+            if (!open) closeDecomposition();
+          }}
+        >
+          <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-2xl">
+            {decomposeSource ? (
+              <form onSubmit={previewDecomposition} className="space-y-6">
+                <div>
+                  <h2 className="text-sm font-semibold">
+                    Decompose from {decomposeSource.id}
+                  </h2>
+                  <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                    Define this round of work. Inherited Resources stay on the
+                    source Node; additions apply only to this request.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <label
+                    htmlFor="decomposition-goal"
+                    className="text-xs font-medium"
+                  >
+                    Instruction
+                  </label>
+                  <Textarea
+                    id="decomposition-goal"
+                    value={decompositionGoal}
+                    maxLength={1_000}
+                    placeholder="Generate several candidate modules from this product definition."
+                    className="min-h-28"
+                    onChange={(event) =>
+                      setDecompositionGoal(event.target.value)
+                    }
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs font-medium">Inherited Resources</p>
+                    <span className="text-[10px] text-muted-foreground">
+                      {decomposeSource.resources.length}
+                    </span>
+                  </div>
+                  <div className="max-h-40 divide-y divide-border overflow-y-auto rounded-xl border border-border">
+                    {decomposeSource.resources.map((resource) => (
+                      <div
+                        key={`${resource.kind}:${resource.path}`}
+                        className="flex items-center gap-2.5 px-3 py-2.5"
+                      >
+                        <FileText className="size-3.5 shrink-0 text-muted-foreground" />
+                        <span className="min-w-0 flex-1 truncate text-[11px]">
+                          {resourceName(resource.path)}
+                        </span>
+                        <span className="text-[9px] uppercase tracking-wide text-muted-foreground">
+                          {resource.kind}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs font-medium">
+                      Additional Context Library Resources
+                    </p>
+                    <span className="text-[10px] text-muted-foreground">
+                      {requestSelectedRefs.length}
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <select
+                      aria-label="Additional Resource folder"
+                      value={requestFolder?.path ?? ''}
+                      onChange={(event) =>
+                        setRequestFolderPath(event.target.value)
+                      }
+                      className="h-10 w-full appearance-none rounded-xl border border-border bg-background px-3 pr-9 text-xs font-medium outline-none transition focus:border-ring focus:ring-3 focus:ring-ring/20"
+                    >
+                      {folders.map((folder) => {
+                        const depth = folder.path.split('/').length - 2;
+                        return (
+                          <option key={folder.path} value={folder.path}>
+                            {`${'— '.repeat(depth)}${folder.title}`}
+                          </option>
+                        );
+                      })}
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute top-1/2 right-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                  </div>
+                  <div className="max-h-44 divide-y divide-border overflow-y-auto rounded-xl border border-border">
+                    {!requestFolder || requestFolder.entries.length === 0 ? (
+                      <p className="p-4 text-xs text-muted-foreground">
+                        This folder is empty.
+                      </p>
+                    ) : (
+                      requestFolder.entries.map((entry, index) => {
+                        if (entry.kind === 'folder') {
+                          return (
+                            <button
+                              key={entry.path}
+                              type="button"
+                              className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition hover:bg-muted/50"
+                              onClick={() => setRequestFolderPath(entry.path)}
+                            >
+                              <Folder className="size-3.5 shrink-0" />
+                              <span className="min-w-0 flex-1 truncate text-xs font-medium">
+                                {entry.name}
+                              </span>
+                              <span className="text-[10px] text-muted-foreground">
+                                Folder
+                              </span>
+                            </button>
+                          );
+                        }
+                        const checked = requestSelectedRefs.includes(
+                          entry.path,
+                        );
+                        const inputId = `request-context-${index}`;
+                        return (
+                          <label
+                            key={entry.path}
+                            htmlFor={inputId}
+                            className="flex cursor-pointer items-start gap-2.5 px-3 py-2.5 transition hover:bg-muted/50"
+                          >
+                            <Checkbox
+                              id={inputId}
+                              checked={checked}
+                              onCheckedChange={(value) =>
+                                toggleRequestSource(entry.path, value === true)
+                              }
+                              aria-label={`Add ${entry.name} to this request`}
+                              className="mt-0.5"
+                            />
+                            <FileText className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+                            <span className="min-w-0">
+                              <span className="block truncate font-mono text-[11px] font-medium">
+                                {entry.name}
+                              </span>
+                              <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
+                                {entry.title}
+                              </span>
+                            </span>
+                          </label>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs font-medium">
+                      Additional Local Markdown
+                    </p>
+                    <span className="text-[10px] text-muted-foreground">
+                      {requestFiles.length}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className={cn(
+                      'flex min-h-20 w-full flex-col items-center justify-center rounded-xl border border-dashed border-border px-4 py-3 text-center transition',
+                      requestDragging && 'border-foreground bg-secondary',
+                    )}
+                    onClick={() => requestFileInputRef.current?.click()}
+                    onDragEnter={(event) => {
+                      event.preventDefault();
+                      setRequestDragging(true);
+                    }}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDragLeave={() => setRequestDragging(false)}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      setRequestDragging(false);
+                      addRequestFiles(Array.from(event.dataTransfer.files));
+                    }}
+                  >
+                    <Upload className="size-4" />
+                    <span className="mt-1.5 text-xs font-medium">
+                      Drop Markdown or choose files
+                    </span>
+                  </button>
+                  <input
+                    ref={requestFileInputRef}
+                    type="file"
+                    accept=".md,.markdown,text/markdown"
+                    multiple
+                    hidden
+                    onChange={(event) => {
+                      addRequestFiles(Array.from(event.target.files ?? []));
+                      event.target.value = '';
+                    }}
+                  />
+                  {requestFiles.length > 0 ? (
+                    <ul className="space-y-1.5 pt-1">
+                      {requestFiles.map((file, index) => (
+                        <li
+                          key={`${file.name}:${file.size}:${file.lastModified}`}
+                          className="flex items-center gap-2 rounded-lg bg-secondary px-2.5 py-2"
+                        >
+                          <FileText className="size-3 shrink-0" />
+                          <span className="min-w-0 flex-1 truncate text-[11px]">
+                            {file.name}
+                          </span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-xs"
+                            aria-label={`Remove ${file.name}`}
+                            title="Remove Resource"
+                            onClick={() =>
+                              setRequestFiles((current) =>
+                                current.filter(
+                                  (_, candidateIndex) =>
+                                    candidateIndex !== index,
+                                ),
+                              )
+                            }
+                          >
+                            <X />
+                          </Button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+
+                {requestError ? (
+                  <p role="alert" className="text-xs text-destructive">
+                    {requestError}
+                  </p>
+                ) : null}
+
+                <div className="border-t border-border pt-5">
+                  <Button
+                    type="submit"
+                    size="lg"
+                    className="w-full"
+                    disabled={!decompositionGoal.trim()}
+                  >
+                    Preview request on canvas
+                  </Button>
+                  <p className="mt-2 text-center text-[10px] leading-4 text-muted-foreground">
+                    Preview only. Nothing is saved or sent to an Agent yet.
+                  </p>
+                </div>
+              </form>
+            ) : null}
+          </DialogContent>
+        </Dialog>
       </div>
 
       <Sheet
@@ -747,12 +1062,4 @@ function formatTimestamp(value: string) {
         dateStyle: 'medium',
         timeStyle: 'short',
       }).format(date);
-}
-
-function nodeTypeColor(type: string) {
-  let hash = 0;
-  for (const character of type) {
-    hash = (hash * 31 + character.charCodeAt(0)) % 360;
-  }
-  return `hsl(${hash} 55% 48%)`;
 }

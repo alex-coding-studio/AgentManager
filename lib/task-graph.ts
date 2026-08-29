@@ -18,6 +18,7 @@ export type TaskGraphNode = {
   role: 'start' | 'node';
   type: string;
   title: string;
+  summary?: string;
   status: string;
   createdAt: string;
   updatedAt: string;
@@ -26,6 +27,7 @@ export type TaskGraphNode = {
     path: string;
     metadata?: Record<string, unknown>;
   }>;
+  derivedFrom?: string[];
   dependsOn: string[];
   typeTemplateRef: string;
   metadata: Record<string, unknown>;
@@ -55,6 +57,8 @@ export async function listTaskGraphNodes(project: RegisteredProject) {
         !['start', 'node'].includes(node.role) ||
         typeof node.type !== 'string' ||
         !node.title ||
+        (node.summary !== undefined && typeof node.summary !== 'string') ||
+        (node.derivedFrom !== undefined && !Array.isArray(node.derivedFrom)) ||
         !Array.isArray(node.resources)
       ) {
         throw new Error(`${fileName} is not a valid Task Graph node.`);
