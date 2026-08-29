@@ -1,93 +1,100 @@
-# Decomposition and Work Resolution Model
+# Product Growth, Decomposition, and Implementation Model
 
 ## Status
 
-This document records AgentManager's current conceptual model for product
-growth, decomposition, and implementation. It defines product language and
-stage boundaries before the existing navigation, Harnesses, and storage models
-are renamed or generalized.
+This document records AgentManager's current conceptual model for turning an
+unclear idea into durable product meaning and, when the user chooses, into
+delivered work. It defines the shared objects and operations before the
+existing navigation, Harnesses, and storage models are generalized.
 
 It does not define an implementation plan or require an immediate migration of
-the current Task Decomposition workspace.
+the current workspaces.
 
 ## Relative atomicity
 
-Atomicity is relative to the stage at which a Card is being used. A Card is not
-required to be mechanically indivisible.
+Atomicity is relative to the decision being made. A Card is not required to be
+mechanically indivisible.
 
-The same piece of work can be:
+The same scope can be:
 
-- atomic as a product decision because the user can understand, compare,
+- atomic for product judgment because the user can understand, compare,
   accept, revise, or reject it as one coherent direction;
-- atomic as a decomposition result because its intent and boundary are clear
-  enough for the user's current purpose; and
-- non-atomic during implementation because delivery may benefit from several
+- atomic for decomposition because its intent and boundary are manageable for
+  the user's current purpose; and
+- non-atomic during implementation because delivery benefits from several
   independently verifiable steps or pull requests.
 
-Further subdivision is always mechanically possible. That fact alone is not a
-reason to keep decomposing. AgentManager stops at the resolution that makes the
-work understandable and manageable for the next decision.
+Further subdivision is almost always possible. That fact alone is not a reason
+to keep decomposing. AgentManager stops at the resolution that the user finds
+feasible for the next decision.
 
-## Three work resolutions
+## Formal Nodes are shared product objects
 
-### Product-direction resolution
+A Formal Node is accepted, durable meaning in the product graph. It is not a
+Task Decomposition object, a What's Next object, or an Implementation object.
 
-The What's Next workspace answers:
+A Formal Node can represent a product direction, capability, experience,
+module, constraint, enabling foundation, implementation goal, or another
+coherent object. Its meaning and provenance stay stable while different
+workspaces operate on it.
 
-> Given the product facts already accepted, what coherent additions could
-> become true next?
+Workspace-specific activity does not become part of the Formal Node:
 
-Each Candidate is atomic at the product-decision level. It names one direction
-the user can evaluate as a whole. It may still contain multiple design or
-implementation steps.
+- proposal and revision history belongs to a bounded Candidate Session;
+- delivery status, owners, pull requests, gates, and retries belong to
+  Implementation;
+- opening a Node in another workspace does not copy or replace it; and
+- execution evidence may propose new facts, but it does not silently rewrite
+  accepted product meaning.
 
-A useful Candidate:
+The Node records where it came from and which action created it. Those fields
+describe provenance, not workspace ownership.
 
-- adds one durable and observable product outcome;
-- is adjacent to the selected formal origins;
-- explains why it is useful now and what it unlocks;
-- has a boundary that distinguishes it from the other Candidates; and
-- can be accepted without silently accepting every other Candidate in the
-  proposal.
+## Three independent operations
 
-What's Next does not promise that an accepted Candidate is ready for direct
-implementation.
+AgentManager exposes three different questions over the same product graph.
+They are operations the user may choose, not mandatory phases in a pipeline.
 
-### Human-manageable decomposition resolution
+### Grow with What's Next
 
-The general Decomposition capability answers:
+> Starting from this idea or these accepted facts, what meaningful direction
+> could become concrete next?
 
-> How can this selected scope be represented as a set of coherent units that
-> the user can understand and control?
+What's Next helps the user discover and articulate product meaning. Early in a
+product, it may surface several different starting directions. Later, it may
+grow an accepted direction with adjacent outcomes.
 
-The selected scope may be a product idea, Feature, Capability, Experience,
-Module, research direction, implementation goal, or another domain object. A
-decomposition result is not necessarily an executable task.
+Its primary goal is concreteness, not execution planning. A concrete result may
+nevertheless already be feasible enough to implement directly.
 
-Decomposition should stop when every resulting item:
+### Decompose
+
+> What coherent, user-manageable parts exist inside this selected scope?
+
+Decomposition converts an oversized or cognitively dense scope into a set of
+bounded units. The selected scope may be an idea, Feature, Capability,
+Experience, Module, research direction, implementation goal, or any other
+Formal Node.
+
+Decomposition should stop when each result:
 
 - expresses one coherent intent;
 - has a boundary distinguishable from its siblings;
 - carries a manageable amount of Context for the user's current purpose;
 - can be inspected, revised, accepted, or rejected independently; and
-- gains little additional decision value from another immediate split.
+- gains little immediate decision value from another split.
 
-The user is the final judge of whether this resolution is feasible. The Harness
-must not continue splitting solely to reach an abstract definition of the
-smallest possible task.
+Task Decomposition is one profile of this general operation. Decomposition
+does not require every result to be implementation-ready.
 
-Task Decomposition is one profile of this more general capability, not the
-definition of the capability itself.
+### Implement
 
-### Delivery resolution
+> I intend to make or validate this accepted meaning. What execution slices
+> will do that safely and verifiably?
 
-The future Implementation workspace answers:
-
-> I intend to complete this accepted item. What execution slices will deliver
-> it safely and verifiably?
-
-This is where AgentManager may turn one coherent upper-level Card into several
-delivery slices. Each slice should have:
+Implementation can start from any accepted Formal Node, whether it originated
+in What's Next, Decomposition, manual authoring, or another future capability.
+It turns the selected meaning into delivery-sized slices with:
 
 - bounded inputs and authoritative Context;
 - one explicit output;
@@ -97,109 +104,143 @@ delivery slices. Each slice should have:
 - delivery evidence such as commits, pull requests, reviews, and merges.
 
 One Agent Session or one pull request is a useful default delivery scale, not a
-universal product-level size limit. Several slices may be combined into one
-pull request when their shared Context and review boundary make that delivery
-clearer. A larger Card may use several pull requests without losing its
-upper-level identity.
+universal product-level size limit. Several slices may share one pull request
+when that creates the clearest implementation and review boundary. One Formal
+Node may also require several pull requests without losing its identity.
 
-## Workspace responsibilities
+Implementation is both a delivery tool and a way to test whether an idea is
+actually feasible. Its evidence can inspire further growth or a revised
+product decision without making delivery state part of the product graph.
 
-### What's Next
+## The user owns routing
 
-- expands outward from accepted product facts;
-- proposes a small set of materially distinct adjacent directions;
-- lets the user accept zero, one, or several directions;
-- preserves accepted directions as new formal facts; and
-- does not decompose an existing boundary or create an execution plan.
+There is no required sequence among Grow, Decompose, and Implement.
 
-### Decomposition
+For any accepted Formal Node, the user may:
 
-- converts an oversized or cognitively dense scope into user-manageable units;
-- preserves the selected parent's meaning rather than inventing a different
-  product;
-- adapts its stopping resolution to the user's purpose;
-- does not require every output to be implementation-ready; and
-- does not own execution status, pull requests, or delivery evidence.
+- continue growing or refining it in What's Next;
+- decompose it when its internal boundary is difficult to manage;
+- implement it directly when it already feels feasible; or
+- leave it as accepted product meaning without taking another action.
 
-### Implementation
+Choosing direct implementation does not certify that the Node is mechanically
+indivisible. Choosing Decomposition does not imply that every user must make
+the same choice. The product should expose these options without pretending it
+can determine the only correct route.
 
-- pulls an accepted formal Card into an execution workspace;
-- breaks it down according to delivery concerns;
-- tracks inputs, outputs, gates, dependencies, and execution evidence; and
-- becomes the integration boundary for pull requests, Issues, external task
-  systems, and future delivery automation.
+Executability is therefore an affordance of a sufficiently concrete Node, not
+a special Node type or lifecycle status.
 
-## Cross-workspace identity
+## Divergence and convergence
 
-Moving work to a higher-resolution workspace does not replace or copy the
-meaning of the source Card.
+The product graph is a directed acyclic graph, not a single tree and not a
+linear roadmap.
 
-- A Decomposition result records the formal scope from which it was derived.
-- An Implementation item records the accepted Card it intends to deliver.
-- Lower-level execution state does not become product-definition state.
-- Pull-request and delivery status do not pollute the product-growth graph.
-- Completing or revising a child does not silently rewrite its parent.
+- One unclear idea may grow into several plausible starting branches.
+- A user may pursue one, several, or none of them.
+- Each branch can be grown, decomposed, or implemented independently.
+- Work on separate branches may reveal that a later outcome depends on several
+  accepted origins.
+- Such an outcome is represented by a multi-origin Formal Node rather than by
+  copying one branch into another.
 
-Each workspace owns the additional detail required at its resolution while
-retaining a stable reference to the authoritative upper-level intent.
+The Harness must preserve provenance and prevent cycles, but it must not assume
+that siblings are mutually exclusive or that one branch owns every later Node.
 
-## Example: project environment
+## Product graph and project document are dual representations
 
-`Configure the project environment` can be one valid product or decomposition
-Card. At that resolution, it expresses one coherent result: the product has a
-reproducible foundation on which later work can run.
+The Node network is the structured, composable representation of the product.
+It preserves boundaries, dependencies, provenance, and multiple lines of
+growth. A complete project document is a synthesized narrative representation
+of the same accepted meaning.
 
-When pulled into Implementation, it might become several slices:
+AgentManager should eventually support both directions:
 
-1. initialize the TypeScript application and package configuration;
-2. define the local asset and JSON storage layout;
-3. add lint, type-check, test, and production-build gates; and
-4. expose the documented command-line startup path.
+- synthesize selected or complete accepted graph content into a coherent,
+  large project document; and
+- use a large project document as input to produce a Node network that covers
+  its meaningful product content.
 
-Those slices may be delivered through one pull request or several. The delivery
-choice does not invalidate the atomicity of the upper-level Card because the
-upper-level Card is atomic for product judgment, not for source-code mutation.
+This is semantic duality, not a promise of an exact structural inverse. A
+document may narrate ideas in a different order, and an Agent may choose
+different Node boundaries when reconstructing the graph. The round-trip target
+is preserved meaning, coverage, dependencies, and provenance—not byte-for-byte
+text or identical graph geometry.
+
+The synthesis action is a future capability. It is not part of the What's Next
+Harness itself.
+
+## Example: AgentManager
+
+`I want to build AgentManager` did not initially define the complete product.
+The user's strongest immediate need was to turn a large AI-generated project
+document into manageable pieces. Exploring that need made Task Decomposition a
+concrete direction.
+
+After Task Decomposition existed, a new question became visible: where does the
+large source document come from? That question grew into What's Next, an
+iterative way to turn an unclear idea into accepted product meaning.
+
+Once both existed, another gap became clear: accepted Cards still needed a
+place to become executable work without mixing pull-request state into the
+product graph. That gap grew into Implementation.
+
+These capabilities did not emerge from a complete up-front system guess. They
+grew from different immediate needs and can eventually form one connected
+product network. A What's Next Card may go straight to Implementation; Task
+Decomposition is available when the user wants another level of resolution,
+not as a required checkpoint.
 
 ## Harness implications
 
 ### What's Next Harness
 
-The Harness should require each Candidate to be atomic at the current
-product-decision resolution. It must not require every Candidate to fit in one
-Agent Session or phrase every direction as an experiment. It should state the
-new durable outcome, why it is adjacent, what it unlocks, and what remains
-outside its boundary.
+The Harness should make unclear intent progressively concrete. It should not
+guess the entire final system, require a full product identity before offering
+useful directions, or turn every Candidate into an execution plan. A Candidate
+may become directly implementable as a consequence of becoming concrete.
+
+Detailed decisions are recorded in
+[`WHATS_NEXT_HARNESS.md`](WHATS_NEXT_HARNESS.md).
 
 ### Decomposition Harness
 
 The Harness should receive or infer the purpose of the current decomposition.
-It should stop when the resulting Cards are coherent, distinguishable, and
-manageable at that resolution. It must not continue splitting merely because a
-Card contains multiple possible execution steps.
+It should stop when the results are coherent, distinguishable, and manageable
+at that resolution. It must not keep splitting solely because more execution
+steps could exist.
 
 ### Implementation Harness
 
 The Harness may optimize for delivery-sized slices. It should define explicit
-inputs, outputs, acceptance criteria, gates, and dependencies, and it may use an
-Agent Session or pull request as a practical sizing signal.
+inputs, outputs, acceptance criteria, gates, and dependencies while preserving
+a reference to the Formal Node whose meaning it is implementing.
 
-No single size rule applies unchanged across all three Harnesses.
+No single size rule applies unchanged across these operations.
 
-## End-to-end model
+## Operating model
 
 ```text
-Idea or accepted product facts
-  -> What's Next
-Possible adjacent product directions
-  -> user acceptance
-Formal product Nodes
-  -> Decomposition
-Human-manageable scope units
-  -> pull into Implementation
-Execution slices
-  -> Agent or human delivery
-Commits, pull requests, review, merge, and acceptance evidence
+                         +------------------+
+                         |   Formal Node    |
+                         | accepted meaning |
+                         +------------------+
+                           /       |       \
+                          /        |        \
+                  Grow further  Decompose  Implement
+                    What's Next      |       directly
+                         |            |          |
+                         v            v          v
+                    Candidates   coherent     execution
+                         |          units       slices
+                         |            |          |
+                         +-- accept --+----------+
+                                  |
+                                  v
+                         new Formal Nodes or
+                          delivery evidence
 ```
 
-AgentManager therefore manages the progressive resolution of intent. It does
-not attempt to reduce every idea directly into indivisible tasks in one pass.
+The graph may expand through any of these routes. AgentManager manages changing
+resolution and durable relationships without prescribing one universal
+workflow.
