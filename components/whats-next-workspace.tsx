@@ -8,17 +8,20 @@ import {
   type DragEvent,
 } from 'react';
 import {
-  ArrowUpRight,
   ChevronDown,
   FileText,
   LoaderCircle,
+  MessageSquareText,
   Pencil,
   Sparkles,
   Trash2,
   Upload,
   X,
 } from 'lucide-react';
-import { MarkdownReader } from '@/components/markdown-reader';
+import {
+  MarkdownReader,
+  type MarkdownFeedbackSelection,
+} from '@/components/markdown-reader';
 import { TaskGraphCanvas } from '@/components/task-graph-canvas';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -37,7 +40,12 @@ import type { TaskGraphNode } from '@/lib/task-graph';
 import type { TaskGraphPreview } from '@/lib/task-graph-layout';
 import { getTaskGraphRelationships } from '@/lib/task-graph-rules';
 import type { LocalAgentKind } from '@/lib/local-agent-transport';
-import type { WhatsNextRunRecord } from '@/lib/whats-next-runs';
+import { WHATS_NEXT_HARNESS_REVISION } from '@/lib/whats-next-harness';
+import { renderWhatsNextResponseMarkdown } from '@/lib/whats-next-response';
+import type {
+  WhatsNextFeedbackAnchor,
+  WhatsNextRunRecord,
+} from '@/lib/whats-next-runs';
 import { cn } from '@/lib/utils';
 
 const AGENT_LABELS: Record<LocalAgentKind, string> = {
@@ -55,14 +63,23 @@ export function WhatsNextWorkspace({
   projectId,
   folders,
   initialNodes,
+  initialRuns = [],
+  developmentPreview = false,
 }: {
   projectId: string;
   folders: ContextBrowserFolder[];
   initialNodes: TaskGraphNode[];
+  initialRuns?: WhatsNextRunRecord[];
+  developmentPreview?: boolean;
 }) {
   const [nodes, setNodes] = useState(initialNodes);
-  const [previews, setPreviews] = useState<TaskGraphPreview[]>([]);
-  const [selectedAgent, setSelectedAgent] = useState<LocalAgentKind>('claude');
+  const [previews, setPreviews] = useState<TaskGraphPreview[]>(
+    mergePreviews([], initialRuns.flatMap(runToPreviews)),
+  );
+  const [runs, setRuns] = useState<WhatsNextRunRecord[]>(initialRuns);
+  const [selectedAgent, setSelectedAgent] = useState<LocalAgentKind>(
+    agentForRun(initialRuns.at(-1)),
+  );
   const [error, setError] = useState('');
 
   const [idea, setIdea] = useState('');
@@ -93,10 +110,22 @@ export function WhatsNextWorkspace({
     candidateId: string;
   } | null>(null);
   const [reviseNote, setReviseNote] = useState('');
+  const [feedbackDraft, setFeedbackDraft] = useState<{
+    selection: MarkdownFeedbackSelection;
+    instruction: string;
+  } | null>(null);
+  const [pendingFeedback, setPendingFeedback] = useState<
+    WhatsNextFeedbackAnchor[]
+  >([]);
   const [preview, setPreview] = useState<{
     title: string;
     path: string;
     markdown: string;
+  } | null>(null);
+  const [comparison, setComparison] = useState<{
+    title: string;
+    previous: string;
+    current: string;
   } | null>(null);
   const [accepting, setAccepting] = useState(false);
   const [discarding, setDiscarding] = useState(false);
@@ -115,6 +144,9 @@ export function WhatsNextWorkspace({
     return node ? [node] : [];
   });
   const selectedNode = nodes.find((node) => node.id === inspectorId) ?? null;
+  const selectedNodeMarkdown = selectedNode?.resources.find((resource) =>
+    ['idea', 'output'].includes(resource.kind),
+  );
   const deletionBlockers = selectedNode
     ? (() => {
         const related = getTaskGraphRelationships(nodes, selectedNode.id);
@@ -144,21 +176,42 @@ export function WhatsNextWorkspace({
       !acceptedCandidateIds.has(item.candidate?.candidateId ?? ''),
   );
   const hasGraph = nodes.length > 0;
+  const latestResponse = [...runs]
+    .reverse()
+    .find(
+      (run) => run.result && !['running', 'validating'].includes(run.status),
+    );
+  const continuingGrow = growSource
+    ? runs.some(
+        (run) =>
+          run.agentSessionId &&
+          run.harness.revision === WHATS_NEXT_HARNESS_REVISION &&
+          run.transport ===
+            (selectedAgent === 'codex' ? 'codex-cli' : 'claude-cli') &&
+          run.sourceNodeIds.length === 1 &&
+          run.sourceNodeIds[0] === growSource.id,
+      )
+    : false;
 
-  const restoreRuns = useEffectEvent(async () => {
+  async function loadRunsFromServer() {
     const response = await fetch(
       `/api/projects/${projectId}/whats-next-runs`,
     ).catch(() => null);
     if (!response?.ok) return;
     const payload = (await response.json()) as { runs: WhatsNextRunRecord[] };
-    setPreviews(payload.runs.flatMap(runToPreviews));
-  });
+    setRuns(payload.runs);
+    setSelectedAgent(agentForRun(payload.runs.at(-1)));
+    setPreviews(mergePreviews([], payload.runs.flatMap(runToPreviews)));
+  }
+
+  const restoreRuns = useEffectEvent(loadRunsFromServer);
 
   useEffect(() => {
+    if (developmentPreview) return;
     if (restoredRuns.current) return;
     restoredRuns.current = true;
     void restoreRuns();
-  }, []);
+  }, [developmentPreview]);
 
   async function pollRun(runId: string) {
     for (let attempt = 0; attempt < 3_600; attempt += 1) {
@@ -169,10 +222,17 @@ export function WhatsNextWorkspace({
       if (!response?.ok) continue;
       const { run } = (await response.json()) as { run: WhatsNextRunRecord };
       if (['running', 'validating'].includes(run.status)) continue;
-      setPreviews((current) => [
-        ...current.filter((item) => item.runId !== runId),
-        ...runToPreviews(run),
-      ]);
+      if (run.revisionOf && run.result?.outcome !== 'proposal') {
+        await loadRunsFromServer();
+        return;
+      }
+      setRuns((current) => upsertRun(current, run));
+      setPreviews((current) =>
+        mergePreviews(
+          current.filter((item) => item.runId !== runId),
+          runToPreviews(run),
+        ),
+      );
       return;
     }
   }
@@ -182,6 +242,7 @@ export function WhatsNextWorkspace({
     instruction: string;
     contextRefs?: string[];
     files?: File[];
+    feedback?: WhatsNextFeedbackAnchor[];
     revisionTarget?: { runId: string; candidateId: string };
   }) {
     const body = new FormData();
@@ -192,6 +253,9 @@ export function WhatsNextWorkspace({
     body.append('agent', selectedAgent);
     for (const ref of input.contextRefs ?? []) body.append('contextRefs', ref);
     for (const file of input.files ?? []) body.append('files', file);
+    if (input.feedback?.length) {
+      body.append('feedback', JSON.stringify(input.feedback));
+    }
     if (input.revisionTarget) {
       body.append('revisionRunId', input.revisionTarget.runId);
       body.append('revisionCandidateId', input.revisionTarget.candidateId);
@@ -212,7 +276,10 @@ export function WhatsNextWorkspace({
       instruction: input.instruction,
       revisionTarget: input.revisionTarget,
     });
-    setPreviews((current) => [...current, ...runToPreviews(payload.run!)]);
+    setRuns((current) => upsertRun(current, payload.run!));
+    setPreviews((current) =>
+      mergePreviews(current, runToPreviews(payload.run!)),
+    );
     void pollRun(payload.run.runId);
   }
 
@@ -223,7 +290,7 @@ export function WhatsNextWorkspace({
     setError('');
     try {
       const body = new FormData();
-      body.append('title', sentence.slice(0, 160));
+      body.append('title', titleFromIdea(sentence));
       body.append('idea', sentence);
       body.append('graph', 'whats-next');
       for (const ref of startRefs) body.append('contextRefs', ref);
@@ -246,7 +313,7 @@ export function WhatsNextWorkspace({
       setStartFiles([]);
       await startRun({
         sourceNodeIds: [payload.node.id],
-        instruction: sentence,
+        instruction: '',
       });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Something failed.');
@@ -256,7 +323,7 @@ export function WhatsNextWorkspace({
   }
 
   async function submitGrow() {
-    if (!growSource || !growInstruction.trim()) return;
+    if (!growSource) return;
     setError('');
     try {
       await startRun({
@@ -301,6 +368,10 @@ export function WhatsNextWorkspace({
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ runId }),
     }).catch(() => null);
+    if (snapshot?.revisionTarget) {
+      await loadRunsFromServer();
+      return;
+    }
     if (!snapshot || snapshot.revisionTarget) return;
     if (snapshot.sourceNodeIds.length > 1) {
       setCombineIds(snapshot.sourceNodeIds);
@@ -349,21 +420,55 @@ export function WhatsNextWorkspace({
   }
 
   async function reviseCandidate() {
-    if (!revisionTarget || !reviseNote.trim()) return;
+    if (!revisionTarget || (!reviseNote.trim() && pendingFeedback.length === 0))
+      return;
     const origins = selectedCandidate?.derivedFrom ?? [];
     setError('');
     try {
       await startRun({
         sourceNodeIds: origins,
-        instruction: reviseNote,
+        instruction:
+          reviseNote.trim() ||
+          'Refine the current Markdown using the attached inline feedback.',
+        feedback: pendingFeedback,
         revisionTarget,
       });
       setRevisionTarget(null);
       setReviseNote('');
+      setFeedbackDraft(null);
+      setPendingFeedback([]);
       setInspectorId('');
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Something failed.');
     }
+  }
+
+  async function addPendingFeedback() {
+    if (
+      !feedbackDraft?.instruction.trim() ||
+      !selectedCandidatePreview?.outputPath ||
+      !selectedCandidate
+    )
+      return;
+    const excerptHash = await sha256(feedbackDraft.selection.excerpt);
+    setPendingFeedback((current) => [
+      ...current,
+      {
+        feedbackId: `FEEDBACK-${crypto.randomUUID()}`,
+        path: selectedCandidatePreview.outputPath!,
+        baseRevision: selectedCandidate.revision,
+        startLine: feedbackDraft.selection.startLine,
+        endLine: feedbackDraft.selection.endLine,
+        excerpt: feedbackDraft.selection.excerpt,
+        excerptHash,
+        instruction: feedbackDraft.instruction.trim(),
+      },
+    ]);
+    setRevisionTarget({
+      runId: selectedCandidatePreview.runId!,
+      candidateId: selectedCandidate.candidateId,
+    });
+    setFeedbackDraft(null);
   }
 
   async function saveStart() {
@@ -373,7 +478,7 @@ export function WhatsNextWorkspace({
     try {
       const body = new FormData();
       body.append('id', editStart.id);
-      body.append('title', editText.trim().slice(0, 160));
+      body.append('title', titleFromIdea(editText));
       body.append('idea', editText.trim());
       body.append('graph', 'whats-next');
       for (const resource of editStart.resources) {
@@ -403,6 +508,19 @@ export function WhatsNextWorkspace({
     } finally {
       setSavingStart(false);
     }
+  }
+
+  async function beginEditSource(node: TaskGraphNode) {
+    const source = node.resources.find((resource) => resource.kind === 'idea');
+    if (!source) return;
+    const response = await fetch(
+      `/api/projects/${projectId}/resources?path=${encodeURIComponent(source.path)}`,
+    ).catch(() => null);
+    if (!response?.ok) return;
+    const payload = (await response.json()) as { markdown: string };
+    setEditStartId(node.id);
+    setEditText(withoutFirstHeading(payload.markdown));
+    setInspectorId('');
   }
 
   async function deleteNode(nodeId: string) {
@@ -436,7 +554,40 @@ export function WhatsNextWorkspace({
     }
   }
 
-  async function openOutput(path: string, title: string) {
+  async function openComparison(
+    title: string,
+    previousPath: string,
+    currentPath: string,
+    previousMarkdown?: string,
+    currentMarkdown?: string,
+  ) {
+    if (previousMarkdown !== undefined && currentMarkdown !== undefined) {
+      setComparison({
+        title,
+        previous: previousMarkdown,
+        current: currentMarkdown,
+      });
+      return;
+    }
+    const [previousResponse, currentResponse] = await Promise.all([
+      fetch(
+        `/api/projects/${projectId}/resources?path=${encodeURIComponent(previousPath)}`,
+      ),
+      fetch(
+        `/api/projects/${projectId}/resources?path=${encodeURIComponent(currentPath)}`,
+      ),
+    ]);
+    if (!previousResponse.ok || !currentResponse.ok) return;
+    const previous = (await previousResponse.json()) as { markdown: string };
+    const current = (await currentResponse.json()) as { markdown: string };
+    setComparison({
+      title,
+      previous: previous.markdown,
+      current: current.markdown,
+    });
+  }
+
+  async function openMarkdown(path: string, title: string) {
     const response = await fetch(
       `/api/projects/${projectId}/resources?path=${encodeURIComponent(path)}`,
     ).catch(() => null);
@@ -465,10 +616,13 @@ export function WhatsNextWorkspace({
             onChange={(event) => setIdea(event.target.value)}
             rows={4}
             placeholder="A manager that helps one developer grow and decompose product intent…"
-            maxLength={160}
+            maxLength={4_000}
             className="mt-5 resize-none text-sm"
             aria-label="Your idea"
           />
+          <p className="mt-2 text-right text-[11px] text-muted-foreground">
+            {idea.trim().length}/4,000 characters
+          </p>
           <div className="mt-4">
             <SourcePicker
               folders={folders}
@@ -531,6 +685,33 @@ export function WhatsNextWorkspace({
         onDecompose={setGrowSourceId}
         onCancelRun={(runId) => void cancelRun(runId)}
       />
+
+      {latestResponse?.result ? (
+        <button
+          type="button"
+          className="absolute top-4 left-4 z-10 w-[min(320px,calc(100%-2rem))] rounded-xl border border-border bg-background/95 p-3 text-left shadow-[0_12px_35px_rgb(15_23_42/9%)] backdrop-blur transition hover:border-foreground/25"
+          onClick={() =>
+            setPreview({
+              title: 'Latest Response',
+              path: `whats-next/runs/${latestResponse.runId}/response.md`,
+              markdown: renderWhatsNextResponseMarkdown(latestResponse.result!),
+            })
+          }
+        >
+          <span className="flex items-center gap-2 text-xs font-semibold">
+            <MessageSquareText className="size-3.5" />
+            Latest Response
+            <span className="ml-auto rounded-full bg-secondary px-2 py-0.5 text-[9px] font-medium text-muted-foreground">
+              {continuationLabel(
+                latestResponse.result.reflection.continuationAdvice.action,
+              )}
+            </span>
+          </span>
+          <span className="mt-1.5 block max-h-10 overflow-hidden text-[11px] leading-5 text-muted-foreground">
+            {plainMarkdown(latestResponse.result.reflection.markdown)}
+          </span>
+        </button>
+      ) : null}
 
       <div className="pointer-events-none absolute top-4 left-1/2 -translate-x-1/2">
         {error ? (
@@ -616,7 +797,7 @@ export function WhatsNextWorkspace({
           if (!open) closeGrow();
         }}
       >
-        <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-2xl">
+        <DialogContent className="max-h-[88vh] overflow-y-auto pb-0 sm:max-w-2xl">
           {growSource ? (
             <form
               onSubmit={(event) => {
@@ -627,12 +808,15 @@ export function WhatsNextWorkspace({
             >
               <div>
                 <h2 className="text-sm font-semibold">
-                  Grow from {growSource.id}
+                  {continuingGrow ? 'Continue from' : 'Explore from'}{' '}
+                  {growSource.id}
                 </h2>
                 <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                  {AGENT_LABELS[selectedAgent]} proposes two to five distinct
-                  directions. Inherited Resources stay on the source Node;
-                  additions apply only to this request.
+                  {continuingGrow
+                    ? `${AGENT_LABELS[selectedAgent]} continues the same line of inquiry with only this round’s changes.`
+                    : `${AGENT_LABELS[selectedAgent]} responds with a Reflection and supported next directions.`}{' '}
+                  Inherited Resources stay on the source Node; additions apply
+                  only to this request.
                 </p>
               </div>
 
@@ -664,13 +848,16 @@ export function WhatsNextWorkspace({
                   htmlFor="whats-next-instruction"
                   className="text-xs font-medium"
                 >
-                  Instruction
+                  Instruction{' '}
+                  <span className="font-normal text-muted-foreground">
+                    optional
+                  </span>
                 </label>
                 <Textarea
                   id="whats-next-instruction"
                   value={growInstruction}
                   maxLength={1_000}
-                  placeholder="What should the next directions explore?"
+                  placeholder="Steer this round, or let the Agent respond from the current Node."
                   className="min-h-28"
                   onChange={(event) => setGrowInstruction(event.target.value)}
                 />
@@ -733,17 +920,17 @@ export function WhatsNextWorkspace({
                 label="Run-only context"
               />
 
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={!growInstruction.trim()}
-              >
-                <Sparkles className="size-4" />
-                Find next directions
-              </Button>
-              {error ? (
-                <p className="text-xs text-destructive">{error}</p>
-              ) : null}
+              <div className="sticky bottom-0 -mx-4 border-t border-border bg-popover px-4 py-4">
+                <Button type="submit" className="w-full">
+                  <Sparkles className="size-4" />
+                  {continuingGrow
+                    ? 'Continue exploration'
+                    : 'Start exploration'}
+                </Button>
+                {error ? (
+                  <p className="mt-2 text-xs text-destructive">{error}</p>
+                ) : null}
+              </div>
             </form>
           ) : null}
         </DialogContent>
@@ -768,23 +955,23 @@ export function WhatsNextWorkspace({
               className="space-y-5"
             >
               <div>
-                <h2 className="text-sm font-semibold">Edit the idea</h2>
+                <h2 className="text-sm font-semibold">Edit source</h2>
                 <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                  This rewrites {editStart.id} and the `idea.md` it carries.
-                  Directions already grown from it are left alone.
+                  This rewrites the Markdown carried by {editStart.id}. Existing
+                  directions and dependencies remain unchanged.
                 </p>
               </div>
               <Textarea
                 value={editText}
                 onChange={(event) => setEditText(event.target.value)}
-                rows={4}
-                maxLength={160}
-                className="resize-none text-sm"
-                aria-label="Your idea"
+                rows={10}
+                maxLength={4_000}
+                className="text-sm"
+                aria-label="Source Markdown"
               />
               <div className="flex items-center justify-between gap-3">
                 <span className="text-[11px] text-muted-foreground">
-                  {editText.trim().length}/160 characters
+                  {editText.trim().length}/4,000 characters
                 </span>
                 <Button
                   type="submit"
@@ -811,10 +998,12 @@ export function WhatsNextWorkspace({
             setInspectorId('');
             setRevisionTarget(null);
             setReviseNote('');
+            setFeedbackDraft(null);
+            setPendingFeedback([]);
           }
         }}
       >
-        <SheetContent className="w-full sm:max-w-md">
+        <SheetContent className="w-full sm:max-w-2xl">
           {selectedCandidate ? (
             <>
               <SheetHeader>
@@ -824,60 +1013,156 @@ export function WhatsNextWorkspace({
                   {selectedCandidate.revision} · unaccepted direction
                 </SheetDescription>
               </SheetHeader>
-              <div className="space-y-5 overflow-y-auto px-4 text-sm">
-                <p className="leading-6 text-muted-foreground">
-                  {selectedCandidate.summary}
-                </p>
-                <Fact
-                  label="Grew from"
-                  value={selectedCandidate.derivedFrom.join(', ')}
+              <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 pb-4 text-sm">
+                <MarkdownReader
+                  title={selectedCandidate.title}
+                  filePath={selectedCandidatePreview?.outputPath ?? 'output.md'}
+                  markdown={
+                    'outputMarkdown' in selectedCandidate &&
+                    typeof selectedCandidate.outputMarkdown === 'string'
+                      ? selectedCandidate.outputMarkdown
+                      : `# ${selectedCandidate.title}\n\n${selectedCandidate.summary}`
+                  }
+                  compact
+                  onAddFeedback={(selection) =>
+                    setFeedbackDraft({ selection, instruction: '' })
+                  }
                 />
-                <Fact
-                  label="Depends on"
-                  value={selectedCandidate.dependsOn.join(', ') || 'Nothing'}
-                />
-                {selectedCandidate.assumptions.length > 0 ? (
-                  <div>
-                    <p className="text-[11px] font-medium text-muted-foreground">
-                      Assumptions
-                    </p>
-                    <ul className="mt-1.5 space-y-1.5">
-                      {selectedCandidate.assumptions.map((assumption) => (
-                        <li
-                          key={assumption}
-                          className="text-xs leading-5 text-muted-foreground"
-                        >
-                          {assumption}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-                {selectedCandidatePreview?.outputPath ? (
-                  <button
+
+                {selectedCandidatePreview?.previousOutputPath &&
+                selectedCandidatePreview.outputPath ? (
+                  <Button
                     type="button"
-                    className="flex items-center gap-1.5 text-xs text-foreground underline-offset-4 hover:underline"
+                    variant="outline"
+                    size="sm"
                     onClick={() =>
-                      void openOutput(
-                        selectedCandidatePreview.outputPath!,
+                      void openComparison(
                         selectedCandidate.title,
+                        selectedCandidatePreview.previousOutputPath!,
+                        selectedCandidatePreview.outputPath!,
+                        selectedCandidatePreview.previousMarkdown,
+                        'outputMarkdown' in selectedCandidate &&
+                          typeof selectedCandidate.outputMarkdown === 'string'
+                          ? selectedCandidate.outputMarkdown
+                          : undefined,
                       )
                     }
                   >
-                    Read the generated Markdown
-                    <ArrowUpRight className="size-3.5" />
-                  </button>
+                    Compare with previous revision
+                  </Button>
                 ) : null}
-                {revisionTarget ? (
-                  <div className="rounded-xl border border-border p-3">
+
+                <details className="rounded-xl border border-border p-3">
+                  <summary className="cursor-pointer text-xs font-medium">
+                    Graph details
+                  </summary>
+                  <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                    <Fact
+                      label="Grew from"
+                      value={selectedCandidate.derivedFrom.join(', ')}
+                    />
+                    <Fact
+                      label="Depends on"
+                      value={
+                        selectedCandidate.dependsOn.join(', ') || 'Nothing'
+                      }
+                    />
+                  </div>
+                </details>
+
+                {feedbackDraft ? (
+                  <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 p-3">
                     <p className="text-[11px] font-medium">
-                      Tell the Agent what to change
+                      Lines {feedbackDraft.selection.startLine}–
+                      {feedbackDraft.selection.endLine}
+                    </p>
+                    <p className="mt-1 line-clamp-3 text-[11px] leading-5 text-muted-foreground">
+                      “{feedbackDraft.selection.excerpt}”
+                    </p>
+                    <Textarea
+                      value={feedbackDraft.instruction}
+                      onChange={(event) =>
+                        setFeedbackDraft((current) =>
+                          current
+                            ? { ...current, instruction: event.target.value }
+                            : null,
+                        )
+                      }
+                      rows={3}
+                      placeholder="What should the Agent reconsider here?"
+                      className="mt-3 resize-none text-sm"
+                      aria-label="Inline feedback"
+                    />
+                    <div className="mt-2 flex justify-end gap-2">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setFeedbackDraft(null)}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={!feedbackDraft.instruction.trim()}
+                        onClick={() => void addPendingFeedback()}
+                      >
+                        Add feedback
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+
+                {pendingFeedback.length > 0 ? (
+                  <div className="space-y-2">
+                    <p className="text-[11px] font-medium text-muted-foreground">
+                      Feedback for this Refine
+                    </p>
+                    {pendingFeedback.map((feedback) => (
+                      <div
+                        key={feedback.feedbackId}
+                        className="flex items-start gap-3 rounded-xl bg-secondary px-3 py-2.5"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[10px] text-muted-foreground">
+                            Lines {feedback.startLine}–{feedback.endLine}
+                          </p>
+                          <p className="mt-1 text-xs leading-5">
+                            {feedback.instruction}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          className="text-muted-foreground hover:text-foreground"
+                          aria-label="Remove inline feedback"
+                          onClick={() =>
+                            setPendingFeedback((current) =>
+                              current.filter(
+                                (item) =>
+                                  item.feedbackId !== feedback.feedbackId,
+                              ),
+                            )
+                          }
+                        >
+                          <X className="size-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+              <SheetFooter className="shrink-0 border-t border-border px-6 py-4">
+                {revisionTarget ? (
+                  <div className="w-full">
+                    <p className="text-[11px] font-medium">
+                      Refine this Markdown
                     </p>
                     <Textarea
                       value={reviseNote}
                       onChange={(event) => setReviseNote(event.target.value)}
                       rows={3}
-                      placeholder="This direction is interesting, but…"
+                      placeholder="Describe what should change…"
                       className="mt-2 resize-none text-sm"
                       aria-label="Revision note"
                     />
@@ -894,57 +1179,59 @@ export function WhatsNextWorkspace({
                       </Button>
                       <Button
                         size="sm"
-                        disabled={!reviseNote.trim()}
+                        disabled={
+                          developmentPreview ||
+                          (!reviseNote.trim() && pendingFeedback.length === 0)
+                        }
                         onClick={() => void reviseCandidate()}
                       >
-                        Regenerate this card
+                        {developmentPreview ? 'Preview only' : 'Send Refine'}
                       </Button>
                     </div>
                   </div>
-                ) : null}
-              </div>
-              <SheetFooter className="border-t border-border px-6 py-4">
-                <div className="flex w-full gap-2">
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    size="icon"
-                    disabled={accepting || discarding}
-                    aria-label="Discard this direction"
-                    title="Discard this direction"
-                    onClick={() => void updateCandidate('discard')}
-                  >
-                    {discarding ? (
-                      <LoaderCircle className="animate-spin" />
-                    ) : (
-                      <Trash2 />
-                    )}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="flex-1"
-                    disabled={
-                      accepting || discarding || Boolean(revisionTarget)
-                    }
-                    onClick={() =>
-                      setRevisionTarget({
-                        runId: selectedCandidatePreview!.runId!,
-                        candidateId: selectedCandidate.candidateId,
-                      })
-                    }
-                  >
-                    <Pencil /> Revise
-                  </Button>
-                  <Button
-                    type="button"
-                    className="flex-1"
-                    disabled={accepting || discarding}
-                    onClick={() => void updateCandidate('accept')}
-                  >
-                    {accepting ? 'Accepting…' : 'Accept'}
-                  </Button>
-                </div>
+                ) : (
+                  <div className="flex w-full gap-2">
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="icon"
+                      disabled={accepting || discarding || developmentPreview}
+                      aria-label="Discard this direction"
+                      title="Discard this direction"
+                      onClick={() => void updateCandidate('discard')}
+                    >
+                      {discarding ? (
+                        <LoaderCircle className="animate-spin" />
+                      ) : (
+                        <Trash2 />
+                      )}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="flex-1"
+                      disabled={
+                        accepting || discarding || Boolean(revisionTarget)
+                      }
+                      onClick={() =>
+                        setRevisionTarget({
+                          runId: selectedCandidatePreview!.runId!,
+                          candidateId: selectedCandidate.candidateId,
+                        })
+                      }
+                    >
+                      <Pencil /> Refine
+                    </Button>
+                    <Button
+                      type="button"
+                      className="flex-1"
+                      disabled={accepting || discarding || developmentPreview}
+                      onClick={() => void updateCandidate('accept')}
+                    >
+                      {accepting ? 'Accepting…' : 'Accept'}
+                    </Button>
+                  </div>
+                )}
               </SheetFooter>
             </>
           ) : selectedNode ? (
@@ -955,7 +1242,7 @@ export function WhatsNextWorkspace({
                   {selectedNode.id} · {selectedNode.role} · {selectedNode.type}
                 </SheetDescription>
               </SheetHeader>
-              <div className="space-y-5 overflow-y-auto px-4 text-sm">
+              <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 text-sm">
                 {selectedNode.summary ? (
                   <p className="leading-6 text-muted-foreground">
                     {selectedNode.summary}
@@ -965,6 +1252,21 @@ export function WhatsNextWorkspace({
                   label="Grew from"
                   value={selectedNode.derivedFrom?.join(', ') || 'Nothing'}
                 />
+                {selectedNodeMarkdown ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      void openMarkdown(
+                        selectedNodeMarkdown.path,
+                        selectedNode.title,
+                      )
+                    }
+                  >
+                    <FileText /> Read source Markdown
+                  </Button>
+                ) : null}
                 <Fact
                   label="Came from"
                   value={
@@ -976,7 +1278,7 @@ export function WhatsNextWorkspace({
                   }
                 />
               </div>
-              <SheetFooter className="border-t border-border px-6 py-4">
+              <SheetFooter className="shrink-0 border-t border-border px-6 py-4">
                 <div className="flex w-full gap-2">
                   <Button
                     type="button"
@@ -1025,12 +1327,10 @@ export function WhatsNextWorkspace({
                       type="button"
                       className="flex-1"
                       onClick={() => {
-                        setEditStartId(selectedNode.id);
-                        setEditText(selectedNode.title);
-                        setInspectorId('');
+                        void beginEditSource(selectedNode);
                       }}
                     >
-                      <Pencil /> Edit the idea
+                      <Pencil /> Edit source
                     </Button>
                   ) : null}
                 </div>
@@ -1047,14 +1347,74 @@ export function WhatsNextWorkspace({
         </SheetContent>
       </Sheet>
 
-      {preview ? (
-        <MarkdownReader
-          title={preview.title}
-          filePath={preview.path}
-          markdown={preview.markdown}
-          onClose={() => setPreview(null)}
-        />
-      ) : null}
+      <Dialog
+        open={preview !== null}
+        onOpenChange={(open) => {
+          if (!open) setPreview(null);
+        }}
+      >
+        <DialogContent
+          showCloseButton={false}
+          className="max-h-[92vh] overflow-hidden bg-transparent p-0 ring-0 sm:max-w-[min(92vw,1100px)]"
+        >
+          {preview ? (
+            <MarkdownReader
+              title={preview.title}
+              filePath={preview.path}
+              markdown={preview.markdown}
+              onClose={() => setPreview(null)}
+              className="max-h-[92vh] overflow-y-auto"
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={comparison !== null}
+        onOpenChange={(open) => {
+          if (!open) setComparison(null);
+        }}
+      >
+        <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden sm:max-w-4xl">
+          {comparison ? (
+            <>
+              <div>
+                <h2 className="text-sm font-semibold">
+                  Review {comparison.title}
+                </h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Every changed line is shown before this revision is accepted.
+                </p>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-border font-mono text-[11px] leading-5">
+                {lineDiff(comparison.previous, comparison.current).map(
+                  (line, index) => (
+                    <div
+                      key={`${index}:${line.text}`}
+                      className={cn(
+                        'grid grid-cols-[24px_1fr] px-3 py-0.5',
+                        line.kind === 'added' && 'bg-emerald-500/10',
+                        line.kind === 'removed' && 'bg-red-500/10',
+                      )}
+                    >
+                      <span className="select-none text-muted-foreground">
+                        {line.kind === 'added'
+                          ? '+'
+                          : line.kind === 'removed'
+                            ? '−'
+                            : ' '}
+                      </span>
+                      <span className="whitespace-pre-wrap break-words">
+                        {line.text || ' '}
+                      </span>
+                    </div>
+                  ),
+                )}
+              </div>
+            </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -1166,6 +1526,7 @@ function SourcePicker({
                         <Checkbox
                           checked={refs.includes(entry.path)}
                           onCheckedChange={() => onToggleRef(entry.path)}
+                          aria-label={entry.name}
                         />
                         <FileText className="size-3.5 shrink-0 text-muted-foreground" />
                         <span className="truncate">{entry.name}</span>
@@ -1276,6 +1637,136 @@ function resourceName(resourcePath: string) {
   return resourcePath.split('/').at(-1) ?? resourcePath;
 }
 
+function titleFromIdea(idea: string) {
+  const firstLine = idea
+    .split('\n')
+    .map((line) => line.replace(/^#+\s*/, '').trim())
+    .find(Boolean);
+  return (firstLine || 'Untitled idea').slice(0, 160);
+}
+
+function withoutFirstHeading(markdown: string) {
+  return markdown.replace(/^#\s+[^\n]+\n+/, '').trim();
+}
+
+function agentForRun(run: WhatsNextRunRecord | undefined): LocalAgentKind {
+  return run?.transport === 'codex-cli' ? 'codex' : 'claude';
+}
+
+function mergePreviews(
+  current: TaskGraphPreview[],
+  incoming: TaskGraphPreview[],
+) {
+  const merged = new Map(current.map((preview) => [preview.id, preview]));
+  for (const preview of incoming) {
+    const previous = merged.get(preview.id);
+    merged.set(
+      preview.id,
+      previous?.kind === 'candidate' &&
+        preview.kind === 'run' &&
+        preview.revisionOf === previous.id
+        ? {
+            ...preview,
+            title: previous.title,
+            description: previous.description,
+            candidate: previous.candidate,
+            outputPath: previous.outputPath,
+            previousOutputPath: previous.previousOutputPath,
+            previousMarkdown: previous.previousMarkdown,
+          }
+        : previous?.kind === 'candidate' && preview.kind === 'candidate'
+          ? {
+              ...preview,
+              previousOutputPath:
+                preview.previousOutputPath ?? previous.outputPath,
+              previousMarkdown:
+                previous.candidate && 'outputMarkdown' in previous.candidate
+                  ? previous.candidate.outputMarkdown
+                  : undefined,
+            }
+          : preview,
+    );
+  }
+  return [...merged.values()];
+}
+
+function upsertRun(current: WhatsNextRunRecord[], run: WhatsNextRunRecord) {
+  return [...current.filter((item) => item.runId !== run.runId), run].sort(
+    (left, right) => left.startedAt.localeCompare(right.startedAt),
+  );
+}
+
+function continuationLabel(
+  action: 'continue' | 'consider-closing' | 'consider-branching',
+) {
+  if (action === 'consider-closing') return 'Ready to close';
+  if (action === 'consider-branching') return 'Consider branching';
+  return 'Continue';
+}
+
+function plainMarkdown(markdown: string) {
+  return markdown
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/^\s*[-*>]\s+/gm, '')
+    .replace(/[*_`>]/g, '')
+    .replace(/\s+/g, ' ')
+    .replace(/^Reflection\s*/i, '')
+    .trim();
+}
+
+async function sha256(value: string) {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+function lineDiff(previous: string, current: string) {
+  const before = previous.split('\n');
+  const after = current.split('\n');
+  const rows = Array.from(
+    { length: before.length + 1 },
+    () => Array(after.length + 1).fill(0) as number[],
+  );
+  for (let left = before.length - 1; left >= 0; left -= 1) {
+    for (let right = after.length - 1; right >= 0; right -= 1) {
+      rows[left]![right] =
+        before[left] === after[right]
+          ? rows[left + 1]![right + 1]! + 1
+          : Math.max(rows[left + 1]![right]!, rows[left]![right + 1]!);
+    }
+  }
+  const lines: Array<{
+    kind: 'same' | 'added' | 'removed';
+    text: string;
+  }> = [];
+  let left = 0;
+  let right = 0;
+  while (left < before.length && right < after.length) {
+    if (before[left] === after[right]) {
+      lines.push({ kind: 'same', text: before[left]! });
+      left += 1;
+      right += 1;
+    } else if (rows[left + 1]![right]! >= rows[left]![right + 1]!) {
+      lines.push({ kind: 'removed', text: before[left]! });
+      left += 1;
+    } else {
+      lines.push({ kind: 'added', text: after[right]! });
+      right += 1;
+    }
+  }
+  while (left < before.length) {
+    lines.push({ kind: 'removed', text: before[left]! });
+    left += 1;
+  }
+  while (right < after.length) {
+    lines.push({ kind: 'added', text: after[right]! });
+    right += 1;
+  }
+  return lines;
+}
+
 function runToPreviews(run: WhatsNextRunRecord): TaskGraphPreview[] {
   const base = {
     sourceNodeId: run.sourceNodeIds[0] ?? '',
@@ -1291,13 +1782,14 @@ function runToPreviews(run: WhatsNextRunRecord): TaskGraphPreview[] {
     return [
       {
         ...base,
-        id: run.runId,
+        id: run.revisionOf ?? run.runId,
         kind: 'run',
-        title: agentLabel,
-        type: 'Running',
+        title: run.revisionOf ? 'Refining direction' : agentLabel,
+        type: run.revisionOf ? 'Refining' : 'Running',
         description: run.input?.instruction ?? '',
         agentLabel,
         status: run.status,
+        revisionOf: run.revisionOf,
       },
     ];
   }
@@ -1315,6 +1807,10 @@ function runToPreviews(run: WhatsNextRunRecord): TaskGraphPreview[] {
       dependsOn: candidate.dependsOn,
       candidate,
       outputPath: `whats-next/runs/${run.runId}/candidates/${candidate.candidateId}/output.md`,
+      previousOutputPath:
+        run.revisionOf && run.parentRunId
+          ? `whats-next/runs/${run.parentRunId}/candidates/${candidate.candidateId}/output.md`
+          : undefined,
       revisionOf: run.revisionOf,
     }));
   }

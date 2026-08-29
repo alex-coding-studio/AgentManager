@@ -6,6 +6,7 @@ import {
   listLatestWhatsNextRuns,
   readWhatsNextRun,
   startWhatsNextRun,
+  type WhatsNextFeedbackAnchor,
 } from '@/lib/whats-next-runs';
 
 export const runtime = 'nodejs';
@@ -25,12 +26,13 @@ export async function POST(
     const agent = formData.get('agent');
     const revisionRunId = formData.get('revisionRunId');
     const revisionCandidateId = formData.get('revisionCandidateId');
+    const feedbackValue = formData.get('feedback');
     const sourceNodeIds = formData
       .getAll('sourceNodeIds')
       .filter((entry): entry is string => typeof entry === 'string');
     if (sourceNodeIds.length === 0 || typeof instruction !== 'string') {
       return Response.json(
-        { error: 'At least one origin Node and an Instruction are required.' },
+        { error: 'At least one origin Node is required.' },
         { status: 400 },
       );
     }
@@ -46,12 +48,14 @@ export async function POST(
     const files = formData
       .getAll('files')
       .filter((entry): entry is File => entry instanceof File);
+    const feedback = parseFeedback(feedbackValue);
     const run = await startWhatsNextRun(project, {
       sourceNodeIds,
       agent,
       instruction,
       contextRefs,
       files,
+      feedback,
       revisionRunId:
         typeof revisionRunId === 'string' && revisionRunId
           ? revisionRunId
@@ -70,6 +74,18 @@ export async function POST(
       { status: /already has an active/.test(message) ? 409 : 400 },
     );
   }
+}
+
+function parseFeedback(value: FormDataEntryValue | null) {
+  if (value === null || value === '') return [];
+  if (typeof value !== 'string') {
+    throw new Error('Inline feedback must be JSON.');
+  }
+  const parsed = JSON.parse(value) as unknown;
+  if (!Array.isArray(parsed) || parsed.length > 20) {
+    throw new Error('Inline feedback must contain no more than 20 items.');
+  }
+  return parsed as WhatsNextFeedbackAnchor[];
 }
 
 export async function GET(

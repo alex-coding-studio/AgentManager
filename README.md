@@ -45,6 +45,18 @@ For development with live reload:
 agent-manager dev
 ```
 
+To review the development server through a private Tailscale Serve hostname,
+allow that hostname before starting the dev server:
+
+```bash
+AGENT_MANAGER_ALLOWED_DEV_ORIGINS=your-device.your-tailnet.ts.net agent-manager dev
+tailscale serve --bg 3000
+```
+
+The hostname is machine-specific and must not be committed to configuration.
+Tailscale Serve keeps the site inside the tailnet; this project does not require
+or enable public Funnel access.
+
 ## Local data
 
 The machine registry is stored at `~/.agent-manager/config.json`. Each project

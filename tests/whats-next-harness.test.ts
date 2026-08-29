@@ -2,11 +2,23 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   WHATS_NEXT_HARNESS_ID,
+  WHATS_NEXT_HARNESS_PROMPT,
   WHATS_NEXT_HARNESS_REVISION,
   WhatsNextResultValidationError,
+  canReuseWhatsNextSession,
   parseWhatsNextHarnessResult,
   validateWhatsNextHarnessResult,
 } from '../lib/whats-next-harness.ts';
+import { renderWhatsNextResponseMarkdown } from '../lib/whats-next-response.ts';
+
+void test('ships the settled Reflection and Markdown Harness contract', () => {
+  assert.match(WHATS_NEXT_HARNESS_PROMPT, /user-facing Reflection/);
+  assert.match(WHATS_NEXT_HARNESS_PROMPT, /Why this direction/);
+  assert.match(WHATS_NEXT_HARNESS_PROMPT, /For refine-candidate/);
+  assert.match(WHATS_NEXT_HARNESS_PROMPT, /exactly one semantic level/);
+  assert.match(WHATS_NEXT_HARNESS_PROMPT, /protected comparison Context/);
+  assert.doesNotMatch(WHATS_NEXT_HARNESS_PROMPT, /placeholder/);
+});
 
 const request = {
   sessionId: 'SESSION-0001',
@@ -28,6 +40,15 @@ function baseResult() {
       revision: WHATS_NEXT_HARNESS_REVISION,
     },
     request,
+    reflection: {
+      markdown:
+        '# Reflection\n\nThe user most needs a bounded way to make the idea concrete.',
+      continuationAdvice: {
+        action: 'continue',
+        recommendedFocus: 'concretize',
+        reason: 'Several useful starting directions remain unexplored.',
+      },
+    },
     exploration: {
       consideredNodeIds: ['NODE-0001'],
       notes: ['The Start carries only the stated idea.'],
@@ -36,11 +57,12 @@ function baseResult() {
 }
 
 function candidate(id: string, overrides: Record<string, unknown> = {}) {
+  const title = `Direction ${id}`;
   return {
     candidateId: id,
     revision: 1,
     type: 'module',
-    title: `Direction ${id}`,
+    title,
     summary: 'One possible next step grown from the Start.',
     derivedFrom: ['NODE-0001'],
     dependsOn: [],
@@ -49,6 +71,18 @@ function candidate(id: string, overrides: Record<string, unknown> = {}) {
     metadata: {},
     presentation: {},
     assumptions: [],
+    outputMarkdown: `# ${title}
+
+One possible next step grown from the Start.
+
+## Why this direction
+
+- The origin describes a broad product idea that still needs a concrete entry point.
+- This direction provides one bounded possibility the user can inspect.
+
+## Assumptions
+
+- None`,
     ...overrides,
   };
 }
@@ -63,6 +97,93 @@ void test('accepts a proposal of distinct directions', () => {
     context,
   );
   assert.equal(result.outcome, 'proposal');
+});
+
+void test('requires a machine-readable progressive continuation focus', () => {
+  const value = proposal([
+    candidate('CANDIDATE-0001'),
+    candidate('CANDIDATE-0002'),
+  ]);
+  delete (value.reflection.continuationAdvice as { recommendedFocus?: string })
+    .recommendedFocus;
+  assert.throws(
+    () => validateWhatsNextHarnessResult(value, context),
+    WhatsNextResultValidationError,
+  );
+});
+
+void test('does not resume a provider Session across Harness revisions', () => {
+  const run = {
+    agentSessionMode: 'persistent' as const,
+    transport: 'codex-cli' as const,
+    harness: { revision: WHATS_NEXT_HARNESS_REVISION - 1 },
+  };
+  assert.equal(canReuseWhatsNextSession(run, 'codex-cli'), false);
+  assert.equal(
+    canReuseWhatsNextSession(
+      {
+        ...run,
+        harness: { revision: WHATS_NEXT_HARNESS_REVISION },
+      },
+      'codex-cli',
+    ),
+    true,
+  );
+});
+
+void test('rejects contradictory continuation advice', () => {
+  const value = proposal([
+    candidate('CANDIDATE-0001'),
+    candidate('CANDIDATE-0002'),
+  ]);
+  value.reflection.continuationAdvice = {
+    action: 'consider-closing',
+    recommendedFocus: 'concretize',
+    reason: 'The meaning is abstract but the Session should close.',
+  };
+  assert.throws(
+    () => validateWhatsNextHarnessResult(value, context),
+    WhatsNextResultValidationError,
+  );
+});
+
+void test('renders one readable Response from Reflection and Candidates', () => {
+  const result = validateWhatsNextHarnessResult(
+    proposal([candidate('CANDIDATE-0001'), candidate('CANDIDATE-0002')]),
+    context,
+  );
+  const markdown = renderWhatsNextResponseMarkdown(result);
+  assert.match(markdown, /# Reflection/);
+  assert.match(markdown, /## Suggested next step/);
+  assert.match(markdown, /Make this direction one level more concrete/);
+  assert.match(markdown, /# Candidate Proposals/);
+  assert.match(markdown, /## Direction CANDIDATE-0001/);
+});
+
+void test('accepts a heading-free Reflection and ordered rationale', () => {
+  const value = proposal([
+    candidate('CANDIDATE-0001', {
+      outputMarkdown: `# Direction CANDIDATE-0001
+
+One possible next step grown from the Start.
+
+## Why this direction
+
+1. The origin still needs a concrete entry point.
+2. The user can inspect this direction independently.
+
+## Assumptions
+
+- None`,
+    }),
+    candidate('CANDIDATE-0002'),
+  ]);
+  value.reflection.markdown =
+    'The current idea contains several connected but unsettled values.';
+  assert.equal(
+    validateWhatsNextHarnessResult(value, context).outcome,
+    'proposal',
+  );
 });
 
 void test('rejects a single-direction proposal', () => {
@@ -166,6 +287,9 @@ void test('rejects a response for a different request', () => {
 void test('requires the next revision when revising one direction', () => {
   const revising = {
     ...context,
+    operation: 'refine-candidate' as const,
+    revisionCandidateId: 'CANDIDATE-0001',
+    revisionTarget: candidate('CANDIDATE-0001'),
     previousCandidateRevisions: { 'CANDIDATE-0001': 1 },
   };
   assert.throws(
@@ -177,13 +301,65 @@ void test('requires the next revision when revising one direction', () => {
     WhatsNextResultValidationError,
   );
   const result = validateWhatsNextHarnessResult(
-    proposal([
-      candidate('CANDIDATE-0001', { revision: 2 }),
-      candidate('CANDIDATE-0002'),
-    ]),
+    proposal([candidate('CANDIDATE-0001', { revision: 2 })]),
     revising,
   );
   assert.equal(result.outcome, 'proposal');
+});
+
+void test('rejects Candidate Markdown without a bounded rationale', () => {
+  assert.throws(
+    () =>
+      validateWhatsNextHarnessResult(
+        proposal([
+          candidate('CANDIDATE-0001', {
+            outputMarkdown: '# Direction CANDIDATE-0001\n\nNo rationale.',
+          }),
+          candidate('CANDIDATE-0002'),
+        ]),
+        context,
+      ),
+    WhatsNextResultValidationError,
+  );
+});
+
+void test('rejects assumptions that drift from Candidate Markdown', () => {
+  assert.throws(
+    () =>
+      validateWhatsNextHarnessResult(
+        proposal([
+          candidate('CANDIDATE-0001', {
+            assumptions: ['A hidden assumption.'],
+          }),
+          candidate('CANDIDATE-0002'),
+        ]),
+        context,
+      ),
+    WhatsNextResultValidationError,
+  );
+});
+
+void test('rejects graph changes during one-to-one Refine', () => {
+  const original = candidate('CANDIDATE-0001');
+  assert.throws(
+    () =>
+      validateWhatsNextHarnessResult(
+        proposal([
+          candidate('CANDIDATE-0001', {
+            revision: 2,
+            dependsOn: ['NODE-0002'],
+          }),
+        ]),
+        {
+          ...context,
+          operation: 'refine-candidate',
+          revisionCandidateId: 'CANDIDATE-0001',
+          revisionTarget: original,
+          previousCandidateRevisions: { 'CANDIDATE-0001': 1 },
+        },
+      ),
+    WhatsNextResultValidationError,
+  );
 });
 
 void test('does not offer an insufficient-evidence outcome', () => {
@@ -202,9 +378,15 @@ void test('does not offer an insufficient-evidence outcome', () => {
 });
 
 void test('accepts a no-change outcome', () => {
+  const value = baseResult();
+  value.reflection.continuationAdvice = {
+    action: 'consider-closing',
+    recommendedFocus: 'close',
+    reason: 'Another round would only repeat accepted meaning.',
+  };
   const result = validateWhatsNextHarnessResult(
     {
-      ...baseResult(),
+      ...value,
       outcome: 'no-change',
       reason: 'The origin is exhausted.',
     },

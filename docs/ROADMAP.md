@@ -88,3 +88,45 @@ retain the usage accumulated before interruption.
 The future interface can expose a `Run statistics` view with totals, Context
 breakdown, duration, expansions, retries, tools, Sub Agents, outcome, and cost
 when known.
+
+## Deferred: Decomposition Recompose runtime
+
+The product contract now names proposal-level structural revision
+`Recompose`. Unlike the current strict one-Candidate `revise-candidate`
+operation, Recompose may return a different partition and Candidate count.
+
+Deliver it as one coherent runtime migration:
+
+- add an explicit proposal-level Recompose operation;
+- reconcile retained, replaced, split, merged, added, and removed Candidate
+  identities;
+- update the output schema, validator, persistence, and Canvas interaction
+  together;
+- treat accepted Formal Nodes as protected boundaries; and
+- cover dependency impact, stale inputs, comparison, rollback, and system-Trash
+  cleanup.
+
+Do not rename only the Prompt or UI while the runtime still enforces one-to-one
+revision. Restructuring accepted graph branches remains a separate future
+operation.
+
+## Deferred: Mobile Markdown feedback
+
+The desktop Markdown review flow supports free text selection and block-level
+feedback anchors. On an iPhone browser or embedded WebView, text-selection
+handles, hover-only block controls, and the follow-up feedback action are not
+reliable enough for practical use. A visible `Add feedback` action may appear
+without producing a usable feedback Composer.
+
+Mobile annotation is not required for the first desktop-focused What's Next
+V1. A later mobile-specific interaction should avoid depending on desktop text
+selection and should be validated on iOS Safari and embedded WebViews. Possible
+directions include:
+
+- an explicit annotation mode with always-visible block controls;
+- tap-to-select paragraphs or list items, with optional multi-block selection;
+- a bottom-sheet feedback Composer that preserves the selected excerpt; and
+- clear selected, queued, stale, and removed feedback states without hover.
+
+Do not treat the current mobile interaction as accepted merely because the
+underlying line-range data model supports multiple lines.
