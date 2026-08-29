@@ -5,6 +5,7 @@ import {
   WHATS_NEXT_HARNESS_PROMPT,
   WHATS_NEXT_HARNESS_REVISION,
   WhatsNextResultValidationError,
+  canReuseWhatsNextSession,
   parseWhatsNextHarnessResult,
   validateWhatsNextHarnessResult,
 } from '../lib/whats-next-harness.ts';
@@ -105,6 +106,41 @@ void test('requires a machine-readable progressive continuation focus', () => {
   ]);
   delete (value.reflection.continuationAdvice as { recommendedFocus?: string })
     .recommendedFocus;
+  assert.throws(
+    () => validateWhatsNextHarnessResult(value, context),
+    WhatsNextResultValidationError,
+  );
+});
+
+void test('does not resume a provider Session across Harness revisions', () => {
+  const run = {
+    agentSessionMode: 'persistent' as const,
+    transport: 'codex-cli' as const,
+    harness: { revision: WHATS_NEXT_HARNESS_REVISION - 1 },
+  };
+  assert.equal(canReuseWhatsNextSession(run, 'codex-cli'), false);
+  assert.equal(
+    canReuseWhatsNextSession(
+      {
+        ...run,
+        harness: { revision: WHATS_NEXT_HARNESS_REVISION },
+      },
+      'codex-cli',
+    ),
+    true,
+  );
+});
+
+void test('rejects contradictory continuation advice', () => {
+  const value = proposal([
+    candidate('CANDIDATE-0001'),
+    candidate('CANDIDATE-0002'),
+  ]);
+  value.reflection.continuationAdvice = {
+    action: 'consider-closing',
+    recommendedFocus: 'concretize',
+    reason: 'The meaning is abstract but the Session should close.',
+  };
   assert.throws(
     () => validateWhatsNextHarnessResult(value, context),
     WhatsNextResultValidationError,
@@ -342,9 +378,15 @@ void test('does not offer an insufficient-evidence outcome', () => {
 });
 
 void test('accepts a no-change outcome', () => {
+  const value = baseResult();
+  value.reflection.continuationAdvice = {
+    action: 'consider-closing',
+    recommendedFocus: 'close',
+    reason: 'Another round would only repeat accepted meaning.',
+  };
   const result = validateWhatsNextHarnessResult(
     {
-      ...baseResult(),
+      ...value,
       outcome: 'no-change',
       reason: 'The origin is exhausted.',
     },

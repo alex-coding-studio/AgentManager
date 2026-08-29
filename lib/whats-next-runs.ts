@@ -15,6 +15,7 @@ import type { RegisteredProject } from './project-registry.ts';
 import {
   WHATS_NEXT_HARNESS_ID,
   WHATS_NEXT_HARNESS_REVISION,
+  canReuseWhatsNextSession,
   parseWhatsNextHarnessResult,
   type WhatsNextCandidate,
   type WhatsNextHarnessResult,
@@ -149,8 +150,8 @@ export async function startWhatsNextRun(
     ? revisionTarget.run
     : await findLatestCoordinatorRun(project, input.sourceNodeIds);
   const coordinatorRun =
-    coordinatorCandidate?.agentSessionMode === 'persistent' &&
-    coordinatorCandidate.transport === transport
+    coordinatorCandidate &&
+    canReuseWhatsNextSession(coordinatorCandidate, transport)
       ? coordinatorCandidate
       : null;
   const continuesExistingSession = Boolean(coordinatorRun?.agentSessionId);

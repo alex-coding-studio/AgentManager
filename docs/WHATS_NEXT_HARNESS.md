@@ -138,6 +138,9 @@ The machine-readable continuation advice records both the broad action and a
 AgentManager renders the recommendation prominently in the readable Response
 Markdown and uses it to construct the default continuation Instruction. The
 Canvas UI remains general, and the user may always replace the default.
+The broad action and focus cannot contradict each other: closing always uses
+`close`, branching uses `expand` or `compare`, clarification uses `clarify`,
+and `no-change` closes the line of inquiry.
 
 ### Atomicity is relative to product judgment
 
@@ -311,6 +314,13 @@ available and send only the latest user input, feedback anchors, Markdown and
 graph deltas, new or changed Resource references, and current fingerprints.
 Unchanged Harness text, sources, and prior dialogue are not repeatedly
 injected.
+
+A provider Session is reusable only under the same Harness revision and
+transport. A Harness revision change starts a fresh provider Session from the
+current Candidate, selected origins, project instructions, graph map, and full
+Context Workspace bootstrap. Sending a new Contract into an old provider
+Session is not sufficient because superseded rules remain in its conversation
+Context.
 
 Related content remains discoverable from the manifest. Before reading it, the
 Agent must name a concrete unresolved question such as possible duplication
