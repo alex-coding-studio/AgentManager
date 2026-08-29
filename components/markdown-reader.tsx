@@ -138,7 +138,7 @@ export function MarkdownReader({
       <header
         className={cn(
           'flex shrink-0 items-center gap-3 border-b border-border',
-          compact ? 'px-4 py-3' : 'px-6 py-4',
+          compact ? 'sticky top-0 z-10 bg-card px-4 py-3' : 'px-6 py-4',
         )}
       >
         <div className="grid size-9 place-items-center rounded-xl bg-secondary">
