@@ -229,6 +229,24 @@ coordinates:
 6. Keep the initial fitted view readable while allowing manual zoom down to
    twenty percent for large graphs.
 
+## Ninth implementation slice
+
+The ninth slice makes graph relationships inspectable and establishes safe
+manual deletion:
+
+1. List `Derived from`, `Depends on`, `Derived nodes`, and `Dependents`
+   separately in the Node inspector.
+2. Let every relationship row close the inspector, focus the related card, and
+   center it on the Canvas.
+3. Allow deletion only when no formal Node derives from or depends on the
+   selected Node.
+4. Move the complete Node folder to the operating system Trash after both the
+   interface and server validate that it is no longer referenced.
+5. Apply the same rule to Start so deleting the final unreferenced Start returns
+   the Canvas to its empty state.
+6. Let the development fixture simulate deletion in memory without touching
+   project data.
+
 ## Canvas direction
 
 Task Decomposition is an open canvas rather than a traditional project board.

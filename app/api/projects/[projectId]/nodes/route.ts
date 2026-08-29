@@ -1,6 +1,13 @@
 import { getProject } from '@/lib/project-registry';
-import { createStartNode, updateStartNode } from '@/lib/task-graph';
-import { CanvasStartConflictError } from '@/lib/task-graph-rules';
+import {
+  createStartNode,
+  deleteTaskGraphNode,
+  updateStartNode,
+} from '@/lib/task-graph';
+import {
+  CanvasStartConflictError,
+  NodeReferencedError,
+} from '@/lib/task-graph-rules';
 
 export const runtime = 'nodejs';
 
@@ -90,5 +97,37 @@ export async function PATCH(
         ? error.message
         : 'Could not update the start node.';
     return Response.json({ error: message }, { status: 400 });
+  }
+}
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ projectId: string }> },
+) {
+  const { projectId } = await params;
+  const project = await getProject(projectId);
+  if (!project) {
+    return Response.json({ error: 'Project not found.' }, { status: 404 });
+  }
+
+  try {
+    const payload = (await request.json()) as { id?: unknown };
+    if (typeof payload.id !== 'string') {
+      return Response.json({ error: 'A node is required.' }, { status: 400 });
+    }
+    return Response.json(await deleteTaskGraphNode(project, payload.id));
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : 'Could not delete the node.';
+    return Response.json(
+      {
+        error: message,
+        blockerNodeIds:
+          error instanceof NodeReferencedError
+            ? error.blockerNodeIds
+            : undefined,
+      },
+      { status: error instanceof NodeReferencedError ? 409 : 400 },
+    );
   }
 }

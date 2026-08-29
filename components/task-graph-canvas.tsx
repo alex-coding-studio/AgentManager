@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useEffect, useMemo } from 'react';
+import { memo, useEffect, useMemo, useRef } from 'react';
 import {
   Background,
   BackgroundVariant,
@@ -15,6 +15,7 @@ import {
   type Edge,
   type Node,
   type NodeProps,
+  type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { FileText, GitFork, Info, Plus } from 'lucide-react';
@@ -46,6 +47,7 @@ export function TaskGraphCanvas({
   nodes,
   previews,
   focusedNodeId,
+  locateRequest,
   onFocusNode,
   onInspectNode,
   onSelectPreview,
@@ -54,6 +56,7 @@ export function TaskGraphCanvas({
   nodes: TaskGraphNode[];
   previews: TaskGraphPreview[];
   focusedNodeId: string;
+  locateRequest: { nodeId: string; sequence: number } | null;
   onFocusNode: (nodeId: string) => void;
   onInspectNode: (nodeId: string) => void;
   onSelectPreview: (previewId: string) => void;
@@ -72,6 +75,9 @@ export function TaskGraphCanvas({
   );
   const [flowNodes, setFlowNodes, onNodesChange] = useNodesState(graph.nodes);
   const [flowEdges, setFlowEdges, onEdgesChange] = useEdgesState(graph.edges);
+  const flowInstance = useRef<ReactFlowInstance<TaskFlowNode, Edge> | null>(
+    null,
+  );
 
   useEffect(() => {
     setFlowNodes(
@@ -83,11 +89,31 @@ export function TaskGraphCanvas({
     setFlowEdges(graph.edges);
   }, [focusedNodeId, graph, setFlowEdges, setFlowNodes]);
 
+  useEffect(() => {
+    if (!locateRequest || !flowInstance.current) return;
+    const instance = flowInstance.current;
+    const node = instance.getNode(locateRequest.nodeId);
+    if (!node) return;
+    const width = node.measured?.width ?? 288;
+    const height = node.measured?.height ?? 156;
+    void instance.setCenter(
+      node.position.x + width / 2,
+      node.position.y + height / 2,
+      {
+        duration: 350,
+        zoom: Math.max(instance.getZoom(), 0.65),
+      },
+    );
+  }, [locateRequest]);
+
   return (
     <ReactFlow<TaskFlowNode, Edge>
       nodes={flowNodes}
       edges={flowEdges}
       nodeTypes={nodeTypes}
+      onInit={(instance) => {
+        flowInstance.current = instance;
+      }}
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
       onNodeClick={(_, node) => {

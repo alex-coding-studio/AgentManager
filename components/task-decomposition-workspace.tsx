@@ -3,17 +3,30 @@
 import Link from 'next/link';
 import { useRef, useState, type DragEvent } from 'react';
 import {
+  ArrowUpRight,
   ChevronDown,
   FileText,
   Folder,
   Pencil,
   Plus,
   SlidersHorizontal,
+  Trash2,
   Upload,
   X,
 } from 'lucide-react';
 import { MarkdownReader } from '@/components/markdown-reader';
 import { TaskGraphCanvas } from '@/components/task-graph-canvas';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogMedia,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
@@ -30,6 +43,7 @@ import {
 import type { ContextBrowserFolder } from '@/lib/product-context';
 import type { TaskGraphNode } from '@/lib/task-graph';
 import type { TaskGraphPreview } from '@/lib/task-graph-layout';
+import { getTaskGraphRelationships } from '@/lib/task-graph-rules';
 import { cn } from '@/lib/utils';
 
 type DecompositionRequestPreview = TaskGraphPreview & {
@@ -42,11 +56,13 @@ export function TaskDecompositionWorkspace({
   folders,
   initialNodes,
   initialPreviews,
+  developmentPreview,
 }: {
   projectId: string;
   folders: ContextBrowserFolder[];
   initialNodes: TaskGraphNode[];
   initialPreviews: TaskGraphPreview[];
+  developmentPreview: boolean;
 }) {
   const [nodes, setNodes] = useState(initialNodes);
   const [title, setTitle] = useState('');
@@ -59,6 +75,10 @@ export function TaskDecompositionWorkspace({
   const [editingId, setEditingId] = useState('');
   const [focusedNodeId, setFocusedNodeId] = useState('');
   const [inspectorNodeId, setInspectorNodeId] = useState('');
+  const [locateRequest, setLocateRequest] = useState<{
+    nodeId: string;
+    sequence: number;
+  } | null>(null);
   const [requestPreviews, setRequestPreviews] = useState<
     DecompositionRequestPreview[]
   >(
@@ -88,6 +108,9 @@ export function TaskDecompositionWorkspace({
   const [previewingPath, setPreviewingPath] = useState('');
   const [dragging, setDragging] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
   const [error, setError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const requestFileInputRef = useRef<HTMLInputElement>(null);
@@ -104,6 +127,19 @@ export function TaskDecompositionWorkspace({
     selectedRefs.length + retainedAttachmentRefs.length + files.length;
   const selectedNode =
     nodes.find((node) => node.id === inspectorNodeId) ?? null;
+  const selectedRelationships = selectedNode
+    ? getTaskGraphRelationships(nodes, selectedNode.id)
+    : null;
+  const deletionBlockers = selectedRelationships
+    ? [
+        ...new Map(
+          [
+            ...selectedRelationships.derivedNodes,
+            ...selectedRelationships.dependents,
+          ].map((node) => [node.id, node]),
+        ).values(),
+      ]
+    : [];
   const decomposeSource =
     nodes.find((node) => node.id === decomposeSourceId) ?? null;
 
@@ -333,6 +369,59 @@ export function TaskDecompositionWorkspace({
     addFiles(Array.from(event.dataTransfer.files));
   }
 
+  function locateNode(nodeId: string) {
+    setInspectorNodeId('');
+    setFocusedNodeId(nodeId);
+    setLocateRequest((current) => ({
+      nodeId,
+      sequence: (current?.sequence ?? 0) + 1,
+    }));
+  }
+
+  async function deleteSelectedNode() {
+    if (!selectedNode || deletionBlockers.length > 0) return;
+    setDeleting(true);
+    setDeleteError('');
+
+    if (developmentPreview) {
+      setNodes((current) =>
+        current.filter((node) => node.id !== selectedNode.id),
+      );
+      setRequestPreviews((current) =>
+        current.filter((preview) => preview.sourceNodeId !== selectedNode.id),
+      );
+      finishNodeDeletion();
+      return;
+    }
+
+    const response = await fetch(`/api/projects/${projectId}/nodes`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: selectedNode.id }),
+    });
+    const result = (await response.json()) as {
+      nodes?: TaskGraphNode[];
+      error?: string;
+    };
+    if (!response.ok || !result.nodes) {
+      setDeleting(false);
+      setDeleteError(result.error ?? 'Could not delete the node.');
+      return;
+    }
+    setNodes(result.nodes);
+    setRequestPreviews((current) =>
+      current.filter((preview) => preview.sourceNodeId !== selectedNode.id),
+    );
+    finishNodeDeletion();
+  }
+
+  function finishNodeDeletion() {
+    setDeleting(false);
+    setDeleteOpen(false);
+    setInspectorNodeId('');
+    setFocusedNodeId('');
+  }
+
   return (
     <div className="flex min-h-[calc(100vh-4rem)] flex-col overflow-hidden">
       <header className="flex shrink-0 items-end justify-between gap-6 border-b border-border px-5 py-5 lg:px-8">
@@ -384,6 +473,7 @@ export function TaskDecompositionWorkspace({
               nodes={nodes}
               previews={requestPreviews}
               focusedNodeId={focusedNodeId}
+              locateRequest={locateRequest}
               onFocusNode={setFocusedNodeId}
               onInspectNode={(nodeId) => {
                 setFocusedNodeId(nodeId);
@@ -948,6 +1038,36 @@ export function TaskDecompositionWorkspace({
                   <NodeFact label="Status" value={selectedNode.status} />
                 </dl>
 
+                {selectedRelationships ? (
+                  <section className="mt-7">
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                      Relationships
+                    </h3>
+                    <div className="mt-3 grid gap-4">
+                      <RelationshipList
+                        title="Derived from"
+                        nodes={selectedRelationships.derivedFrom}
+                        onSelect={locateNode}
+                      />
+                      <RelationshipList
+                        title="Depends on"
+                        nodes={selectedRelationships.dependsOn}
+                        onSelect={locateNode}
+                      />
+                      <RelationshipList
+                        title="Derived nodes"
+                        nodes={selectedRelationships.derivedNodes}
+                        onSelect={locateNode}
+                      />
+                      <RelationshipList
+                        title="Dependents"
+                        nodes={selectedRelationships.dependents}
+                        onSelect={locateNode}
+                      />
+                    </div>
+                  </section>
+                ) : null}
+
                 <section className="mt-7">
                   <div className="flex items-center justify-between gap-3">
                     <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
@@ -997,25 +1117,87 @@ export function TaskDecompositionWorkspace({
                       <dt className="text-muted-foreground">Updated</dt>
                       <dd>{formatTimestamp(selectedNode.updatedAt)}</dd>
                     </div>
-                    <div className="flex items-center justify-between gap-4">
-                      <dt className="text-muted-foreground">Dependencies</dt>
-                      <dd>{selectedNode.dependsOn.length}</dd>
-                    </div>
                   </dl>
                 </section>
               </div>
 
               <SheetFooter className="border-t border-border px-6 py-4">
-                {selectedNode.role === 'start' ? (
-                  <Button type="button" onClick={() => editNode(selectedNode)}>
-                    <Pencil /> Edit start node
+                <div className="flex gap-2">
+                  {selectedNode.role === 'start' ? (
+                    <Button
+                      type="button"
+                      className="flex-1"
+                      onClick={() => editNode(selectedNode)}
+                    >
+                      <Pencil /> Edit start node
+                    </Button>
+                  ) : null}
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    className="flex-1"
+                    disabled={deletionBlockers.length > 0}
+                    title={
+                      deletionBlockers.length > 0
+                        ? 'Delete the referencing nodes first'
+                        : 'Move node to Trash'
+                    }
+                    onClick={() => {
+                      setDeleteError('');
+                      setDeleteOpen(true);
+                    }}
+                  >
+                    <Trash2 /> Delete node
                   </Button>
+                </div>
+                {deletionBlockers.length > 0 ? (
+                  <p className="text-[10px] leading-4 text-muted-foreground">
+                    Referenced by {deletionBlockers.length}{' '}
+                    {deletionBlockers.length === 1 ? 'node' : 'nodes'}. Select
+                    them above and delete them first.
+                  </p>
                 ) : null}
               </SheetFooter>
             </>
           ) : null}
         </SheetContent>
       </Sheet>
+
+      <AlertDialog
+        open={deleteOpen}
+        onOpenChange={(open) => {
+          if (!deleting) setDeleteOpen(open);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogMedia>
+              <Trash2 />
+            </AlertDialogMedia>
+            <AlertDialogTitle>Delete {selectedNode?.title}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {developmentPreview
+                ? 'This removes the node from the development preview until the page reloads.'
+                : 'The node folder will move to the operating system Trash. Its upstream relationships will disappear with it.'}
+              {deleteError ? (
+                <span className="mt-2 block text-destructive">
+                  {deleteError}
+                </span>
+              ) : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={deleting}
+              onClick={deleteSelectedNode}
+            >
+              {deleting ? 'Deleting…' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog
         open={preview !== null}
@@ -1039,6 +1221,53 @@ export function TaskDecompositionWorkspace({
           ) : null}
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function RelationshipList({
+  title,
+  nodes,
+  onSelect,
+}: {
+  title: string;
+  nodes: TaskGraphNode[];
+  onSelect: (nodeId: string) => void;
+}) {
+  return (
+    <div>
+      <div className="mb-1.5 flex items-center justify-between gap-3">
+        <h4 className="text-[10px] font-medium text-muted-foreground">
+          {title}
+        </h4>
+        <span className="text-[9px] text-muted-foreground">{nodes.length}</span>
+      </div>
+      {nodes.length > 0 ? (
+        <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
+          {nodes.map((node) => (
+            <button
+              key={node.id}
+              type="button"
+              className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-muted/50"
+              onClick={() => onSelect(node.id)}
+            >
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-xs font-medium">
+                  {node.title}
+                </span>
+                <span className="mt-0.5 block font-mono text-[9px] text-muted-foreground">
+                  {node.id}
+                </span>
+              </span>
+              <ArrowUpRight className="size-3.5 shrink-0 text-muted-foreground" />
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-xl border border-dashed border-border px-3 py-2.5 text-[10px] text-muted-foreground">
+          None
+        </div>
+      )}
     </div>
   );
 }

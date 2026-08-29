@@ -10,8 +10,12 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import path from 'node:path';
+import trash from 'trash';
 import type { RegisteredProject } from '@/lib/project-registry';
-import { assertCanvasCanCreateStartNode } from '@/lib/task-graph-rules';
+import {
+  assertCanvasCanCreateStartNode,
+  assertTaskGraphNodeCanBeDeleted,
+} from '@/lib/task-graph-rules';
 
 export type TaskGraphNode = {
   schemaVersion: 1;
@@ -287,6 +291,30 @@ export async function updateStartNode(
     }
     throw error;
   }
+}
+
+export async function deleteTaskGraphNode(
+  project: RegisteredProject,
+  nodeId: string,
+) {
+  if (!/^NODE-\d{4,}$/.test(nodeId)) {
+    throw new Error('The node is invalid.');
+  }
+
+  const nodes = await listTaskGraphNodes(project);
+  if (!nodes.some((node) => node.id === nodeId)) {
+    throw new Error('The node could not be found.');
+  }
+  assertTaskGraphNodeCanBeDeleted(nodes, nodeId);
+
+  const nodePath = path.join(
+    project.planningPath,
+    'task-graph',
+    'nodes',
+    nodeId,
+  );
+  await trash(nodePath);
+  return { nodes: await listTaskGraphNodes(project) };
 }
 
 export async function readTaskGraphMarkdownResource(
