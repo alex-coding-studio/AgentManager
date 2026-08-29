@@ -112,3 +112,12 @@ is stable and useful.
 - Verify provider Session reuse and delta Context on the second round.
 - Compare second-round token use with the initial 44,471-token input.
 - Decide final Candidate dispositions only after those checks.
+
+## Deferred UX observation
+
+Mobile Markdown annotation was not usable enough in the first remote review.
+Text selection and the visible `Add feedback` action did not reliably open a
+usable feedback flow in the iPhone browser environment. This does not block the
+desktop-first V1, but it invalidates any claim that the current annotation UI
+already supports mobile review. The future requirement is tracked in the
+Roadmap.
