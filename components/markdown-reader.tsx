@@ -1,12 +1,6 @@
 'use client';
 
-import {
-  useEffect,
-  useEffectEvent,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   BookOpen,
   FileText,
@@ -54,6 +48,7 @@ export function MarkdownReader({
     null,
   );
   const contentRef = useRef<HTMLDivElement>(null);
+  const submittedOnPointerDown = useRef(false);
 
   useEffect(() => {
     if (!focusMode) return;
@@ -84,15 +79,15 @@ export function MarkdownReader({
     }
   }
 
-  const captureSelection = useEffectEvent(() => {
-    if (!onAddFeedback || !contentRef.current) return;
+  function readFeedbackSelection() {
+    if (!onAddFeedback || !contentRef.current) return null;
     const selected = window.getSelection();
     if (!selected || selected.isCollapsed || selected.rangeCount === 0) {
-      return;
+      return null;
     }
     const range = selected.getRangeAt(0);
     if (!contentRef.current.contains(range.commonAncestorContainer)) {
-      return;
+      return null;
     }
     const start = closestPositionedElement(range.startContainer);
     const end = closestPositionedElement(range.endContainer);
@@ -100,32 +95,21 @@ export function MarkdownReader({
     const startLine = Number(start?.dataset.lineStart);
     const endLine = Number(end?.dataset.lineEnd);
     if (!excerpt || !Number.isFinite(startLine) || !Number.isFinite(endLine)) {
-      return;
+      return null;
     }
-    setSelection({
+    return {
       startLine: Math.min(startLine, endLine),
       endLine: Math.max(startLine, endLine),
       excerpt: excerpt.slice(0, 1_200),
-    });
-  });
+    };
+  }
 
-  function addSelectedFeedback() {
-    if (!selection || !onAddFeedback) return;
-    onAddFeedback(selection);
+  function addSelectedFeedback(candidate = selection) {
+    if (!candidate || !onAddFeedback) return;
+    onAddFeedback(candidate);
     window.getSelection()?.removeAllRanges();
     setSelection(null);
   }
-
-  useEffect(() => {
-    const content = contentRef.current;
-    if (!content || !onAddFeedback) return;
-    content.addEventListener('mouseup', captureSelection);
-    document.addEventListener('selectionchange', captureSelection);
-    return () => {
-      content.removeEventListener('mouseup', captureSelection);
-      document.removeEventListener('selectionchange', captureSelection);
-    };
-  }, [onAddFeedback]);
 
   const reader = (
     <article
@@ -162,10 +146,21 @@ export function MarkdownReader({
               variant="ghost"
               size="icon"
               aria-label="Add feedback from selected text"
-              title={selection ? 'Add feedback' : 'Select text to add feedback'}
-              disabled={!selection}
-              onPointerDown={(event) => event.preventDefault()}
-              onClick={addSelectedFeedback}
+              title="Add feedback from selected text"
+              onPointerDown={(event) => {
+                const candidate = selection ?? readFeedbackSelection();
+                if (!candidate) return;
+                event.preventDefault();
+                submittedOnPointerDown.current = true;
+                addSelectedFeedback(candidate);
+              }}
+              onClick={() => {
+                if (submittedOnPointerDown.current) {
+                  submittedOnPointerDown.current = false;
+                  return;
+                }
+                addSelectedFeedback(readFeedbackSelection());
+              }}
             >
               <MessageSquarePlus />
             </Button>
@@ -243,7 +238,7 @@ export function MarkdownReader({
             type="button"
             size="sm"
             onPointerDown={(event) => event.preventDefault()}
-            onClick={addSelectedFeedback}
+            onClick={() => addSelectedFeedback()}
           >
             Add feedback
           </Button>
@@ -274,6 +269,10 @@ export function MarkdownReader({
 
       <div
         ref={contentRef}
+        onPointerUp={(event) => {
+          if (event.pointerType !== 'mouse') return;
+          setSelection(readFeedbackSelection());
+        }}
         className={cn(
           'relative min-w-0 px-6 py-7 sm:px-9 sm:py-9',
           compact && 'px-4 py-4 sm:px-4 sm:py-4',
