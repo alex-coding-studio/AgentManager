@@ -224,6 +224,16 @@ from the explicit details control that opens the inspector. A development-only
 in memory for visual checks; it never replaces or mutates project data in
 production.
 
+The Node inspector derives four directional relationship lists from canonical
+Node JSON: origins from `derivedFrom`, prerequisites from `dependsOn`, Nodes
+that name the current Node as an origin, and Nodes that name it as a
+prerequisite. Relationship navigation focuses and centers the chosen card
+without storing viewport state. A Node is deletable only when the latter two
+lists are empty. The server repeats that reference check immediately before
+moving the complete Node directory to the operating system Trash. Deletion
+never reconnects Nodes or cascades through the graph; the deleted Node's own
+upstream relationships disappear with its directory.
+
 Every node is a folder so it can carry its JSON card, node-local Resources, and
 future generated artifacts without inventing a database relationship. Semantic
 types are not registered in application code. The first accepted card of a new

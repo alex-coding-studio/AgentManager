@@ -44,6 +44,7 @@ export default async function TaskDecompositionPage({
         folders={folders}
         initialNodes={graphPreview?.nodes ?? nodes}
         initialPreviews={graphPreview?.previews ?? []}
+        developmentPreview={graphPreview !== null}
       />
     </ProjectShell>
   );
