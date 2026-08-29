@@ -212,6 +212,7 @@ export async function updateStartNode(
     contextRefs: string[];
     retainedAttachmentRefs: string[];
     files: File[];
+    idea?: string;
   },
   graphRoot: GraphRoot = 'task-graph',
 ) {
@@ -228,6 +229,10 @@ export async function updateStartNode(
   }
   if (input.files.length > 20) {
     throw new Error('Upload no more than 20 Markdown files at once.');
+  }
+  const idea = input.idea?.trim() ?? '';
+  if (idea.length > 4_000) {
+    throw new Error('The starting idea must be 4,000 characters or fewer.');
   }
 
   const nodePath = path.join(
@@ -260,11 +265,18 @@ export async function updateStartNode(
     if (!resource) throw new Error('A retained attachment is invalid.');
     return resource;
   });
+  const ideaResource = node.resources.find(
+    (resource) => resource.kind === 'idea',
+  );
   if (
     contextRefs.length + retainedAttachments.length + input.files.length ===
-    0
+      0 &&
+    !idea &&
+    !ideaResource
   ) {
-    throw new Error('Select or upload at least one source document.');
+    throw new Error(
+      'Write a starting idea, or select or upload at least one source document.',
+    );
   }
 
   const uploads = await prepareUploads(input.files);
@@ -285,8 +297,15 @@ export async function updateStartNode(
       newAttachmentPaths.push(absolutePath);
       newAttachments.push({
         kind: 'attachment',
-        path: `task-graph/nodes/${input.id}/resources/${fileName}`,
+        path: `${graphRoot}/nodes/${input.id}/resources/${fileName}`,
       });
+    }
+
+    if (idea && ideaResource) {
+      await writeFile(
+        path.join(project.planningPath, ideaResource.path),
+        `# ${title}\n\n${idea}\n`,
+      );
     }
 
     const updatedNode: TaskGraphNode = {
@@ -294,6 +313,7 @@ export async function updateStartNode(
       title,
       updatedAt: new Date().toISOString(),
       resources: [
+        ...(ideaResource ? [ideaResource] : []),
         ...contextRefs.map((ref) => ({ kind: 'context', path: ref })),
         ...retainedAttachments,
         ...newAttachments,
@@ -319,7 +339,10 @@ export async function updateStartNode(
         unlink(path.join(project.planningPath, ref)).catch(() => undefined),
       ),
     );
-    return { node: updatedNode, nodes: await listTaskGraphNodes(project) };
+    return {
+      node: updatedNode,
+      nodes: await listTaskGraphNodes(project, graphRoot),
+    };
   } catch (error) {
     if (!committed) {
       await Promise.all(

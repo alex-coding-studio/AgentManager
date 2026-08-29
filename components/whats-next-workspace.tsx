@@ -13,6 +13,7 @@ import {
   ChevronDown,
   FileText,
   LoaderCircle,
+  Pencil,
   Sparkles,
   Trash2,
   Upload,
@@ -99,11 +100,16 @@ export function WhatsNextWorkspace({
   } | null>(null);
   const [accepting, setAccepting] = useState(false);
   const [discarding, setDiscarding] = useState(false);
+  const [editStartId, setEditStartId] = useState('');
+  const [editText, setEditText] = useState('');
+  const [savingStart, setSavingStart] = useState(false);
+  const [deletingNodeId, setDeletingNodeId] = useState('');
   const runSnapshots = useRef(new Map<string, RunSnapshot>());
   const restoredRuns = useRef(false);
   const locateSequence = useRef(0);
 
   const growSource = nodes.find((node) => node.id === growSourceId) ?? null;
+  const editStart = nodes.find((node) => node.id === editStartId) ?? null;
   const combineNodes = combineIds.flatMap((nodeId) => {
     const node = nodes.find((value) => value.id === nodeId);
     return node ? [node] : [];
@@ -344,6 +350,76 @@ export function WhatsNextWorkspace({
       setInspectorId('');
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Something failed.');
+    }
+  }
+
+  async function saveStart() {
+    if (!editStart || !editText.trim() || savingStart) return;
+    setSavingStart(true);
+    setError('');
+    try {
+      const body = new FormData();
+      body.append('id', editStart.id);
+      body.append('title', editText.trim().slice(0, 160));
+      body.append('idea', editText.trim());
+      body.append('graph', 'whats-next');
+      for (const resource of editStart.resources) {
+        if (resource.kind === 'context') {
+          body.append('contextRefs', resource.path);
+        }
+        if (resource.kind === 'attachment') {
+          body.append('retainedAttachmentRefs', resource.path);
+        }
+      }
+      const response = await fetch(`/api/projects/${projectId}/nodes`, {
+        method: 'PATCH',
+        body,
+      });
+      const payload = (await response.json()) as {
+        nodes?: TaskGraphNode[];
+        error?: string;
+      };
+      if (!response.ok || !payload.nodes) {
+        throw new Error(payload.error ?? 'Could not update the Start.');
+      }
+      setNodes(payload.nodes);
+      setEditStartId('');
+      setEditText('');
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Something failed.');
+    } finally {
+      setSavingStart(false);
+    }
+  }
+
+  async function deleteNode(nodeId: string) {
+    setDeletingNodeId(nodeId);
+    setError('');
+    try {
+      const response = await fetch(`/api/projects/${projectId}/nodes`, {
+        method: 'DELETE',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id: nodeId, graph: 'whats-next' }),
+      });
+      const payload = (await response.json()) as {
+        nodes?: TaskGraphNode[];
+        error?: string;
+        blockerNodeIds?: string[];
+      };
+      if (!response.ok || !payload.nodes) {
+        throw new Error(
+          payload.blockerNodeIds?.length
+            ? `${nodeId} is still used by ${payload.blockerNodeIds.join(', ')}.`
+            : (payload.error ?? 'Could not delete the card.'),
+        );
+      }
+      setNodes(payload.nodes);
+      setCombineIds((current) => current.filter((value) => value !== nodeId));
+      setInspectorId('');
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Something failed.');
+    } finally {
+      setDeletingNodeId('');
     }
   }
 
@@ -659,6 +735,61 @@ export function WhatsNextWorkspace({
         </DialogContent>
       </Dialog>
 
+      <Dialog
+        open={editStart !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditStartId('');
+            setEditText('');
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          {editStart ? (
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                void saveStart();
+              }}
+              className="space-y-5"
+            >
+              <div>
+                <h2 className="text-sm font-semibold">Edit the idea</h2>
+                <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                  This rewrites {editStart.id} and the `idea.md` it carries.
+                  Directions already grown from it are left alone.
+                </p>
+              </div>
+              <Textarea
+                value={editText}
+                onChange={(event) => setEditText(event.target.value)}
+                rows={4}
+                maxLength={160}
+                className="resize-none text-sm"
+                aria-label="Your idea"
+              />
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-[11px] text-muted-foreground">
+                  {editText.trim().length}/160 characters
+                </span>
+                <Button
+                  type="submit"
+                  disabled={!editText.trim() || savingStart}
+                >
+                  {savingStart ? (
+                    <LoaderCircle className="size-4 animate-spin" />
+                  ) : null}
+                  Save
+                </Button>
+              </div>
+              {error ? (
+                <p className="text-xs text-destructive">{error}</p>
+              ) : null}
+            </form>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
       <Sheet
         open={Boolean(inspectorId)}
         onOpenChange={(open) => {
@@ -826,7 +957,7 @@ export function WhatsNextWorkspace({
                   }
                 />
               </div>
-              <SheetFooter className="flex-row gap-2">
+              <SheetFooter className="flex-wrap gap-2">
                 <Button
                   className="flex-1"
                   onClick={() => {
@@ -855,6 +986,35 @@ export function WhatsNextWorkspace({
                     ? 'Unselect'
                     : 'Add to selection'}
                 </Button>
+                <div className="flex w-full flex-row gap-2">
+                  {selectedNode.role === 'start' ? (
+                    <Button
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => {
+                        setEditStartId(selectedNode.id);
+                        setEditText(selectedNode.title);
+                        setInspectorId('');
+                      }}
+                    >
+                      <Pencil className="size-4" />
+                      Edit the idea
+                    </Button>
+                  ) : null}
+                  <Button
+                    variant="ghost"
+                    className={selectedNode.role === 'start' ? '' : 'flex-1'}
+                    disabled={deletingNodeId === selectedNode.id}
+                    onClick={() => void deleteNode(selectedNode.id)}
+                  >
+                    {deletingNodeId === selectedNode.id ? (
+                      <LoaderCircle className="size-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="size-4" />
+                    )}
+                    Delete
+                  </Button>
+                </div>
               </SheetFooter>
             </>
           ) : null}
