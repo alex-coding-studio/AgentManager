@@ -94,8 +94,11 @@ export function ProductContextWorkspace({
         </p>
       </div>
 
-      <div className="grid items-start gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
-        <ul className="grid gap-2" aria-label="Context sections">
+      <div className="grid items-start gap-5 lg:grid-cols-[270px_minmax(0,1fr)]">
+        <ul
+          className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card"
+          aria-label="Context sections"
+        >
           {sections.map((section) => {
             const selected = selectedSection?.slug === section.slug;
             return (
@@ -104,34 +107,24 @@ export function ProductContextWorkspace({
                   type="button"
                   onClick={() => setSelectedSlug(section.slug)}
                   className={cn(
-                    'w-full rounded-xl border p-4 text-left transition',
+                    'flex min-h-14 w-full items-center gap-3 px-3 py-2.5 text-left transition',
                     selected
-                      ? 'border-foreground bg-foreground text-background shadow-sm'
-                      : 'border-border bg-card hover:border-foreground/30 hover:bg-muted/40',
+                      ? 'bg-secondary text-secondary-foreground'
+                      : 'hover:bg-muted/50',
                   )}
                 >
-                  <div className="flex items-center gap-2.5">
-                    <Folder className="size-4 shrink-0" />
-                    <span className="font-medium">{section.title}</span>
-                    <span
-                      className={cn(
-                        'ml-auto text-[10px] uppercase tracking-wide',
-                        selected
-                          ? 'text-background/60'
-                          : 'text-muted-foreground',
-                      )}
-                    >
-                      Folder
-                    </span>
-                  </div>
-                  <p
+                  <Folder
                     className={cn(
-                      'mt-2 line-clamp-2 text-xs leading-5',
-                      selected ? 'text-background/65' : 'text-muted-foreground',
+                      'size-4 shrink-0',
+                      selected ? 'text-foreground' : 'text-muted-foreground',
                     )}
-                  >
-                    {section.summary}
-                  </p>
+                  />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">{section.title}</p>
+                    <p className="mt-0.5 truncate text-[11px] leading-4 text-muted-foreground">
+                      {section.summary}
+                    </p>
+                  </div>
                 </button>
               </li>
             );
