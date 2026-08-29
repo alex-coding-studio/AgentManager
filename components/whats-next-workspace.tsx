@@ -521,6 +521,7 @@ export function WhatsNextWorkspace({
         locateRequest={locateRequest}
         selectedNodeIds={combineIds}
         plusLabel="Ask what's next from"
+        edgeAlignedOverlays
         onMultiSelect={(nodeId) =>
           setCombineIds((current) => toggle(current, nodeId))
         }
