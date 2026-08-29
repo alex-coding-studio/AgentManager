@@ -9,7 +9,6 @@ import {
 } from 'react';
 import {
   ArrowUpRight,
-  Check,
   ChevronDown,
   FileText,
   LoaderCircle,
@@ -36,6 +35,7 @@ import {
 import type { ContextBrowserFolder } from '@/lib/product-context';
 import type { TaskGraphNode } from '@/lib/task-graph';
 import type { TaskGraphPreview } from '@/lib/task-graph-layout';
+import { getTaskGraphRelationships } from '@/lib/task-graph-rules';
 import type { LocalAgentKind } from '@/lib/local-agent-transport';
 import type { WhatsNextRunRecord } from '@/lib/whats-next-runs';
 import { cn } from '@/lib/utils';
@@ -115,6 +115,19 @@ export function WhatsNextWorkspace({
     return node ? [node] : [];
   });
   const selectedNode = nodes.find((node) => node.id === inspectorId) ?? null;
+  const deletionBlockers = selectedNode
+    ? (() => {
+        const related = getTaskGraphRelationships(nodes, selectedNode.id);
+        return [
+          ...new Map(
+            [...related.derivedNodes, ...related.dependents].map((node) => [
+              node.id,
+              node,
+            ]),
+          ).values(),
+        ];
+      })()
+    : [];
   const selectedCandidatePreview =
     previews.find(
       (item) => item.id === inspectorId && item.kind === 'candidate',
@@ -889,43 +902,48 @@ export function WhatsNextWorkspace({
                   </div>
                 ) : null}
               </div>
-              <SheetFooter className="flex-row gap-2">
-                <Button
-                  className="flex-1"
-                  disabled={accepting || discarding}
-                  onClick={() => void updateCandidate('accept')}
-                >
-                  {accepting ? (
-                    <LoaderCircle className="size-4 animate-spin" />
-                  ) : (
-                    <Check className="size-4" />
-                  )}
-                  Accept
-                </Button>
-                <Button
-                  variant="outline"
-                  disabled={accepting || discarding || Boolean(revisionTarget)}
-                  onClick={() =>
-                    setRevisionTarget({
-                      runId: selectedCandidatePreview!.runId!,
-                      candidateId: selectedCandidate.candidateId,
-                    })
-                  }
-                >
-                  Revise
-                </Button>
-                <Button
-                  variant="ghost"
-                  disabled={accepting || discarding}
-                  aria-label="Discard this direction"
-                  onClick={() => void updateCandidate('discard')}
-                >
-                  {discarding ? (
-                    <LoaderCircle className="size-4 animate-spin" />
-                  ) : (
-                    <Trash2 className="size-4" />
-                  )}
-                </Button>
+              <SheetFooter className="border-t border-border px-6 py-4">
+                <div className="flex w-full gap-2">
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="icon"
+                    disabled={accepting || discarding}
+                    aria-label="Discard this direction"
+                    title="Discard this direction"
+                    onClick={() => void updateCandidate('discard')}
+                  >
+                    {discarding ? (
+                      <LoaderCircle className="animate-spin" />
+                    ) : (
+                      <Trash2 />
+                    )}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="flex-1"
+                    disabled={
+                      accepting || discarding || Boolean(revisionTarget)
+                    }
+                    onClick={() =>
+                      setRevisionTarget({
+                        runId: selectedCandidatePreview!.runId!,
+                        candidateId: selectedCandidate.candidateId,
+                      })
+                    }
+                  >
+                    <Pencil /> Revise
+                  </Button>
+                  <Button
+                    type="button"
+                    className="flex-1"
+                    disabled={accepting || discarding}
+                    onClick={() => void updateCandidate('accept')}
+                  >
+                    {accepting ? 'Accepting…' : 'Accept'}
+                  </Button>
+                </div>
               </SheetFooter>
             </>
           ) : selectedNode ? (
@@ -957,39 +975,53 @@ export function WhatsNextWorkspace({
                   }
                 />
               </div>
-              <SheetFooter className="flex-wrap gap-2">
-                <Button
-                  className="flex-1"
-                  onClick={() => {
-                    setInspectorId('');
-                    setGrowSourceId(selectedNode.id);
-                  }}
-                >
-                  <Sparkles className="size-4" />
-                  Ask what&apos;s next
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setInspectorId('');
-                    setCombineIds((current) =>
-                      toggle(current, selectedNode.id),
-                    );
-                    locateSequence.current += 1;
-                    setLocateRequest({
-                      nodeId: selectedNode.id,
-                      sequence: locateSequence.current,
-                    });
-                  }}
-                >
-                  {combineIds.includes(selectedNode.id)
-                    ? 'Unselect'
-                    : 'Add to selection'}
-                </Button>
-                <div className="flex w-full flex-row gap-2">
+              <SheetFooter className="border-t border-border px-6 py-4">
+                <div className="flex w-full gap-2">
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="icon"
+                    disabled={
+                      deletionBlockers.length > 0 ||
+                      deletingNodeId === selectedNode.id
+                    }
+                    aria-label="Delete this card"
+                    title={
+                      deletionBlockers.length > 0
+                        ? 'Delete the referencing cards first'
+                        : 'Move this card to Trash'
+                    }
+                    onClick={() => void deleteNode(selectedNode.id)}
+                  >
+                    {deletingNodeId === selectedNode.id ? (
+                      <LoaderCircle className="animate-spin" />
+                    ) : (
+                      <Trash2 />
+                    )}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => {
+                      setInspectorId('');
+                      setCombineIds((current) =>
+                        toggle(current, selectedNode.id),
+                      );
+                      locateSequence.current += 1;
+                      setLocateRequest({
+                        nodeId: selectedNode.id,
+                        sequence: locateSequence.current,
+                      });
+                    }}
+                  >
+                    {combineIds.includes(selectedNode.id)
+                      ? 'Unselect'
+                      : 'Add to selection'}
+                  </Button>
                   {selectedNode.role === 'start' ? (
                     <Button
-                      variant="outline"
+                      type="button"
                       className="flex-1"
                       onClick={() => {
                         setEditStartId(selectedNode.id);
@@ -997,24 +1029,17 @@ export function WhatsNextWorkspace({
                         setInspectorId('');
                       }}
                     >
-                      <Pencil className="size-4" />
-                      Edit the idea
+                      <Pencil /> Edit the idea
                     </Button>
                   ) : null}
-                  <Button
-                    variant="ghost"
-                    className={selectedNode.role === 'start' ? '' : 'flex-1'}
-                    disabled={deletingNodeId === selectedNode.id}
-                    onClick={() => void deleteNode(selectedNode.id)}
-                  >
-                    {deletingNodeId === selectedNode.id ? (
-                      <LoaderCircle className="size-4 animate-spin" />
-                    ) : (
-                      <Trash2 className="size-4" />
-                    )}
-                    Delete
-                  </Button>
                 </div>
+                {deletionBlockers.length > 0 ? (
+                  <p className="text-[10px] leading-4 text-muted-foreground">
+                    Referenced by {deletionBlockers.length}{' '}
+                    {deletionBlockers.length === 1 ? 'card' : 'cards'}. Delete
+                    those first.
+                  </p>
+                ) : null}
               </SheetFooter>
             </>
           ) : null}
