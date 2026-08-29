@@ -67,6 +67,7 @@ export type TaskDecompositionRunRecord = {
     instruction: string;
     projectInstructions: string;
     resourcePaths: string[];
+    requestArtifact: 'request.json';
   };
   inputFingerprint: string;
   startedAt: string;
@@ -213,6 +214,20 @@ export async function startTaskDecompositionRun(
     ? buildTaskDecompositionContinuationPrompt(packetWithoutFingerprint)
     : buildTaskDecompositionPrompt(packetWithoutFingerprint);
   const timestamp = new Date().toISOString();
+  await writeFile(
+    path.join(runPath, 'request.json'),
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        createdAt: timestamp,
+        packet: packetWithoutFingerprint,
+        prompt,
+      },
+      null,
+      2,
+    )}\n`,
+    { flag: 'wx' },
+  );
   const record: TaskDecompositionRunRecord = {
     schemaVersion: 1,
     runId,
@@ -234,6 +249,7 @@ export async function startTaskDecompositionRun(
       instruction: input.instruction.trim(),
       projectInstructions: featureContext.instructions,
       resourcePaths: resources.map((resource) => resource.path),
+      requestArtifact: 'request.json',
     },
     inputFingerprint: requestIdentity.inputFingerprint,
     startedAt: timestamp,
@@ -431,14 +447,23 @@ export async function discardTaskDecompositionCandidate(
   ) {
     throw new Error('Cancel or finish the active Candidate revision first.');
   }
-  const run = await readTaskDecompositionRun(project, runId);
-  if (run.result?.outcome !== 'proposal') {
+  const requestedRun = await readTaskDecompositionRun(project, runId);
+  if (requestedRun.result?.outcome !== 'proposal') {
     throw new Error('The Candidate proposal is unavailable.');
   }
-  const candidateIndex = run.result.candidates.findIndex(
+  const requestedCandidate = requestedRun.result.candidates.find(
     (candidate) => candidate.candidateId === candidateId,
   );
-  if (candidateIndex < 0) throw new Error('The Candidate could not be found.');
+  if (!requestedCandidate) throw new Error('The Candidate could not be found.');
+  if (
+    [...activeRuns.values()].some(
+      (active) =>
+        active.record.sourceNodeId === requestedRun.sourceNodeId &&
+        ['running', 'validating'].includes(active.record.status),
+    )
+  ) {
+    throw new Error('Cancel or finish the active Agent Run first.');
+  }
   const accepted = (await listTaskGraphNodes(project)).some(
     (node) => node.provenance?.candidateId === candidateId,
   );
@@ -446,12 +471,36 @@ export async function discardTaskDecompositionCandidate(
     throw new Error('An accepted Candidate must be managed as a formal Node.');
   }
 
-  const runPath = taskDecompositionRunPath(project, runId);
+  const candidateRuns = (await readAllTaskDecompositionRuns(project)).filter(
+    (run) =>
+      run.result?.outcome === 'proposal' &&
+      run.result.candidates.some(
+        (candidate) => candidate.candidateId === candidateId,
+      ),
+  );
+  let requestedRunDeleted = false;
+  for (const run of candidateRuns) {
+    const runDeleted = await discardCandidateFromRun(project, run, candidateId);
+    if (run.runId === runId) requestedRunDeleted = runDeleted;
+  }
+  return { candidateId, runDeleted: requestedRunDeleted };
+}
+
+async function discardCandidateFromRun(
+  project: RegisteredProject,
+  run: TaskDecompositionRunRecord,
+  candidateId: string,
+) {
+  if (run.result?.outcome !== 'proposal') return false;
+  const candidateIndex = run.result.candidates.findIndex(
+    (candidate) => candidate.candidateId === candidateId,
+  );
+  if (candidateIndex < 0) return false;
+  const runPath = taskDecompositionRunPath(project, run.runId);
   if (run.result.candidates.length === 1) {
     await trash(runPath);
-    return { candidateId, runDeleted: true };
+    return true;
   }
-
   const candidatePath = path.join(runPath, 'candidates', candidateId);
   const stagedPath = path.join(
     runPath,
@@ -468,7 +517,7 @@ export async function discardTaskDecompositionCandidate(
     throw error;
   }
   await trash(stagedPath);
-  return { candidateId, runDeleted: false };
+  return false;
 }
 
 async function finishTaskDecompositionRun(

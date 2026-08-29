@@ -254,6 +254,9 @@ after a page reload. Cancel marks the Run terminal before interrupting its proce
 so late output cannot replace the restored Composer input. Proposal,
 clarification, insufficient-evidence, failure, and cancellation remain distinct
 states; only a later explicit acceptance can create formal Node folders.
+The sibling `request.json` freezes the exact assembled prompt and complete
+request packet, including Resource contents and graph state, so later edits to
+project files cannot change the evidence for that invocation.
 
 One bounded Coordinator Agent Session belongs to each decomposition root. The
 first Run creates a persistent provider Session; later parent-level additions
@@ -270,11 +273,11 @@ The validator rejects identifier collisions and output outside the operation
 boundary. `no-change` is a valid incremental result; conflicts with existing
 boundaries become clarification rather than implicit rewrites.
 
-Discarding an unaccepted Candidate moves its generated directory to the
-operating system Trash and removes it from the Proposal result. Sibling
-Candidates remain unchanged. When the discarded Candidate is the Proposal's
-last result, the complete Run directory moves to Trash. Accepted Candidates are
-formal Nodes and cannot use this transient deletion path.
+Discarding an unaccepted Candidate removes that identifier from every Proposal
+and revision Run, moves all of its generated directories to the operating
+system Trash, and leaves sibling Candidates unchanged. When it is a Proposal's
+last result, that complete Run directory moves to Trash. Accepted Candidates
+are formal Nodes and cannot use this transient deletion path.
 
 Every node is a folder so it can carry its JSON card, node-local Resources, and
 future generated artifacts without inventing a database relationship. Semantic
