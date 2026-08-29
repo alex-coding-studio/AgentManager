@@ -205,18 +205,24 @@ render an in-memory Draft request beside its source with a dashed directional
 edge. The request inherits source-node Resources and can add request-only
 Context or local Markdown without mutating the source. That Draft is an
 interaction preview only and is deliberately discarded on reload. Node
-positions are deterministic projections of lineage depth: each generation is a
-column and siblings are arranged vertically. Users can pan and zoom the canvas,
-but Nodes are not draggable and no presentation coordinates become canonical
-planning data.
+positions are a deterministic Dagre projection driven only by lineage and
+Request edges. The layout uses a left-to-right rank direction, generous rank
+and sibling spacing, and bounded stable offsets so every target remains to the
+right of its source without forcing a rigid grid. Dependency edges do not
+influence placement. Users can pan and zoom the canvas, but Nodes are not
+draggable and no presentation coordinates become canonical planning data.
 
 Lineage and dependency edges retain separate directions and visual grammar. A
 lineage edge runs from an origin to the Node derived from it and uses a neutral
-solid stroke. A dependency edge runs from the dependent Node to the
-prerequisite named in its `dependsOn` array and uses an amber dashed stroke with
-a shared legend. A development-only `?preview=graph-layout` fixture generates a
-single-root, four-generation graph in memory for visual checks; it never
-replaces or mutates project data in production.
+solid stroke. Dependency edges stay hidden in the resting graph. Focusing a
+card reveals each direct dependency from the dependent Node to the prerequisite
+named in its `dependsOn` array as an amber dashed Bezier curve. The focused
+card, direct lineage neighbors, direct dependency neighbors, and their edges
+remain prominent while unrelated cards and edges dim. Card focus is separate
+from the explicit details control that opens the inspector. A development-only
+`?preview=graph-layout` fixture generates a single-root, four-generation graph
+in memory for visual checks; it never replaces or mutates project data in
+production.
 
 Every node is a folder so it can carry its JSON card, node-local Resources, and
 future generated artifacts without inventing a database relationship. Semantic

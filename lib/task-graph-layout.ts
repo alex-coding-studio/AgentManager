@@ -1,3 +1,4 @@
+import dagre from '@dagrejs/dagre';
 import type { TaskGraphNode } from '@/lib/task-graph';
 
 export type TaskGraphPreview = {
@@ -23,77 +24,29 @@ export type TaskGraphLayoutEdge = {
   relation: 'lineage' | 'dependency' | 'request';
 };
 
+const nodeWidth = 288;
+const nodeHeight = 156;
+
 export function buildTaskGraphLayout(
   nodes: TaskGraphNode[],
   previews: TaskGraphPreview[],
 ) {
-  const nodeById = new Map(nodes.map((node) => [node.id, node]));
-  const depthById = new Map<string, number>();
-
-  function resolveDepth(nodeId: string, ancestors: Set<string>): number {
-    const knownDepth = depthById.get(nodeId);
-    if (knownDepth !== undefined) return knownDepth;
-    if (ancestors.has(nodeId)) return 0;
-    const node = nodeById.get(nodeId);
-    const parents = (node?.derivedFrom ?? []).filter((parentId) =>
-      nodeById.has(parentId),
-    );
-    if (parents.length === 0) {
-      depthById.set(nodeId, 0);
-      return 0;
-    }
-    const nextAncestors = new Set(ancestors).add(nodeId);
-    const depth =
-      Math.max(
-        ...parents.map((parentId) => resolveDepth(parentId, nextAncestors)),
-      ) + 1;
-    depthById.set(nodeId, depth);
-    return depth;
-  }
-
-  const countByDepth = new Map<number, number>();
-  const layoutNodes: TaskGraphLayoutNode[] = nodes.map((node) => {
-    const depth = resolveDepth(node.id, new Set());
-    const index = countByDepth.get(depth) ?? 0;
-    countByDepth.set(depth, index + 1);
-    return {
+  const layoutNodes: Array<{
+    id: string;
+    kind: TaskGraphLayoutNode['kind'];
+    derivedFrom: string[];
+  }> = [
+    ...nodes.map((node) => ({
       id: node.id,
-      kind: 'formal',
-      x: depth * 360,
-      y: index * 190,
+      kind: 'formal' as const,
       derivedFrom: node.derivedFrom ?? [],
-    };
-  });
-  const nodePositions = new Map(
-    layoutNodes.map((node) => [node.id, { x: node.x, y: node.y }]),
-  );
-  const previewCountBySource = new Map<string, number>();
-
-  for (const preview of previews) {
-    const sourcePosition = nodePositions.get(preview.sourceNodeId) ?? {
-      x: 0,
-      y: 0,
-    };
-    const previewX = sourcePosition.x + 360;
-    const nextAvailableY =
-      Math.max(
-        sourcePosition.y - 190,
-        ...layoutNodes
-          .filter((node) => node.x === previewX)
-          .map((node) => node.y),
-      ) + 190;
-    const sourcePreviewCount =
-      previewCountBySource.get(preview.sourceNodeId) ?? 0;
-    previewCountBySource.set(preview.sourceNodeId, sourcePreviewCount + 1);
-    layoutNodes.push({
+    })),
+    ...previews.map((preview) => ({
       id: preview.id,
-      kind: 'preview',
-      x: previewX,
-      y: nextAvailableY + sourcePreviewCount * 190,
+      kind: 'preview' as const,
       derivedFrom: [preview.sourceNodeId],
-    });
-  }
-
+    })),
+  ];
   const knownIds = new Set(layoutNodes.map((node) => node.id));
   const lineageEdges: TaskGraphLayoutEdge[] = layoutNodes.flatMap((node) =>
     node.derivedFrom
@@ -105,6 +58,33 @@ export function buildTaskGraphLayout(
         relation: node.kind === 'preview' ? 'request' : 'lineage',
       })),
   );
+
+  const graph = new dagre.graphlib.Graph()
+    .setDefaultEdgeLabel(() => ({}))
+    .setGraph({
+      rankdir: 'LR',
+      ranker: 'network-simplex',
+      ranksep: 180,
+      nodesep: 144,
+      marginx: 24,
+      marginy: 24,
+    });
+  for (const node of layoutNodes) {
+    graph.setNode(node.id, { width: nodeWidth, height: nodeHeight });
+  }
+  for (const edge of lineageEdges) {
+    graph.setEdge(edge.source, edge.target);
+  }
+  dagre.layout(graph);
+
+  const positionedNodes: TaskGraphLayoutNode[] = layoutNodes.map((node) => {
+    const position = graph.node(node.id) as { x: number; y: number };
+    return {
+      ...node,
+      x: position.x - nodeWidth / 2 + horizontalOffset(node.id),
+      y: position.y - nodeHeight / 2 + verticalOffset(node.id),
+    };
+  });
   const dependencyEdges: TaskGraphLayoutEdge[] = nodes.flatMap((node) =>
     node.dependsOn
       .filter((dependency) => knownIds.has(dependency))
@@ -115,5 +95,24 @@ export function buildTaskGraphLayout(
         relation: 'dependency',
       })),
   );
-  return { nodes: layoutNodes, edges: [...lineageEdges, ...dependencyEdges] };
+  return {
+    nodes: positionedNodes,
+    edges: [...lineageEdges, ...dependencyEdges],
+  };
+}
+
+function horizontalOffset(id: string) {
+  return ((stableHash(id) % 5) - 2) * 12;
+}
+
+function verticalOffset(id: string) {
+  return ((Math.floor(stableHash(id) / 5) % 7) - 3) * 10;
+}
+
+function stableHash(value: string) {
+  let hash = 0;
+  for (const character of value) {
+    hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  }
+  return hash;
 }

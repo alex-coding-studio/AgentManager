@@ -35,13 +35,7 @@ void test('builds formal lineage edges from derivedFrom', () => {
       relation: 'lineage',
     },
   ]);
-  assert.deepEqual(
-    graph.nodes.map(({ id, x, y }) => ({ id, x, y })),
-    [
-      { id: 'NODE-0001', x: 0, y: 0 },
-      { id: 'NODE-0002', x: 360, y: 0 },
-    ],
-  );
+  assert.ok(position(graph, 'NODE-0002').x > position(graph, 'NODE-0001').x);
 });
 
 void test('places each lineage generation in its own column', () => {
@@ -55,15 +49,18 @@ void test('places each lineage generation in its own column', () => {
     [],
   );
 
-  assert.deepEqual(
-    graph.nodes.map(({ id, x, y }) => ({ id, x, y })),
-    [
-      { id: 'NODE-0001', x: 0, y: 0 },
-      { id: 'NODE-0002', x: 360, y: 0 },
-      { id: 'NODE-0003', x: 360, y: 190 },
-      { id: 'NODE-0004', x: 720, y: 0 },
-    ],
-  );
+  const root = position(graph, 'NODE-0001');
+  const firstChild = position(graph, 'NODE-0002');
+  const secondChild = position(graph, 'NODE-0003');
+  const grandchild = position(graph, 'NODE-0004');
+  assert.ok(root.x < firstChild.x);
+  assert.ok(root.x < secondChild.x);
+  assert.ok(firstChild.x < grandchild.x);
+  assert.ok(secondChild.x < grandchild.x);
+  assert.notEqual(firstChild.x, secondChild.x);
+  assert.notEqual(firstChild.y, secondChild.y);
+  assert.ok(root.y > Math.min(firstChild.y, secondChild.y));
+  assert.ok(root.y < Math.max(firstChild.y, secondChild.y));
 });
 
 void test('places a preview beside its source with a temporary edge', () => {
@@ -80,13 +77,11 @@ void test('places a preview beside its source with a temporary edge', () => {
     ],
   );
 
-  assert.deepEqual(graph.nodes[1], {
-    id: 'REQUEST-PREVIEW-NODE-0001',
-    kind: 'preview',
-    x: 360,
-    y: 0,
-    derivedFrom: ['NODE-0001'],
-  });
+  const source = position(graph, 'NODE-0001');
+  const preview = position(graph, 'REQUEST-PREVIEW-NODE-0001');
+  assert.equal(preview.kind, 'preview');
+  assert.deepEqual(preview.derivedFrom, ['NODE-0001']);
+  assert.ok(preview.x > source.x);
   assert.equal(graph.edges[0]?.relation, 'request');
 });
 
@@ -114,7 +109,7 @@ void test('renders execution dependencies separately from lineage', () => {
   });
 });
 
-void test('places a request preview after occupied nodes in the target column', () => {
+void test('places a request preview without colliding in the target rank', () => {
   const graph = buildTaskGraphLayout(
     [
       node('NODE-0001'),
@@ -132,11 +127,17 @@ void test('places a request preview after occupied nodes in the target column', 
     ],
   );
 
-  assert.deepEqual(graph.nodes.at(-1), {
-    id: 'REQUEST-PREVIEW-NODE-0001',
-    kind: 'preview',
-    x: 360,
-    y: 380,
-    derivedFrom: ['NODE-0001'],
-  });
+  const preview = position(graph, 'REQUEST-PREVIEW-NODE-0001');
+  const firstChild = position(graph, 'NODE-0002');
+  const secondChild = position(graph, 'NODE-0003');
+  assert.ok(Math.abs(preview.x - firstChild.x) < 60);
+  assert.ok(Math.abs(preview.x - secondChild.x) < 60);
+  assert.notEqual(preview.y, firstChild.y);
+  assert.notEqual(preview.y, secondChild.y);
 });
+
+function position(graph: ReturnType<typeof buildTaskGraphLayout>, id: string) {
+  const result = graph.nodes.find((candidate) => candidate.id === id);
+  assert.ok(result);
+  return result;
+}
