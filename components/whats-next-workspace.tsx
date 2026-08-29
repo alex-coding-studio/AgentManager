@@ -1141,9 +1141,10 @@ export function WhatsNextWorkspace({
                     ))}
                   </div>
                 ) : null}
-
+              </div>
+              <SheetFooter className="shrink-0 border-t border-border px-6 py-4">
                 {revisionTarget ? (
-                  <div className="rounded-xl border border-border p-3">
+                  <div className="w-full">
                     <p className="text-[11px] font-medium">
                       Refine this Markdown
                     </p>
@@ -1151,7 +1152,7 @@ export function WhatsNextWorkspace({
                       value={reviseNote}
                       onChange={(event) => setReviseNote(event.target.value)}
                       rows={3}
-                      placeholder="Optional overall guidance in addition to inline feedback…"
+                      placeholder="Describe what should change…"
                       className="mt-2 resize-none text-sm"
                       aria-label="Revision note"
                     />
@@ -1178,50 +1179,49 @@ export function WhatsNextWorkspace({
                       </Button>
                     </div>
                   </div>
-                ) : null}
-              </div>
-              <SheetFooter className="shrink-0 border-t border-border px-6 py-4">
-                <div className="flex w-full gap-2">
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    size="icon"
-                    disabled={accepting || discarding || developmentPreview}
-                    aria-label="Discard this direction"
-                    title="Discard this direction"
-                    onClick={() => void updateCandidate('discard')}
-                  >
-                    {discarding ? (
-                      <LoaderCircle className="animate-spin" />
-                    ) : (
-                      <Trash2 />
-                    )}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="flex-1"
-                    disabled={
-                      accepting || discarding || Boolean(revisionTarget)
-                    }
-                    onClick={() =>
-                      setRevisionTarget({
-                        runId: selectedCandidatePreview!.runId!,
-                        candidateId: selectedCandidate.candidateId,
-                      })
-                    }
-                  >
-                    <Pencil /> Refine
-                  </Button>
-                  <Button
-                    type="button"
-                    className="flex-1"
-                    disabled={accepting || discarding || developmentPreview}
-                    onClick={() => void updateCandidate('accept')}
-                  >
-                    {accepting ? 'Accepting…' : 'Accept'}
-                  </Button>
-                </div>
+                ) : (
+                  <div className="flex w-full gap-2">
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="icon"
+                      disabled={accepting || discarding || developmentPreview}
+                      aria-label="Discard this direction"
+                      title="Discard this direction"
+                      onClick={() => void updateCandidate('discard')}
+                    >
+                      {discarding ? (
+                        <LoaderCircle className="animate-spin" />
+                      ) : (
+                        <Trash2 />
+                      )}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="flex-1"
+                      disabled={
+                        accepting || discarding || Boolean(revisionTarget)
+                      }
+                      onClick={() =>
+                        setRevisionTarget({
+                          runId: selectedCandidatePreview!.runId!,
+                          candidateId: selectedCandidate.candidateId,
+                        })
+                      }
+                    >
+                      <Pencil /> Refine
+                    </Button>
+                    <Button
+                      type="button"
+                      className="flex-1"
+                      disabled={accepting || discarding || developmentPreview}
+                      onClick={() => void updateCandidate('accept')}
+                    >
+                      {accepting ? 'Accepting…' : 'Accept'}
+                    </Button>
+                  </div>
+                )}
               </SheetFooter>
             </>
           ) : selectedNode ? (
