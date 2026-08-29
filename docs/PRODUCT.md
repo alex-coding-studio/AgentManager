@@ -126,6 +126,9 @@ The third slice captures stable starting points for later Agent decomposition:
 7. Render the captured start node on the canvas.
 8. Show each source by file name and open Markdown sources in the shared reader.
 9. Edit the node title and source set without changing the node identity.
+10. Keep the Canvas full-width and open node creation in a modal workspace.
+11. Open a node Inspector by selecting its Card.
+12. Offer editing from the Inspector rather than placing edit controls on Cards.
 
 Agent invocation, generated child nodes, dependency edges, manual canvas
 positioning, and prompt calibration remain outside this slice.

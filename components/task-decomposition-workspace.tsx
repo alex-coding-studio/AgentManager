@@ -18,6 +18,14 @@ import { Button, buttonVariants } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import type { ContextBrowserFolder } from '@/lib/product-context';
 import type { TaskGraphNode } from '@/lib/task-graph';
 import { cn } from '@/lib/utils';
@@ -38,7 +46,9 @@ export function TaskDecompositionWorkspace({
     folders[0]?.path ?? '',
   );
   const [files, setFiles] = useState<File[]>([]);
+  const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState('');
+  const [selectedNodeId, setSelectedNodeId] = useState('');
   const [retainedAttachmentRefs, setRetainedAttachmentRefs] = useState<
     string[]
   >([]);
@@ -62,6 +72,7 @@ export function TaskDecompositionWorkspace({
   );
   const sourceCount =
     selectedRefs.length + retainedAttachmentRefs.length + files.length;
+  const selectedNode = nodes.find((node) => node.id === selectedNodeId) ?? null;
 
   function toggleSource(ref: string, selected: boolean) {
     setSelectedRefs((current) =>
@@ -127,11 +138,13 @@ export function TaskDecompositionWorkspace({
     }
     setNodes(result.nodes);
     setCreatedId(result.node.id);
+    setSelectedNodeId(result.node.id);
     setTitle('');
     setSelectedRefs([]);
     setEditingId('');
     setRetainedAttachmentRefs([]);
     setFiles([]);
+    setFormOpen(false);
   }
 
   function editNode(node: TaskGraphNode) {
@@ -150,6 +163,8 @@ export function TaskDecompositionWorkspace({
     setFiles([]);
     setCreatedId('');
     setError('');
+    setSelectedNodeId('');
+    setFormOpen(true);
   }
 
   function cancelEditing() {
@@ -159,9 +174,21 @@ export function TaskDecompositionWorkspace({
     setRetainedAttachmentRefs([]);
     setFiles([]);
     setError('');
+    setFormOpen(false);
+  }
+
+  function createNode() {
+    setEditingId('');
+    setTitle('');
+    setSelectedRefs([]);
+    setRetainedAttachmentRefs([]);
+    setFiles([]);
+    setError('');
+    setFormOpen(true);
   }
 
   async function previewResource(resourcePath: string) {
+    setSelectedNodeId('');
     setPreviewingPath(resourcePath);
     setError('');
     const response = await fetch(
@@ -216,6 +243,9 @@ export function TaskDecompositionWorkspace({
             <span className="size-2 rounded-full bg-foreground" />
             {nodes.length} {nodes.length === 1 ? 'node' : 'nodes'}
           </div>
+          <Button type="button" onClick={createNode}>
+            <Plus /> New start node
+          </Button>
           <Link
             href={`/projects/${projectId}/decomposition/context`}
             className={buttonVariants({ variant: 'outline' })}
@@ -225,10 +255,10 @@ export function TaskDecompositionWorkspace({
         </div>
       </header>
 
-      <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_390px]">
+      <div className="min-h-0 flex-1">
         <section
           aria-label="Task canvas"
-          className="relative min-h-[520px] overflow-auto border-b border-border bg-[radial-gradient(circle,var(--border)_1px,transparent_1px)] bg-[size:22px_22px] lg:border-r lg:border-b-0"
+          className="relative min-h-[calc(100vh-10rem)] overflow-auto bg-[radial-gradient(circle,var(--border)_1px,transparent_1px)] bg-[size:22px_22px]"
         >
           <div className="min-h-full min-w-[680px] p-8 lg:p-12">
             {nodes.length === 0 ? (
@@ -244,329 +274,430 @@ export function TaskDecompositionWorkspace({
                     Its source documents become the fixed boundary for future
                     decomposition.
                   </p>
+                  <Button type="button" className="mt-5" onClick={createNode}>
+                    <Plus /> New start node
+                  </Button>
                 </div>
               </div>
             ) : (
               <div className="grid max-w-5xl grid-cols-2 items-start gap-8 xl:grid-cols-3">
                 {nodes.map((node) => (
-                  <article
+                  <button
                     key={node.id}
+                    type="button"
                     className={cn(
-                      'min-h-36 rounded-2xl border border-t-[3px] border-border bg-background p-4 shadow-[0_10px_30px_rgb(15_23_42/6%)]',
+                      'min-h-36 rounded-2xl border border-t-[3px] border-border bg-background p-4 text-left shadow-[0_10px_30px_rgb(15_23_42/6%)] transition hover:-translate-y-0.5 hover:shadow-[0_16px_38px_rgb(15_23_42/9%)] focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30',
                       node.id === createdId && 'ring-2 ring-foreground/20',
                     )}
                     style={{
                       borderTopColor:
                         node.presentation?.color ?? nodeTypeColor(node.type),
                     }}
+                    onClick={() => setSelectedNodeId(node.id)}
                   >
                     <div className="flex items-center justify-between gap-3">
                       <span className="font-mono text-[10px] font-medium tracking-wide text-muted-foreground">
                         {node.id}
                       </span>
-                      <div className="flex items-center gap-1">
-                        <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-medium capitalize text-secondary-foreground">
-                          {node.type}
-                        </span>
-                        {node.role === 'start' ? (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon-xs"
-                            aria-label={`Edit ${node.title}`}
-                            title="Edit start node"
-                            onClick={() => editNode(node)}
-                          >
-                            <Pencil />
-                          </Button>
-                        ) : null}
-                      </div>
+                      <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-medium capitalize text-secondary-foreground">
+                        {node.type}
+                      </span>
                     </div>
                     <h2 className="mt-4 text-sm font-semibold leading-5">
                       {node.title}
                     </h2>
                     <div className="mt-5 space-y-1.5">
-                      {node.resources.map((resource) => (
-                        <button
+                      {node.resources.slice(0, 3).map((resource) => (
+                        <span
                           key={`${resource.kind}:${resource.path}`}
-                          type="button"
-                          className="flex max-w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-[11px] text-muted-foreground transition hover:bg-secondary hover:text-foreground"
-                          title={`Preview ${resourceName(resource.path)}`}
-                          disabled={previewingPath === resource.path}
-                          onClick={() => previewResource(resource.path)}
+                          className="flex max-w-full items-center gap-1.5 px-1.5 py-1 text-[11px] text-muted-foreground"
                         >
                           <FileText className="size-3 shrink-0" />
                           <span className="truncate">
-                            {previewingPath === resource.path
-                              ? 'Opening…'
-                              : resourceName(resource.path)}
+                            {resourceName(resource.path)}
                           </span>
-                        </button>
+                        </span>
                       ))}
+                      {node.resources.length > 3 ? (
+                        <span className="px-1.5 text-[10px] text-muted-foreground">
+                          +{node.resources.length - 3} more
+                        </span>
+                      ) : null}
                     </div>
-                  </article>
+                  </button>
                 ))}
               </div>
             )}
           </div>
         </section>
 
-        <aside className="min-h-0 overflow-y-auto bg-background p-5 lg:p-6">
-          <form onSubmit={saveTask} className="space-y-6">
-            <div>
-              <div className="flex items-center gap-2">
-                <div className="grid size-7 place-items-center rounded-lg bg-primary text-primary-foreground">
-                  <Plus className="size-3.5" />
+        <Dialog
+          open={formOpen}
+          onOpenChange={(open) => {
+            if (open) setFormOpen(true);
+            else cancelEditing();
+          }}
+        >
+          <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-2xl">
+            <form onSubmit={saveTask} className="space-y-6">
+              <div>
+                <div className="flex items-center gap-2">
+                  <div className="grid size-7 place-items-center rounded-lg bg-primary text-primary-foreground">
+                    <Plus className="size-3.5" />
+                  </div>
+                  <h2 className="text-sm font-semibold">
+                    {editingId ? `Edit ${editingId}` : 'New start node'}
+                  </h2>
                 </div>
-                <h2 className="text-sm font-semibold">
-                  {editingId ? `Edit ${editingId}` : 'New start node'}
-                </h2>
+                <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                  Select every document needed to understand what will be
+                  decomposed.
+                </p>
               </div>
-              <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                Select every document needed to understand what will be
-                decomposed.
-              </p>
-            </div>
 
-            <div className="space-y-2">
-              <label htmlFor="task-title" className="text-xs font-medium">
-                Start-node title
-              </label>
-              <Input
-                id="task-title"
-                value={title}
-                maxLength={160}
-                placeholder="Task decomposition MVP"
-                onChange={(event) => setTitle(event.target.value)}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label htmlFor="context-folder" className="text-xs font-medium">
-                Context Library folder
-              </label>
-              <div className="relative">
-                <select
-                  id="context-folder"
-                  value={selectedFolder?.path ?? ''}
-                  onChange={(event) =>
-                    setSelectedFolderPath(event.target.value)
-                  }
-                  className="h-10 w-full appearance-none rounded-xl border border-border bg-background px-3 pr-9 text-xs font-medium outline-none transition focus:border-ring focus:ring-3 focus:ring-ring/20"
-                >
-                  {folders.map((folder) => {
-                    const depth = folder.path.split('/').length - 2;
-                    return (
-                      <option key={folder.path} value={folder.path}>
-                        {`${'— '.repeat(depth)}${folder.title}`}
-                      </option>
-                    );
-                  })}
-                </select>
-                <ChevronDown className="pointer-events-none absolute top-1/2 right-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <div className="space-y-2">
+                <label htmlFor="task-title" className="text-xs font-medium">
+                  Start-node title
+                </label>
+                <Input
+                  id="task-title"
+                  value={title}
+                  maxLength={160}
+                  placeholder="Task decomposition MVP"
+                  onChange={(event) => setTitle(event.target.value)}
+                />
               </div>
-              <div className="max-h-64 divide-y divide-border overflow-y-auto rounded-xl border border-border">
-                {availableSourceCount === 0 ? (
-                  <p className="p-4 text-xs text-muted-foreground">
-                    No Markdown documents are available yet.
-                  </p>
-                ) : !selectedFolder || selectedFolder.entries.length === 0 ? (
-                  <p className="p-4 text-xs text-muted-foreground">
-                    This folder is empty.
-                  </p>
-                ) : (
-                  selectedFolder.entries.map((entry, index) => {
-                    if (entry.kind === 'folder') {
-                      return (
-                        <button
-                          key={entry.path}
-                          type="button"
-                          className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition hover:bg-muted/50"
-                          onClick={() => setSelectedFolderPath(entry.path)}
-                        >
-                          <Folder className="size-3.5 shrink-0" />
-                          <span className="min-w-0 flex-1 truncate text-xs font-medium">
-                            {entry.name}
-                          </span>
-                          <span className="text-[10px] text-muted-foreground">
-                            Folder
-                          </span>
-                        </button>
-                      );
+
+              <div className="space-y-2">
+                <label htmlFor="context-folder" className="text-xs font-medium">
+                  Context Library folder
+                </label>
+                <div className="relative">
+                  <select
+                    id="context-folder"
+                    value={selectedFolder?.path ?? ''}
+                    onChange={(event) =>
+                      setSelectedFolderPath(event.target.value)
                     }
-                    const checked = selectedRefs.includes(entry.path);
-                    const inputId = `context-source-${index}`;
-                    return (
-                      <label
-                        key={entry.path}
-                        htmlFor={inputId}
-                        className="flex cursor-pointer items-start gap-2.5 px-3 py-2.5 transition hover:bg-muted/50"
-                      >
-                        <Checkbox
-                          id={inputId}
-                          checked={checked}
-                          onCheckedChange={(value) =>
-                            toggleSource(entry.path, value === true)
-                          }
-                          aria-label={`Use ${entry.name}`}
-                          className="mt-0.5"
-                        />
-                        <FileText className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
-                        <span className="min-w-0">
-                          <span className="block truncate font-mono text-[11px] font-medium">
-                            {entry.name}
+                    className="h-10 w-full appearance-none rounded-xl border border-border bg-background px-3 pr-9 text-xs font-medium outline-none transition focus:border-ring focus:ring-3 focus:ring-ring/20"
+                  >
+                    {folders.map((folder) => {
+                      const depth = folder.path.split('/').length - 2;
+                      return (
+                        <option key={folder.path} value={folder.path}>
+                          {`${'— '.repeat(depth)}${folder.title}`}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute top-1/2 right-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                </div>
+                <div className="max-h-64 divide-y divide-border overflow-y-auto rounded-xl border border-border">
+                  {availableSourceCount === 0 ? (
+                    <p className="p-4 text-xs text-muted-foreground">
+                      No Markdown documents are available yet.
+                    </p>
+                  ) : !selectedFolder || selectedFolder.entries.length === 0 ? (
+                    <p className="p-4 text-xs text-muted-foreground">
+                      This folder is empty.
+                    </p>
+                  ) : (
+                    selectedFolder.entries.map((entry, index) => {
+                      if (entry.kind === 'folder') {
+                        return (
+                          <button
+                            key={entry.path}
+                            type="button"
+                            className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition hover:bg-muted/50"
+                            onClick={() => setSelectedFolderPath(entry.path)}
+                          >
+                            <Folder className="size-3.5 shrink-0" />
+                            <span className="min-w-0 flex-1 truncate text-xs font-medium">
+                              {entry.name}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground">
+                              Folder
+                            </span>
+                          </button>
+                        );
+                      }
+                      const checked = selectedRefs.includes(entry.path);
+                      const inputId = `context-source-${index}`;
+                      return (
+                        <label
+                          key={entry.path}
+                          htmlFor={inputId}
+                          className="flex cursor-pointer items-start gap-2.5 px-3 py-2.5 transition hover:bg-muted/50"
+                        >
+                          <Checkbox
+                            id={inputId}
+                            checked={checked}
+                            onCheckedChange={(value) =>
+                              toggleSource(entry.path, value === true)
+                            }
+                            aria-label={`Use ${entry.name}`}
+                            className="mt-0.5"
+                          />
+                          <FileText className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+                          <span className="min-w-0">
+                            <span className="block truncate font-mono text-[11px] font-medium">
+                              {entry.name}
+                            </span>
+                            <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
+                              {entry.title}
+                            </span>
                           </span>
-                          <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
-                            {entry.title}
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-xs font-medium">Local Markdown</p>
+                <button
+                  type="button"
+                  className={cn(
+                    'flex min-h-24 w-full flex-col items-center justify-center rounded-xl border border-dashed border-border px-4 py-4 text-center transition',
+                    dragging && 'border-foreground bg-secondary',
+                  )}
+                  onClick={() => fileInputRef.current?.click()}
+                  onDragEnter={(event) => {
+                    event.preventDefault();
+                    setDragging(true);
+                  }}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDragLeave={() => setDragging(false)}
+                  onDrop={dropFiles}
+                >
+                  <Upload className="size-4" />
+                  <span className="mt-2 text-xs font-medium">
+                    Drop Markdown or choose files
+                  </span>
+                  <span className="mt-1 text-[10px] text-muted-foreground">
+                    Up to 20 files, 2 MB each
+                  </span>
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".md,.markdown,text/markdown"
+                  multiple
+                  hidden
+                  onChange={(event) => {
+                    addFiles(Array.from(event.target.files ?? []));
+                    event.target.value = '';
+                  }}
+                />
+                {files.length > 0 ? (
+                  <ul className="space-y-1.5 pt-1">
+                    {files.map((file, index) => (
+                      <li
+                        key={`${file.name}:${file.size}:${file.lastModified}`}
+                        className="flex items-center gap-2 rounded-lg bg-secondary px-2.5 py-2"
+                      >
+                        <FileText className="size-3 shrink-0" />
+                        <span className="min-w-0 flex-1 truncate text-[11px]">
+                          {file.name}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-xs"
+                          aria-label={`Remove ${file.name}`}
+                          title="Remove source"
+                          onClick={() =>
+                            setFiles((current) =>
+                              current.filter(
+                                (_, candidateIndex) => candidateIndex !== index,
+                              ),
+                            )
+                          }
+                        >
+                          <X />
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                {retainedAttachmentRefs.length > 0 ? (
+                  <ul className="space-y-1.5 pt-1">
+                    {retainedAttachmentRefs.map((ref) => (
+                      <li
+                        key={ref}
+                        className="flex items-center gap-2 rounded-lg bg-secondary px-2.5 py-2"
+                      >
+                        <FileText className="size-3 shrink-0" />
+                        <span className="min-w-0 flex-1 truncate text-[11px]">
+                          {resourceName(ref)}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-xs"
+                          aria-label={`Remove ${resourceName(ref)}`}
+                          title="Remove source"
+                          onClick={() =>
+                            setRetainedAttachmentRefs((current) =>
+                              current.filter((candidate) => candidate !== ref),
+                            )
+                          }
+                        >
+                          <X />
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+
+              {error ? (
+                <p role="alert" className="text-xs text-destructive">
+                  {error}
+                </p>
+              ) : null}
+
+              <div className="border-t border-border pt-5">
+                <div className="flex gap-2">
+                  {editingId ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="lg"
+                      onClick={cancelEditing}
+                    >
+                      Cancel
+                    </Button>
+                  ) : null}
+                  <Button
+                    type="submit"
+                    className="flex-1"
+                    size="lg"
+                    disabled={!title.trim() || sourceCount === 0 || creating}
+                  >
+                    {editingId ? <Pencil /> : <Plus />}{' '}
+                    {creating
+                      ? editingId
+                        ? 'Saving…'
+                        : 'Creating…'
+                      : editingId
+                        ? 'Save changes'
+                        : 'Create start node'}
+                  </Button>
+                </div>
+                <p className="mt-2 text-center text-[10px] text-muted-foreground">
+                  {sourceCount} {sourceCount === 1 ? 'source' : 'sources'}{' '}
+                  selected
+                </p>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      <Sheet
+        open={selectedNode !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelectedNodeId('');
+        }}
+      >
+        <SheetContent className="sm:max-w-md">
+          {selectedNode ? (
+            <>
+              <SheetHeader className="border-b border-border px-6 py-6 pr-14">
+                <div className="mb-3 flex items-center gap-2">
+                  <span className="font-mono text-[10px] font-medium tracking-wide text-muted-foreground">
+                    {selectedNode.id}
+                  </span>
+                  <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-medium capitalize text-secondary-foreground">
+                    {selectedNode.type}
+                  </span>
+                </div>
+                <SheetTitle className="text-xl font-semibold tracking-[-0.025em]">
+                  {selectedNode.title}
+                </SheetTitle>
+                <SheetDescription>
+                  A captured {selectedNode.role} node and its fixed source
+                  boundary.
+                </SheetDescription>
+              </SheetHeader>
+
+              <div className="flex-1 overflow-y-auto px-6 py-5">
+                <dl className="grid grid-cols-3 gap-3">
+                  <NodeFact label="Role" value={selectedNode.role} />
+                  <NodeFact label="Type" value={selectedNode.type} />
+                  <NodeFact label="Status" value={selectedNode.status} />
+                </dl>
+
+                <section className="mt-7">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                      Sources
+                    </h3>
+                    <span className="text-[10px] text-muted-foreground">
+                      {selectedNode.resources.length}
+                    </span>
+                  </div>
+                  <div className="mt-3 divide-y divide-border overflow-hidden rounded-xl border border-border">
+                    {selectedNode.resources.map((resource) => (
+                      <button
+                        key={`${resource.kind}:${resource.path}`}
+                        type="button"
+                        className="flex w-full items-center gap-3 px-3 py-3 text-left transition hover:bg-muted/50"
+                        disabled={previewingPath === resource.path}
+                        onClick={() => previewResource(resource.path)}
+                      >
+                        <div className="grid size-8 shrink-0 place-items-center rounded-lg bg-secondary">
+                          <FileText className="size-3.5" />
+                        </div>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-xs font-medium">
+                            {previewingPath === resource.path
+                              ? 'Opening…'
+                              : resourceName(resource.path)}
+                          </span>
+                          <span className="mt-0.5 block truncate font-mono text-[10px] text-muted-foreground">
+                            {resource.path}
                           </span>
                         </span>
-                      </label>
-                    );
-                  })
-                )}
+                        <span className="rounded bg-secondary px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-muted-foreground">
+                          {resource.kind}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+
+                <section className="mt-7 border-t border-border pt-5">
+                  <dl className="space-y-3 text-xs">
+                    <div className="flex items-center justify-between gap-4">
+                      <dt className="text-muted-foreground">Created</dt>
+                      <dd>{formatTimestamp(selectedNode.createdAt)}</dd>
+                    </div>
+                    <div className="flex items-center justify-between gap-4">
+                      <dt className="text-muted-foreground">Updated</dt>
+                      <dd>{formatTimestamp(selectedNode.updatedAt)}</dd>
+                    </div>
+                    <div className="flex items-center justify-between gap-4">
+                      <dt className="text-muted-foreground">Dependencies</dt>
+                      <dd>{selectedNode.dependsOn.length}</dd>
+                    </div>
+                  </dl>
+                </section>
               </div>
-            </div>
 
-            <div className="space-y-2">
-              <p className="text-xs font-medium">Local Markdown</p>
-              <button
-                type="button"
-                className={cn(
-                  'flex min-h-24 w-full flex-col items-center justify-center rounded-xl border border-dashed border-border px-4 py-4 text-center transition',
-                  dragging && 'border-foreground bg-secondary',
-                )}
-                onClick={() => fileInputRef.current?.click()}
-                onDragEnter={(event) => {
-                  event.preventDefault();
-                  setDragging(true);
-                }}
-                onDragOver={(event) => event.preventDefault()}
-                onDragLeave={() => setDragging(false)}
-                onDrop={dropFiles}
-              >
-                <Upload className="size-4" />
-                <span className="mt-2 text-xs font-medium">
-                  Drop Markdown or choose files
-                </span>
-                <span className="mt-1 text-[10px] text-muted-foreground">
-                  Up to 20 files, 2 MB each
-                </span>
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".md,.markdown,text/markdown"
-                multiple
-                hidden
-                onChange={(event) => {
-                  addFiles(Array.from(event.target.files ?? []));
-                  event.target.value = '';
-                }}
-              />
-              {files.length > 0 ? (
-                <ul className="space-y-1.5 pt-1">
-                  {files.map((file, index) => (
-                    <li
-                      key={`${file.name}:${file.size}:${file.lastModified}`}
-                      className="flex items-center gap-2 rounded-lg bg-secondary px-2.5 py-2"
-                    >
-                      <FileText className="size-3 shrink-0" />
-                      <span className="min-w-0 flex-1 truncate text-[11px]">
-                        {file.name}
-                      </span>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-xs"
-                        aria-label={`Remove ${file.name}`}
-                        title="Remove source"
-                        onClick={() =>
-                          setFiles((current) =>
-                            current.filter(
-                              (_, candidateIndex) => candidateIndex !== index,
-                            ),
-                          )
-                        }
-                      >
-                        <X />
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-              {retainedAttachmentRefs.length > 0 ? (
-                <ul className="space-y-1.5 pt-1">
-                  {retainedAttachmentRefs.map((ref) => (
-                    <li
-                      key={ref}
-                      className="flex items-center gap-2 rounded-lg bg-secondary px-2.5 py-2"
-                    >
-                      <FileText className="size-3 shrink-0" />
-                      <span className="min-w-0 flex-1 truncate text-[11px]">
-                        {resourceName(ref)}
-                      </span>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-xs"
-                        aria-label={`Remove ${resourceName(ref)}`}
-                        title="Remove source"
-                        onClick={() =>
-                          setRetainedAttachmentRefs((current) =>
-                            current.filter((candidate) => candidate !== ref),
-                          )
-                        }
-                      >
-                        <X />
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </div>
-
-            {error ? (
-              <p role="alert" className="text-xs text-destructive">
-                {error}
-              </p>
-            ) : null}
-
-            <div className="border-t border-border pt-5">
-              <div className="flex gap-2">
-                {editingId ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="lg"
-                    onClick={cancelEditing}
-                  >
-                    Cancel
+              <SheetFooter className="border-t border-border px-6 py-4">
+                {selectedNode.role === 'start' ? (
+                  <Button type="button" onClick={() => editNode(selectedNode)}>
+                    <Pencil /> Edit start node
                   </Button>
                 ) : null}
-                <Button
-                  type="submit"
-                  className="flex-1"
-                  size="lg"
-                  disabled={!title.trim() || sourceCount === 0 || creating}
-                >
-                  {editingId ? <Pencil /> : <Plus />}{' '}
-                  {creating
-                    ? editingId
-                      ? 'Saving…'
-                      : 'Creating…'
-                    : editingId
-                      ? 'Save changes'
-                      : 'Create start node'}
-                </Button>
-              </div>
-              <p className="mt-2 text-center text-[10px] text-muted-foreground">
-                {sourceCount} {sourceCount === 1 ? 'source' : 'sources'}{' '}
-                selected
-              </p>
-            </div>
-          </form>
-        </aside>
-      </div>
+              </SheetFooter>
+            </>
+          ) : null}
+        </SheetContent>
+      </Sheet>
 
       <Dialog
         open={preview !== null}
@@ -596,6 +727,27 @@ export function TaskDecompositionWorkspace({
 
 function resourceName(resourcePath: string) {
   return resourcePath.split('/').at(-1) ?? resourcePath;
+}
+
+function NodeFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl bg-secondary px-3 py-2.5">
+      <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">
+        {label}
+      </dt>
+      <dd className="mt-1 truncate text-xs font-medium capitalize">{value}</dd>
+    </div>
+  );
+}
+
+function formatTimestamp(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? value
+    : new Intl.DateTimeFormat(undefined, {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      }).format(date);
 }
 
 function nodeTypeColor(type: string) {
