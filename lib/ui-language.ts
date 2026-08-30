@@ -5,6 +5,41 @@ export function isUiLanguage(value: unknown): value is UiLanguage {
 }
 
 export const chineseUi: Record<string, string> = {
+  'Send to Agent': '发送给 Agent',
+  'Planning only': '仅规划',
+  'Agent running': 'Agent 运行中',
+  Loading: '加载中',
+  'Live planning · read-only Agent · execution not connected':
+    '真实规划 · Agent 只读 · 执行尚未接入',
+  'Add a formal Node, then plan with your Agent.':
+    '添加正式节点，与 Agent 一起制定执行计划。',
+  'No goals yet. Add a formal Node to start planning.':
+    '还没有目标。添加正式节点后开始规划。',
+  'Plan finalized': '计划已确认',
+  Planning: '规划中',
+  'Not planned yet': '尚未规划',
+  'Execution not connected': '执行尚未接入',
+  'Just Do It instructions': 'Just Do It 全局 Instructions',
+  'Project-wide working rules. Each new planning run takes a snapshot; running Agents are unchanged.':
+    '当前项目的工作规则。每次新规划读取一份快照，不改变已经运行中的 Agent。',
+  'Your additional requirements': '你的补充要求',
+  'Model ID (optional)': '模型 ID（可选）',
+  'Agent default': 'Agent 默认',
+  'Uses your local Agent login. Unsupported model settings return an error, without silently changing models.':
+    '使用本地 Agent 登录。模型配置不受支持时会报错，不会悄悄换模型。',
+  'Actions are ready. Execution is not connected yet.':
+    '执行步骤已就绪；暂未接入代码执行。',
+  'Reopen plan': '重新调整计划',
+  'Last run usage': '上轮用量',
+  'Choose a formal Node. Its output is retained for planning; the source is unchanged.':
+    '选择一个正式节点。保留其产出用于规划，不修改来源节点。',
+  'No formal Nodes available yet.': '还没有可导入的正式节点。',
+  'Prerequisites not yet verified': '前置成果尚未验收',
+  'Could not load planning.': '无法加载规划工作区。',
+  'Planning request failed.': '规划请求失败。',
+  'Attach no more than five resources.': '最多添加 5 份资料。',
+  'Use text or Markdown files up to 256 KB.':
+    '请使用不超过 256 KB 的文本或 Markdown 文件。',
   'Preview mode': '预览模式',
   'Open preview': '打开预览',
   'Exit preview': '退出预览',

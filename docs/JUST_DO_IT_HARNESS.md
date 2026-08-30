@@ -2,11 +2,13 @@
 
 ## Delivery boundary
 
-Revision 1 is an offline, provider-independent foundation. It implements stage
+The provider-independent foundation implements stage
 prompts, request snapshots, structural and scope validation, and a file-backed
-Card worklog with progressive-disclosure Markdown handoffs. It does not connect
-the frozen UI, invoke an Agent, discover/install Skills, create Issues/PRs,
-perform Git rollback, or implement a production execution state machine.
+Card worklog with progressive-disclosure Markdown handoffs. Revision 2 adds a
+target-only response for scoped Plan edits. The [live Planning adapter](JUST_DO_IT_PLANNING.md)
+connects import, generation, adjustment and finalization on the ordinary route;
+the frozen demo remains isolated. Execution, automatic Skill loading, GitHub
+writes, rollback and the execution state machine are not connected.
 The product contract remains [JUST_DO_IT.md](JUST_DO_IT.md).
 
 Run `npm run test:implementation-harness` for fixed contract and storage tests.
@@ -40,8 +42,8 @@ Inputs are semantic, not a required filename inventory. Outputs describe visible
 behavior with technical evidence available through references. Step counts are
 not a product-quality gate: one or twelve structurally valid steps can pass the
 schema; the user decides whether the proposal is useful. New steps use UUIDs,
-not display aliases or numbered IDs. A scoped edit preserves all sibling
-contracts, ordering and the Overview. Retaining semantic identity across a
+not display aliases or numbered IDs. A scoped edit returns only the target step;
+the host preserves sibling contracts, ordering and the Overview. Retaining semantic identity across a
 whole-plan rewrite still depends on model behavior and needs live evaluation.
 
 All stages can carry a concise Agent-authored handoff summary, which is advisory.
@@ -94,8 +96,8 @@ future capabilities; no cost reduction is claimed from fixed examples.
 
 The Card owns continuity independently of any provider Session.
 `lib/just-do-it-worklog.ts` exposes `appendCardWorkRecord` and `readCardWorklog`.
-Callers provide a trusted storage root and a full Card UUID. No route or current
-project writer invokes these helpers yet.
+Callers provide a trusted storage root and a full Card UUID. The live planning
+route invokes these helpers for its Card-owned records and transaction documents.
 
 Three record kinds have separate responsibilities:
 
@@ -145,7 +147,7 @@ compaction, disk limits and explicit repair are later work.
 
 ## Next bounded integration
 
-Connect one real planning round to this contract and worklog, without changing
+The planning-only adapter is connected; expand evaluation without changing
 the frozen preview or enabling execution writes. Validate whether the generated
 Plan reflects the supplied goal and feedback, then test a fresh Session reading
 the main handoff and targeted references. This requires separate runtime work:

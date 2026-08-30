@@ -44,7 +44,7 @@ const navigation = [
     icon: Play,
     path: '/implementation',
     available: true,
-    badge: 'Preview',
+    badge: 'Planning only',
   },
 ];
 

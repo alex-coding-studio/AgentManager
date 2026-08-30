@@ -1,5 +1,14 @@
 # Roadmap
 
+## Current implementation update — real Planning connected
+
+The [live Planning slice](JUST_DO_IT_PLANNING.md) now imports real formal Nodes,
+persists Card context and runs a read-only local Agent for Plan generation and
+feedback. Finalize creates ready Action contracts without execution. The frozen
+preview remains separately accessible. Next evaluate Plan quality and recovery
+with real users, then define the execution integration; no GitHub writes or
+Action execution were enabled in this slice.
+
 ## Current focus — Just Do It Harness design; UI baseline frozen
 
 As of 2026-08-30, the user accepted the current UI direction and requested a

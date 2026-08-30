@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { ProjectShell } from '@/components/project-shell';
-import { JustDoItEntry } from '@/components/just-do-it-entry';
+import { JustDoItLiveWorkspace } from '@/components/just-do-it-live-workspace';
 import {
   getGitHubRepositoryUrl,
   getProject,
@@ -23,7 +23,7 @@ export default async function ImplementationPage({
   const preview = (await searchParams).preview === 'just-do-it';
   const Workspace = preview
     ? (await import('@/components/just-do-it-workspace')).JustDoItWorkspace
-    : JustDoItEntry;
+    : JustDoItLiveWorkspace;
   return (
     <ProjectShell
       project={project}

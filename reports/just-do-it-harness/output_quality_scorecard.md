@@ -1,5 +1,9 @@
 # Just Do It Harness: Scaffold evaluation
 
+Subsequent evidence: the [live planning smoke](live-planning-smoke.md) records
+one real initial Plan and scoped-edit validation. The original Scaffold evidence
+below remains distinct from that narrow integration test.
+
 ## Verdict and evidence boundary
 
 The offline contract/storage foundation is testable. Live model effectiveness is

@@ -11,8 +11,10 @@ The subsequent 2026-08-30 Harness discussion settles the planning/reopening
 boundary and user decision authority below. These rules supersede older intent
 where noted; the frozen demo has not been updated to enforce them.
 An offline [Harness foundation](JUST_DO_IT_HARNESS.md) now provides phase prompts,
-request/result validation and a file-backed Card worklog. It is not wired to
-the UI, providers or GitHub, and has not been evaluated with live Agent output.
+request/result validation and a file-backed Card worklog. The subsequent
+[Planning integration](JUST_DO_IT_PLANNING.md) connects real read-only generation,
+adjustment and Finalize while retaining the isolated Preview. GitHub writes,
+Action execution and automatic Skill loading remain unconnected.
 This document records the
 settled product intent and explicitly separates unresolved mechanics and
 deferred ideas. It does not authorize implementation or data migration.
