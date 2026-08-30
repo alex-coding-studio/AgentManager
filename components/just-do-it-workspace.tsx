@@ -722,9 +722,9 @@ function ActionWorkbench({
           </summary>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <Fact label="Input">
-              {t('Working directory')}: {projectPath}
-              {'\n\n'}
-              {target.input}
+              {target.input
+                .replace('当前登记的项目路径', projectPath)
+                .replace('已登记的 AgentManager 项目目录', projectPath)}
             </Fact>
             <Fact label="Expected output">{target.output}</Fact>
             <Fact label="Validation">{target.validation}</Fact>
