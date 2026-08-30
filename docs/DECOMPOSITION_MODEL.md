@@ -138,6 +138,10 @@ product decision without making delivery state part of the product graph.
 ### Just Do It workflow and prerequisites
 
 Users explicitly add a goal Card, discuss a Plan, and work through its Actions.
+They confirm the entire draft Plan before its exact step contracts become
+executable Actions. Step count should remain manageable (roughly five to seven
+when appropriate, not a mandatory minimum). Input, Output, and Validation are
+the primary Action content; Processing is an activity state.
 Each Action supports repeated Input / Process / Output / Validation rounds;
 producing an output is not equivalent to passing verification. The current
 design focuses on a manual software-delivery loop, with automatic advancement

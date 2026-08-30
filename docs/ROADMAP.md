@@ -18,6 +18,13 @@ Local Git versioning and operational analytics remain deferred. They must not
 delay completing the workflow discussion. Implementation scope and acceptance
 checks will be agreed separately after the unresolved design questions are settled.
 
+The next UI pass explores whole-plan generation and feedback before Action
+creation, concrete input/output/validation contracts, per-role demo model
+configuration, and Issue-style follow-ups. Actual shared Agent/model settings
+and GitHub Issue creation/synchronization require a later integration contract.
+GitHub-backed Todos are distinct from the deferred local Git artifact-version
+proposal; neither implies the other has been implemented.
+
 ## Earlier Decomposition MVP planning baseline
 
 The following records the earlier planning baseline, not a current runtime

@@ -24,7 +24,11 @@ export default async function ImplementationPage({
       projects={projects}
       repositoryUrl={getGitHubRepositoryUrl(project)}
     >
-      <JustDoItWorkspace key={project.id} projectId={project.id} />
+      <JustDoItWorkspace
+        key={project.id}
+        projectId={project.id}
+        projectPath={project.rootPath}
+      />
     </ProjectShell>
   );
 }

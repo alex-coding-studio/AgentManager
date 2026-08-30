@@ -5,6 +5,69 @@ export function isUiLanguage(value: unknown): value is UiLanguage {
 }
 
 export const chineseUi: Record<string, string> = {
+  Model: '模型',
+  'Provider default': '沿用默认配置',
+  'Reasoning model · demo': '推理模型 · 演示',
+  'Lightweight model · demo': '轻量模型 · 演示',
+  'Reasoning effort': '推理强度',
+  low: '低',
+  medium: '中',
+  high: '高',
+  'Planning profile': '规划配置',
+  'Execution profile': '执行配置',
+  'Review profile': '审查配置',
+  'Requested profile': '本轮请求配置',
+  'Demo profiles only, not a live model catalog. Nothing is sent to a provider.':
+    '仅演示配置，不是账号真实模型列表，也不会发送给服务商。',
+  'Plan the whole goal': '先规划整个目标',
+  'Discuss and revise the complete plan. Actions appear only after you accept the whole plan.':
+    '先讨论和调整整份计划，整体确认后才展开执行步骤。',
+  'Feedback on the whole plan': '对整份计划的反馈',
+  'Simulate plan revision': '模拟调整计划',
+  'Simulate Generate Plan': '模拟生成计划',
+  'Demo plan result': '演示结果',
+  'Standard example': '标准示例',
+  'Shorter example': '精简示例',
+  'This is a scripted planning demo, not AI. Feedback is retained; edit the proposed contracts directly to explore changes.':
+    '这是预设交互演示，不是真实 AI。反馈会被保留；可以直接修改步骤约定来体验调整。',
+  'Preparing a plan draft…': '正在准备计划草案…',
+  'Plan generation failed. Your input and earlier draft are retained; retry before confirming.':
+    '生成计划失败，输入和此前草案保留。请重试后再确认。',
+  'Plan generation canceled. No Actions were created.':
+    '已取消生成，本轮没有创建新的执行步骤。',
+  'Planning response': '规划回应',
+  'Plan response version': '规划回应版本',
+  'Historical response only. Return to the latest version to confirm the current draft.':
+    '正在阅读历史回应；请回到最新版本再确认当前草案。',
+  'Current plan draft': '当前计划草案',
+  'Plan steps': '个计划步骤',
+  'Aim for roughly 5–7 meaningful steps, not a quota. Simple goals need fewer. These exact contracts become Actions when confirmed.':
+    '通常 5–7 步比较容易把握，但不凑数，简单目标可以更少。确认后，下面这些约定直接成为执行步骤。',
+  'This plan may be too large. Consider reducing the goal instead of hiding complexity inside steps.':
+    '计划可能过大，建议缩小本轮目标，而不是把复杂工作硬塞进少数步骤。',
+  'Existing delivery retained': '保留已有交付',
+  'Step title': '步骤标题',
+  'Confirm entire plan': '确认整份计划',
+  'No Actions yet. Confirm the entire plan first.':
+    '尚无执行步骤。先生成、讨论并确认整份计划。',
+  'Working directory': '工作目录',
+  'Prepare a follow-up Issue': '准备后续 Issue',
+  'Only defer out-of-scope work. Current delivery blockers must stay in this Action. No GitHub Issue will actually be created.':
+    '只记录范围外的新需求。本轮阻塞问题仍须在当前步骤解决。这里不会创建真实 GitHub Issue。',
+  'Issue title': 'Issue 标题',
+  'Why later?': '为什么留到以后？',
+  'Expected future outcome': '后续预期成果',
+  'Simulate creating Issue': '模拟创建 Issue',
+  'New follow-up': '新增后续事项',
+  'GitHub Issues will own these Todos. This preview only simulates Issue metadata and open/closed state.':
+    '后续以 GitHub Issues 管理待办。本页仅模拟 Issue 信息及打开、关闭状态。',
+  Open: '未关闭',
+  Closed: '已关闭',
+  'Sample Issue': '示例 Issue',
+  'From action': '来源步骤',
+  'Simulate Issue reopened': '模拟重新打开',
+  'Simulate Issue closed': '模拟关闭 Issue',
+  'Track out-of-scope feedback as Todo': '将范围外反馈记为 Todo',
   'Plan progress': '计划进度',
   'Completed {done} / {total} steps': '已完成 {done} / {total} 步',
   'Open goal: {title}': '打开目标：{title}',

@@ -29,7 +29,6 @@ import {
   RotateCcw,
   Search,
   ShieldCheck,
-  Sparkles,
   X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -45,6 +44,15 @@ import { Textarea } from '@/components/ui/textarea';
 import { MarkdownReader } from '@/components/markdown-reader';
 import { useUiText } from '@/components/ui-language-provider';
 import {
+  DemoPlanningWorkspace,
+  DemoPlanningTimer,
+} from '@/components/just-do-it-planning';
+import { DemoIssueDraft, DemoIssueTodos } from '@/components/just-do-it-issues';
+import {
+  DemoAgentProfile,
+  DemoProfileSummary,
+} from '@/components/demo-agent-profile';
+import {
   DemoGoalCard,
   DemoProgress,
   DemoStatus,
@@ -55,6 +63,7 @@ import {
   createDemoState,
   createLibraryGoal,
   demoReducer,
+  defaultDemoProfile,
   goalComplete,
   needsAttention,
   reviewFinding,
@@ -71,7 +80,13 @@ const sectionStyle = 'rounded-2xl border border-border bg-card';
 const labelStyle =
   'text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground';
 
-export function JustDoItWorkspace({ projectId }: { projectId: string }) {
+export function JustDoItWorkspace({
+  projectId,
+  projectPath,
+}: {
+  projectId: string;
+  projectPath: string;
+}) {
   const { t } = useUiText();
   const [state, dispatch] = useReducer(demoReducer, undefined, createDemoState);
   const [goalId, setGoalId] = useState<string | null>(null);
@@ -124,6 +139,7 @@ export function JustDoItWorkspace({ projectId }: { projectId: string }) {
           key={selected.id}
           state={state}
           goal={selected}
+          projectPath={projectPath}
           dispatch={dispatch}
           onBack={() => setGoalId(null)}
           onOpenGoal={setGoalId}
@@ -213,6 +229,16 @@ export function JustDoItWorkspace({ projectId }: { projectId: string }) {
           </p>
         </div>
       )}
+      {state.goals
+        .filter((goal) => goal.planning?.job)
+        .map((goal) => (
+          <DemoPlanningTimer
+            key={goal.planning!.job!.id}
+            goalId={goal.id}
+            jobId={goal.planning!.job!.id}
+            dispatch={dispatch}
+          />
+        ))}
       {state.goals.flatMap((goal) =>
         goal.actions
           .filter((item) => item.job)
@@ -313,17 +339,19 @@ function GoalWorkbench({
   dispatch,
   onBack,
   onOpenGoal,
+  projectPath,
 }: {
   state: DemoState;
   goal: DemoGoal;
   dispatch: Dispatch<DemoEvent>;
   onBack: () => void;
   onOpenGoal: (id: string) => void;
+  projectPath: string;
 }) {
   const { t } = useUiText();
   const [actionId, setActionId] = useState(
     (goal.actions.find((item) => item.stage !== 'verified') ?? goal.actions[0])
-      .id,
+      ?.id ?? '',
   );
   const [panel, setPanel] = useState<'action' | 'plan' | 'todos'>(
     goal.planConfirmed ? 'action' : 'plan',
@@ -388,49 +416,56 @@ function GoalWorkbench({
               {t('Edit plan')}
             </button>
           </div>
-          <DemoProgress goal={goal} />
+          {goal.planConfirmed ? (
+            <DemoProgress goal={goal} />
+          ) : (
+            <p className="text-xs leading-5 text-muted-foreground">
+              {t('No Actions yet. Confirm the entire plan first.')}
+            </p>
+          )}
           <div className="mt-5 space-y-1.5">
-            {goal.actions.map((item, index) => (
-              <button
-                key={item.id}
-                onClick={() => {
-                  setActionId(item.id);
-                  setPanel('action');
-                }}
-                aria-pressed={panel === 'action' && item.id === actionId}
-                className={cn(
-                  'flex w-full items-start gap-3 rounded-xl p-3 text-left transition focus-visible:ring-2 focus-visible:ring-ring',
-                  panel === 'action' && item.id === actionId
-                    ? 'bg-secondary'
-                    : 'hover:bg-secondary/50',
-                )}
-              >
-                <span
+            {goal.planConfirmed &&
+              goal.actions.map((item, index) => (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    setActionId(item.id);
+                    setPanel('action');
+                  }}
+                  aria-pressed={panel === 'action' && item.id === target?.id}
                   className={cn(
-                    'mt-0.5 grid size-6 shrink-0 place-items-center rounded-full border text-[10px]',
-                    item.stage === 'verified'
-                      ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
-                      : 'border-border text-muted-foreground',
+                    'flex w-full items-start gap-3 rounded-xl p-3 text-left transition focus-visible:ring-2 focus-visible:ring-ring',
+                    panel === 'action' && item.id === target?.id
+                      ? 'bg-secondary'
+                      : 'hover:bg-secondary/50',
                   )}
                 >
-                  {item.job ? (
-                    <LoaderCircle className="size-3 animate-spin" />
-                  ) : item.stage === 'verified' ? (
-                    <Check className="size-3" />
-                  ) : (
-                    index + 1
-                  )}
-                </span>
-                <span className="min-w-0">
-                  <span className="block text-xs font-medium leading-5">
-                    {item.title}
+                  <span
+                    className={cn(
+                      'mt-0.5 grid size-6 shrink-0 place-items-center rounded-full border text-[10px]',
+                      item.stage === 'verified'
+                        ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+                        : 'border-border text-muted-foreground',
+                    )}
+                  >
+                    {item.job ? (
+                      <LoaderCircle className="size-3 animate-spin" />
+                    ) : item.stage === 'verified' ? (
+                      <Check className="size-3" />
+                    ) : (
+                      index + 1
+                    )}
                   </span>
-                  <span className="mt-1 block text-[10px] text-muted-foreground">
-                    {t(actionStatus(item))}
+                  <span className="min-w-0">
+                    <span className="block text-xs font-medium leading-5">
+                      {item.title}
+                    </span>
+                    <span className="mt-1 block text-[10px] text-muted-foreground">
+                      {t(actionStatus(item))}
+                    </span>
                   </span>
-                </span>
-              </button>
-            ))}
+                </button>
+              ))}
           </div>
           <button
             className={cn(
@@ -469,21 +504,22 @@ function GoalWorkbench({
               ))}
             </div>
           )}
-          {panel === 'plan' ? (
-            <PlanEditor
+          {panel === 'plan' || (!goal.planConfirmed && panel !== 'todos') ? (
+            <DemoPlanningWorkspace
               key={goal.id}
               goal={goal}
               dispatch={dispatch}
               onDone={() => setPanel('action')}
             />
           ) : panel === 'todos' ? (
-            <TodoPanel goal={goal} dispatch={dispatch} />
+            <DemoIssueTodos goal={goal} dispatch={dispatch} />
           ) : (
             <ActionWorkbench
               key={target.id}
               state={state}
               goal={goal}
               target={target}
+              projectPath={projectPath}
               dispatch={dispatch}
               onPlan={() => setPanel('plan')}
             />
@@ -583,185 +619,20 @@ function GoalWorkbench({
   );
 }
 
-function PlanEditor({
-  goal,
-  dispatch,
-  onDone,
-}: {
-  goal: DemoGoal;
-  dispatch: Dispatch<DemoEvent>;
-  onDone: () => void;
-}) {
-  const { t } = useUiText();
-  const [requirements, setRequirements] = useState(goal.requirements);
-  const [titles, setTitles] = useState(goal.actions.map((item) => item.title));
-  const locked = goal.actions.some((item) => item.job);
-  return (
-    <section className={cn(sectionStyle, 'p-5')}>
-      <div className="flex items-center gap-2">
-        <Sparkles className="size-4 text-muted-foreground" />
-        <h2 className="text-lg font-semibold">
-          {t('Shape the plan before you start')}
-        </h2>
-      </div>
-      <p className="mt-2 text-xs leading-6 text-muted-foreground">
-        {t(
-          'This plan is a prepared example, not an Agent response. Edit the upcoming steps and your requirements; verified work stays intact.',
-        )}
-      </p>
-      <label
-        className="mt-5 block text-xs font-medium"
-        htmlFor="demo-requirements"
-      >
-        {t('Your requirements')}
-      </label>
-      <Textarea
-        id="demo-requirements"
-        className="mt-2 min-h-24"
-        value={requirements}
-        disabled={locked}
-        onChange={(event) => setRequirements(event.target.value)}
-      />
-      <div className="mt-5 space-y-4">
-        {goal.actions.map((item, index) => (
-          <div key={item.id}>
-            <label
-              htmlFor={`plan-${item.id}`}
-              className="mb-2 flex items-center gap-2 text-xs text-muted-foreground"
-            >
-              {String(index + 1).padStart(2, '0')}{' '}
-              {item.stage === 'verified' && (
-                <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
-                  <Check className="size-3" />
-                  {t('Verified')}
-                </span>
-              )}
-            </label>
-            <Input
-              id={`plan-${item.id}`}
-              aria-label={`${t('Plan step')} ${index + 1}`}
-              disabled={locked || item.stage === 'verified'}
-              value={titles[index]}
-              onChange={(event) =>
-                setTitles((values) =>
-                  values.map((value, position) =>
-                    position === index ? event.target.value : value,
-                  ),
-                )
-              }
-            />
-            <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
-              {item.output}
-            </p>
-          </div>
-        ))}
-      </div>
-      <Button
-        className="mt-6"
-        disabled={locked || titles.some((value) => !value.trim())}
-        onClick={() => {
-          dispatch({
-            type: 'confirm-plan',
-            goalId: goal.id,
-            requirements,
-            titles,
-          });
-          onDone();
-        }}
-      >
-        <Check />
-        {t(goal.planConfirmed ? 'Save plan' : 'Confirm plan')}
-      </Button>
-    </section>
-  );
-}
-
-function TodoPanel({
-  goal,
-  dispatch,
-}: {
-  goal: DemoGoal;
-  dispatch: Dispatch<DemoEvent>;
-}) {
-  const { t } = useUiText();
-  const [text, setText] = useState('');
-  return (
-    <section className={cn(sectionStyle, 'p-5')}>
-      <h2 className="text-lg font-semibold">{t('For later')}</h2>
-      <p className="mt-2 text-xs leading-6 text-muted-foreground">
-        {t(
-          'Capture a new idea without expanding this delivery. A blocker belongs to the current action, not here.',
-        )}
-      </p>
-      <form
-        className="mt-5 flex gap-2"
-        onSubmit={(event) => {
-          event.preventDefault();
-          dispatch({ type: 'todo-add', goalId: goal.id, text });
-          setText('');
-        }}
-      >
-        <Input
-          aria-label={t('New idea')}
-          placeholder={t('New idea')}
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-        />
-        <Button disabled={!text.trim()} type="submit">
-          <Plus />
-          {t('Add')}
-        </Button>
-      </form>
-      <div className="mt-4 divide-y divide-border">
-        {goal.todos.map((item) => (
-          <label
-            key={item.id}
-            className="flex cursor-pointer items-start gap-3 py-4 text-sm"
-          >
-            <input
-              type="checkbox"
-              checked={item.done}
-              className="mt-1 size-4 accent-foreground"
-              onChange={() =>
-                dispatch({
-                  type: 'todo-toggle',
-                  goalId: goal.id,
-                  todoId: item.id,
-                })
-              }
-            />
-            <span
-              className={cn(
-                'leading-6',
-                item.done && 'text-muted-foreground line-through',
-              )}
-            >
-              {item.text}
-            </span>
-          </label>
-        ))}
-      </div>
-      {!goal.todos.length && (
-        <p className="py-8 text-center text-sm text-muted-foreground">
-          {t('No ideas parked here yet.')}
-        </p>
-      )}
-    </section>
-  );
-}
-
 function ActionWorkbench({
   state,
   goal,
   target,
   dispatch,
   onPlan,
+  projectPath,
 }: {
   state: DemoState;
   goal: DemoGoal;
   target: DemoAction;
   dispatch: Dispatch<DemoEvent>;
   onPlan: () => void;
+  projectPath: string;
 }) {
   const { t } = useUiText();
   const feedback = target.draft ?? '';
@@ -776,6 +647,7 @@ function ActionWorkbench({
   const [historyOpen, setHistoryOpen] = useState(false);
   const [roundIndex, setRoundIndex] = useState<number | null>(null);
   const [prOpen, setPrOpen] = useState(false);
+  const [issueOpen, setIssueOpen] = useState(false);
   const feedbackRef = useRef<HTMLTextAreaElement>(null);
   const latest = target.rounds.at(-1);
   const viewed =
@@ -797,11 +669,13 @@ function ActionWorkbench({
       actionId: target.id,
       kind,
       simulation,
-      input:
+      input: [
+        `Working directory: ${projectPath}`,
         feedback.trim() ||
-        (target.result === 'changes'
-          ? '按 Review 的阻塞意见修正，再交付一版供验收。'
-          : target.input),
+          (target.result === 'changes'
+            ? '按 Review 的阻塞意见修正，再交付一版供验收。'
+            : target.input),
+      ].join('\n\n'),
     });
   };
   const markdown = viewed
@@ -868,9 +742,12 @@ function ActionWorkbench({
             {t('Input & expected outcome')}
           </summary>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            <Fact label="Input">{target.input}</Fact>
+            <Fact label="Input">
+              {t('Working directory')}: {projectPath}
+              {'\n\n'}
+              {target.input}
+            </Fact>
             <Fact label="Expected output">{target.output}</Fact>
-            <Fact label="Process">{target.process}</Fact>
             <Fact label="Validation">{target.validation}</Fact>
           </div>
         </details>
@@ -978,6 +855,7 @@ function ActionWorkbench({
                 )}
               </p>
             )}
+            <DemoProfileSummary value={viewed?.profile} />
             <MarkdownReader
               title={`${t('Round')} ${viewed?.number} · output.md`}
               filePath={`demo/${goal.id}/${target.id}/round-${viewed?.number}/output.md`}
@@ -1026,6 +904,23 @@ function ActionWorkbench({
                 </select>
               </label>
             </div>
+            {target.verification === 'agent' && (
+              <div className="mt-3">
+                <DemoAgentProfile
+                  label="Review profile"
+                  value={target.reviewProfile ?? defaultDemoProfile()}
+                  disabled={busy}
+                  onChange={(profile) =>
+                    dispatch({
+                      type: 'configure',
+                      goalId: goal.id,
+                      actionId: target.id,
+                      reviewProfile: profile,
+                    })
+                  }
+                />
+              </div>
+            )}
             <p className="mt-2 text-xs leading-6 text-muted-foreground">
               {t(
                 'Completion condition: PR merged. A saved output or a positive review is not completion.',
@@ -1049,6 +944,7 @@ function ActionWorkbench({
                 {t('Review passed. Waiting for your merge decision.')}
               </p>
             )}
+            <DemoProfileSummary value={latest?.reviewProfile} />
             <div className="mt-4 flex flex-wrap gap-2">
               {target.verification === 'agent' && (
                 <Button
@@ -1114,27 +1010,35 @@ function ActionWorkbench({
               value={feedback}
               onChange={(event) => setFeedback(event.target.value)}
             />
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-              <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                Agent
-                <select
-                  aria-label={t('Execution agent')}
-                  disabled={busy}
-                  className="rounded-lg border border-border bg-background px-2 py-1.5 text-xs text-foreground"
-                  value={target.agent}
-                  onChange={(event) =>
-                    dispatch({
-                      type: 'configure',
-                      goalId: goal.id,
-                      actionId: target.id,
-                      agent: event.target.value as DemoAction['agent'],
-                    })
+            <div className="mt-3">
+              <DemoAgentProfile
+                label="Execution profile"
+                value={
+                  target.executionProfile ?? {
+                    ...defaultDemoProfile(),
+                    agent: target.agent,
                   }
-                >
-                  <option>Codex</option>
-                  <option>Claude</option>
-                </select>
-              </label>
+                }
+                disabled={busy}
+                onChange={(profile) =>
+                  dispatch({
+                    type: 'configure',
+                    goalId: goal.id,
+                    actionId: target.id,
+                    executionProfile: profile,
+                    agent: profile.agent,
+                  })
+                }
+              />
+            </div>
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+              <Button
+                variant="outline"
+                disabled={busy}
+                onClick={() => setIssueOpen(true)}
+              >
+                {t('Track out-of-scope feedback as Todo')}
+              </Button>
               <Button
                 size="lg"
                 disabled={!executable}
@@ -1168,6 +1072,16 @@ function ActionWorkbench({
           </div>
         )}
       </div>
+      {issueOpen && (
+        <DemoIssueDraft
+          goal={goal}
+          actionId={target.id}
+          initialText={feedback}
+          dispatch={dispatch}
+          onClose={() => setIssueOpen(false)}
+          onCreated={() => setFeedback('')}
+        />
+      )}
       <Dialog open={prOpen} onOpenChange={setPrOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
@@ -1203,7 +1117,7 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div>
       <h3 className={labelStyle}>{t(label)}</h3>
-      <p className="mt-1.5 text-xs leading-6 text-muted-foreground">
+      <p className="mt-1.5 whitespace-pre-line break-words text-xs leading-6 text-muted-foreground">
         {children}
       </p>
     </div>

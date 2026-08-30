@@ -122,6 +122,10 @@ The Just Do It sidebar entry opens an [interactive demo](docs/JUST_DO_IT_DEMO.md
 at `/projects/<projectId>/implementation`. It uses fictional, in-memory data:
 no Agent calls, GitHub changes, or project writes. Reload to reset the examples.
 
+Use **Add a goal** to try whole-plan generation, feedback, and confirmation
+before any Actions appear. The demo also includes per-role model profiles and
+Issue-style follow-ups; neither invokes a provider or writes to GitHub.
+
 ## License
 
 MIT
