@@ -4,6 +4,9 @@
 
 Design discussion captured on 2026-08-29. Just Do It now has an isolated
 [interactive UI demo](JUST_DO_IT_DEMO.md), not an integrated execution workflow.
+On 2026-08-30, the user accepted the UI direction and froze its interaction
+baseline. It remains available in explicit Preview Mode while Harness contracts
+are discussed; real integration and task validation are subsequent work.
 This document records the
 settled product intent and explicitly separates unresolved mechanics and
 deferred ideas. It does not authorize implementation or data migration.
@@ -119,6 +122,19 @@ and behavior for multiple execution attempts remain to be decided.
 ## Form the Plan before execution — settled
 
 The user and Agent first discuss a proposed Plan and adjust it before starting.
+The confirmation unit is the entire Plan, never one step at a time. Before
+confirmation, show an Overview and individually browsable planned steps,
+not executable Action cards or a long response duplicated by a second step list.
+After explicit whole-plan
+confirmation, those exact contracts become the Actions together; do not ask
+the Agent to reinterpret them into a second, potentially different plan.
+
+Roughly five to seven meaningful steps is a useful comfort range, not a quota.
+Three steps may be sufficient for a simple goal. If a goal needs many independent
+deliveries, suggest narrowing its scope or returning to Break It Down rather
+than overwhelming the user with a dozen steps or hiding the complexity inside
+oversized Actions.
+
 Planning combines:
 
 - the selected Card's goal, documents, and relevant graph context;
@@ -130,12 +146,43 @@ The Agent should identify what is already available and what is genuinely
 required, not impose a generic preparation checklist. A local website skeleton
 does not automatically require a database or every future feature.
 
-Each Action uses Input / Process / Output / Validation:
+Planning has distinct screens:
+
+1. Adding a goal opens its otherwise empty work area with a centered Start Plan
+   entry: fixed source context, user input, optional extra Resources, Agent,
+   model, reasoning effort, and one primary start action. There is no empty
+   Action rail or pre-created execution work to manage.
+2. Starting replaces that entry with a Loading state, rather than appending a
+   response under the original form.
+3. Generation reveals a clearly unconfirmed Plan Preview. A short Overview is
+   the default reading level. The left side lists step titles; selecting a step
+   reveals only its input, expected output, and validation detail.
+4. The user describes adjustments to one step or to the whole Plan. Requests
+   such as "three steps feel too broad; make them four" belong to whole-plan
+   feedback. The Agent supplies new step definitions, inputs, outputs and
+   validation; do not offer a manual Add step form that makes the user author
+   those contracts. Scoped changes preserve unrelated steps. No full-response
+   reading is required.
+   A single-step adjustment loads only that step's detail pane. Keep the Plan
+   list, selection, and surrounding layout mounted; other steps remain browsable.
+   Do not replace the entire preview with a loading screen for a scoped update.
+5. Confirming the entire Plan finalizes those step contracts and enters the
+   execution-ready Action workspace.
+
+Planning retains only the current draft. Do not save or expose planning response
+history, revision numbers, or Git checkpoints. This supersedes the earlier
+response-history proposal; it does not remove execution Action output history.
+The information is organized by reading depth, not duplicated in a giant
+Markdown response and a second Plan form. Extra Resources become planning and
+execution inputs; their presence does not authorize unrelated work.
+The exact Harness and provider-call orchestration remain later design work.
+
+Each Action's primary content is Input / Output / Validation. Processing is
+the temporary activity between input and output, not a required content panel:
 
 | Element    | Meaning                                                                                                 |
 | ---------- | ------------------------------------------------------------------------------------------------------- |
 | Input      | Goal, evidence, prerequisites, constraints, and user feedback needed to act.                            |
-| Process    | Work performed by the Agent or user; technical substeps can remain internal.                            |
 | Output     | A concrete deliverable or an honest Response explaining partial progress, failure, or a need for input. |
 | Validation | The means and evidence for deciding whether the agreed outcome was achieved.                            |
 
@@ -146,6 +193,47 @@ checks are evidence, not a substitute for the outcome.
 
 Explicit requirements, assumptions, and deferred ideas should be distinguishable.
 The Plan is adjustable, not a guarantee that execution will reveal no surprises.
+
+Before execution, Output means expected delivery. After execution, display the
+actual artifacts and evidence separately so an intended outcome cannot be
+mistaken for completed work. Do not use vague placeholders such as "use relevant
+context" or "a configured website" as the complete Action contract.
+
+### Example: prepare the development environment
+
+For a Plan that has agreed Next.js, TypeScript, and npm:
+
+- Input: the already registered project directory, source output.md, confirmed
+  Plan, technology choices, user requirements, and restrictions on global tools
+  or unrelated files. Inspect and preserve existing work; do not ask for a new
+  repository name or create a second directory by default.
+- Expected output: package and lock files, necessary TypeScript/application
+  configuration, a minimal homepage, repeatable startup/check scripts, README
+  instructions, and a PR containing the changes.
+- Validation: follow the instructions to install and start the project, open
+  the homepage without blocking errors, pass agreed type/build checks, check
+  that database or real-Agent integration was not added outside scope, then
+  review and merge the PR under this Action's acceptance agreement.
+
+Actual delivery should identify the files, commands, preview location, and PR
+that exist, not merely repeat the expected-output description. This example is
+a concrete contract, not proof that any setup has run.
+
+## Agent and model configuration — shared direction
+
+Agent selection and model selection are distinct. Planning, execution, and
+verification may use different Agent/model/reasoning-effort configurations,
+with defaults so users do not have to reselect them every round. A stronger
+planning configuration and a lighter execution configuration is a hypothesis
+to validate against quality, rework, and overall cost, not a guaranteed saving.
+
+This is a shared invocation capability for all three workspaces. Real integration
+must validate provider/account capabilities and record requested configuration
+and actual model information when available. It must not silently substitute
+models or imply that changing provider can resume another provider's session.
+Exact model catalogs, defaults, cost reporting, and continuation behavior remain
+to be designed. Current selectors are explicitly fictional demo profiles and
+do not change local CLI settings or invoke providers.
 
 ## Manual execution and validation loop — settled
 
@@ -220,7 +308,59 @@ discussion instead of silently expanding the Action.
 Updating current or future steps does not reset completed work. Internal
 substeps retain their original Action ownership. The user may abandon the
 current attempt and return to planning when the overall approach is unsuitable.
-Exact Todo storage, promotion, and plan-edit interactions remain open.
+Todo promotion and plan-edit interactions remain open; the GitHub-backed
+storage direction below supersedes the earlier generic local-checklist concept.
+
+### GitHub Issue-backed Todos — agreed direction for this scope
+
+There are two entrances to one Agent-assisted workflow: an explicit place to
+capture a user's new idea, and a follow-up discovered during Validation. The
+user describes the request naturally, such as adding multi-device login later;
+the Agent organizes its Issue title, body, deferral context, source links, and
+open questions. Do not make the user fill title/reason/acceptance fields to
+record an idea. Attach the relevant goal, Action, available output, and review
+context automatically, preserving the user's original words.
+
+A validation-discovered inconsistency or extra scope can be proposed as a
+follow-up only when deferral is appropriate. Recording it must not silently
+waive a blocker or mark the current Action verified. Issue formation is a
+collaboration/response flow, not a manual metadata-entry form.
+
+Successful creation closes the input composer automatically and shows a brief
+non-modal notification. Do not require reading a second result dialog or clicking
+Done. With real integration, the notification can link to the created Issue;
+the demo only reports a local Todo and must not fabricate a GitHub link.
+Failures or clarification needs should retain the input for continued work.
+
+The local Todo section is a lightweight GitHub-style index: title, short summary,
+Issue number, labels, status, URL, and minimal association identifiers. Complete
+Issue content and contextual discussion belong on GitHub, not a second local
+detail viewer or duplicated context store. Open the external Issue to read more.
+Do not add local close/reopen controls merely to reproduce GitHub management.
+
+A later, more useful local action is to develop an actionable Todo into a task
+Card and choose the appropriate parent Node. Retain its Issue association; do
+not automatically expand the current Plan. This promotion workflow is deferred
+and has no button or implementation in this round.
+
+Validation feedback that improves the current delivery remains in the same
+Action's correction loop. Only newly introduced, out-of-scope work is deferred;
+when that classification is ambiguous, ask instead of silently postponing a fix.
+Creating a Todo does not change the accepted Plan or count as delivery progress.
+
+For the GitHub-focused workflow, use Issues as the Todo authority rather than
+maintaining a separate independent checklist. An Issue should describe the
+request, original feedback where useful, why it is deferred, its future outcome,
+and its originating goal, Action, output/review round, and PR when available.
+Use a todo label and a stable node identifier label for discovery; retain the
+repository/Issue identity and stable source association independently of labels.
+The proposed exact naming convention is not a permanent identifier contract.
+
+Agents can maintain these records and retrieve relevant Issues for later plans.
+Open/closed state should reflect GitHub when integrated. Recording an Issue
+does not start implementation or add it to the current Plan automatically.
+Real creation, permission handling, deduplication, failure recovery, and sync
+remain unimplemented; the UI currently simulates Issue metadata and state only.
 
 ## Prerequisite delivery contract — settled
 
@@ -238,11 +378,16 @@ source after the prerequisite has been delivered. For goal A depending on B:
 - Reconcile any provisional Plan for A against B's actual delivery before
   allowing A to execute.
 
-A's input/context area displays B's fulfillment status, delivery summary,
+A's conditional prerequisite-input section displays B's fulfillment status, delivery summary,
 artifact locations and versions, necessary usage instructions or limitations,
 and verification evidence links. It links to B without expanding B's complete
 Plan and Actions into A's Canvas. Goal-level dependencies are managed outside
 the internal plan; internal prerequisites are handled at their own granularity.
+
+Do not combine source provenance, repeated requirements, branch metadata, and
+prerequisites into a generic Context and delivery panel. Source content is
+accessible beside the goal title, requirements belong in planning, prerequisites
+appear only when present, and branch/PR references belong to Action output.
 
 Use actual delivered artifacts, not just B's original description of intended
 work. Provide bounded summaries and resolvable references with on-demand access
@@ -281,6 +426,11 @@ history are different operations. Their exact UI and recovery policy remain open
 
 ## Deferred: shared local Git versioning
 
+The current pre-execution Plan draft is explicitly excluded from version-history
+work: it is a lightweight current-state discussion. The proposal below concerns
+artifact/version management across the product and execution outputs; it must
+not reintroduce a planning-history UI or checkpoint store.
+
 The proposed model is Git-native versioned work, not an additional audit log:
 stable artifact paths, one saved version per output round, review of that
 version, further commits for corrections, and selection of an earlier baseline
@@ -301,7 +451,9 @@ discussion, or assume it is already the selected implementation architecture.
 - Plan editing during execution and how newly necessary prerequisites surface.
 - Validation configuration, who may accept, and external completion synchronization.
 - Output/feedback history, Agent continuation, and binding verification to a version.
-- Todo capture, visibility, and promotion into future work.
+- GitHub Todo creation/synchronization, deduplication, and promotion into future work.
+- Actual provider model availability, per-role defaults, and session behavior
+  when model or reasoning configuration changes.
 - Action isolation, safe deletion/rollback, and already delivered work.
 - Dependency delivery/version selection, multiple prerequisites, and the effect
   of upstream execution changes after downstream work has begun. This concerns

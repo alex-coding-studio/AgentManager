@@ -5,6 +5,153 @@ export function isUiLanguage(value: unknown): value is UiLanguage {
 }
 
 export const chineseUi: Record<string, string> = {
+  'Preview mode': '预览模式',
+  'Open preview': '打开预览',
+  'Exit preview': '退出预览',
+  'Real planning and execution are not connected yet.':
+    '真实规划与执行尚未接入。',
+  'Explore the agreed workflow with sample data. No Agent, GitHub, or project writes. Changes reset when you reload or leave preview.':
+    '使用示例数据体验已确认的流程，不调用 Agent、不修改 GitHub 或项目。刷新或离开预览后，演示改动会重置。',
+  'Follow-up work for a later plan.': '留待后续计划处理的事项。',
+  'Demo Issue: GitHub is not connected.': '示例 Issue，尚未连接 GitHub。',
+  'Not connected': '未连接',
+  'Todo added · demo': '已添加 Todo · 演示',
+  'Follow-up recorded': '已加入演示 Todo',
+  'Tell the Agent what to remember': '让 Agent 记下一个想法',
+  'Describe the later work in your own words. The Agent organizes the Issue and its context. This is a scripted demo; no real GitHub Issue is created.':
+    '用自己的话说后续想做什么，由 Agent 整理需求与上下文。当前为预设演示，不创建真实 GitHub Issue。',
+  'Organizing your follow-up…': '正在整理后续事项 · 演示…',
+  'Original request & context': '原始需求与来源上下文',
+  Done: '完成',
+  'What should we keep for later?': '有什么想法留到以后？',
+  'For example: we may need multi-device login later. Not in this delivery; add it to Todo.':
+    '例如：后续可能要加入多端登录支持，这一轮先不做，帮我加到 Todo。',
+  'The current goal, Action, and available output are included automatically. Current blockers still belong to this delivery.':
+    '自动带入当前目标、步骤与已有产出。本轮阻塞问题仍留在当前交付中解决。',
+  'Ask Agent to record it · demo': '交给 Agent 整理 · 演示',
+  'From validation': '来自验收',
+  'User idea': '临时想法',
+  'Optional review follow-up': '可选的后续事项 · 演示',
+  'Later, add a cross-platform verification checklist. This is outside the current local-only delivery and does not waive any blocking finding.':
+    '后续可补充跨平台验证清单。这不属于本轮本地交付，也不能替代当前阻塞问题的修复。',
+  'Ask Agent to add this to Issues': '让 Agent 整理为 Issue',
+  'Only this step is updating. You can still browse the plan on the left.':
+    '仅更新这一步，你仍可浏览左侧计划。',
+  'For example: three steps feel too broad. Could you break them into four?':
+    '例如：3 步有点少，可以细化成 4 步吗？',
+  'Try the demo: refine three steps into four': '演示可试：把三步细化成四步',
+  'Requested step change': '希望这一步怎样调整',
+  'Describe the change. You do not need to write the input, output, or validation yourself. This demo retains guidance; real AI integration comes later.':
+    '直接说明想改什么，不必自己填写输入、输出和验收。当前演示保留调整要求，真实 AI 后续接入。',
+  'Demo library only. Local files stay in this tab; no project library is read or changed.':
+    '资料库为示例。本地文件仅在本页保留，不读取或修改真实项目资料库。',
+  'Start planning': '开始规划',
+  'This goal is here. Nothing has been planned or started yet.':
+    '目标已添加，还没有计划，也没有开始执行。',
+  'Preparing your plan…': '正在生成计划…',
+  'Updating this planned step…': '正在调整这一步…',
+  'The start form is put away. Your plan will appear as individual steps when ready.':
+    '完成后将按步骤展示计划，你可以逐项查看和调整。',
+  'Plan preview': '计划预览 · 待确认',
+  'Review each step, then confirm the entire plan to create Actions.':
+    '先看概览和步骤，整体确认后再进入执行。',
+  'Adjust whole plan': '调整整份计划',
+  'Add planned step': '添加步骤',
+  'Usually 5–7 steps; fewer is fine. Keep the goal manageable.':
+    '通常 5–7 步比较容易把握，简单目标可以更少。',
+  'Planned step': '计划步骤',
+  'Adjust this step': '调整这一步',
+  'Step guidance': '本步补充说明',
+  'Plan guidance': '计划补充说明',
+  'Included from the source goal': '已带入的目标上下文',
+  'Adjustments to the plan': '希望怎样调整',
+  'Extra resources': '额外资料',
+  'Import planning resources': '导入规划资料',
+  'Import files': '导入文件',
+  'Optional Markdown or text. Read in this tab only; nothing is uploaded.':
+    '可选 Markdown 或文本，仅在本页读取，不上传到服务端。',
+  'Use up to 5 Markdown or text files, at most 256 KB each.':
+    '最多添加 5 个 Markdown 或文本文件，每个不超过 256 KB。',
+  'Extra resources must total at most 1 MB.': '额外资料合计不超过 1 MB。',
+  'Could not import these resources. Keep the total below 1 MB.':
+    '无法导入这些资料，请使用文本文件并将总量控制在 1 MB 以内。',
+  'Remove resource {name}': '移除资料 {name}',
+  'Start Plan · demo': '开始规划 · 演示',
+  'Update plan · demo': '更新计划 · 演示',
+  'Update step · demo': '更新这一步 · 演示',
+  'Scripted demo: adjustments replace the current draft. No planning history or Git versions are kept.':
+    '预设演示：调整只更新当前草案，规划阶段不保留历史或 Git 版本。',
+  'Edit this step in place. Other steps stay unchanged; confirmation still applies to the whole plan.':
+    '只调整这一步的边界，其他步骤保持不变；最终仍需确认整份计划。',
+  'Save step changes': '保存本步调整',
+  'Add to plan preview': '加入计划预览',
+  "This plan's scope": '本轮范围',
+  'Scan the titles on the left. Open a step only when you need its input, output, and validation details.':
+    '先扫一眼左侧标题；需要了解细节时，再点开某一步查看输入、产出和验收。',
+  'Prerequisite deliveries': '前置成果',
+  Model: '模型',
+  'Provider default': '沿用默认配置',
+  'Reasoning model · demo': '推理模型 · 演示',
+  'Lightweight model · demo': '轻量模型 · 演示',
+  'Reasoning effort': '推理强度',
+  low: '低',
+  medium: '中',
+  high: '高',
+  'Planning profile': '规划配置',
+  'Execution profile': '执行配置',
+  'Review profile': '审查配置',
+  'Requested profile': '本轮请求配置',
+  'Demo profiles only, not a live model catalog. Nothing is sent to a provider.':
+    '仅演示配置，不是账号真实模型列表，也不会发送给服务商。',
+  'Plan the whole goal': '先规划整个目标',
+  'Discuss and revise the complete plan. Actions appear only after you accept the whole plan.':
+    '先讨论和调整整份计划，整体确认后才展开执行步骤。',
+  'Feedback on the whole plan': '对整份计划的反馈',
+  'Simulate plan revision': '模拟调整计划',
+  'Simulate Generate Plan': '模拟生成计划',
+  'Demo plan result': '演示结果',
+  'Standard example': '标准示例',
+  'Shorter example': '精简示例',
+  'This is a scripted planning demo, not AI. Feedback is retained; edit the proposed contracts directly to explore changes.':
+    '这是预设交互演示，不是真实 AI。反馈会被保留；可以直接修改步骤约定来体验调整。',
+  'Preparing a plan draft…': '正在准备计划草案…',
+  'Plan generation failed. Your input and earlier draft are retained; retry before confirming.':
+    '生成计划失败，输入和此前草案保留。请重试后再确认。',
+  'Plan generation canceled. No Actions were created.':
+    '已取消生成，本轮没有创建新的执行步骤。',
+  'Planning response': '规划回应',
+  'Plan response version': '规划回应版本',
+  'Historical response only. Return to the latest version to confirm the current draft.':
+    '正在阅读历史回应；请回到最新版本再确认当前草案。',
+  'Current plan draft': '当前计划草案',
+  'Plan steps': '个计划步骤',
+  'Aim for roughly 5–7 meaningful steps, not a quota. Simple goals need fewer. These exact contracts become Actions when confirmed.':
+    '通常 5–7 步比较容易把握，但不凑数，简单目标可以更少。确认后，下面这些约定直接成为执行步骤。',
+  'This plan may be too large. Consider reducing the goal instead of hiding complexity inside steps.':
+    '计划可能过大，建议缩小本轮目标，而不是把复杂工作硬塞进少数步骤。',
+  'Existing delivery retained': '保留已有交付',
+  'Step title': '步骤标题',
+  'Confirm entire plan': '确认整份计划',
+  'No Actions yet. Confirm the entire plan first.':
+    '尚无执行步骤。先生成、讨论并确认整份计划。',
+  'Working directory': '工作目录',
+  'Prepare a follow-up Issue': '准备后续 Issue',
+  'Only defer out-of-scope work. Current delivery blockers must stay in this Action. No GitHub Issue will actually be created.':
+    '只记录范围外的新需求。本轮阻塞问题仍须在当前步骤解决。这里不会创建真实 GitHub Issue。',
+  'Issue title': 'Issue 标题',
+  'Why later?': '为什么留到以后？',
+  'Expected future outcome': '后续预期成果',
+  'Simulate creating Issue': '模拟创建 Issue',
+  'New follow-up': '记个想法',
+  'GitHub Issues will own these Todos. This preview only simulates Issue metadata and open/closed state.':
+    '后续以 GitHub Issues 管理待办。本页仅模拟 Issue 信息及打开、关闭状态。',
+  Open: '未关闭',
+  Closed: '已关闭',
+  'Sample Issue': '示例 Issue',
+  'From action': '来源步骤',
+  'Simulate Issue reopened': '模拟重新打开',
+  'Simulate Issue closed': '模拟关闭 Issue',
+  'Add Todo': '添加 Todo',
   'Plan progress': '计划进度',
   'Completed {done} / {total} steps': '已完成 {done} / {total} 步',
   'Open goal: {title}': '打开目标：{title}',

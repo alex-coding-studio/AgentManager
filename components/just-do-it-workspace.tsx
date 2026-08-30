@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import {
   useEffect,
   useReducer,
@@ -29,7 +30,6 @@ import {
   RotateCcw,
   Search,
   ShieldCheck,
-  Sparkles,
   X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -45,6 +45,19 @@ import { Textarea } from '@/components/ui/textarea';
 import { MarkdownReader } from '@/components/markdown-reader';
 import { useUiText } from '@/components/ui-language-provider';
 import {
+  DemoPlanningWorkspace,
+  DemoPlanningTimer,
+} from '@/components/just-do-it-planning';
+import {
+  DemoIssueDraft,
+  DemoIssueTodos,
+  DemoTodoNotice,
+} from '@/components/just-do-it-issues';
+import {
+  DemoAgentProfile,
+  DemoProfileSummary,
+} from '@/components/demo-agent-profile';
+import {
   DemoGoalCard,
   DemoProgress,
   DemoStatus,
@@ -55,6 +68,7 @@ import {
   createDemoState,
   createLibraryGoal,
   demoReducer,
+  defaultDemoProfile,
   goalComplete,
   needsAttention,
   reviewFinding,
@@ -71,7 +85,13 @@ const sectionStyle = 'rounded-2xl border border-border bg-card';
 const labelStyle =
   'text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground';
 
-export function JustDoItWorkspace({ projectId }: { projectId: string }) {
+export function JustDoItWorkspace({
+  projectId,
+  projectPath,
+}: {
+  projectId: string;
+  projectPath: string;
+}) {
   const { t } = useUiText();
   const [state, dispatch] = useReducer(demoReducer, undefined, createDemoState);
   const [goalId, setGoalId] = useState<string | null>(null);
@@ -105,25 +125,34 @@ export function JustDoItWorkspace({ projectId }: { projectId: string }) {
         <span className="flex items-center gap-2">
           <FlaskConical className="size-3.5 shrink-0" />
           <strong className="font-medium text-foreground">
-            {t('Interactive demo')}
+            {t('Preview mode')}
           </strong>
           <span>
             {t('Sample data only. No Agent, GitHub, or project writes.')}
           </span>
         </span>
-        <button
-          className="inline-flex items-center gap-1.5 rounded px-1 py-1 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-          onClick={() => setResetting(true)}
-        >
-          <RotateCcw className="size-3" />
-          {t('Reset demo')}
-        </button>
+        <div className="flex items-center gap-3">
+          <Link
+            href={`/projects/${projectId}/implementation`}
+            className="rounded px-1 py-1 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {t('Exit preview')}
+          </Link>
+          <button
+            className="inline-flex items-center gap-1.5 rounded px-1 py-1 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={() => setResetting(true)}
+          >
+            <RotateCcw className="size-3" />
+            {t('Reset demo')}
+          </button>
+        </div>
       </div>
       {selected ? (
         <GoalWorkbench
           key={selected.id}
           state={state}
           goal={selected}
+          projectPath={projectPath}
           dispatch={dispatch}
           onBack={() => setGoalId(null)}
           onOpenGoal={setGoalId}
@@ -213,6 +242,17 @@ export function JustDoItWorkspace({ projectId }: { projectId: string }) {
           </p>
         </div>
       )}
+      {state.goals
+        .filter((goal) => goal.planning?.job)
+        .map((goal) => (
+          <DemoPlanningTimer
+            key={goal.planning!.job!.id}
+            goalId={goal.id}
+            jobId={goal.planning!.job!.id}
+            delayMs={goal.planning!.job!.targetId ? 10_000 : 1600}
+            dispatch={dispatch}
+          />
+        ))}
       {state.goals.flatMap((goal) =>
         goal.actions
           .filter((item) => item.job)
@@ -313,17 +353,19 @@ function GoalWorkbench({
   dispatch,
   onBack,
   onOpenGoal,
+  projectPath,
 }: {
   state: DemoState;
   goal: DemoGoal;
   dispatch: Dispatch<DemoEvent>;
   onBack: () => void;
   onOpenGoal: (id: string) => void;
+  projectPath: string;
 }) {
   const { t } = useUiText();
   const [actionId, setActionId] = useState(
     (goal.actions.find((item) => item.stage !== 'verified') ?? goal.actions[0])
-      .id,
+      ?.id ?? '',
   );
   const [panel, setPanel] = useState<'action' | 'plan' | 'todos'>(
     goal.planConfirmed ? 'action' : 'plan',
@@ -333,6 +375,8 @@ function GoalWorkbench({
     goal.actions.find((item) => item.id === actionId) ?? goal.actions[0];
   const blocked = unmetDependencies(state, goal);
   const complete = goalComplete(goal);
+  const showingPlan =
+    panel === 'plan' || (!goal.planConfirmed && panel !== 'todos');
   return (
     <div className="mx-auto max-w-[1600px] px-5 py-5 lg:px-8">
       <button
@@ -344,18 +388,29 @@ function GoalWorkbench({
       </button>
       <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div className="max-w-3xl">
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            <span className={labelStyle}>{t(goal.source)}</span>
-            {goal.sourceDeleted && (
+          {goal.sourceDeleted && (
+            <div className="mb-2 flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-1 text-xs text-amber-700 dark:text-amber-300">
                 <Link2Off className="size-3" />
                 {t('Source node deleted')}
               </span>
-            )}
+            </div>
+          )}
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl font-semibold leading-9 tracking-tight">
+              {goal.title}
+            </h1>
+            <button
+              type="button"
+              onClick={() => setSourceOpen(true)}
+              aria-label={t('View retained source')}
+              title={goal.sourceId}
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs text-muted-foreground hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <FileText className="size-3.5" />
+              {t('Source')}
+            </button>
           </div>
-          <h1 className="text-2xl font-semibold leading-9 tracking-tight">
-            {goal.title}
-          </h1>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
             {goal.summary}
           </p>
@@ -374,178 +429,161 @@ function GoalWorkbench({
           </span>
         </div>
       )}
-      <div className="grid items-start gap-5 xl:grid-cols-[238px_minmax(0,1fr)]">
-        <aside className={cn(sectionStyle, 'min-w-0 p-4 xl:sticky xl:top-5')}>
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="flex items-center gap-2 text-sm font-semibold">
-              <ListChecks className="size-4" />
-              {t('Plan')}
-            </h2>
-            <button
-              className="rounded px-2 py-1 text-xs text-muted-foreground hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring"
-              onClick={() => setPanel('plan')}
-            >
-              {t('Edit plan')}
-            </button>
-          </div>
-          <DemoProgress goal={goal} />
-          <div className="mt-5 space-y-1.5">
-            {goal.actions.map((item, index) => (
-              <button
-                key={item.id}
-                onClick={() => {
-                  setActionId(item.id);
-                  setPanel('action');
-                }}
-                aria-pressed={panel === 'action' && item.id === actionId}
-                className={cn(
-                  'flex w-full items-start gap-3 rounded-xl p-3 text-left transition focus-visible:ring-2 focus-visible:ring-ring',
-                  panel === 'action' && item.id === actionId
-                    ? 'bg-secondary'
-                    : 'hover:bg-secondary/50',
-                )}
-              >
-                <span
-                  className={cn(
-                    'mt-0.5 grid size-6 shrink-0 place-items-center rounded-full border text-[10px]',
-                    item.stage === 'verified'
-                      ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
-                      : 'border-border text-muted-foreground',
-                  )}
-                >
-                  {item.job ? (
-                    <LoaderCircle className="size-3 animate-spin" />
-                  ) : item.stage === 'verified' ? (
-                    <Check className="size-3" />
-                  ) : (
-                    index + 1
-                  )}
-                </span>
-                <span className="min-w-0">
-                  <span className="block text-xs font-medium leading-5">
-                    {item.title}
-                  </span>
-                  <span className="mt-1 block text-[10px] text-muted-foreground">
-                    {t(actionStatus(item))}
-                  </span>
-                </span>
-              </button>
-            ))}
-          </div>
-          <button
-            className={cn(
-              'mt-5 flex w-full items-center justify-between rounded-lg border-t border-border px-2 pt-4 pb-2 text-xs text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring',
-              panel === 'todos' && 'text-foreground',
-            )}
-            onClick={() => setPanel('todos')}
-          >
-            <span className="flex items-center gap-2">
-              <MessageSquare className="size-3.5" />
-              {t('For later')}
-            </span>
-            <span>{goal.todos.filter((item) => !item.done).length}</span>
-          </button>
-        </aside>
-        <div className="min-w-0 space-y-4">
-          {blocked.length > 0 && (
-            <div className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-4">
-              <h2 className="text-sm font-medium">
-                {t('Waiting for prerequisite')}
+      <div
+        className={cn(
+          'grid items-start gap-5',
+          !showingPlan && 'xl:grid-cols-[238px_minmax(0,1fr)]',
+        )}
+      >
+        {!showingPlan && (
+          <aside className={cn(sectionStyle, 'min-w-0 p-4 xl:sticky xl:top-5')}>
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="flex items-center gap-2 text-sm font-semibold">
+                <ListChecks className="size-4" />
+                {t('Plan')}
               </h2>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                {t(
-                  'You can prepare this plan, but execution waits for the upstream delivery.',
-                )}
-              </p>
-              {blocked.map((id) => (
-                <button
-                  key={id}
-                  className="mt-3 flex items-center gap-2 rounded text-xs underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-ring"
-                  onClick={() => onOpenGoal(id)}
-                >
-                  {state.goals.find((item) => item.id === id)?.title ?? id}
-                  <ArrowRight className="size-3" />
-                </button>
-              ))}
+              <button
+                className="rounded px-2 py-1 text-xs text-muted-foreground hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring"
+                onClick={() => setPanel('plan')}
+              >
+                {t('Edit plan')}
+              </button>
             </div>
+            {goal.planConfirmed ? (
+              <DemoProgress goal={goal} />
+            ) : (
+              <p className="text-xs leading-5 text-muted-foreground">
+                {t('No Actions yet. Confirm the entire plan first.')}
+              </p>
+            )}
+            <div className="mt-5 space-y-1.5">
+              {goal.planConfirmed &&
+                goal.actions.map((item, index) => (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      setActionId(item.id);
+                      setPanel('action');
+                    }}
+                    aria-pressed={panel === 'action' && item.id === target?.id}
+                    className={cn(
+                      'flex w-full items-start gap-3 rounded-xl p-3 text-left transition focus-visible:ring-2 focus-visible:ring-ring',
+                      panel === 'action' && item.id === target?.id
+                        ? 'bg-secondary'
+                        : 'hover:bg-secondary/50',
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        'mt-0.5 grid size-6 shrink-0 place-items-center rounded-full border text-[10px]',
+                        item.stage === 'verified'
+                          ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+                          : 'border-border text-muted-foreground',
+                      )}
+                    >
+                      {item.job ? (
+                        <LoaderCircle className="size-3 animate-spin" />
+                      ) : item.stage === 'verified' ? (
+                        <Check className="size-3" />
+                      ) : (
+                        index + 1
+                      )}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-xs font-medium leading-5">
+                        {item.title}
+                      </span>
+                      <span className="mt-1 block text-[10px] text-muted-foreground">
+                        {t(actionStatus(item))}
+                      </span>
+                    </span>
+                  </button>
+                ))}
+            </div>
+            <button
+              className={cn(
+                'mt-5 flex w-full items-center justify-between rounded-lg border-t border-border px-2 pt-4 pb-2 text-xs text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring',
+                panel === 'todos' && 'text-foreground',
+              )}
+              onClick={() => setPanel('todos')}
+            >
+              <span className="flex items-center gap-2">
+                <MessageSquare className="size-3.5" />
+                {t('For later')}
+              </span>
+              <span>{goal.todos.filter((item) => !item.done).length}</span>
+            </button>
+          </aside>
+        )}
+        <div className="min-w-0 space-y-4">
+          {goal.dependencyIds.length > 0 && (
+            <section
+              className={cn(
+                'rounded-xl border p-4',
+                blocked.length
+                  ? 'border-amber-500/25 bg-amber-500/5'
+                  : 'border-border bg-card',
+              )}
+            >
+              <h2 className="text-sm font-medium">
+                {t('Prerequisite deliveries')}
+              </h2>
+              {blocked.length > 0 && (
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  {t(
+                    'You can prepare this plan, but execution waits for the upstream delivery.',
+                  )}
+                </p>
+              )}
+              {goal.dependencyIds.map((id) => {
+                const dep = state.goals.find((item) => item.id === id);
+                const delivered = Boolean(dep && goalComplete(dep));
+                return (
+                  <div key={id} className="mt-3 space-y-2 text-xs">
+                    <button
+                      className="flex items-center gap-2 rounded text-left font-medium focus-visible:ring-2 focus-visible:ring-ring"
+                      onClick={() => onOpenGoal(id)}
+                    >
+                      {delivered ? (
+                        <Check className="size-3 text-emerald-600 dark:text-emerald-400" />
+                      ) : (
+                        <Link2 className="size-3" />
+                      )}
+                      {dep?.title ?? id}
+                      <ChevronRight className="size-3" />
+                    </button>
+                    <p className="leading-5 text-muted-foreground">
+                      {delivered && dep
+                        ? `${t('Delivered input')}: ${dep.actions.map((item) => `${item.rounds.at(-1)?.summary ?? item.output} (${item.rounds.at(-1)?.commit ?? 'demo'})`).join(' ')}`
+                        : t(
+                            'Delivery context becomes available after verification.',
+                          )}
+                    </p>
+                  </div>
+                );
+              })}
+            </section>
           )}
-          {panel === 'plan' ? (
-            <PlanEditor
+          {showingPlan ? (
+            <DemoPlanningWorkspace
               key={goal.id}
               goal={goal}
               dispatch={dispatch}
               onDone={() => setPanel('action')}
             />
           ) : panel === 'todos' ? (
-            <TodoPanel goal={goal} dispatch={dispatch} />
+            <DemoIssueTodos goal={goal} dispatch={dispatch} />
           ) : (
             <ActionWorkbench
               key={target.id}
               state={state}
               goal={goal}
               target={target}
+              projectPath={projectPath}
               dispatch={dispatch}
               onPlan={() => setPanel('plan')}
             />
           )}
-          <section className={cn(sectionStyle, 'p-4')}>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className={labelStyle}>{t('Context & delivery')}</h2>
-              <button
-                onClick={() => setSourceOpen(true)}
-                className="inline-flex items-center gap-1.5 rounded text-xs text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <FileText className="size-3.5" />
-                {t('View retained source')}
-              </button>
-            </div>
-            <p className="mt-3 text-xs leading-6 text-muted-foreground">
-              {goal.requirements}
-            </p>
-            <div className="mt-3 flex flex-wrap gap-4 border-t border-border pt-3 text-[11px] text-muted-foreground">
-              <span className="flex items-center gap-1.5">
-                <GitBranch className="size-3" />
-                demo/{goal.id}
-              </span>
-              <span className="flex items-center gap-1.5">
-                {goal.sourceDeleted ? (
-                  <Link2Off className="size-3" />
-                ) : (
-                  <Link2 className="size-3" />
-                )}
-                {goal.sourceDeleted ? t('Source node deleted') : goal.sourceId}
-              </span>
-            </div>
-            {goal.dependencyIds.map((id) => {
-              const dep = state.goals.find((item) => item.id === id);
-              return (
-                <div
-                  key={id}
-                  className="mt-4 rounded-lg bg-secondary/50 p-3 text-xs"
-                >
-                  <button
-                    onClick={() => onOpenGoal(id)}
-                    className="flex items-center gap-2 text-left font-medium"
-                  >
-                    {dep && goalComplete(dep) ? (
-                      <Check className="size-3 text-emerald-500" />
-                    ) : (
-                      <Link2 className="size-3" />
-                    )}
-                    {dep?.title ?? id}
-                    <ChevronRight className="size-3" />
-                  </button>
-                  <p className="mt-2 leading-5 text-muted-foreground">
-                    {dep && goalComplete(dep)
-                      ? `${t('Delivered input')}: ${dep.actions.map((item) => `${item.rounds.at(-1)?.summary ?? item.output} (${item.rounds.at(-1)?.commit ?? 'demo'})`).join(' ')}`
-                      : t(
-                          'Delivery context becomes available after verification.',
-                        )}
-                  </p>
-                </div>
-              );
-            })}
-          </section>
         </div>
       </div>
       <Dialog open={sourceOpen} onOpenChange={setSourceOpen}>
@@ -583,185 +621,20 @@ function GoalWorkbench({
   );
 }
 
-function PlanEditor({
-  goal,
-  dispatch,
-  onDone,
-}: {
-  goal: DemoGoal;
-  dispatch: Dispatch<DemoEvent>;
-  onDone: () => void;
-}) {
-  const { t } = useUiText();
-  const [requirements, setRequirements] = useState(goal.requirements);
-  const [titles, setTitles] = useState(goal.actions.map((item) => item.title));
-  const locked = goal.actions.some((item) => item.job);
-  return (
-    <section className={cn(sectionStyle, 'p-5')}>
-      <div className="flex items-center gap-2">
-        <Sparkles className="size-4 text-muted-foreground" />
-        <h2 className="text-lg font-semibold">
-          {t('Shape the plan before you start')}
-        </h2>
-      </div>
-      <p className="mt-2 text-xs leading-6 text-muted-foreground">
-        {t(
-          'This plan is a prepared example, not an Agent response. Edit the upcoming steps and your requirements; verified work stays intact.',
-        )}
-      </p>
-      <label
-        className="mt-5 block text-xs font-medium"
-        htmlFor="demo-requirements"
-      >
-        {t('Your requirements')}
-      </label>
-      <Textarea
-        id="demo-requirements"
-        className="mt-2 min-h-24"
-        value={requirements}
-        disabled={locked}
-        onChange={(event) => setRequirements(event.target.value)}
-      />
-      <div className="mt-5 space-y-4">
-        {goal.actions.map((item, index) => (
-          <div key={item.id}>
-            <label
-              htmlFor={`plan-${item.id}`}
-              className="mb-2 flex items-center gap-2 text-xs text-muted-foreground"
-            >
-              {String(index + 1).padStart(2, '0')}{' '}
-              {item.stage === 'verified' && (
-                <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
-                  <Check className="size-3" />
-                  {t('Verified')}
-                </span>
-              )}
-            </label>
-            <Input
-              id={`plan-${item.id}`}
-              aria-label={`${t('Plan step')} ${index + 1}`}
-              disabled={locked || item.stage === 'verified'}
-              value={titles[index]}
-              onChange={(event) =>
-                setTitles((values) =>
-                  values.map((value, position) =>
-                    position === index ? event.target.value : value,
-                  ),
-                )
-              }
-            />
-            <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
-              {item.output}
-            </p>
-          </div>
-        ))}
-      </div>
-      <Button
-        className="mt-6"
-        disabled={locked || titles.some((value) => !value.trim())}
-        onClick={() => {
-          dispatch({
-            type: 'confirm-plan',
-            goalId: goal.id,
-            requirements,
-            titles,
-          });
-          onDone();
-        }}
-      >
-        <Check />
-        {t(goal.planConfirmed ? 'Save plan' : 'Confirm plan')}
-      </Button>
-    </section>
-  );
-}
-
-function TodoPanel({
-  goal,
-  dispatch,
-}: {
-  goal: DemoGoal;
-  dispatch: Dispatch<DemoEvent>;
-}) {
-  const { t } = useUiText();
-  const [text, setText] = useState('');
-  return (
-    <section className={cn(sectionStyle, 'p-5')}>
-      <h2 className="text-lg font-semibold">{t('For later')}</h2>
-      <p className="mt-2 text-xs leading-6 text-muted-foreground">
-        {t(
-          'Capture a new idea without expanding this delivery. A blocker belongs to the current action, not here.',
-        )}
-      </p>
-      <form
-        className="mt-5 flex gap-2"
-        onSubmit={(event) => {
-          event.preventDefault();
-          dispatch({ type: 'todo-add', goalId: goal.id, text });
-          setText('');
-        }}
-      >
-        <Input
-          aria-label={t('New idea')}
-          placeholder={t('New idea')}
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-        />
-        <Button disabled={!text.trim()} type="submit">
-          <Plus />
-          {t('Add')}
-        </Button>
-      </form>
-      <div className="mt-4 divide-y divide-border">
-        {goal.todos.map((item) => (
-          <label
-            key={item.id}
-            className="flex cursor-pointer items-start gap-3 py-4 text-sm"
-          >
-            <input
-              type="checkbox"
-              checked={item.done}
-              className="mt-1 size-4 accent-foreground"
-              onChange={() =>
-                dispatch({
-                  type: 'todo-toggle',
-                  goalId: goal.id,
-                  todoId: item.id,
-                })
-              }
-            />
-            <span
-              className={cn(
-                'leading-6',
-                item.done && 'text-muted-foreground line-through',
-              )}
-            >
-              {item.text}
-            </span>
-          </label>
-        ))}
-      </div>
-      {!goal.todos.length && (
-        <p className="py-8 text-center text-sm text-muted-foreground">
-          {t('No ideas parked here yet.')}
-        </p>
-      )}
-    </section>
-  );
-}
-
 function ActionWorkbench({
   state,
   goal,
   target,
   dispatch,
   onPlan,
+  projectPath,
 }: {
   state: DemoState;
   goal: DemoGoal;
   target: DemoAction;
   dispatch: Dispatch<DemoEvent>;
   onPlan: () => void;
+  projectPath: string;
 }) {
   const { t } = useUiText();
   const feedback = target.draft ?? '';
@@ -776,6 +649,9 @@ function ActionWorkbench({
   const [historyOpen, setHistoryOpen] = useState(false);
   const [roundIndex, setRoundIndex] = useState<number | null>(null);
   const [prOpen, setPrOpen] = useState(false);
+  const [issueOpen, setIssueOpen] = useState(false);
+  const [todoNotice, setTodoNotice] = useState(0);
+  const [validationIdea, setValidationIdea] = useState<string | null>(null);
   const feedbackRef = useRef<HTMLTextAreaElement>(null);
   const latest = target.rounds.at(-1);
   const viewed =
@@ -797,11 +673,13 @@ function ActionWorkbench({
       actionId: target.id,
       kind,
       simulation,
-      input:
+      input: [
+        `Working directory: ${projectPath}`,
         feedback.trim() ||
-        (target.result === 'changes'
-          ? '按 Review 的阻塞意见修正，再交付一版供验收。'
-          : target.input),
+          (target.result === 'changes'
+            ? '按 Review 的阻塞意见修正，再交付一版供验收。'
+            : target.input),
+      ].join('\n\n'),
     });
   };
   const markdown = viewed
@@ -868,9 +746,12 @@ function ActionWorkbench({
             {t('Input & expected outcome')}
           </summary>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            <Fact label="Input">{target.input}</Fact>
+            <Fact label="Input">
+              {target.input
+                .replace('当前登记的项目路径', projectPath)
+                .replace('已登记的 AgentManager 项目目录', projectPath)}
+            </Fact>
             <Fact label="Expected output">{target.output}</Fact>
-            <Fact label="Process">{target.process}</Fact>
             <Fact label="Validation">{target.validation}</Fact>
           </div>
         </details>
@@ -978,6 +859,11 @@ function ActionWorkbench({
                 )}
               </p>
             )}
+            <p className="mb-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <GitBranch className="size-3" />
+              demo/{goal.id}/{target.id}
+            </p>
+            <DemoProfileSummary value={viewed?.profile} />
             <MarkdownReader
               title={`${t('Round')} ${viewed?.number} · output.md`}
               filePath={`demo/${goal.id}/${target.id}/round-${viewed?.number}/output.md`}
@@ -1026,6 +912,23 @@ function ActionWorkbench({
                 </select>
               </label>
             </div>
+            {target.verification === 'agent' && (
+              <div className="mt-3">
+                <DemoAgentProfile
+                  label="Review profile"
+                  value={target.reviewProfile ?? defaultDemoProfile()}
+                  disabled={busy}
+                  onChange={(profile) =>
+                    dispatch({
+                      type: 'configure',
+                      goalId: goal.id,
+                      actionId: target.id,
+                      reviewProfile: profile,
+                    })
+                  }
+                />
+              </div>
+            )}
             <p className="mt-2 text-xs leading-6 text-muted-foreground">
               {t(
                 'Completion condition: PR merged. A saved output or a positive review is not completion.',
@@ -1048,6 +951,33 @@ function ActionWorkbench({
               <p className="mt-3 text-xs text-emerald-700 dark:text-emerald-400">
                 {t('Review passed. Waiting for your merge decision.')}
               </p>
+            )}
+            <DemoProfileSummary value={latest?.reviewProfile} />
+            {latest?.review && (
+              <div className="mt-4 rounded-lg border border-border p-3">
+                <p className="text-xs font-medium">
+                  {t('Optional review follow-up')}
+                </p>
+                <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                  {t(
+                    'Later, add a cross-platform verification checklist. This is outside the current local-only delivery and does not waive any blocking finding.',
+                  )}
+                </p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="mt-2"
+                  disabled={busy}
+                  onClick={() => {
+                    setValidationIdea(
+                      '验收时想到：后续补充跨平台验证清单；本轮只验证当前本机环境，不在这次交付实施。请记到 Todo。',
+                    );
+                    setIssueOpen(true);
+                  }}
+                >
+                  {t('Ask Agent to add this to Issues')}
+                </Button>
+              </div>
             )}
             <div className="mt-4 flex flex-wrap gap-2">
               {target.verification === 'agent' && (
@@ -1114,27 +1044,38 @@ function ActionWorkbench({
               value={feedback}
               onChange={(event) => setFeedback(event.target.value)}
             />
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-              <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                Agent
-                <select
-                  aria-label={t('Execution agent')}
-                  disabled={busy}
-                  className="rounded-lg border border-border bg-background px-2 py-1.5 text-xs text-foreground"
-                  value={target.agent}
-                  onChange={(event) =>
-                    dispatch({
-                      type: 'configure',
-                      goalId: goal.id,
-                      actionId: target.id,
-                      agent: event.target.value as DemoAction['agent'],
-                    })
+            <div className="mt-3">
+              <DemoAgentProfile
+                label="Execution profile"
+                value={
+                  target.executionProfile ?? {
+                    ...defaultDemoProfile(),
+                    agent: target.agent,
                   }
-                >
-                  <option>Codex</option>
-                  <option>Claude</option>
-                </select>
-              </label>
+                }
+                disabled={busy}
+                onChange={(profile) =>
+                  dispatch({
+                    type: 'configure',
+                    goalId: goal.id,
+                    actionId: target.id,
+                    executionProfile: profile,
+                    agent: profile.agent,
+                  })
+                }
+              />
+            </div>
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+              <Button
+                variant="outline"
+                disabled={busy}
+                onClick={() => {
+                  setValidationIdea(null);
+                  setIssueOpen(true);
+                }}
+              >
+                {t('Add Todo')}
+              </Button>
               <Button
                 size="lg"
                 disabled={!executable}
@@ -1168,6 +1109,23 @@ function ActionWorkbench({
           </div>
         )}
       </div>
+      {issueOpen && (
+        <DemoIssueDraft
+          goal={goal}
+          actionId={target.id}
+          initialText={validationIdea ?? feedback}
+          sourceKind={validationIdea ? 'validation' : 'idea'}
+          dispatch={dispatch}
+          onClose={() => setIssueOpen(false)}
+          onCreated={() => {
+            if (!validationIdea) setFeedback('');
+            setTodoNotice((value) => value + 1);
+          }}
+        />
+      )}
+      {todoNotice > 0 && (
+        <DemoTodoNotice key={todoNotice} onDismiss={() => setTodoNotice(0)} />
+      )}
       <Dialog open={prOpen} onOpenChange={setPrOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
@@ -1203,7 +1161,7 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div>
       <h3 className={labelStyle}>{t(label)}</h3>
-      <p className="mt-1.5 text-xs leading-6 text-muted-foreground">
+      <p className="mt-1.5 whitespace-pre-line break-words text-xs leading-6 text-muted-foreground">
         {children}
       </p>
     </div>

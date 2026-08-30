@@ -61,6 +61,10 @@ export function DemoStatus({ label }: { label: string }) {
 export function DemoProgress({ goal }: { goal: DemoGoal }) {
   const { t } = useUiText();
   const done = goal.actions.filter((item) => item.stage === 'verified').length;
+  if (!goal.planConfirmed)
+    return (
+      <p className="text-xs text-muted-foreground">{t('Plan to confirm')}</p>
+    );
   return (
     <div className="space-y-2">
       <div className="flex justify-between gap-2 text-xs text-muted-foreground">
@@ -137,7 +141,11 @@ export function DemoGoalCard({
           title={complete ? t('None') : current?.title}
         >
           <span className="font-medium">{t('Current action')}：</span>
-          {complete ? t('None') : (current?.title ?? t('None'))}
+          {!goal.planConfirmed
+            ? t('Plan to confirm')
+            : complete
+              ? t('None')
+              : (current?.title ?? t('None'))}
         </p>
       </button>
       <div className="mt-1 flex h-9 shrink-0 items-center justify-between gap-2 border-t border-border pt-1 text-[10px] text-muted-foreground">

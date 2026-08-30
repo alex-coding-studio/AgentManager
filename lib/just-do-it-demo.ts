@@ -7,6 +7,127 @@ export type DemoResult =
   | 'error'
   | 'canceled';
 export type DemoSimulation = 'success' | 'blocked' | 'error';
+export type DemoProfile = {
+  agent: 'Codex' | 'Claude';
+  model: 'default' | 'reasoning-demo' | 'efficient-demo';
+  effort: 'default' | 'low' | 'medium' | 'high';
+};
+export const defaultDemoProfile = (): DemoProfile => ({
+  agent: 'Codex',
+  model: 'default',
+  effort: 'default',
+});
+export type DemoPlanStep = Pick<
+  DemoAction,
+  'id' | 'title' | 'input' | 'output' | 'validation'
+> & { guidance?: string };
+export type DemoPlanResource = {
+  id: string;
+  name: string;
+  content: string;
+  libraryPath?: string;
+};
+export const demoPlanningLibrary: DemoPlanResource[] = [
+  {
+    id: 'library:Product/demo-experience.md',
+    libraryPath: 'Product/demo-experience.md',
+    name: 'demo-experience.md',
+    content:
+      '# Demo experience\n\nKeep the local website readable in dark mode. Start with an editable goal and one clear next step. This is fictional Context Library material.',
+  },
+  {
+    id: 'library:Engineering/demo-runtime.md',
+    libraryPath: 'Engineering/demo-runtime.md',
+    name: 'demo-runtime.md',
+    content:
+      '# Demo runtime\n\nReuse the registered project folder. Preserve existing files and use local sample data. No database or live Agent connection in this demonstration.',
+  },
+];
+export function validDemoResources(resources: DemoPlanResource[]) {
+  const sizes = resources.map(
+    (item) => new TextEncoder().encode(item.content).length,
+  );
+  return (
+    resources.length <= 5 &&
+    new Set(resources.map((item) => item.id)).size === resources.length &&
+    resources.every((item) => /\.(md|markdown|txt)$/i.test(item.name)) &&
+    sizes.every((size) => size <= 262_144) &&
+    sizes.reduce((total, size) => total + size, 0) <= 1_048_576
+  );
+}
+export type DemoPlanning = {
+  requirements: string;
+  feedback: string;
+  templates: DemoPlanStep[];
+  steps: DemoPlanStep[];
+  resources: DemoPlanResource[];
+  generated: boolean;
+  overview: string;
+  guidance?: string;
+  profile: DemoProfile;
+  error?: 'error' | 'canceled';
+  job?: {
+    id: number;
+    variant: 'standard' | 'compact' | 'error';
+    requirements: string;
+    feedback: string;
+    profile: DemoProfile;
+    targetId?: string;
+    resources: DemoPlanResource[];
+  };
+};
+export type DemoTodo = {
+  id: string;
+  text: string;
+  done: boolean;
+  issueNumber?: number;
+  summary?: string;
+  labels?: string[];
+  url?: string;
+  actionId?: string;
+};
+export type DemoTodoOrigin = {
+  kind: 'idea' | 'validation';
+  goalTitle: string;
+  sourceId: string;
+  actionTitle?: string;
+  round?: number;
+  outputSummary?: string;
+  outputCommit?: string;
+  reviewResult?: 'changes' | 'approved';
+};
+
+export function organizeDemoFollowUp(
+  goal: DemoGoal,
+  request: string,
+  actionId?: string,
+  kind: DemoTodoOrigin['kind'] = 'idea',
+) {
+  const source = goal.actions.find((item) => item.id === actionId);
+  const output = source?.rounds.at(-1);
+  const multiDevice = /多端登录|多设备登录|multi.?device.*login/i.test(request);
+  return {
+    text: multiDevice
+      ? '支持多端登录'
+      : request.trim().split('\n')[0].slice(0, 100),
+    request: request.trim(),
+    reason: '按用户要求记录为后续事项，不改变当前 Action 的交付范围。',
+    acceptance: multiDevice
+      ? '支持在多个设备上登录。后续实施前确认设备范围、会话保留和退出规则，以及对应验收场景。'
+      : '后续实施前，结合用户原始需求明确范围、预期成果与验收方式。',
+    actionId,
+    origin: {
+      kind,
+      goalTitle: goal.title,
+      sourceId: goal.sourceId,
+      actionTitle: source?.title,
+      round: output?.number,
+      outputSummary: output?.summary,
+      outputCommit: output?.commit,
+      reviewResult: output?.review,
+    },
+  };
+}
 export type DemoRound = {
   number: number;
   input: string;
@@ -14,12 +135,14 @@ export type DemoRound = {
   commit: string;
   snapshot?: { title: string; output: string; validation: string };
   review?: 'changes' | 'approved';
+  profile?: DemoProfile;
+  reviewProfile?: DemoProfile;
 };
 export type DemoAction = {
+  guidance?: string;
   id: string;
   title: string;
   input: string;
-  process: string;
   output: string;
   validation: string;
   stage: DemoStage;
@@ -28,11 +151,14 @@ export type DemoAction = {
   agent: 'Codex' | 'Claude';
   verification: 'agent' | 'manual';
   draft?: string;
+  executionProfile?: DemoProfile;
+  reviewProfile?: DemoProfile;
   job?: {
     id: number;
     kind: 'execute' | 'review';
     simulation: DemoSimulation;
     input: string;
+    profile?: DemoProfile;
   };
 };
 export type DemoGoal = {
@@ -46,7 +172,8 @@ export type DemoGoal = {
   requirements: string;
   planConfirmed: boolean;
   actions: DemoAction[];
-  todos: { id: string; text: string; done: boolean }[];
+  todos: DemoTodo[];
+  planning?: DemoPlanning;
 };
 export type DemoState = { goals: DemoGoal[]; sequence: number };
 
@@ -55,9 +182,8 @@ function action(id: string, title: string, output: string): DemoAction {
     id,
     title,
     output,
-    input: '使用当前目标的说明、用户要求与已验收的前置成果。',
-    process: '检查现有实现，完成这一步所需的最小改动，运行检查并整理交付说明。',
-    validation: '在本地走通约定的流程；检查通过后合并对应 PR。',
+    input: `工作目录：当前登记的项目路径，不另建仓库。\n来源：目标节点 output.md 与已确认计划。\n本步范围：${title}。复用现有工程，不覆盖用户改动。`,
+    validation: `按交付说明在本地复现「${title}」；检查相关行为与错误反馈，确认没有扩大范围。Review 通过并合并对应 PR 后，本步才算完成。`,
     stage: 'ready',
     rounds: [],
     agent: 'Codex',
@@ -86,6 +212,12 @@ export function createDemoState(): DemoState {
     '一个可以启动并继续开发的最小工程，以及启动说明。',
   );
   environment.stage = 'verified';
+  environment.input =
+    '工作位置：已登记的 AgentManager 项目目录。\n已确认技术：Next.js、TypeScript、npm（演示约定）。\n输入资料：来源 output.md、整份计划、用户补充要求。\n先检查已有 Node 与文件；保留用户改动，不安装全局工具、不接数据库或真实 Agent。';
+  environment.output =
+    '项目内的 package.json、锁文件、TypeScript 配置、最小应用入口与首页；可重复使用的启动和检查脚本；README 启动说明；包含上述变更的 PR。';
+  environment.validation =
+    '按 README 安装依赖并启动，浏览器能打开首页且无阻断错误；类型检查与构建通过；检查没有数据库或真实 AI 接入等范围外变更；PR 审查通过并合并。';
   environment.rounds = [
     round(
       1,
@@ -252,48 +384,130 @@ export function createDemoState(): DemoState {
   };
   return {
     ...state,
-    goals: state.goals.map((goal) => ({
-      ...goal,
-      actions: goal.actions.map((item) => ({
-        ...item,
-        rounds: item.rounds.map((version) => ({
-          ...version,
-          snapshot: {
-            title: item.title,
-            output: item.output,
-            validation: item.validation,
-          },
+    goals: state.goals.map((goal) =>
+      preparePlanningGoal({
+        ...goal,
+        actions: goal.actions.map((item) => ({
+          ...item,
+          rounds: item.rounds.map((version) => ({
+            ...version,
+            snapshot: {
+              title: item.title,
+              output: item.output,
+              validation: item.validation,
+            },
+          })),
         })),
-      })),
-    })),
+      }),
+    ),
   };
 }
 
 export function createLibraryGoal(): DemoGoal {
-  return {
+  const base = createDemoState().goals[0];
+  return preparePlanningGoal({
     id: 'library',
-    title: '给首次打开网站的人一个清楚的起点',
-    summary: '用一个轻量空状态帮助用户理解可以输入什么，以及接下来会发生什么。',
+    title: '从零规划 AgentManager 的本地网站骨架',
+    summary:
+      '先讨论整份执行计划，再确认各步的输入、交付和验收约定。确认前不创建执行 Action。',
     source: "What's Next",
     sourceId: 'NODE-a470d6c2',
     sourceDeleted: false,
     dependencyIds: [],
-    requirements: '不添加教学弹窗，用一个示例和明确的开始按钮。',
+    requirements:
+      '使用已登记的项目路径；本地使用、支持深色与中英文；先用演示数据，不接数据库和真实 AI。',
     planConfirmed: false,
-    actions: [
-      action(
-        'empty-state',
-        '准备一个可理解的空状态',
-        '目标输入示例、简短说明和可操作的开始入口。',
-      ),
-      action(
-        'first-use',
-        '验证第一次使用',
-        '从空白页面到第一张任务卡的完整体验。',
-      ),
-    ],
+    actions: base.actions.map((item) => ({
+      ...item,
+      stage: 'ready',
+      result: undefined,
+      rounds: [],
+    })),
     todos: [],
+  });
+}
+
+function planStep(item: DemoAction): DemoPlanStep {
+  return {
+    id: item.id,
+    title: item.title,
+    input: item.input,
+    output: item.output,
+    validation: item.validation,
+    ...(item.guidance !== undefined ? { guidance: item.guidance } : {}),
   };
+}
+export function planningFor(goal: DemoGoal): DemoPlanning {
+  return (
+    goal.planning ?? {
+      requirements: goal.requirements,
+      feedback: '',
+      templates: goal.actions.map(planStep),
+      steps: goal.planConfirmed ? goal.actions.map(planStep) : [],
+      resources: [],
+      generated: goal.planConfirmed,
+      overview: goal.summary,
+      profile: defaultDemoProfile(),
+    }
+  );
+}
+function preparePlanningGoal(goal: DemoGoal): DemoGoal {
+  if (goal.planConfirmed) return goal;
+  return { ...goal, planning: planningFor(goal), actions: [] };
+}
+
+function simulatedPlan(
+  goal: DemoGoal,
+  plan: DemoPlanning,
+  variant: 'standard' | 'compact' | 'error',
+) {
+  const steps = (plan.steps.length ? plan.steps : plan.templates).map(
+    (item) => ({ ...item }),
+  );
+  const feedback = plan.job?.feedback ?? plan.feedback;
+  const refineToFour =
+    /(?:细化|拆分|分成|拆成).{0,5}(?:4|四)\s*(?:个)?\s*步/.test(feedback) &&
+    !/不要|不用|不必|无需|别/.test(feedback);
+  if (
+    refineToFour &&
+    steps.length === 3 &&
+    steps[1].id === 'interface' &&
+    goal.actions.every((item) => !item.rounds.length)
+  ) {
+    const original = steps[1];
+    steps.splice(
+      1,
+      1,
+      {
+        ...original,
+        title: '搭建目标输入与示例列表',
+        output: '可输入目标的页面与固定示例任务列表，不接真实 AI。',
+        validation: '提交一个目标后能看到对应示例列表；输入校验与空状态可用。',
+      },
+      {
+        id: 'selection-feedback',
+        title: '完成卡片选择与状态反馈',
+        input: '上一项交付的目标输入页面和示例列表。',
+        output: '可以选中第一张任务卡，并清楚看到选中和取消选择的反馈。',
+        validation: '鼠标和键盘都能完成选择与取消；原有输入和列表行为不退化。',
+      },
+    );
+    return steps;
+  }
+  if (
+    variant === 'compact' &&
+    steps.length > 2 &&
+    goal.actions.every((item) => !item.rounds.length)
+  ) {
+    const tail = steps.splice(1);
+    steps.push({
+      ...tail[0],
+      title: '完成示例交互并验收整条路径',
+      output: tail.map((item) => item.output).join('\n'),
+      validation: tail.map((item) => item.validation).join('\n'),
+    });
+  }
+  return steps;
 }
 
 export function demoSourceHref(projectId: string, goal: DemoGoal) {
@@ -328,6 +542,7 @@ export function canExecute(
   const index = goal.actions.findIndex((item) => item.id === target.id);
   return (
     goal.planConfirmed &&
+    !goal.planning?.job &&
     !unmetDependencies(state, goal).length &&
     index >= 0 &&
     goal.actions.slice(0, index).every((item) => item.stage === 'verified') &&
@@ -345,7 +560,8 @@ export function needsAttention(goal: DemoGoal) {
 }
 export function goalStatus(state: DemoState, goal: DemoGoal): string {
   if (goalComplete(goal)) return 'Completed';
-  if (goal.actions.some((item) => item.job)) return 'Agent is running';
+  if (goal.actions.some((item) => item.job) || goal.planning?.job)
+    return 'Agent is running';
   if (unmetDependencies(state, goal).length) return 'Waiting for prerequisite';
   if (!goal.planConfirmed) return 'Plan to confirm';
   if (needsAttention(goal)) return 'Needs attention';
@@ -375,12 +591,39 @@ export type DemoEvent =
   | { type: 'source-deleted'; goalId: string }
   | { type: 'draft'; goalId: string; actionId: string; value: string }
   | {
+      type: 'plan-update';
+      goalId: string;
+      requirements?: string;
+      feedback?: string;
+      profile?: DemoProfile;
+      steps?: DemoPlanStep[];
+      resources?: DemoPlanResource[];
+    }
+  | {
+      type: 'plan-start';
+      goalId: string;
+      variant: 'standard' | 'compact' | 'error';
+      targetId?: string;
+    }
+  | { type: 'plan-settle'; goalId: string; jobId: number }
+  | { type: 'plan-cancel'; goalId: string }
+  | { type: 'plan-accept'; goalId: string }
+  | {
       type: 'confirm-plan';
       goalId: string;
       requirements: string;
       titles: string[];
     }
-  | { type: 'todo-add'; goalId: string; text: string }
+  | {
+      type: 'todo-add';
+      goalId: string;
+      text: string;
+      reason?: string;
+      acceptance?: string;
+      actionId?: string;
+      request?: string;
+      origin?: DemoTodoOrigin;
+    }
   | { type: 'todo-toggle'; goalId: string; todoId: string }
   | {
       type: 'configure';
@@ -388,6 +631,8 @@ export type DemoEvent =
       actionId: string;
       agent?: DemoAction['agent'];
       verification?: DemoAction['verification'];
+      executionProfile?: DemoProfile;
+      reviewProfile?: DemoProfile;
     }
   | {
       type: 'start';
@@ -419,6 +664,151 @@ export function demoReducer(state: DemoState, event: DemoEvent): DemoState {
   });
   if (event.type === 'source-deleted')
     return updateGoal({ ...goal, sourceDeleted: true });
+  if (event.type.startsWith('plan-')) {
+    const plan = planningFor(goal);
+    if (event.type === 'plan-update') {
+      if (plan.job || goal.actions.some((item) => item.job)) return state;
+      if (event.resources && !validDemoResources(event.resources)) return state;
+      const locked = goal.actions.filter((item) => item.rounds.length);
+      if (
+        event.steps &&
+        locked.some(
+          (item) =>
+            JSON.stringify(event.steps!.find((step) => step.id === item.id)) !==
+            JSON.stringify(planStep(item)),
+        )
+      )
+        return state;
+      return updateGoal({
+        ...goal,
+        planning: {
+          ...plan,
+          requirements: event.requirements ?? plan.requirements,
+          feedback: event.feedback ?? plan.feedback,
+          profile: event.profile ?? plan.profile,
+          steps: event.steps ?? plan.steps,
+          resources: event.resources ?? plan.resources,
+        },
+      });
+    }
+    if (event.type === 'plan-start') {
+      if (plan.job || goal.actions.some((item) => item.job)) return state;
+      if (
+        event.targetId &&
+        (!plan.steps.some((item) => item.id === event.targetId) ||
+          goal.actions.some(
+            (item) => item.id === event.targetId && item.rounds.length,
+          ))
+      )
+        return state;
+      const id = state.sequence + 1;
+      return updateGoal(
+        {
+          ...goal,
+          planning: {
+            ...plan,
+            error: undefined,
+            job: {
+              id,
+              variant: event.variant,
+              requirements: plan.requirements,
+              feedback: plan.feedback,
+              profile: { ...plan.profile },
+              targetId: event.targetId,
+              resources: plan.resources.map((item) => ({ ...item })),
+            },
+          },
+        },
+        id,
+      );
+    }
+    if (event.type === 'plan-cancel')
+      return plan.job
+        ? updateGoal({
+            ...goal,
+            planning: { ...plan, job: undefined, error: 'canceled' },
+          })
+        : state;
+    if (event.type === 'plan-settle') {
+      if (plan.job?.id !== event.jobId) return state;
+      if (plan.job.variant === 'error')
+        return updateGoal({
+          ...goal,
+          planning: { ...plan, job: undefined, error: 'error' },
+        });
+      const steps = plan.job.targetId
+        ? plan.steps.map((item) =>
+            item.id === plan.job!.targetId
+              ? { ...item, guidance: plan.job!.feedback || item.guidance }
+              : item,
+          )
+        : simulatedPlan(goal, plan, plan.job.variant);
+      return updateGoal({
+        ...goal,
+        planning: {
+          ...plan,
+          job: undefined,
+          steps,
+          generated: true,
+          overview: plan.job.targetId
+            ? plan.overview
+            : `先${steps[0]?.title ?? '明确范围'}${
+                steps.length > 1
+                  ? `，再${steps
+                      .slice(1)
+                      .map((item) => item.title)
+                      .join('，再')}`
+                  : ''
+              }。每一步都以具体成果和验收约定为边界，整体确认后再执行。`,
+          guidance: plan.job.targetId
+            ? plan.guidance
+            : plan.job.feedback || plan.guidance,
+          feedback: '',
+        },
+      });
+    }
+    if (event.type === 'plan-accept') {
+      if (
+        plan.job ||
+        plan.error ||
+        !plan.generated ||
+        !plan.steps.length ||
+        goal.actions.some((item) => item.job) ||
+        new Set(plan.steps.map((item) => item.id)).size !== plan.steps.length ||
+        plan.steps.some(
+          (item) =>
+            !item.title.trim() ||
+            !item.input.trim() ||
+            !item.output.trim() ||
+            !item.validation.trim(),
+        )
+      )
+        return state;
+      const actions = plan.steps.map((step) => {
+        const previous = goal.actions.find((item) => item.id === step.id);
+        return previous?.rounds.length
+          ? previous
+          : previous
+            ? { ...previous, ...step }
+            : {
+                ...action(step.id, step.title, step.output),
+                ...step,
+                executionProfile: defaultDemoProfile(),
+                reviewProfile: defaultDemoProfile(),
+              };
+      });
+      return updateGoal({
+        ...goal,
+        planConfirmed: true,
+        requirements: plan.requirements,
+        actions,
+        planning: {
+          ...plan,
+          templates: plan.steps.map((item) => ({ ...item })),
+        },
+      });
+    }
+  }
   if (event.type === 'todo-add')
     return event.text.trim()
       ? updateGoal(
@@ -430,6 +820,17 @@ export function demoReducer(state: DemoState, event: DemoEvent): DemoState {
                 id: `todo-${state.sequence + 1}`,
                 text: event.text.trim(),
                 done: false,
+                issueNumber: state.sequence + 101,
+                summary: (
+                  event.acceptance?.trim() ||
+                  event.reason?.trim() ||
+                  '留待后续计划处理的事项。'
+                ).slice(0, 240),
+                labels: [
+                  'todo',
+                  (event.origin?.sourceId ?? goal.sourceId).toLowerCase(),
+                ],
+                actionId: event.actionId,
               },
             ],
           },
@@ -445,6 +846,7 @@ export function demoReducer(state: DemoState, event: DemoEvent): DemoState {
     });
   if (event.type === 'confirm-plan') {
     if (
+      !goal.planConfirmed ||
       goal.actions.some((item) => item.job) ||
       event.titles.length !== goal.actions.length ||
       event.titles.some((title) => !title.trim())
@@ -461,6 +863,7 @@ export function demoReducer(state: DemoState, event: DemoEvent): DemoState {
       ),
     });
   }
+  if (!('actionId' in event)) return state;
   const target = goal.actions.find((item) => item.id === event.actionId);
   if (!target) return state;
   const updateAction = (next: DemoAction, sequence = state.sequence) =>
@@ -484,6 +887,8 @@ export function demoReducer(state: DemoState, event: DemoEvent): DemoState {
           ...target,
           agent: event.agent ?? target.agent,
           verification: event.verification ?? target.verification,
+          executionProfile: event.executionProfile ?? target.executionProfile,
+          reviewProfile: event.reviewProfile ?? target.reviewProfile,
         });
   if (event.type === 'start') {
     if (
@@ -499,9 +904,21 @@ export function demoReducer(state: DemoState, event: DemoEvent): DemoState {
           id,
           kind: event.kind,
           simulation: event.simulation,
+          profile: {
+            ...(event.kind === 'review'
+              ? (target.reviewProfile ?? defaultDemoProfile())
+              : (target.executionProfile ?? {
+                  ...defaultDemoProfile(),
+                  agent: target.agent,
+                })),
+          },
           input: [
             goal.requirements,
             target.input,
+            target.guidance ?? '',
+            ...(goal.planning?.resources.map(
+              (item) => `${item.name}\n${item.content}`,
+            ) ?? []),
             event.input,
             target.rounds.at(-1)?.review === 'changes'
               ? reviewFinding(target)
@@ -552,7 +969,7 @@ export function demoReducer(state: DemoState, event: DemoEvent): DemoState {
         result,
         rounds: target.rounds.map((item, index) =>
           index === target.rounds.length - 1
-            ? { ...item, review: result }
+            ? { ...item, review: result, reviewProfile: job.profile }
             : item,
         ),
       });
@@ -574,6 +991,7 @@ export function demoReducer(state: DemoState, event: DemoEvent): DemoState {
         {
           number,
           input: job.input,
+          profile: job.profile,
           snapshot: {
             title: target.title,
             output: target.output,

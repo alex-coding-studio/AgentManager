@@ -8,6 +8,10 @@ import {
   findDemoSource,
   createLibraryGoal,
   goalComplete,
+  planningFor,
+  validDemoResources,
+  demoPlanningLibrary,
+  organizeDemoFollowUp,
   unmetDependencies,
   type DemoState,
   type DemoEvent,
@@ -140,18 +144,373 @@ void test('verified upstream delivery unlocks execution and is included in downs
     });
   }
   assert.equal(goalComplete(state.goals[0]), true);
-  const dep = state.goals[1];
-  state = demoReducer(state, {
-    type: 'confirm-plan',
-    goalId: dep.id,
-    requirements: dep.requirements,
-    titles: dep.actions.map((item) => item.title),
-  });
+  state = generatePlan(state, 'integration');
+  state = demoReducer(state, { type: 'plan-accept', goalId: 'integration' });
   assert.deepEqual(unmetDependencies(state, state.goals[1]), []);
   state = run(state, 'execute', 'integration', 'transport');
   assert.match(
     target(state, 'integration', 'transport').rounds[0].input,
     /最小工程与启动说明已准备好/,
+  );
+});
+
+function generatePlan(
+  state: DemoState,
+  goalId = 'library',
+  variant: 'standard' | 'compact' | 'error' = 'standard',
+) {
+  const next = demoReducer(state, { type: 'plan-start', goalId, variant });
+  const job = next.goals.find((item) => item.id === goalId)!.planning!.job!;
+  assert.ok(job);
+  return demoReducer(next, { type: 'plan-settle', goalId, jobId: job.id });
+}
+
+void test('only whole-plan confirmation materializes the exact draft contracts as Actions', () => {
+  let state = demoReducer(createDemoState(), { type: 'add-goal' });
+  assert.deepEqual(state.goals.at(-1)!.actions, []);
+  assert.equal(
+    demoReducer(state, { type: 'plan-accept', goalId: 'library' }),
+    state,
+  );
+  state = generatePlan(state);
+  const goal = state.goals.at(-1)!;
+  assert.equal(goal.planConfirmed, false);
+  assert.deepEqual(goal.actions, []);
+  assert.equal(planningFor(goal).steps.length, 3);
+  const steps = planningFor(goal).steps.map((item, index) =>
+    index === 0
+      ? { ...item, output: `${item.output}\n补充经过用户确认的交付文件。` }
+      : item,
+  );
+  state = demoReducer(state, { type: 'plan-update', goalId: 'library', steps });
+  state = demoReducer(state, { type: 'plan-accept', goalId: 'library' });
+  assert.equal(state.goals.at(-1)!.planConfirmed, true);
+  assert.deepEqual(
+    state.goals
+      .at(-1)!
+      .actions.map(({ id, title, input, output, validation }) => ({
+        id,
+        title,
+        input,
+        output,
+        validation,
+      })),
+    steps,
+  );
+});
+
+void test('plan adjustments replace the current draft without retaining response or revision history', () => {
+  let state = demoReducer(createDemoState(), { type: 'add-goal' });
+  state = generatePlan(state);
+  state = demoReducer(state, {
+    type: 'plan-update',
+    goalId: 'library',
+    feedback: '减少步骤，但保持验收边界。',
+    profile: { agent: 'Claude', model: 'reasoning-demo', effort: 'high' },
+  });
+  state = generatePlan(state, 'library', 'compact');
+  const plan = state.goals.at(-1)!.planning!;
+  assert.equal(plan.steps.length, 2);
+  assert.equal('responses' in plan, false);
+  assert.equal('revision' in plan, false);
+  assert.match(plan.guidance!, /减少步骤/);
+  assert.equal(plan.profile.agent, 'Claude');
+  assert.deepEqual(state.goals.at(-1)!.actions, []);
+});
+
+void test('canceled or failed planning cannot confirm stale draft or apply late results', () => {
+  let state = demoReducer(createDemoState(), { type: 'add-goal' });
+  state = generatePlan(state);
+  state = demoReducer(state, {
+    type: 'plan-start',
+    goalId: 'library',
+    variant: 'standard',
+  });
+  const jobId = state.goals.at(-1)!.planning!.job!.id;
+  state = demoReducer(state, { type: 'plan-cancel', goalId: 'library' });
+  assert.equal(
+    demoReducer(state, { type: 'plan-settle', goalId: 'library', jobId }),
+    state,
+  );
+  assert.equal(
+    demoReducer(state, { type: 'plan-accept', goalId: 'library' }),
+    state,
+  );
+  state = generatePlan(state, 'library', 'error');
+  assert.equal(state.goals.at(-1)!.planning!.steps.length, 3);
+  assert.equal('responses' in state.goals.at(-1)!.planning!, false);
+  assert.equal(
+    demoReducer(state, { type: 'plan-accept', goalId: 'library' }),
+    state,
+  );
+});
+
+void test('scoped feedback preserves siblings and whole-plan feedback can refine three steps into four', () => {
+  let state = generatePlan(
+    demoReducer(createDemoState(), { type: 'add-goal' }),
+  );
+  const initial = state.goals.at(-1)!.planning!.steps;
+  state = demoReducer(state, {
+    type: 'plan-update',
+    goalId: 'library',
+    feedback: '不安装全局依赖。',
+  });
+  state = demoReducer(state, {
+    type: 'plan-start',
+    goalId: 'library',
+    variant: 'standard',
+    targetId: initial[0].id,
+  });
+  const jobId = state.goals.at(-1)!.planning!.job!.id;
+  state = demoReducer(state, { type: 'plan-settle', goalId: 'library', jobId });
+  const steps = state.goals.at(-1)!.planning!.steps;
+  assert.equal(steps[1], initial[1]);
+  assert.equal(steps[2], initial[2]);
+  assert.equal(steps[0].guidance, '不安装全局依赖。');
+  state = demoReducer(state, {
+    type: 'plan-update',
+    goalId: 'library',
+    feedback: '3 步有点少，可以细化成 4 步吗？',
+  });
+  state = generatePlan(state);
+  assert.equal(state.goals.at(-1)!.planning!.steps.length, 4);
+  assert.equal(state.goals.at(-1)!.actions.length, 0);
+  state = demoReducer(state, { type: 'plan-accept', goalId: 'library' });
+  assert.equal(state.goals.at(-1)!.actions.length, 4);
+  assert.equal(state.goals.at(-1)!.actions[0].guidance, '不安装全局依赖。');
+});
+
+void test('planning resources are bounded in UTF-8 bytes and remain input to the accepted Action', () => {
+  let state = demoReducer(createDemoState(), { type: 'add-goal' });
+  const resources = [
+    { id: 'reference', name: 'boundary.md', content: '本轮不接真实 AI。' },
+  ];
+  assert.equal(validDemoResources(resources), true);
+  assert.equal(
+    validDemoResources([{ ...resources[0], content: '测'.repeat(90_000) }]),
+    false,
+  );
+  assert.equal(
+    validDemoResources([{ ...resources[0], name: 'binary.exe' }]),
+    false,
+  );
+  state = demoReducer(state, {
+    type: 'plan-update',
+    goalId: 'library',
+    resources,
+  });
+  state = generatePlan(state);
+  state = demoReducer(state, { type: 'plan-accept', goalId: 'library' });
+  state = run(state, 'execute', 'library', 'environment');
+  assert.match(
+    target(state, 'library', 'environment').rounds[0].input,
+    /boundary.md/,
+  );
+  assert.match(
+    target(state, 'library', 'environment').rounds[0].input,
+    /本轮不接真实 AI/,
+  );
+  assert.equal('responses' in state.goals.at(-1)!.planning!, false);
+});
+
+void test('four-step demo feedback is idempotent and never splits already delivered work', () => {
+  let state = generatePlan(
+    demoReducer(createDemoState(), { type: 'add-goal' }),
+  );
+  const request: DemoEvent = {
+    type: 'plan-update',
+    goalId: 'library',
+    feedback: '3 步有点少，可以细化成 4 步吗？',
+  };
+  state = generatePlan(demoReducer(state, request));
+  assert.equal(state.goals.at(-1)!.planning!.steps.length, 4);
+  state = generatePlan(demoReducer(state, request));
+  assert.equal(state.goals.at(-1)!.planning!.steps.length, 4);
+  assert.equal(
+    new Set(state.goals.at(-1)!.planning!.steps.map((step) => step.id)).size,
+    4,
+  );
+  let delivered = createDemoState();
+  delivered = demoReducer(delivered, { ...request, goalId: 'website' });
+  delivered = generatePlan(delivered, 'website');
+  assert.equal(delivered.goals[0].planning!.steps.length, 3);
+});
+
+void test('library selections and local Markdown share bounded inputs without losing their origin', () => {
+  const local = {
+    id: 'local-reference',
+    name: 'notes.markdown',
+    content: 'Local acceptance notes.',
+  };
+  const library = demoPlanningLibrary[0];
+  assert.equal(validDemoResources([library, local]), true);
+  let state = demoReducer(createDemoState(), { type: 'add-goal' });
+  state = demoReducer(state, {
+    type: 'plan-update',
+    goalId: 'library',
+    resources: [{ ...library }, local],
+  });
+  assert.equal(
+    state.goals.at(-1)!.planning!.resources[0].libraryPath,
+    'Product/demo-experience.md',
+  );
+  state = generatePlan(state);
+  state = demoReducer(state, { type: 'plan-accept', goalId: 'library' });
+  state = run(state, 'execute', 'library', 'environment');
+  assert.match(
+    target(state, 'library', 'environment').rounds[0].input,
+    /demo-experience.md/,
+  );
+  assert.match(
+    target(state, 'library', 'environment').rounds[0].input,
+    /Local acceptance notes/,
+  );
+  state = demoReducer(state, {
+    type: 'plan-update',
+    goalId: 'library',
+    resources: [local],
+  });
+  assert.deepEqual(state.goals.at(-1)!.planning!.resources, [local]);
+});
+
+void test('independent execution and review profiles are captured on the output they produced', () => {
+  let state = createDemoState();
+  state = demoReducer(state, {
+    type: 'configure',
+    goalId: 'website',
+    actionId: 'interface',
+    executionProfile: {
+      agent: 'Codex',
+      model: 'efficient-demo',
+      effort: 'low',
+    },
+    reviewProfile: { agent: 'Claude', model: 'reasoning-demo', effort: 'high' },
+  });
+  state = run(state, 'execute');
+  state = run(state, 'review');
+  const result = target(state).rounds.at(-1)!;
+  assert.equal(result.profile?.model, 'efficient-demo');
+  assert.equal(result.reviewProfile?.agent, 'Claude');
+  assert.equal(result.reviewProfile?.effort, 'high');
+});
+
+void test('Issue summaries retain their Action association without changing delivery or Plan progress', () => {
+  let state = createDemoState();
+  const before = state.goals[0].actions;
+  state = demoReducer(state, {
+    type: 'todo-add',
+    goalId: 'website',
+    actionId: 'interface',
+    text: '拖拽排序',
+    reason: '新增需求，本轮不包含',
+    acceptance: '排序在刷新后保留',
+  });
+  const issue = state.goals[0].todos.at(-1)!;
+  assert.equal(issue.actionId, 'interface');
+  assert.ok(issue.issueNumber);
+  assert.equal(issue.summary, '排序在刷新后保留');
+  assert.deepEqual(issue.labels, [
+    'todo',
+    state.goals[0].sourceId.toLowerCase(),
+  ]);
+  assert.equal(state.goals[0].actions, before);
+  state = demoReducer(state, {
+    type: 'todo-toggle',
+    goalId: 'website',
+    todoId: issue.id,
+  });
+  assert.equal(state.goals[0].todos.at(-1)!.done, true);
+  assert.equal(state.goals[0].actions, before);
+});
+
+void test('natural-language follow-ups generate Issue metadata with the original request and frozen context', () => {
+  let state = createDemoState();
+  const request = '后续可能要加入多端登录支持，这里先不做，帮我加到 Todo。';
+  const organized = organizeDemoFollowUp(state.goals[0], request, 'interface');
+  assert.equal(organized.text, '支持多端登录');
+  assert.equal(organized.request, request);
+  assert.equal(organized.origin.kind, 'idea');
+  assert.equal(organized.origin.round, 1);
+  assert.match(organized.acceptance, /后续实施前确认/);
+  state = run(state, 'execute');
+  const actions = state.goals[0].actions;
+  state = demoReducer(state, {
+    type: 'todo-add',
+    goalId: 'website',
+    ...organized,
+  });
+  const issue = state.goals[0].todos.at(-1)!;
+  assert.equal('origin' in issue, false);
+  assert.equal('request' in issue, false);
+  assert.equal('acceptance' in issue, false);
+  assert.ok(issue.summary);
+  assert.equal(state.goals[0].actions, actions);
+});
+
+void test('validation follow-ups preserve their review source and never resolve blocking findings', () => {
+  let state = run(createDemoState(), 'review');
+  const organized = organizeDemoFollowUp(
+    state.goals[0],
+    '以后补充跨平台验证，不在本轮做。',
+    'interface',
+    'validation',
+  );
+  state = demoReducer(state, {
+    type: 'todo-add',
+    goalId: 'website',
+    ...organized,
+  });
+  assert.equal(organized.origin.kind, 'validation');
+  assert.equal(organized.origin.reviewResult, 'changes');
+  assert.equal('origin' in state.goals[0].todos.at(-1)!, false);
+  assert.equal(target(state).result, 'changes');
+  assert.equal(
+    demoReducer(state, {
+      type: 'merge',
+      goalId: 'website',
+      actionId: 'interface',
+    }),
+    state,
+  );
+  const noOutput = organizeDemoFollowUp(
+    state.goals[0],
+    '以后再做',
+    'validation',
+  );
+  assert.equal(noOutput.origin.round, undefined);
+  assert.equal(noOutput.origin.outputCommit, undefined);
+});
+
+void test('default reviewer is independent from the selected executor and plan confirmation retains ready-step configuration', () => {
+  let state = createDemoState();
+  state = demoReducer(state, {
+    type: 'configure',
+    goalId: 'website',
+    actionId: 'interface',
+    agent: 'Claude',
+    executionProfile: {
+      agent: 'Claude',
+      model: 'efficient-demo',
+      effort: 'low',
+    },
+  });
+  state = run(state, 'review');
+  assert.equal(target(state).rounds.at(-1)!.reviewProfile?.agent, 'Codex');
+  state = demoReducer(state, {
+    type: 'configure',
+    goalId: 'website',
+    actionId: 'validation',
+    executionProfile: {
+      agent: 'Claude',
+      model: 'efficient-demo',
+      effort: 'low',
+    },
+  });
+  state = generatePlan(state, 'website');
+  state = demoReducer(state, { type: 'plan-accept', goalId: 'website' });
+  assert.equal(
+    target(state, 'website', 'validation').executionProfile?.model,
+    'efficient-demo',
   );
 });
 

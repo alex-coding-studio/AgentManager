@@ -1,6 +1,14 @@
 # Roadmap
 
-## Current focus — Just Do It workflow design
+## Current focus — Just Do It Harness design; UI baseline frozen
+
+As of 2026-08-30, the user accepted the current UI direction and requested a
+freeze. The existing interaction remains available as explicit Preview Mode;
+the ordinary implementation route does not display simulated execution data.
+See [JUST_DO_IT_DEMO.md](JUST_DO_IT_DEMO.md) for the frozen baseline and limits.
+Next, agree on the planning, execution-session, and verification Harness contracts,
+then authorize real integration and validate a bounded end-to-end task.
+No live execution or Session-reuse implementation is part of this UI freeze.
 
 As of the 2026-08-29 discussion, the focus is defining Just Do It's manual
 planning, execution, and verification workflow for GitHub-backed software
@@ -17,6 +25,17 @@ of scope until separately agreed.
 Local Git versioning and operational analytics remain deferred. They must not
 delay completing the workflow discussion. Implementation scope and acceptance
 checks will be agreed separately after the unresolved design questions are settled.
+
+The frozen UI demonstrates whole-plan generation and feedback before Action
+creation, concrete input/output/validation contracts, per-role demo model
+configuration, and Issue-style follow-ups. Actual shared Agent/model settings
+and GitHub Issue creation/synchronization require a later integration contract.
+GitHub-backed Todos are distinct from the deferred local Git artifact-version
+proposal; neither implies the other has been implemented.
+
+The planning interaction now follows Start Plan, Loading, Overview with
+step-by-step preview, and whole-plan confirmation. It keeps a current draft only;
+planning response history and Git version management are explicitly excluded.
 
 ## Earlier Decomposition MVP planning baseline
 
@@ -75,6 +94,13 @@ the cost benefit is measured rather than assumed.
   new siblings, `no-change`, or clarification.
 - Restrict Candidate revision to the same Candidate identifier and next
   revision. Structural sibling or child changes return clarification.
+
+## Deferred: Todo to task promotion
+
+Allow an actionable GitHub Todo to become a task Card under a user-selected
+parent Node, preserving its Issue association. Define the appropriate Node
+acceptance and routing behavior separately. Current Todo UI stays a lightweight
+Issue index and does not implement this conversion.
 
 ## Deferred proposal: Shared local Git versioning
 
