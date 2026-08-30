@@ -1,5 +1,6 @@
 import type { TaskGraphNode } from './task-graph.ts';
 import type { WhatsNextRunRecord } from './whats-next-runs.ts';
+import { renderWhatsNextResponseMarkdown } from './whats-next-response.ts';
 
 export type ProposalReplacement = {
   state: 'pending' | 'applied';
@@ -10,6 +11,40 @@ export type ProposalReplacement = {
 
 export function isPendingReplacement(run: WhatsNextRunRecord) {
   return run.replacement?.state === 'pending';
+}
+
+export function redoProposalContext(
+  plan: Pick<ReturnType<typeof redoProposalPlan>, 'histories' | 'targets'>,
+) {
+  const histories = [...plan.histories].sort((a, b) =>
+    b.startedAt.localeCompare(a.startedAt),
+  );
+  const previousRun =
+    histories.find((run) => run.operation === 'explore') ?? histories[0];
+  const instruction = previousRun?.input?.instruction ?? '';
+  const lastResult = histories[0]?.result;
+  const responseMarkdown = lastResult
+    ? renderWhatsNextResponseMarkdown(lastResult)
+    : '';
+  const outputs = plan.targets.map(({ runId, candidate }) => ({
+    title: candidate.title,
+    revision: candidate.revision,
+    path: `whats-next/runs/${runId}/candidates/${candidate.candidateId}/output.md`,
+    markdown: candidate.outputMarkdown,
+  }));
+  const additionalOutputs = outputs.filter(
+    (output) =>
+      lastResult?.outcome !== 'proposal' ||
+      !lastResult.candidates.some(
+        (candidate) => candidate.outputMarkdown === output.markdown,
+      ),
+  );
+  return {
+    instruction,
+    outputs,
+    responseMarkdown,
+    markdown: `# Previous request\n\n${instruction}\n\n# Last response\n\n${responseMarkdown}${additionalOutputs.length ? `\n\n# Other current unaccepted directions\n\n${additionalOutputs.map((output) => output.markdown).join('\n\n---\n\n')}` : ''}`,
+  };
 }
 
 export function redoProposalPlan(

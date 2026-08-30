@@ -7,6 +7,13 @@ Harness's product-design strategy, semantic-resolution policy, or output schema.
 
 1. Open the parent Node's plus action and choose **Redo proposal**.
 2. Explain what the current proposal misunderstood and what is wanted instead.
+   The composer shows the previous instruction and readable current output
+   documents as automatically included context, separately from the new
+   Correction. The full previous-response preview uses the same snapshot builder
+   as the Agent request, including the original proposal instruction, complete
+   last response (Reflection, next-step advice and outputs), and latest revisions
+   of other current Candidates. Identical outputs already present in that response
+   are not repeated in the request snapshot.
 3. Generate a replacement. Original Candidate Cards and their edges remain intact
    while the request runs, and on failure or cancellation.
 4. Open **Review replacement** to read the complete new response.

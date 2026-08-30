@@ -44,7 +44,63 @@ const {
   resolveWhatsNextReplacement,
   cancelWhatsNextRun,
 } = await import('../lib/whats-next-runs.ts');
-const { redoProposalPlan } = await import('../lib/whats-next-redo.ts');
+const { redoProposalPlan, redoProposalContext } =
+  await import('../lib/whats-next-redo.ts');
+
+void test('redo keeps the proposal instruction and complete last response without duplicating current outputs', () => {
+  const original = {
+    runId: 'original',
+    operation: 'explore',
+    startedAt: '2026-08-29T00:00:00Z',
+    input: { instruction: 'Build a personal local website' },
+  };
+  const refined = {
+    runId: 'refined',
+    operation: 'refine-candidate',
+    startedAt: '2026-08-29T00:01:00Z',
+    input: { instruction: 'Only refine this card' },
+    result: {
+      outcome: 'proposal',
+      reflection: {
+        markdown: 'Last full reflection',
+        continuationAdvice: {
+          recommendedFocus: 'compare',
+          reason: 'Last next-step recommendation',
+        },
+      },
+      candidates: [{ outputMarkdown: '# Current A\n\nRefined output' }],
+    },
+  };
+  const context = redoProposalContext({
+    histories: [original, refined],
+    targets: [
+      {
+        runId: 'refined',
+        candidate: {
+          candidateId: 'a',
+          title: 'A',
+          revision: 2,
+          outputMarkdown: '# Current A\n\nRefined output',
+        },
+      },
+      {
+        runId: 'original',
+        candidate: {
+          candidateId: 'b',
+          title: 'B',
+          revision: 1,
+          outputMarkdown: '# Current B\n\nUnchanged sibling',
+        },
+      },
+    ],
+  });
+  assert.equal(context.instruction, 'Build a personal local website');
+  assert.match(context.responseMarkdown, /Last full reflection/);
+  assert.match(context.responseMarkdown, /Last next-step recommendation/);
+  assert.match(context.markdown, /Unchanged sibling/);
+  assert.equal(context.markdown.match(/Refined output/g).length, 1);
+  assert.equal(context.outputs.length, 2);
+});
 
 async function fixture(work) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'redo-proposal-test-'));
@@ -180,6 +236,25 @@ void test('whole-proposal redo preserves originals until confirmation, then repl
       (r) => r.kind === 'previous-proposal',
     );
     assert.ok(prior);
+    const expectedContext = redoProposalContext(
+      redoProposalPlan(
+        await listTaskGraphNodes(project, 'whats-next'),
+        [original],
+        input.sourceNodeIds,
+      ),
+    );
+    assert.equal(
+      await readFile(
+        path.join(project.planningPath, prior.logicalPath),
+        'utf8',
+      ),
+      expectedContext.markdown,
+    );
+    assert.ok(
+      expectedContext.responseMarkdown.includes(
+        original.result.reflection.continuationAdvice.reason,
+      ),
+    );
     assert.match(
       await readFile(
         path.join(project.planningPath, prior.logicalPath),

@@ -36,6 +36,7 @@ import { renderWhatsNextResponseMarkdown } from './whats-next-response.ts';
 import {
   isPendingReplacement,
   redoProposalPlan,
+  redoProposalContext,
   type ProposalReplacement,
 } from './whats-next-redo.ts';
 import {
@@ -241,10 +242,7 @@ async function startWhatsNextRunUnlocked(
         content: resource.markdown,
       });
     }
-    const previousRun = [...redo.histories].sort((a, b) =>
-      b.startedAt.localeCompare(a.startedAt),
-    )[0];
-    const priorMarkdown = `# Previous request\n\n${previousRun?.input?.instruction ?? ''}\n\n# Previous reflection\n\n${previousRun?.result?.reflection.markdown ?? ''}\n\n# Current unaccepted directions\n\n${redo.targets.map(({ candidate }) => candidate.outputMarkdown).join('\n\n---\n\n')}`;
+    const priorMarkdown = redoProposalContext(redo).markdown;
     await writeFile(
       path.join(resourcesPath, 'previous-proposal.md'),
       priorMarkdown,

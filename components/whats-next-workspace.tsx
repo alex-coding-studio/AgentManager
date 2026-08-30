@@ -47,7 +47,11 @@ import type {
   WhatsNextRunRecord,
 } from '@/lib/whats-next-runs';
 import { cn } from '@/lib/utils';
-import { redoProposalPlan, isPendingReplacement } from '@/lib/whats-next-redo';
+import {
+  redoProposalPlan,
+  redoProposalContext,
+  isPendingReplacement,
+} from '@/lib/whats-next-redo';
 
 const AGENT_LABELS: Record<LocalAgentKind, string> = {
   codex: 'Codex',
@@ -149,16 +153,18 @@ export function WhatsNextWorkspace({
 
   const growSource = nodes.find((node) => node.id === growSourceId) ?? null;
   const redoBoundary = (() => {
-    if (!growSource) return { count: 0, reason: '' };
+    if (!growSource) return { count: 0, reason: '', context: null };
     try {
+      const plan = redoProposalPlan(nodes, runs, [growSource.id]);
       return {
-        count: redoProposalPlan(nodes, runs, [growSource.id]).candidateIds
-          .length,
+        count: plan.candidateIds.length,
+        context: redoProposalContext(plan),
         reason: '',
       };
     } catch (error) {
       return {
         count: 0,
+        context: null,
         reason:
           error instanceof Error ? error.message : 'Cannot redo this proposal.',
       };
@@ -1024,6 +1030,65 @@ export function WhatsNextWorkspace({
                 value={selectedAgent}
                 onChange={setSelectedAgent}
               />
+
+              {redoProposal && redoBoundary.context ? (
+                <section
+                  aria-label="Previous proposal context"
+                  className="space-y-3 rounded-xl border border-border p-3"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-xs font-medium">Previous proposal</h3>
+                    <span className="text-[10px] text-muted-foreground">
+                      Included automatically
+                    </span>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-medium text-muted-foreground">
+                      Previous instruction
+                    </p>
+                    <p className="mt-1 max-h-40 overflow-y-auto whitespace-pre-wrap break-words text-xs leading-5">
+                      {redoBoundary.context.instruction ||
+                        'No instruction was recorded for this proposal.'}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-[11px] font-medium text-muted-foreground">
+                      Previous outputs · {redoBoundary.context.outputs.length}
+                    </p>
+                    {redoBoundary.context.outputs.map((output) => (
+                      <button
+                        key={output.path}
+                        type="button"
+                        onClick={() => setPreview(output)}
+                        className="flex w-full items-center gap-2 rounded-lg bg-secondary px-3 py-2 text-left text-xs hover:bg-secondary/70"
+                        aria-label={`Read previous output: ${output.title}`}
+                      >
+                        <FileText className="size-3.5 shrink-0" />
+                        <span className="min-w-0 flex-1 truncate">
+                          {output.title}
+                        </span>
+                        <span className="shrink-0 text-[10px] text-muted-foreground">
+                          Revision {output.revision}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      setPreview({
+                        title: 'Last response',
+                        path: 'previous-proposal.md',
+                        markdown: redoBoundary.context!.responseMarkdown,
+                      })
+                    }
+                  >
+                    Read full last response
+                  </Button>
+                </section>
+              ) : null}
 
               <div className="space-y-2">
                 <label
