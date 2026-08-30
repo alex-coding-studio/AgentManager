@@ -34,6 +34,11 @@ import {
 } from './whats-next-prompt.ts';
 import { renderWhatsNextResponseMarkdown } from './whats-next-response.ts';
 import {
+  redoProposalPlan,
+  redoProposalContext,
+  type ProposalReplacement,
+} from './whats-next-redo.ts';
+import {
   readWhatsNextAttachment,
   readWhatsNextContext,
 } from './whats-next-context.ts';
@@ -89,6 +94,8 @@ export type WhatsNextRunRecord = {
   operation: 'explore' | 'refine-candidate';
   parentRunId?: string;
   revisionOf?: string;
+  replacement?: ProposalReplacement;
+  cleanupWarning?: string;
   status: WhatsNextRunStatus;
   transport: WhatsNextRunTransport;
   harness: {
@@ -131,6 +138,7 @@ type RunRequest = {
   feedback?: WhatsNextFeedbackAnchor[];
   revisionRunId?: string;
   revisionCandidateId?: string;
+  redoProposal?: boolean;
 };
 
 type ActiveRun = { record: WhatsNextRunRecord; agent: LocalAgentRun };
@@ -141,8 +149,21 @@ export async function startWhatsNextRun(
   project: RegisteredProject,
   input: RunRequest,
 ) {
+  return mutateWhatsNext(project, () =>
+    startWhatsNextRunUnlocked(project, input),
+  );
+}
+
+async function startWhatsNextRunUnlocked(
+  project: RegisteredProject,
+  input: RunRequest,
+) {
   validateRunRequest(input);
   const nodes = await listTaskGraphNodes(project, GRAPH_ROOT);
+  const allRuns = await readAllWhatsNextRuns(project);
+  const redo = input.redoProposal
+    ? redoProposalPlan(nodes, allRuns, input.sourceNodeIds)
+    : null;
   const sourceNodes = input.sourceNodeIds.map((nodeId) => {
     const node = nodes.find((value) => value.id === nodeId);
     if (!node) throw new Error(`${nodeId} could not be found.`);
@@ -158,6 +179,7 @@ export async function startWhatsNextRun(
     ? revisionTarget.run
     : await findLatestCoordinatorRun(project, input.sourceNodeIds);
   const coordinatorRun =
+    !redo &&
     coordinatorCandidate &&
     canReuseWhatsNextSession(coordinatorCandidate, transport)
       ? coordinatorCandidate
@@ -196,6 +218,41 @@ export async function startWhatsNextRun(
     resourcesPath,
     input.files,
   );
+  if (redo) {
+    const priorPaths = new Set(
+      redo.targets.flatMap(({ candidate }) =>
+        candidate.resources.map((resource) => resource.path),
+      ),
+    );
+    for (const [index, resourcePath] of [...priorPaths].entries()) {
+      const resource = await readTaskGraphMarkdownResource(
+        project,
+        resourcePath,
+      );
+      const name = `prior-resource-${index + 1}.md`;
+      await writeFile(path.join(resourcesPath, name), resource.markdown, {
+        flag: 'wx',
+      });
+      uploadedResources.push({
+        logicalPath: `whats-next/runs/${runId}/resources/${name}`,
+        kind: 'prior-context',
+        role: 'primary',
+        content: resource.markdown,
+      });
+    }
+    const priorMarkdown = redoProposalContext(redo).markdown;
+    await writeFile(
+      path.join(resourcesPath, 'previous-proposal.md'),
+      priorMarkdown,
+      { flag: 'wx' },
+    );
+    uploadedResources.push({
+      logicalPath: `whats-next/runs/${runId}/resources/previous-proposal.md`,
+      kind: 'previous-proposal',
+      role: 'primary',
+      content: priorMarkdown,
+    });
+  }
   const featureContext = await readWhatsNextContext(project);
   const contextInputs = await collectContextWorkspaceInputs(
     project,
@@ -204,7 +261,7 @@ export async function startWhatsNextRun(
     input.contextRefs,
     uploadedResources,
     featureContext.attachments.map((attachment) => attachment.fileName),
-    continuesExistingSession,
+    redo ? false : continuesExistingSession,
     revisionTarget
       ? {
           outputPath: `whats-next/runs/${revisionTarget.run.runId}/candidates/${revisionTarget.candidate.candidateId}/output.md`,
@@ -214,6 +271,21 @@ export async function startWhatsNextRun(
         }
       : undefined,
   );
+  if (redo) {
+    for (const [index, resource] of contextInputs.entries()) {
+      if (
+        !redo.runIds.some((id) =>
+          resource.logicalPath.startsWith(`whats-next/runs/${id}/`),
+        )
+      )
+        continue;
+      const name = `retained-context-${index}.md`;
+      await writeFile(path.join(resourcesPath, name), resource.content, {
+        flag: 'wx',
+      });
+      resource.logicalPath = `whats-next/runs/${runId}/resources/${name}`;
+    }
+  }
   const contextWorkspace = await writeTaskDecompositionContextWorkspace(
     runPath,
     contextInputs,
@@ -226,6 +298,13 @@ export async function startWhatsNextRun(
   const packet = {
     request: requestIdentity,
     operation,
+    proposalCorrection: redo
+      ? {
+          intent:
+            'Redo the entire unaccepted proposal from these origins using the current Instruction as feedback. The previous proposal is evidence of what the user is correcting, not a direction to preserve. Return a new proposal, not single-card refinement. Do not modify the parent or other branches.',
+          previousCandidateIds: redo.candidateIds,
+        }
+      : undefined,
     instruction: effectiveInstruction,
     projectInstructions: continuesExistingSession
       ? undefined
@@ -282,6 +361,13 @@ export async function startWhatsNextRun(
     operation,
     parentRunId: coordinatorCandidate?.runId,
     revisionOf: revisionTarget?.candidate.candidateId,
+    replacement: redo
+      ? {
+          state: 'applied',
+          candidateIds: redo.candidateIds,
+          runIds: redo.runIds,
+        }
+      : undefined,
     status: 'running',
     transport,
     harness: {
@@ -304,6 +390,30 @@ export async function startWhatsNextRun(
     error: null,
   };
   await writeRunRecord(project, record);
+
+  if (redo) {
+    try {
+      const obsoletePaths: string[] = [];
+      for (const id of redo.runIds) {
+        const folder = whatsNextRunPath(project, id);
+        try {
+          await access(folder);
+          obsoletePaths.push(folder);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+        }
+      }
+      if (obsoletePaths.length) await trash(obsoletePaths);
+    } catch {
+      record.status = 'failed';
+      record.error =
+        'Could not move all abandoned proposal files to system Trash. No Agent was started; abandoned directions remain hidden.';
+      record.endedAt = new Date().toISOString();
+      record.updatedAt = record.endedAt;
+      await writeRunRecord(project, record);
+      return record;
+    }
+  }
 
   const agent = startLocalAgentRun(input.agent, {
     workingDirectory: runPath,
@@ -492,6 +602,20 @@ export async function acceptWhatsNextCandidate(
   runId: string,
   candidateId: string,
 ) {
+  return mutateWhatsNext(project, () =>
+    acceptWhatsNextCandidateUnlocked(project, runId, candidateId),
+  );
+}
+
+async function acceptWhatsNextCandidateUnlocked(
+  project: RegisteredProject,
+  runId: string,
+  candidateId: string,
+) {
+  const allRuns = await readAllWhatsNextRuns(project);
+  const availableRun = allRuns.find((run) => run.runId === runId);
+  if (!availableRun)
+    throw new Error('The Candidate proposal is no longer available.');
   if (
     [...activeRuns.values()].some(
       (active) =>
@@ -594,6 +718,20 @@ export async function discardWhatsNextCandidate(
   runId: string,
   candidateId: string,
 ) {
+  return mutateWhatsNext(project, () =>
+    discardWhatsNextCandidateUnlocked(project, runId, candidateId),
+  );
+}
+
+async function discardWhatsNextCandidateUnlocked(
+  project: RegisteredProject,
+  runId: string,
+  candidateId: string,
+) {
+  const allRuns = await readAllWhatsNextRuns(project);
+  const availableRun = allRuns.find((run) => run.runId === runId);
+  if (!availableRun)
+    throw new Error('The Candidate proposal is no longer available.');
   if (
     [...activeRuns.values()].some(
       (active) =>
@@ -718,7 +856,12 @@ async function finishWhatsNextRun(
           ? { [revisionTarget.candidateId]: revisionTarget.revision }
           : undefined,
         reservedCandidateIds,
-        knownCandidates: await collectLatestUnacceptedCandidates(project),
+        knownCandidates: (
+          await collectLatestUnacceptedCandidates(project)
+        ).filter(
+          (candidate) =>
+            !record.replacement?.candidateIds.includes(candidate.candidateId),
+        ),
         operation: record.operation,
         revisionCandidateId: revisionTarget?.candidateId,
         revisionTarget,
@@ -928,6 +1071,17 @@ async function writeRunRecord(
 }
 
 function validateRunRequest(input: RunRequest) {
+  if (
+    input.redoProposal &&
+    (input.revisionRunId || input.revisionCandidateId || input.feedback?.length)
+  )
+    throw new Error(
+      'Redo a proposal separately from single-Candidate refinement.',
+    );
+  if (input.redoProposal && !input.instruction.trim())
+    throw new Error(
+      'Describe what the whole proposal misunderstood and what you want instead.',
+    );
   if (input.sourceNodeIds.length === 0) {
     throw new Error('Select at least one origin Node.');
   }
@@ -1096,9 +1250,35 @@ async function readAllWhatsNextRuns(project: RegisteredProject) {
       .filter((entry) => entry.isDirectory() && /^RUN-/i.test(entry.name))
       .map((entry) => readWhatsNextRun(project, entry.name).catch(() => null)),
   );
-  return records.filter(
+  const visible = records.filter(
     (record): record is WhatsNextRunRecord => record !== null,
   );
+  const superseded = new Set(
+    visible.flatMap((run) =>
+      run.replacement?.state === 'applied' ? run.replacement.runIds : [],
+    ),
+  );
+  return visible.filter((run) => !superseded.has(run.runId));
+}
+
+const mutationRuntime = globalThis as typeof globalThis & {
+  whatsNextMutations?: Map<string, Promise<unknown>>;
+};
+const mutations = (mutationRuntime.whatsNextMutations ??= new Map());
+
+async function mutateWhatsNext<T>(
+  project: RegisteredProject,
+  work: () => Promise<T>,
+) {
+  const previous = mutations.get(project.planningPath) ?? Promise.resolve();
+  const next = previous.catch(() => undefined).then(work);
+  mutations.set(project.planningPath, next);
+  try {
+    return await next;
+  } finally {
+    if (mutations.get(project.planningPath) === next)
+      mutations.delete(project.planningPath);
+  }
 }
 
 function chooseUniqueFileName(value: string, usedNames: Set<string>) {

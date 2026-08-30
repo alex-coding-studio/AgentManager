@@ -26,6 +26,7 @@ export async function POST(
     const agent = formData.get('agent');
     const revisionRunId = formData.get('revisionRunId');
     const revisionCandidateId = formData.get('revisionCandidateId');
+    const redoProposal = formData.get('redoProposal') === 'true';
     const feedbackValue = formData.get('feedback');
     const sourceNodeIds = formData
       .getAll('sourceNodeIds')
@@ -56,6 +57,7 @@ export async function POST(
       contextRefs,
       files,
       feedback,
+      redoProposal,
       revisionRunId:
         typeof revisionRunId === 'string' && revisionRunId
           ? revisionRunId

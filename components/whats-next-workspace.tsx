@@ -6,6 +6,7 @@ import {
   LoaderCircle,
   MessageSquareText,
   Pencil,
+  RotateCcw,
   Sparkles,
   Trash2,
   X,
@@ -46,6 +47,7 @@ import type {
   WhatsNextRunRecord,
 } from '@/lib/whats-next-runs';
 import { cn } from '@/lib/utils';
+import { redoProposalPlan, redoProposalContext } from '@/lib/whats-next-redo';
 
 const AGENT_LABELS: Record<LocalAgentKind, string> = {
   codex: 'Codex',
@@ -56,6 +58,7 @@ type RunSnapshot = {
   sourceNodeIds: string[];
   instruction: string;
   revisionTarget?: { runId: string; candidateId: string };
+  redoProposal?: boolean;
 };
 
 export function WhatsNextWorkspace({
@@ -95,6 +98,8 @@ export function WhatsNextWorkspace({
 
   const [growSourceId, setGrowSourceId] = useState('');
   const [growInstruction, setGrowInstruction] = useState('');
+  const [redoProposal, setRedoProposal] = useState(false);
+  const [submittingGrow, setSubmittingGrow] = useState(false);
   const [growRefs, setGrowRefs] = useState<string[]>([]);
   const [growFiles, setGrowFiles] = useState<File[]>([]);
   const [growFolderPath, setGrowFolderPath] = useState(folders[0]?.path ?? '');
@@ -141,6 +146,24 @@ export function WhatsNextWorkspace({
   const locateSequence = useRef(0);
 
   const growSource = nodes.find((node) => node.id === growSourceId) ?? null;
+  const redoBoundary = (() => {
+    if (!growSource) return { count: 0, reason: '', context: null };
+    try {
+      const plan = redoProposalPlan(nodes, runs, [growSource.id]);
+      return {
+        count: plan.candidateIds.length,
+        context: redoProposalContext(plan),
+        reason: '',
+      };
+    } catch (error) {
+      return {
+        count: 0,
+        context: null,
+        reason:
+          error instanceof Error ? error.message : 'Cannot redo this proposal.',
+      };
+    }
+  })();
   const editStart = nodes.find((node) => node.id === editStartId) ?? null;
   const combineNodes = combineIds.flatMap((nodeId) => {
     const node = nodes.find((value) => value.id === nodeId);
@@ -216,9 +239,20 @@ export function WhatsNextWorkspace({
   useEffect(() => {
     if (!developmentTransitionRun) return;
     const transitionTimeout = window.setTimeout(() => {
-      setRuns((current) => upsertRun(current, developmentTransitionRun));
+      const discardedRuns = new Set(
+        developmentTransitionRun.replacement?.runIds ?? [],
+      );
+      setRuns((current) =>
+        upsertRun(
+          current.filter((run) => !discardedRuns.has(run.runId)),
+          developmentTransitionRun,
+        ),
+      );
       setPreviews((current) =>
-        mergePreviews(current, runToPreviews(developmentTransitionRun)),
+        mergePreviews(
+          current.filter((preview) => !discardedRuns.has(preview.runId ?? '')),
+          runToPreviews(developmentTransitionRun),
+        ),
       );
       setFocusedNodeId('');
     }, 800);
@@ -266,6 +300,7 @@ export function WhatsNextWorkspace({
     files?: File[];
     feedback?: WhatsNextFeedbackAnchor[];
     revisionTarget?: { runId: string; candidateId: string };
+    redoProposal?: boolean;
   }) {
     const body = new FormData();
     for (const nodeId of input.sourceNodeIds) {
@@ -273,6 +308,7 @@ export function WhatsNextWorkspace({
     }
     body.append('instruction', input.instruction);
     body.append('agent', selectedAgent);
+    if (input.redoProposal) body.append('redoProposal', 'true');
     for (const ref of input.contextRefs ?? []) body.append('contextRefs', ref);
     for (const file of input.files ?? []) body.append('files', file);
     if (input.feedback?.length) {
@@ -297,13 +333,25 @@ export function WhatsNextWorkspace({
       sourceNodeIds: input.sourceNodeIds,
       instruction: input.instruction,
       revisionTarget: input.revisionTarget,
+      redoProposal: input.redoProposal,
     });
-    setRuns((current) => upsertRun(current, payload.run!));
-    setPreviews((current) =>
-      mergePreviews(current, runToPreviews(payload.run!)),
+    const discardedRuns = new Set(payload.run.replacement?.runIds ?? []);
+    setRuns((current) =>
+      upsertRun(
+        current.filter((run) => !discardedRuns.has(run.runId)),
+        payload.run!,
+      ),
     );
-    if (input.revisionTarget) setFocusedNodeId('');
-    void pollRun(payload.run.runId);
+    setPreviews((current) =>
+      mergePreviews(
+        current.filter((preview) => !discardedRuns.has(preview.runId ?? '')),
+        runToPreviews(payload.run!),
+      ),
+    );
+    if (input.revisionTarget || input.redoProposal) setFocusedNodeId('');
+    if (input.redoProposal) setInspectorId('');
+    if (['running', 'validating'].includes(payload.run.status))
+      void pollRun(payload.run.runId);
   }
 
   async function beginFromIdea() {
@@ -346,7 +394,13 @@ export function WhatsNextWorkspace({
   }
 
   async function submitGrow() {
-    if (!growSource) return;
+    if (
+      !growSource ||
+      submittingGrow ||
+      (redoProposal && (redoBoundary.reason || !growInstruction.trim()))
+    )
+      return;
+    setSubmittingGrow(true);
     setError('');
     try {
       await startRun({
@@ -354,10 +408,13 @@ export function WhatsNextWorkspace({
         instruction: growInstruction,
         contextRefs: growRefs,
         files: growFiles,
+        redoProposal,
       });
       closeGrow();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Something failed.');
+    } finally {
+      setSubmittingGrow(false);
     }
   }
 
@@ -381,6 +438,7 @@ export function WhatsNextWorkspace({
     setGrowInstruction('');
     setGrowRefs([]);
     setGrowFiles([]);
+    setRedoProposal(false);
   }
 
   async function cancelRun(runId: string) {
@@ -403,6 +461,7 @@ export function WhatsNextWorkspace({
     } else {
       setGrowSourceId(snapshot.sourceNodeIds[0] ?? '');
       setGrowInstruction(snapshot.instruction);
+      setRedoProposal(false);
     }
   }
 
@@ -698,7 +757,7 @@ export function WhatsNextWorkspace({
         focusedNodeId={focusedNodeId}
         locateRequest={locateRequest}
         selectedNodeIds={combineIds}
-        plusLabel="Ask what's next from"
+        plusLabel="Ask what's next"
         edgeAlignedOverlays
         onMultiSelect={(nodeId) =>
           setCombineIds((current) => toggle(current, nodeId))
@@ -832,15 +891,54 @@ export function WhatsNextWorkspace({
             >
               <div>
                 <h2 className="text-sm font-semibold">
-                  {continuingGrow ? 'Continue from' : 'Explore from'}{' '}
+                  {redoProposal
+                    ? 'Redo proposal from'
+                    : continuingGrow
+                      ? 'Continue from'
+                      : 'Explore from'}{' '}
                   {growSource.id}
                 </h2>
                 <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                  {continuingGrow
-                    ? `${AGENT_LABELS[selectedAgent]} continues the same line of inquiry with only this round’s changes.`
-                    : `${AGENT_LABELS[selectedAgent]} responds with a Reflection and supported next directions.`}{' '}
+                  {redoProposal
+                    ? 'Re-propose discards the current directions to system Trash and immediately generates a new proposal. Cancellation or failure does not restore discarded directions.'
+                    : continuingGrow
+                      ? `${AGENT_LABELS[selectedAgent]} continues the same line of inquiry with only this round’s changes.`
+                      : `${AGENT_LABELS[selectedAgent]} responds with a Reflection and supported next directions.`}{' '}
                   Inherited Resources stay on the source Node; additions apply
                   only to this request.
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-border p-3">
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={!redoProposal ? 'default' : 'outline'}
+                    onClick={() => setRedoProposal(false)}
+                  >
+                    Explore more
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={redoProposal ? 'default' : 'outline'}
+                    onClick={() => setRedoProposal(true)}
+                    disabled={Boolean(redoBoundary.reason)}
+                    title={
+                      redoBoundary.reason ||
+                      'Redo all unaccepted directions from this parent'
+                    }
+                  >
+                    <RotateCcw className="size-3.5" />
+                    Redo proposal
+                  </Button>
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {redoBoundary.reason ||
+                    (redoProposal
+                      ? `${redoBoundary.count} directions will be reconsidered together. No Formal Nodes will be changed.`
+                      : 'Explore more adds directions without replacing the current proposal.')}
                 </p>
               </div>
 
@@ -850,21 +948,84 @@ export function WhatsNextWorkspace({
                 onChange={setSelectedAgent}
               />
 
+              {redoProposal && redoBoundary.context ? (
+                <section
+                  aria-label="Previous proposal context"
+                  className="space-y-3 rounded-xl border border-border p-3"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-xs font-medium">Previous proposal</h3>
+                    <span className="text-[10px] text-muted-foreground">
+                      Included automatically
+                    </span>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-medium text-muted-foreground">
+                      Previous instruction
+                    </p>
+                    <p className="mt-1 max-h-40 overflow-y-auto whitespace-pre-wrap break-words text-xs leading-5">
+                      {redoBoundary.context.instruction ||
+                        'No instruction was recorded for this proposal.'}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-[11px] font-medium text-muted-foreground">
+                      Previous outputs · {redoBoundary.context.outputs.length}
+                    </p>
+                    {redoBoundary.context.outputs.map((output) => (
+                      <button
+                        key={output.path}
+                        type="button"
+                        onClick={() => setPreview(output)}
+                        className="flex w-full items-center gap-2 rounded-lg bg-secondary px-3 py-2 text-left text-xs hover:bg-secondary/70"
+                        aria-label={`Read previous output: ${output.title}`}
+                      >
+                        <FileText className="size-3.5 shrink-0" />
+                        <span className="min-w-0 flex-1 truncate">
+                          {output.title}
+                        </span>
+                        <span className="shrink-0 text-[10px] text-muted-foreground">
+                          Revision {output.revision}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      setPreview({
+                        title: 'Last response',
+                        path: 'previous-proposal.md',
+                        markdown: redoBoundary.context!.responseMarkdown,
+                      })
+                    }
+                  >
+                    Read full last response
+                  </Button>
+                </section>
+              ) : null}
+
               <div className="space-y-2">
                 <label
                   htmlFor="whats-next-instruction"
                   className="text-xs font-medium"
                 >
-                  Instruction{' '}
+                  {redoProposal ? 'Correction' : 'Instruction'}{' '}
                   <span className="font-normal text-muted-foreground">
-                    optional
+                    {redoProposal ? 'required' : 'optional'}
                   </span>
                 </label>
                 <Textarea
                   id="whats-next-instruction"
                   value={growInstruction}
                   maxLength={1_000}
-                  placeholder="Steer this round, or let the Agent respond from the current Node."
+                  placeholder={
+                    redoProposal
+                      ? 'What did this proposal misunderstand, and what do you want instead?'
+                      : 'Steer this round, or let the Agent respond from the current Node.'
+                  }
                   className="min-h-28"
                   onChange={(event) => setGrowInstruction(event.target.value)}
                 />
@@ -928,11 +1089,24 @@ export function WhatsNextWorkspace({
               />
 
               <div className="sticky bottom-0 -mx-4 border-t border-border bg-popover px-4 py-4">
-                <Button type="submit" className="w-full">
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={
+                    developmentPreview ||
+                    submittingGrow ||
+                    (redoProposal &&
+                      (!growInstruction.trim() || Boolean(redoBoundary.reason)))
+                  }
+                >
                   <Sparkles className="size-4" />
-                  {continuingGrow
-                    ? 'Continue exploration'
-                    : 'Start exploration'}
+                  {submittingGrow
+                    ? 'Starting…'
+                    : redoProposal
+                      ? 'Re-propose'
+                      : continuingGrow
+                        ? 'Continue exploration'
+                        : 'Start exploration'}
                 </Button>
                 {error ? (
                   <p className="mt-2 text-xs text-destructive">{error}</p>

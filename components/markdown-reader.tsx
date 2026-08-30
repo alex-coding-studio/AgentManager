@@ -1,6 +1,13 @@
 'use client';
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import {
   BookOpen,
   FileText,
@@ -11,12 +18,24 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
+import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { feedbackPopoverPosition } from '@/lib/markdown-feedback-position';
 
-export function MarkdownReader({
+export function MarkdownReader(
+  props: Parameters<typeof MarkdownReaderContent>[0],
+) {
+  return (
+    <MarkdownReaderContent
+      key={`${props.filePath}\u0000${props.markdown}`}
+      {...props}
+    />
+  );
+}
+
+function MarkdownReaderContent({
   title,
   filePath,
   markdown,
@@ -48,7 +67,78 @@ export function MarkdownReader({
     null,
   );
   const contentRef = useRef<HTMLDivElement>(null);
-  const submittedOnPointerDown = useRef(false);
+  const readerRef = useRef<HTMLElement>(null);
+  const [annotationsEnabled, setAnnotationsEnabled] = useState(false);
+  const [feedbackPosition, setFeedbackPosition] = useState<{
+    left: number;
+    top: number;
+  } | null>(null);
+  const selectionRange = useRef<Range | null>(null);
+
+  function positionFeedback() {
+    const reader = readerRef.current;
+    const content = contentRef.current;
+    const range = selectionRange.current;
+    if (
+      !reader ||
+      !content ||
+      !range ||
+      !content.contains(range.commonAncestorContainer)
+    ) {
+      setFeedbackPosition(null);
+      return;
+    }
+    const visible = {
+      left: 0,
+      top: 0,
+      right: window.innerWidth,
+      bottom: window.innerHeight,
+    };
+    for (
+      let element: HTMLElement | null = content;
+      element;
+      element = element.parentElement
+    ) {
+      const css = getComputedStyle(element);
+      if (
+        !/(auto|scroll|hidden|clip)/.test(`${css.overflowX} ${css.overflowY}`)
+      )
+        continue;
+      const bounds = element.getBoundingClientRect();
+      visible.left = Math.max(visible.left, bounds.left);
+      visible.top = Math.max(visible.top, bounds.top);
+      visible.right = Math.min(visible.right, bounds.right);
+      visible.bottom = Math.min(visible.bottom, bounds.bottom);
+    }
+    const rects = Array.from(range.getClientRects()).filter(
+      (rect) =>
+        rect.width > 0 &&
+        rect.height > 0 &&
+        rect.bottom > visible.top &&
+        rect.top < visible.bottom,
+    );
+    const anchor = rects.at(-1);
+    const position = anchor
+      ? feedbackPopoverPosition(
+          {
+            left: anchor.left,
+            right: anchor.right,
+            top: Math.min(...rects.map((rect) => rect.top)),
+            bottom: Math.max(...rects.map((rect) => rect.bottom)),
+          },
+          reader.getBoundingClientRect(),
+          visible,
+        )
+      : null;
+    setFeedbackPosition(
+      position
+        ? {
+            left: position.left + reader.scrollLeft,
+            top: position.top + reader.scrollTop,
+          }
+        : null,
+    );
+  }
 
   useEffect(() => {
     if (!focusMode) return;
@@ -80,7 +170,8 @@ export function MarkdownReader({
   }
 
   function readFeedbackSelection() {
-    if (!onAddFeedback || !contentRef.current) return null;
+    if (!annotationsEnabled || !onAddFeedback || !contentRef.current)
+      return null;
     const selected = window.getSelection();
     if (!selected || selected.isCollapsed || selected.rangeCount === 0) {
       return null;
@@ -109,12 +200,179 @@ export function MarkdownReader({
     onAddFeedback(candidate);
     window.getSelection()?.removeAllRanges();
     setSelection(null);
+    setFeedbackPosition(null);
+    selectionRange.current = null;
   }
+
+  const refreshFeedback = useEffectEvent(() => {
+    const candidate = readFeedbackSelection();
+    if (!candidate) {
+      setSelection(null);
+      setFeedbackPosition(null);
+      selectionRange.current = null;
+      return;
+    }
+    selectionRange.current = window.getSelection()!.getRangeAt(0).cloneRange();
+    setSelection(candidate);
+    positionFeedback();
+  });
+  const repositionFeedback = useEffectEvent(() => {
+    if (selectionRange.current) positionFeedback();
+  });
+
+  useEffect(() => {
+    if (!annotationsEnabled || !onAddFeedback) return;
+    let selecting = false;
+    let frame = 0;
+    const refresh = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        if (selecting) return;
+        refreshFeedback();
+      });
+    };
+    const down = (event: PointerEvent) => {
+      if ((event.target as Element).closest?.('[data-feedback-popover]'))
+        return;
+      selecting = true;
+      setFeedbackPosition(null);
+    };
+    const up = () => {
+      selecting = false;
+      refresh();
+    };
+    const scroll = () => {
+      repositionFeedback();
+    };
+    document.addEventListener('pointerdown', down);
+    document.addEventListener('pointerup', up);
+    document.addEventListener('pointercancel', up);
+    document.addEventListener('selectionchange', refresh);
+    document.addEventListener('scroll', scroll, true);
+    window.addEventListener('resize', scroll);
+    return () => {
+      cancelAnimationFrame(frame);
+      document.removeEventListener('pointerdown', down);
+      document.removeEventListener('pointerup', up);
+      document.removeEventListener('pointercancel', up);
+      document.removeEventListener('selectionchange', refresh);
+      document.removeEventListener('scroll', scroll, true);
+      window.removeEventListener('resize', scroll);
+    };
+  }, [annotationsEnabled, onAddFeedback, focusMode]);
+
+  const markdownComponents = useMemo<Components>(
+    () => ({
+      h1: ({ children, node }) => (
+        <h1
+          {...sourcePosition(node)}
+          className="mb-5 text-3xl font-semibold tracking-tight"
+        >
+          {children}
+        </h1>
+      ),
+      h2: ({ children, node }) => (
+        <h2
+          {...sourcePosition(node)}
+          className="mt-8 mb-3 text-lg font-semibold"
+        >
+          {children}
+        </h2>
+      ),
+      h3: ({ children, node }) => (
+        <h3 {...sourcePosition(node)} className="mt-6 mb-2 font-semibold">
+          {children}
+        </h3>
+      ),
+      p: ({ children, node }) => (
+        <div className="group/feedback relative">
+          <p
+            {...sourcePosition(node)}
+            className="my-3 pr-8 text-sm leading-7 text-foreground/78"
+          >
+            {children}
+          </p>
+          {onAddFeedback && annotationsEnabled ? (
+            <FeedbackButton
+              node={node}
+              excerpt={childrenText(children)}
+              onAddFeedback={onAddFeedback}
+            />
+          ) : null}
+        </div>
+      ),
+      ul: ({ children }) => (
+        <ul className="my-3 list-disc space-y-2 pl-5 text-sm leading-6 text-foreground/78">
+          {children}
+        </ul>
+      ),
+      ol: ({ children }) => (
+        <ol className="my-3 list-decimal space-y-2 pl-5 text-sm leading-6 text-foreground/78">
+          {children}
+        </ol>
+      ),
+      a: ({ children, href }) => (
+        <a
+          href={href}
+          target="_blank"
+          rel="noreferrer"
+          className="font-medium underline underline-offset-4"
+        >
+          {children}
+        </a>
+      ),
+      li: ({ children, node }) => (
+        <li {...sourcePosition(node)} className="group/feedback relative pr-8">
+          {children}
+          {onAddFeedback && annotationsEnabled ? (
+            <FeedbackButton
+              node={node}
+              excerpt={childrenText(children)}
+              onAddFeedback={onAddFeedback}
+            />
+          ) : null}
+        </li>
+      ),
+      blockquote: ({ children, node }) => (
+        <blockquote
+          {...sourcePosition(node)}
+          className="my-5 border-l-2 border-foreground/25 pl-4 text-muted-foreground"
+        >
+          {children}
+        </blockquote>
+      ),
+      pre: ({ children }) => (
+        <pre className="my-5 max-w-full overflow-x-auto rounded-xl bg-secondary p-4 font-mono text-sm leading-6 whitespace-pre-wrap break-words [&>code]:bg-transparent [&>code]:p-0">
+          {children}
+        </pre>
+      ),
+      code: ({ children }) => (
+        <code className="break-words rounded bg-secondary px-1.5 py-0.5 font-mono text-[0.85em]">
+          {children}
+        </code>
+      ),
+      table: ({ children }) => (
+        <div className="my-5 overflow-x-auto">
+          <table className="w-full border-collapse text-sm">{children}</table>
+        </div>
+      ),
+      th: ({ children }) => (
+        <th className="border border-border bg-secondary px-3 py-2 text-left font-medium">
+          {children}
+        </th>
+      ),
+      td: ({ children }) => (
+        <td className="border border-border px-3 py-2">{children}</td>
+      ),
+    }),
+    [annotationsEnabled, onAddFeedback],
+  );
 
   const reader = (
     <article
+      ref={readerRef}
       className={cn(
-        'min-w-0 overflow-hidden border border-border bg-card shadow-[0_1px_0_rgb(15_23_42/5%),0_14px_40px_rgb(15_23_42/5%)]',
+        'relative min-w-0 overflow-hidden border border-border bg-card shadow-[0_1px_0_rgb(15_23_42/5%),0_14px_40px_rgb(15_23_42/5%)]',
         focusMode
           ? 'flex h-[min(88vh,960px)] w-full flex-col rounded-2xl sm:w-[80vw] sm:max-w-6xl'
           : compact
@@ -143,23 +401,24 @@ export function MarkdownReader({
           {onAddFeedback ? (
             <Button
               type="button"
-              variant="ghost"
+              variant={annotationsEnabled ? 'default' : 'ghost'}
               size="icon"
-              aria-label="Add feedback from selected text"
-              title="Add feedback from selected text"
-              onPointerDown={(event) => {
-                const candidate = selection ?? readFeedbackSelection();
-                if (!candidate) return;
-                event.preventDefault();
-                submittedOnPointerDown.current = true;
-                addSelectedFeedback(candidate);
-              }}
+              aria-label={
+                annotationsEnabled
+                  ? 'Disable annotations'
+                  : 'Enable annotations'
+              }
+              aria-pressed={annotationsEnabled}
+              title={
+                annotationsEnabled
+                  ? 'Disable annotations'
+                  : 'Enable annotations'
+              }
               onClick={() => {
-                if (submittedOnPointerDown.current) {
-                  submittedOnPointerDown.current = false;
-                  return;
-                }
-                addSelectedFeedback(readFeedbackSelection());
+                setAnnotationsEnabled((enabled) => !enabled);
+                setSelection(null);
+                setFeedbackPosition(null);
+                selectionRange.current = null;
               }}
             >
               <MessageSquarePlus />
@@ -224,16 +483,14 @@ export function MarkdownReader({
         </div>
       </header>
 
-      {selection && onAddFeedback ? (
+      {annotationsEnabled && selection && feedbackPosition && onAddFeedback ? (
         <div
-          className={cn(
-            'z-10 flex shrink-0 items-center gap-3 border-b border-violet-500/20 bg-violet-500/5 px-4 py-2.5',
-            compact && 'sticky top-[65px]',
-          )}
+          data-feedback-popover
+          role="toolbar"
+          aria-label="Selected text feedback"
+          className="absolute z-40 flex h-9 w-[190px] items-center justify-between gap-1 rounded-lg border border-border bg-popover px-1 shadow-lg"
+          style={{ left: feedbackPosition.left, top: feedbackPosition.top }}
         >
-          <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
-            Selected lines {selection.startLine}–{selection.endLine}
-          </span>
           <Button
             type="button"
             size="sm"
@@ -251,6 +508,8 @@ export function MarkdownReader({
             onClick={() => {
               window.getSelection()?.removeAllRanges();
               setSelection(null);
+              setFeedbackPosition(null);
+              selectionRange.current = null;
             }}
           >
             <X />
@@ -269,10 +528,6 @@ export function MarkdownReader({
 
       <div
         ref={contentRef}
-        onPointerUp={(event) => {
-          if (event.pointerType !== 'mouse') return;
-          setSelection(readFeedbackSelection());
-        }}
         className={cn(
           'relative min-w-0 px-6 py-7 sm:px-9 sm:py-9',
           compact && 'px-4 py-4 sm:px-4 sm:py-4',
@@ -282,114 +537,7 @@ export function MarkdownReader({
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
           skipHtml
-          components={{
-            h1: ({ children, node }) => (
-              <h1
-                {...sourcePosition(node)}
-                className="mb-5 text-3xl font-semibold tracking-tight"
-              >
-                {children}
-              </h1>
-            ),
-            h2: ({ children, node }) => (
-              <h2
-                {...sourcePosition(node)}
-                className="mt-8 mb-3 text-lg font-semibold"
-              >
-                {children}
-              </h2>
-            ),
-            h3: ({ children, node }) => (
-              <h3 {...sourcePosition(node)} className="mt-6 mb-2 font-semibold">
-                {children}
-              </h3>
-            ),
-            p: ({ children, node }) => (
-              <div className="group/feedback relative">
-                <p
-                  {...sourcePosition(node)}
-                  className="my-3 pr-8 text-sm leading-7 text-foreground/78"
-                >
-                  {children}
-                </p>
-                {onAddFeedback ? (
-                  <FeedbackButton
-                    node={node}
-                    excerpt={childrenText(children)}
-                    onAddFeedback={onAddFeedback}
-                  />
-                ) : null}
-              </div>
-            ),
-            ul: ({ children }) => (
-              <ul className="my-3 list-disc space-y-2 pl-5 text-sm leading-6 text-foreground/78">
-                {children}
-              </ul>
-            ),
-            ol: ({ children }) => (
-              <ol className="my-3 list-decimal space-y-2 pl-5 text-sm leading-6 text-foreground/78">
-                {children}
-              </ol>
-            ),
-            a: ({ children, href }) => (
-              <a
-                href={href}
-                target="_blank"
-                rel="noreferrer"
-                className="font-medium underline underline-offset-4"
-              >
-                {children}
-              </a>
-            ),
-            li: ({ children, node }) => (
-              <li
-                {...sourcePosition(node)}
-                className="group/feedback relative pr-8"
-              >
-                {children}
-                {onAddFeedback ? (
-                  <FeedbackButton
-                    node={node}
-                    excerpt={childrenText(children)}
-                    onAddFeedback={onAddFeedback}
-                  />
-                ) : null}
-              </li>
-            ),
-            blockquote: ({ children, node }) => (
-              <blockquote
-                {...sourcePosition(node)}
-                className="my-5 border-l-2 border-foreground/25 pl-4 text-muted-foreground"
-              >
-                {children}
-              </blockquote>
-            ),
-            pre: ({ children }) => (
-              <pre className="my-5 max-w-full overflow-x-auto rounded-xl bg-secondary p-4 font-mono text-sm leading-6 whitespace-pre-wrap break-words [&>code]:bg-transparent [&>code]:p-0">
-                {children}
-              </pre>
-            ),
-            code: ({ children }) => (
-              <code className="break-words rounded bg-secondary px-1.5 py-0.5 font-mono text-[0.85em]">
-                {children}
-              </code>
-            ),
-            table: ({ children }) => (
-              <div className="my-5 overflow-x-auto">
-                <table className="w-full border-collapse text-sm">
-                  {children}
-                </table>
-              </div>
-            ),
-            th: ({ children }) => (
-              <th className="border border-border bg-secondary px-3 py-2 text-left font-medium">
-                {children}
-              </th>
-            ),
-            td: ({ children }) => (
-              <td className="border border-border px-3 py-2">{children}</td>
-            ),
-          }}
+          components={markdownComponents}
         >
           {markdown}
         </ReactMarkdown>

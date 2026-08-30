@@ -11,6 +11,7 @@ import { listTaskGraphNodes } from '@/lib/task-graph';
 import {
   createWhatsNextRefiningPreview,
   createWhatsNextReviewPreview,
+  createWhatsNextRedoPreview,
 } from '@/lib/whats-next-preview';
 
 export const dynamic = 'force-dynamic';
@@ -34,11 +35,13 @@ export default async function WhatsNextPage({
   const reviewPreview =
     process.env.NODE_ENV !== 'development'
       ? null
-      : preview === 'review-flow'
-        ? createWhatsNextReviewPreview()
-        : preview === 'refining-flow'
-          ? createWhatsNextRefiningPreview()
-          : null;
+      : preview === 'redo-flow'
+        ? createWhatsNextRedoPreview()
+        : preview === 'review-flow'
+          ? createWhatsNextReviewPreview()
+          : preview === 'refining-flow'
+            ? createWhatsNextRefiningPreview()
+            : null;
 
   return (
     <ProjectShell
