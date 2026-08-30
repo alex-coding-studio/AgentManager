@@ -118,6 +118,13 @@ steps.
 See [Just Do It](docs/JUST_DO_IT.md) for the execution-workspace design,
 including settled workflow decisions and questions still open before implementation.
 
+What's Next has a top-level **Context** control on both its empty start page and
+its Canvas. Optional project Instructions are stored in
+`.agent-manager/whats-next/instructions.md`. New projects start blank. Saving
+applies to subsequent requests, including resumed sessions; clearing explicitly
+removes earlier module Instructions without changing the Harness. Already running
+requests retain their captured snapshot. This does not alter exploration strategy.
+
 The Just Do It sidebar entry opens `/projects/<projectId>/implementation`,
 where **Open preview** enters the [interactive demo](docs/JUST_DO_IT_DEMO.md)
 at `/projects/<projectId>/implementation?preview=just-do-it`.

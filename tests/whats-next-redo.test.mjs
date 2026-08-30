@@ -45,6 +45,61 @@ const {
 } = await import('../lib/whats-next-runs.ts');
 const { redoProposalPlan, redoProposalContext } =
   await import('../lib/whats-next-redo.ts');
+const { saveWhatsNextInstructions } =
+  await import('../lib/whats-next-context.ts');
+
+void test('continued Runs receive current Instructions, clearing is explicit, and running snapshots stay unchanged', async () =>
+  fixture(async ({ project, input, original }) => {
+    await saveWhatsNextInstructions(project, 'Use Chinese.');
+    const running = await startWhatsNextRun(project, input);
+    await saveWhatsNextInstructions(project, 'Use concise explanations.');
+    const first = await finished(project, running);
+    const readPacket = async (run) =>
+      JSON.parse(
+        await readFile(
+          path.join(
+            project.planningPath,
+            'whats-next/runs',
+            run.runId,
+            'request.json',
+          ),
+          'utf8',
+        ),
+      );
+    assert.equal(first.sessionId, original.sessionId);
+    assert.equal(
+      (await readPacket(first)).packet.projectInstructions,
+      'Use Chinese.',
+    );
+    assert.equal(first.input.projectInstructions, 'Use Chinese.');
+    assert.equal(
+      (await readPacket(original)).packet.projectInstructions,
+      'Initial project rule.',
+    );
+    assert.equal(original.input.projectInstructions, 'Initial project rule.');
+    const next = await finished(
+      project,
+      await startWhatsNextRun(project, input),
+    );
+    assert.equal(next.sessionId, original.sessionId);
+    assert.equal(
+      (await readPacket(next)).packet.projectInstructions,
+      'Use concise explanations.',
+    );
+    await saveWhatsNextInstructions(project, '');
+    const cleared = await finished(
+      project,
+      await startWhatsNextRun(project, input),
+    );
+    const packet = (await readPacket(cleared)).packet;
+    assert.equal(Object.hasOwn(packet, 'projectInstructions'), true);
+    assert.equal(packet.projectInstructions, '');
+    assert.equal(packet.graphMap, undefined);
+    assert.equal(
+      (await readPacket(first)).packet.projectInstructions,
+      'Use Chinese.',
+    );
+  }, 'Initial project rule.'));
 
 void test('redo keeps the proposal instruction and complete last response without duplicating current outputs', () => {
   const original = {
@@ -101,7 +156,7 @@ void test('redo keeps the proposal instruction and complete last response withou
   assert.equal(context.outputs.length, 2);
 });
 
-async function fixture(work) {
+async function fixture(work, initialInstructions) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'redo-proposal-test-'));
   const previousPath = process.env.PATH;
   try {
@@ -151,6 +206,8 @@ process.stdin.resume();process.stdin.on('end',()=>setTimeout(()=>{
       contextRefs: [],
       files: [],
     };
+    if (initialInstructions !== undefined)
+      await saveWhatsNextInstructions(project, initialInstructions);
     const run = await finished(
       project,
       await startWhatsNextRun(project, input),

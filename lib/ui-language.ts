@@ -5,6 +5,15 @@ export function isUiLanguage(value: unknown): value is UiLanguage {
 }
 
 export const chineseUi: Record<string, string> = {
+  "What's Next instructions": 'What’s Next 全局 Instructions',
+  'Applies to the next request, including continued sessions. Running requests keep their original instructions. Leave blank to use only the Harness defaults.':
+    '保存后对下一轮请求生效，包括续接会话；不改变正在运行的请求。留空则只使用 Harness 默认规则。',
+  'Optional language, collaboration preferences, or project constraints.':
+    '可填写语言、协作偏好或项目约束；也可以留空。',
+  'Saved. The next request will use these Instructions.':
+    '已保存，下一轮请求将使用这些 Instructions。',
+  'Could not load Instructions.': '无法加载 Instructions。',
+  'Could not save Instructions.': '无法保存 Instructions。',
   'Choose a goal to add. Added Cards are shown for context only.':
     '选择未加入的目标；已加入卡片仅作结构参考，不可再次选择。',
   'Not started': '未开始',

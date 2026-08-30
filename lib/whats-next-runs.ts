@@ -306,9 +306,7 @@ async function startWhatsNextRunUnlocked(
         }
       : undefined,
     instruction: effectiveInstruction,
-    projectInstructions: continuesExistingSession
-      ? undefined
-      : featureContext.instructions,
+    projectInstructions: featureContext.instructions,
     graphMap: continuesExistingSession ? undefined : nodes.map(graphMapEntry),
     origins: sourceNodes.map(graphMapEntry),
     contextWorkspace: {

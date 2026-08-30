@@ -14,6 +14,8 @@ import {
 } from 'lucide-react';
 import { AgentSelectField, AgentToggle } from '@/components/agent-selector';
 import { ContextAttachmentPicker } from '@/components/context-attachment-picker';
+import { WhatsNextContextToolbar } from '@/components/whats-next-context-toolbar';
+import { createBrowserUuid } from '@/lib/browser-uuid';
 import {
   MarkdownReader,
   type MarkdownFeedbackSelection,
@@ -62,7 +64,23 @@ type RunSnapshot = {
   redoProposal?: boolean;
 };
 
-export function WhatsNextWorkspace({
+export function WhatsNextWorkspace(
+  props: Parameters<typeof WhatsNextCanvas>[0],
+) {
+  return (
+    <div className="flex h-[calc(100dvh-4rem)] min-h-[480px] flex-col">
+      <WhatsNextContextToolbar
+        projectId={props.projectId}
+        disabled={props.developmentPreview}
+      />
+      <div className="min-h-0 flex-1">
+        <WhatsNextCanvas {...props} />
+      </div>
+    </div>
+  );
+}
+
+function WhatsNextCanvas({
   projectId,
   folders,
   initialNodes,
@@ -539,7 +557,7 @@ export function WhatsNextWorkspace({
     setPendingFeedback((current) => [
       ...current,
       {
-        feedbackId: `FEEDBACK-${crypto.randomUUID()}`,
+        feedbackId: `FEEDBACK-${createBrowserUuid()}`,
         path: selectedCandidatePreview.outputPath!,
         baseRevision: selectedCandidate.revision,
         startLine: feedbackDraft.selection.startLine,
@@ -683,15 +701,15 @@ export function WhatsNextWorkspace({
 
   if (!hasGraph) {
     return (
-      <div className="grid min-h-[calc(100vh-4rem)] place-items-center px-6">
+      <div className="grid h-full place-items-center overflow-y-auto px-6 py-6">
         <div className="w-full max-w-3xl">
           <div className="mb-6 flex items-center gap-2 text-sm text-muted-foreground">
             <Sparkles className="size-4" />
             {t("What's Next")}
           </div>
-          <h1 className="text-2xl font-semibold tracking-tight">
+          <h2 className="text-2xl font-semibold tracking-tight">
             {t('What do you want to build?')}
-          </h1>
+          </h2>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
             {t(
               'Write the idea in your own words. It becomes the Start of this Canvas, and',
@@ -757,7 +775,7 @@ export function WhatsNextWorkspace({
   }
 
   return (
-    <div className="relative h-[calc(100vh-4rem)]">
+    <div className="relative h-full">
       <TaskGraphCanvas
         nodes={nodes}
         previews={visiblePreviews}
