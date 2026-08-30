@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
+import { readAppSettings } from '@/lib/app-settings';
+import { UiLanguageProvider } from '@/components/ui-language-provider';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -17,17 +19,20 @@ export const metadata: Metadata = {
   description: 'A local-first project workspace for one person and AI agents.',
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const { language } = await readAppSettings();
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang={language} suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
+        <UiLanguageProvider key={language} language={language}>
+          {children}
+        </UiLanguageProvider>
       </body>
     </html>
   );

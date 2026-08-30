@@ -17,6 +17,7 @@ import {
 import { siGithub } from 'simple-icons/icons';
 import type { RegisteredProject } from '@/lib/project-registry';
 import { cn } from '@/lib/utils';
+import { useUiText } from '@/components/ui-language-provider';
 
 const navigation = [
   { label: 'Overview', icon: LayoutDashboard, path: '', available: true },
@@ -59,6 +60,7 @@ export function ProjectShell({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const { t } = useUiText();
 
   return (
     <div className="min-h-screen bg-background text-foreground lg:grid lg:grid-cols-[272px_1fr]">
@@ -80,7 +82,7 @@ export function ProjectShell({
             <div className="relative min-w-0 flex-1">
               <select
                 suppressHydrationWarning
-                aria-label="Switch project"
+                aria-label={t('Switch project')}
                 value={project.id}
                 onChange={(event) =>
                   router.push(`/projects/${event.target.value}`)
@@ -99,7 +101,7 @@ export function ProjectShell({
 
           <nav
             className="flex gap-1 overflow-x-auto p-2 lg:grid lg:p-3"
-            aria-label="Project navigation"
+            aria-label={t('Project navigation')}
           >
             {navigation.map((item) => {
               const Icon = item.icon;
@@ -108,10 +110,10 @@ export function ProjectShell({
               const content = (
                 <>
                   <Icon className="size-4" />
-                  <span>{item.label}</span>
+                  <span>{t(item.label)}</span>
                   {!item.available ? (
                     <span className="ml-auto text-[10px] uppercase tracking-wide">
-                      Soon
+                      {t('Soon')}
                     </span>
                   ) : null}
                 </>
@@ -138,14 +140,19 @@ export function ProjectShell({
             })}
           </nav>
 
-          <div className="mt-auto hidden border-t border-border p-3 lg:block">
-            <div className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground">
+          <div className="mt-auto border-t border-border p-3">
+            <Link
+              href={`/settings?project=${project.id}`}
+              className={cn(
+                'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition',
+                pathname === '/settings'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+              )}
+            >
               <Settings className="size-4" />
-              Settings
-              <span className="ml-auto text-[10px] uppercase tracking-wide">
-                Soon
-              </span>
-            </div>
+              {t('Settings')}
+            </Link>
           </div>
         </div>
       </aside>
@@ -168,7 +175,7 @@ export function ProjectShell({
               className="ml-4 flex shrink-0 items-center gap-1.5 rounded-full bg-secondary px-2.5 py-1 text-[11px] font-medium text-secondary-foreground transition hover:bg-muted"
             >
               <GitHubIcon />
-              Repository
+              {t('Repository')}
               <ExternalLink className="size-3" />
             </a>
           ) : null}

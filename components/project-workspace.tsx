@@ -10,6 +10,7 @@ import {
   HardDrive,
   PackagePlus,
   Plus,
+  Settings,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -30,12 +31,14 @@ import {
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import type { ProjectKind, RegisteredProject } from '@/lib/project-registry';
+import { useUiText } from '@/components/ui-language-provider';
 
 export function ProjectWorkspace({
   initialProjects,
 }: {
   initialProjects: RegisteredProject[];
 }) {
+  const { t } = useUiText();
   const [projects, setProjects] = useState(initialProjects);
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -112,12 +115,22 @@ export function ProjectWorkspace({
             </div>
             <div>
               <p className="font-semibold tracking-tight">AgentManager</p>
-              <p className="text-xs text-muted-foreground">Project workspace</p>
+              <p className="text-xs text-muted-foreground">
+                {t('Project workspace')}
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Link
+              href="/settings"
+              className="mr-3 flex items-center gap-1.5 rounded-lg px-2 py-2 hover:bg-muted"
+              aria-label={t('Settings')}
+            >
+              <Settings className="size-4" />
+              {t('Settings')}
+            </Link>
             <HardDrive className="size-3.5" />
-            Local only
+            {t('Local only')}
           </div>
         </div>
       </header>
@@ -126,15 +139,15 @@ export function ProjectWorkspace({
         <div className="flex flex-col justify-between gap-6 sm:flex-row sm:items-end">
           <div>
             <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-primary/65">
-              Projects
+              {t('Projects')}
             </p>
             <h1 className="text-3xl font-semibold tracking-[-0.035em] sm:text-4xl">
-              Begin with a project boundary.
+              {t('Begin with a project boundary.')}
             </h1>
             <p className="mt-3 max-w-xl text-sm leading-6 text-muted-foreground">
-              Register a product idea or an existing code repository. Planning
-              data stays beside the project while remaining invisible to its
-              code history.
+              {t(
+                'Register a product idea or an existing code repository. Planning data stays beside the project while remaining invisible to its code history.',
+              )}
             </p>
           </div>
 
@@ -146,36 +159,37 @@ export function ProjectWorkspace({
             }}
           >
             <DialogTrigger render={<Button size="lg" />}>
-              <Plus /> New project
+              <Plus /> {t('New project')}
             </DialogTrigger>
             <DialogContent className="sm:max-w-lg">
               <form onSubmit={submit}>
                 <DialogHeader>
-                  <DialogTitle>Create a project</DialogTitle>
+                  <DialogTitle>{t('Create a project')}</DialogTitle>
                   <DialogDescription>
-                    Choose where the project lives, then add only enough context
-                    to recognize it.
+                    {t(
+                      'Choose where the project lives, then add only enough context to recognize it.',
+                    )}
                   </DialogDescription>
                 </DialogHeader>
 
                 <div className="my-5 space-y-5">
                   <fieldset className="space-y-2">
                     <legend className="text-xs font-medium">
-                      Starting point
+                      {t('Starting point')}
                     </legend>
                     <div className="grid grid-cols-2 gap-2">
                       <KindButton
                         active={kind === 'standalone'}
                         icon={<PackagePlus />}
-                        title="Product idea"
-                        detail="No code repository yet"
+                        title={t('Product idea')}
+                        detail={t('No code repository yet')}
                         onClick={() => setKind('standalone')}
                       />
                       <KindButton
                         active={kind === 'repository'}
                         icon={<Code2 />}
-                        title="Code repository"
-                        detail="Attach existing local code"
+                        title={t('Code repository')}
+                        detail={t('Attach existing local code')}
                         onClick={() => setKind('repository')}
                       />
                     </div>
@@ -186,7 +200,7 @@ export function ProjectWorkspace({
                       htmlFor="project-name"
                       className="text-xs font-medium"
                     >
-                      Project name
+                      {t('Project name')}
                     </label>
                     <Input
                       id="project-name"
@@ -202,14 +216,16 @@ export function ProjectWorkspace({
                       htmlFor="project-description"
                       className="text-xs font-medium"
                     >
-                      Description
+                      {t('Description')}
                     </label>
                     <Textarea
                       id="project-description"
                       maxLength={600}
                       value={description}
                       onChange={(event) => setDescription(event.target.value)}
-                      placeholder="A local-first workspace for one person building with agents."
+                      placeholder={t(
+                        'A local-first workspace for one person building with agents.',
+                      )}
                     />
                   </div>
 
@@ -218,14 +234,14 @@ export function ProjectWorkspace({
                       htmlFor="project-directory"
                       className="text-xs font-medium"
                     >
-                      Project directory
+                      {t('Project directory')}
                     </label>
                     <div className="flex gap-2">
                       <Input
                         id="project-directory"
                         value={rootPath}
                         onChange={(event) => setRootPath(event.target.value)}
-                        placeholder="Choose an existing local directory"
+                        placeholder={t('Choose an existing local directory')}
                       />
                       <Button
                         type="button"
@@ -233,12 +249,13 @@ export function ProjectWorkspace({
                         onClick={chooseDirectory}
                         disabled={choosing}
                       >
-                        <FolderOpen /> {choosing ? 'Choosing…' : 'Choose'}
+                        <FolderOpen /> {choosing ? t('Choosing…') : t('Choose')}
                       </Button>
                     </div>
                     <p className="text-[11px] leading-4 text-muted-foreground">
-                      AgentManager creates a locally excluded .agent-manager
-                      directory inside this folder.
+                      {t(
+                        'AgentManager creates a locally excluded .agent-manager directory inside this folder.',
+                      )}
                     </p>
                   </div>
 
@@ -254,7 +271,7 @@ export function ProjectWorkspace({
                     type="submit"
                     disabled={!name.trim() || !rootPath.trim() || submitting}
                   >
-                    {submitting ? 'Creating…' : 'Create project'}
+                    {submitting ? t('Creating…') : t('Create project')}
                   </Button>
                 </DialogFooter>
               </form>
@@ -272,9 +289,13 @@ export function ProjectWorkspace({
               <div className="grid size-12 place-items-center rounded-2xl bg-secondary">
                 <Folder className="size-5" />
               </div>
-              <h2 className="mt-4 font-medium">Create the first project</h2>
+              <h2 className="mt-4 font-medium">
+                {t('Create the first project')}
+              </h2>
               <p className="mt-2 max-w-sm text-sm leading-6 text-muted-foreground">
-                Choose a folder, add a name, and write one short description.
+                {t(
+                  'Choose a folder, add a name, and write one short description.',
+                )}
               </p>
             </button>
           ) : null}
@@ -294,15 +315,15 @@ export function ProjectWorkspace({
                     <div className="flex items-center gap-2">
                       <span className="rounded-full bg-secondary px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
                         {project.kind === 'repository'
-                          ? 'Repository'
-                          : 'Product idea'}
+                          ? t('Repository')
+                          : t('Product idea')}
                       </span>
                       <ArrowUpRight className="size-4 text-muted-foreground" />
                     </div>
                   </div>
                   <CardTitle className="text-lg">{project.name}</CardTitle>
                   <CardDescription>
-                    {project.description || 'No description yet.'}
+                    {project.description || t('No description yet.')}
                   </CardDescription>
                   <code className="mt-3 block truncate text-[11px] text-muted-foreground">
                     {project.rootPath}

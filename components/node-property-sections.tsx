@@ -1,4 +1,5 @@
 'use client';
+import { useUiText } from '@/components/ui-language-provider';
 
 import { FileText } from 'lucide-react';
 import type { TaskGraphNode } from '@/lib/task-graph';
@@ -13,17 +14,18 @@ export function NodeResourceSections({
   openingPath?: string;
   onOpen: (path: string) => void;
 }) {
+  const { t } = useUiText();
   const { inputs, outputs } = partitionNodeResources(node.id, node.resources);
   return (
     <div className="space-y-6">
       <ResourceSection
-        title="Inputs"
+        title={t('Inputs')}
         resources={inputs}
         openingPath={openingPath}
         onOpen={onOpen}
       />
       <ResourceSection
-        title="Outputs"
+        title={t('Outputs')}
         resources={outputs}
         openingPath={openingPath}
         onOpen={onOpen}
@@ -33,22 +35,25 @@ export function NodeResourceSections({
 }
 
 export function NodeProvenanceFacts({ node }: { node: TaskGraphNode }) {
+  const { t } = useUiText();
   return (
     <dl className="space-y-3 text-xs">
-      {node.uid ? <PropertyRow label="Stable ID" value={node.uid} /> : null}
+      {node.uid ? (
+        <PropertyRow label={t('Stable ID')} value={node.uid} />
+      ) : null}
       <PropertyRow
-        label="Created through"
+        label={t('Created through')}
         value={
           node.provenance?.feature === 'whats-next'
-            ? "What's Next"
+            ? t("What's Next")
             : node.provenance
-              ? 'Decomposition'
-              : 'Manual creation'
+              ? t('Decomposition')
+              : t('Manual creation')
         }
       />
       {node.provenance ? (
         <PropertyRow
-          label="Source proposal"
+          label={t('Source proposal')}
           value={`${node.provenance.candidateId} · Revision ${node.provenance.revision}`}
         />
       ) : null}
@@ -67,6 +72,7 @@ function ResourceSection({
   openingPath?: string;
   onOpen: (path: string) => void;
 }) {
+  const { t } = useUiText();
   if (resources.length === 0) return null;
   return (
     <section>
@@ -93,7 +99,7 @@ function ResourceSection({
             <span className="min-w-0 flex-1">
               <span className="block truncate text-xs font-medium">
                 {openingPath === resource.path
-                  ? 'Opening…'
+                  ? t('Opening…')
                   : resourceName(resource.path)}
               </span>
               <span className="mt-0.5 block truncate font-mono text-[10px] text-muted-foreground">

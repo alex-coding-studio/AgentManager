@@ -1,4 +1,5 @@
 'use client';
+import { useUiText } from '@/components/ui-language-provider';
 
 import Link from 'next/link';
 import {
@@ -106,6 +107,7 @@ export function TaskDecompositionWorkspace({
     completed: TaskGraphPreview;
   };
 }) {
+  const { t } = useUiText();
   const [nodes, setNodes] = useState(initialNodes);
   const [title, setTitle] = useState('');
   const [selectedRefs, setSelectedRefs] = useState<string[]>([]);
@@ -1010,13 +1012,13 @@ export function TaskDecompositionWorkspace({
       <header className="flex shrink-0 items-end justify-between gap-6 border-b border-border px-5 py-5 lg:px-8">
         <div>
           <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-            Decomposition
+            {t('Decomposition')}
           </p>
           <h1 className="text-2xl font-semibold tracking-[-0.03em]">
-            Decomposition canvas
+            {t('Decomposition canvas')}
           </h1>
           <p className="mt-2 max-w-xl text-sm text-muted-foreground">
-            Break one scope into coherent, human-manageable nodes.
+            {t('Break one scope into coherent, human-manageable nodes.')}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -1028,7 +1030,7 @@ export function TaskDecompositionWorkspace({
             href={`/projects/${projectId}/decomposition/context`}
             className={buttonVariants({ variant: 'outline' })}
           >
-            <SlidersHorizontal /> Context
+            <SlidersHorizontal /> {t('Context')}
           </Link>
         </div>
       </header>
@@ -1041,12 +1043,12 @@ export function TaskDecompositionWorkspace({
                 <button
                   type="button"
                   className="grid min-h-[156px] w-72 place-items-center rounded-2xl border border-dashed border-border bg-background/80 text-muted-foreground shadow-sm transition hover:border-foreground/40 hover:bg-secondary/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
-                  aria-label="Create Start"
+                  aria-label={t('Create Start')}
                   onClick={createNode}
                 >
                   <span className="flex flex-col items-center gap-2">
                     <Plus className="size-5" />
-                    <span className="text-xs font-medium">Start</span>
+                    <span className="text-xs font-medium">{t('Start')}</span>
                   </span>
                 </button>
               </div>
@@ -1080,30 +1082,33 @@ export function TaskDecompositionWorkspace({
             <form onSubmit={saveTask} className="space-y-6">
               <div>
                 <h2 className="text-sm font-semibold">
-                  {editingId ? `Edit ${editingId}` : 'New start node'}
+                  {editingId
+                    ? t('Edit {id}', { id: editingId })
+                    : t('New start node')}
                 </h2>
                 <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                  Select every document needed to understand what will be
-                  decomposed.
+                  {t(
+                    'Select every document needed to understand what will be decomposed.',
+                  )}
                 </p>
               </div>
 
               <div className="space-y-2">
                 <label htmlFor="task-title" className="text-xs font-medium">
-                  Start-node title
+                  {t('Start-node title')}
                 </label>
                 <Input
                   id="task-title"
                   value={title}
                   maxLength={160}
-                  placeholder="Decomposition workspace"
+                  placeholder={t('Decomposition workspace')}
                   onChange={(event) => setTitle(event.target.value)}
                 />
               </div>
 
               <div className="space-y-2">
                 <label htmlFor="context-folder" className="text-xs font-medium">
-                  Context Library folder
+                  {t('Context Library folder')}
                 </label>
                 <div className="relative">
                   <select
@@ -1128,11 +1133,11 @@ export function TaskDecompositionWorkspace({
                 <div className="max-h-64 divide-y divide-border overflow-y-auto rounded-xl border border-border">
                   {availableSourceCount === 0 ? (
                     <p className="p-4 text-xs text-muted-foreground">
-                      No Markdown documents are available yet.
+                      {t('No Markdown documents are available yet.')}
                     </p>
                   ) : !selectedFolder || selectedFolder.entries.length === 0 ? (
                     <p className="p-4 text-xs text-muted-foreground">
-                      This folder is empty.
+                      {t('This folder is empty.')}
                     </p>
                   ) : (
                     selectedFolder.entries.map((entry, index) => {
@@ -1149,7 +1154,7 @@ export function TaskDecompositionWorkspace({
                               {entry.name}
                             </span>
                             <span className="text-[10px] text-muted-foreground">
-                              Folder
+                              {t('Folder')}
                             </span>
                           </button>
                         );
@@ -1188,7 +1193,7 @@ export function TaskDecompositionWorkspace({
               </div>
 
               <div className="space-y-2">
-                <p className="text-xs font-medium">Local Markdown</p>
+                <p className="text-xs font-medium">{t('Local Markdown')}</p>
                 <button
                   type="button"
                   className={cn(
@@ -1206,10 +1211,10 @@ export function TaskDecompositionWorkspace({
                 >
                   <Upload className="size-4" />
                   <span className="mt-2 text-xs font-medium">
-                    Drop Markdown or choose files
+                    {t('Drop Markdown or choose files')}
                   </span>
                   <span className="mt-1 text-[10px] text-muted-foreground">
-                    Up to 20 files, 2 MB each
+                    {t('Up to 20 files, 2 MB each')}
                   </span>
                 </button>
                 <input
@@ -1239,7 +1244,7 @@ export function TaskDecompositionWorkspace({
                           variant="ghost"
                           size="icon-xs"
                           aria-label={`Remove ${file.name}`}
-                          title="Remove source"
+                          title={t('Remove source')}
                           onClick={() =>
                             setFiles((current) =>
                               current.filter(
@@ -1270,7 +1275,7 @@ export function TaskDecompositionWorkspace({
                           variant="ghost"
                           size="icon-xs"
                           aria-label={`Remove ${resourceName(ref)}`}
-                          title="Remove source"
+                          title={t('Remove source')}
                           onClick={() =>
                             setRetainedAttachmentRefs((current) =>
                               current.filter((candidate) => candidate !== ref),
@@ -1301,15 +1306,15 @@ export function TaskDecompositionWorkspace({
                   {editingId ? <Pencil /> : <Plus />}{' '}
                   {creating
                     ? editingId
-                      ? 'Saving…'
-                      : 'Creating…'
+                      ? t('Saving…')
+                      : t('Creating…')
                     : editingId
-                      ? 'Save changes'
-                      : 'Create start node'}
+                      ? t('Save changes')
+                      : t('Create start node')}
                 </Button>
                 <p className="mt-2 text-center text-[10px] text-muted-foreground">
                   {sourceCount} {sourceCount === 1 ? 'source' : 'sources'}{' '}
-                  selected
+                  {t('selected')}
                 </p>
               </div>
             </form>
@@ -1331,14 +1336,21 @@ export function TaskDecompositionWorkspace({
                       ? `Revise ${revisionTarget.candidateId}`
                       : runOperation === 'append-candidates'
                         ? `Extend ${decomposeSource.id}`
-                        : `Decompose from ${decomposeSource.id}`}
+                        : t('Decompose from {id}', { id: decomposeSource.id })}
                   </h2>
                   <p className="mt-2 text-xs leading-5 text-muted-foreground">
                     {revisionTarget
-                      ? 'Redefine this Candidate only. Revisions cannot create siblings or child Nodes.'
+                      ? t(
+                          'Redefine this Candidate only. Revisions cannot create siblings or child Nodes.',
+                        )
                       : runOperation === 'append-candidates'
-                        ? `Existing child boundaries will not be replaced. Add new evidence or guidance so ${AGENT_LABELS[selectedAgent]} can propose only genuinely new siblings.`
-                        : 'Define this round of work. Inherited Resources stay on the source Node; additions apply only to this request.'}
+                        ? t(
+                            'Existing child boundaries will not be replaced. Add new evidence or guidance so {agent} can propose only genuinely new siblings.',
+                            { agent: AGENT_LABELS[selectedAgent] },
+                          )
+                        : t(
+                            'Define this round of work. Inherited Resources stay on the source Node; additions apply only to this request.',
+                          )}
                   </p>
                 </div>
 
@@ -1353,7 +1365,7 @@ export function TaskDecompositionWorkspace({
                     htmlFor="decomposition-goal"
                     className="text-xs font-medium"
                   >
-                    Instruction
+                    {t('Instruction')}
                   </label>
                   <Textarea
                     id="decomposition-goal"
@@ -1361,9 +1373,11 @@ export function TaskDecompositionWorkspace({
                     maxLength={1_000}
                     placeholder={
                       revisionTarget
-                        ? 'Describe how this Candidate itself should change.'
+                        ? t('Describe how this Candidate itself should change.')
                         : runOperation === 'append-candidates'
-                          ? 'Describe the new evidence or boundary that may require additional siblings.'
+                          ? t(
+                              'Describe the new evidence or boundary that may require additional siblings.',
+                            )
                           : 'Generate several candidate modules from this product definition.'
                     }
                     className="min-h-28"
@@ -1375,7 +1389,9 @@ export function TaskDecompositionWorkspace({
 
                 <div className="space-y-2">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="text-xs font-medium">Inherited Resources</p>
+                    <p className="text-xs font-medium">
+                      {t('Inherited Resources')}
+                    </p>
                     <span className="text-[10px] text-muted-foreground">
                       {decomposeSource.resources.length}
                     </span>
@@ -1407,10 +1423,10 @@ export function TaskDecompositionWorkspace({
                   >
                     <span className="min-w-0 flex-1">
                       <span className="block text-xs font-medium">
-                        Run-only context
+                        {t('Run-only context')}
                       </span>
                       <span className="mt-0.5 block text-[10px] text-muted-foreground">
-                        Optional Resources for this Agent Run only
+                        {t('Optional Resources for this Agent Run only')}
                       </span>
                     </span>
                     {requestSelectedRefs.length + requestFiles.length > 0 ? (
@@ -1431,7 +1447,7 @@ export function TaskDecompositionWorkspace({
                       <div className="space-y-2">
                         <div className="flex items-center justify-between gap-3">
                           <p className="text-xs font-medium">
-                            Additional Context Library Resources
+                            {t('Additional Context Library Resources')}
                           </p>
                           <span className="text-[10px] text-muted-foreground">
                             {requestSelectedRefs.length}
@@ -1439,7 +1455,7 @@ export function TaskDecompositionWorkspace({
                         </div>
                         <div className="relative">
                           <select
-                            aria-label="Additional Resource folder"
+                            aria-label={t('Additional Resource folder')}
                             value={requestFolder?.path ?? ''}
                             onChange={(event) =>
                               setRequestFolderPath(event.target.value)
@@ -1461,7 +1477,7 @@ export function TaskDecompositionWorkspace({
                           {!requestFolder ||
                           requestFolder.entries.length === 0 ? (
                             <p className="p-4 text-xs text-muted-foreground">
-                              This folder is empty.
+                              {t('This folder is empty.')}
                             </p>
                           ) : (
                             requestFolder.entries.map((entry, index) => {
@@ -1480,7 +1496,7 @@ export function TaskDecompositionWorkspace({
                                       {entry.name}
                                     </span>
                                     <span className="text-[10px] text-muted-foreground">
-                                      Folder
+                                      {t('Folder')}
                                     </span>
                                   </button>
                                 );
@@ -1526,7 +1542,7 @@ export function TaskDecompositionWorkspace({
                       <div className="space-y-2">
                         <div className="flex items-center justify-between gap-3">
                           <p className="text-xs font-medium">
-                            Additional Local Markdown
+                            {t('Additional Local Markdown')}
                           </p>
                           <span className="text-[10px] text-muted-foreground">
                             {requestFiles.length}
@@ -1555,7 +1571,7 @@ export function TaskDecompositionWorkspace({
                         >
                           <Upload className="size-4" />
                           <span className="mt-1.5 text-xs font-medium">
-                            Drop Markdown or choose files
+                            {t('Drop Markdown or choose files')}
                           </span>
                         </button>
                         <input
@@ -1587,7 +1603,7 @@ export function TaskDecompositionWorkspace({
                                   variant="ghost"
                                   size="icon-xs"
                                   aria-label={`Remove ${file.name}`}
-                                  title="Remove Resource"
+                                  title={t('Remove Resource')}
                                   onClick={() =>
                                     setRequestFiles((current) =>
                                       current.filter(
@@ -1622,17 +1638,26 @@ export function TaskDecompositionWorkspace({
                     disabled={!decompositionGoal.trim()}
                   >
                     {developmentPreview
-                      ? 'Create fixture request'
+                      ? t('Create fixture request')
                       : revisionTarget
-                        ? `Send revision to ${AGENT_LABELS[selectedAgent]}`
+                        ? t('Send revision to {agent}', {
+                            agent: AGENT_LABELS[selectedAgent],
+                          })
                         : runOperation === 'append-candidates'
-                          ? 'Find additional nodes'
-                          : `Send to ${AGENT_LABELS[selectedAgent]}`}
+                          ? t('Find additional nodes')
+                          : t('Send to {agent}', {
+                              agent: AGENT_LABELS[selectedAgent],
+                            })}
                   </Button>
                   <p className="mt-2 text-center text-[10px] leading-4 text-muted-foreground">
                     {developmentPreview
-                      ? 'Development fixture only. Nothing is sent to an Agent.'
-                      : `${AGENT_LABELS[selectedAgent]} runs locally with your existing subscription login.`}
+                      ? t(
+                          'Development fixture only. Nothing is sent to an Agent.',
+                        )
+                      : t(
+                          '{agent} runs locally with your existing subscription login.',
+                          { agent: AGENT_LABELS[selectedAgent] },
+                        )}
                   </p>
                 </div>
               </form>
@@ -1663,41 +1688,41 @@ export function TaskDecompositionWorkspace({
                   {selectedNode.title}
                 </SheetTitle>
                 <SheetDescription>
-                  A captured {selectedNode.role} node and its fixed source
-                  boundary.
+                  {t('A captured')}
+                  {selectedNode.role} {t('node and its fixed source boundary.')}
                 </SheetDescription>
               </SheetHeader>
 
               <div className="flex-1 overflow-y-auto px-6 py-5">
                 <dl className="grid grid-cols-3 gap-3">
-                  <NodeFact label="Role" value={selectedNode.role} />
-                  <NodeFact label="Type" value={selectedNode.type} />
-                  <NodeFact label="Status" value={selectedNode.status} />
+                  <NodeFact label={t('Role')} value={selectedNode.role} />
+                  <NodeFact label={t('Type')} value={selectedNode.type} />
+                  <NodeFact label={t('Status')} value={selectedNode.status} />
                 </dl>
 
                 {selectedRelationships ? (
                   <section className="mt-7">
                     <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                      Relationships
+                      {t('Relationships')}
                     </h3>
                     <div className="mt-3 grid gap-4">
                       <RelationshipList
-                        title="Derived from"
+                        title={t('Derived from')}
                         nodes={selectedRelationships.derivedFrom}
                         onSelect={locateNode}
                       />
                       <RelationshipList
-                        title="Depends on"
+                        title={t('Depends on')}
                         nodes={selectedRelationships.dependsOn}
                         onSelect={locateNode}
                       />
                       <RelationshipList
-                        title="Derived nodes"
+                        title={t('Derived nodes')}
                         nodes={selectedRelationships.derivedNodes}
                         onSelect={locateNode}
                       />
                       <RelationshipList
-                        title="Dependents"
+                        title={t('Dependents')}
                         nodes={selectedRelationships.dependents}
                         onSelect={locateNode}
                       />
@@ -1720,11 +1745,11 @@ export function TaskDecompositionWorkspace({
                 <section className="mt-7 border-t border-border pt-5">
                   <dl className="space-y-3 text-xs">
                     <div className="flex items-center justify-between gap-4">
-                      <dt className="text-muted-foreground">Created</dt>
+                      <dt className="text-muted-foreground">{t('Created')}</dt>
                       <dd>{formatTimestamp(selectedNode.createdAt)}</dd>
                     </div>
                     <div className="flex items-center justify-between gap-4">
-                      <dt className="text-muted-foreground">Updated</dt>
+                      <dt className="text-muted-foreground">{t('Updated')}</dt>
                       <dd>{formatTimestamp(selectedNode.updatedAt)}</dd>
                     </div>
                   </dl>
@@ -1739,7 +1764,7 @@ export function TaskDecompositionWorkspace({
                       className="flex-1"
                       onClick={() => editNode(selectedNode)}
                     >
-                      <Pencil /> Edit start node
+                      <Pencil /> {t('Edit start node')}
                     </Button>
                   ) : null}
                   <Button
@@ -1749,22 +1774,23 @@ export function TaskDecompositionWorkspace({
                     disabled={deletionBlockers.length > 0}
                     title={
                       deletionBlockers.length > 0
-                        ? 'Delete the referencing nodes first'
-                        : 'Move node to Trash'
+                        ? t('Delete the referencing nodes first')
+                        : t('Move node to Trash')
                     }
                     onClick={() => {
                       setDeleteError('');
                       setDeleteOpen(true);
                     }}
                   >
-                    <Trash2 /> Delete node
+                    <Trash2 /> {t('Delete node')}
                   </Button>
                 </div>
                 {deletionBlockers.length > 0 ? (
                   <p className="text-[10px] leading-4 text-muted-foreground">
-                    Referenced by {deletionBlockers.length}{' '}
-                    {deletionBlockers.length === 1 ? 'node' : 'nodes'}. Select
-                    them above and delete them first.
+                    {t('Referenced by')}
+                    {deletionBlockers.length}{' '}
+                    {deletionBlockers.length === 1 ? 'node' : 'nodes'}
+                    {t('. Select them above and delete them first.')}
                   </p>
                 ) : null}
               </SheetFooter>
@@ -1777,7 +1803,8 @@ export function TaskDecompositionWorkspace({
                     {selectedCandidate.candidateId}
                   </span>
                   <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-medium capitalize text-secondary-foreground">
-                    Candidate · revision {selectedCandidate.revision}
+                    {t('Candidate · revision')}
+                    {selectedCandidate.revision}
                   </span>
                 </div>
                 <SheetTitle className="text-xl font-semibold tracking-[-0.025em]">
@@ -1788,9 +1815,9 @@ export function TaskDecompositionWorkspace({
 
               <div className="flex-1 overflow-y-auto px-6 py-5">
                 <dl className="grid grid-cols-2 gap-3">
-                  <NodeFact label="Type" value={selectedCandidate.type} />
+                  <NodeFact label={t('Type')} value={selectedCandidate.type} />
                   <NodeFact
-                    label="Revision"
+                    label={t('Revision')}
                     value={String(selectedCandidate.revision)}
                   />
                 </dl>
@@ -1809,25 +1836,25 @@ export function TaskDecompositionWorkspace({
                   >
                     <FileText />
                     {previewingPath === selectedCandidatePreview.outputPath
-                      ? 'Opening output…'
-                      : 'Open output.md'}
+                      ? t('Opening output…')
+                      : t('Open output.md')}
                   </Button>
                 ) : null}
 
                 <section className="mt-7">
                   <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                    Relationships
+                    {t('Relationships')}
                   </h3>
                   <div className="mt-3 grid gap-4">
                     <CandidateRelationshipList
-                      title="Derived from"
+                      title={t('Derived from')}
                       nodeIds={selectedCandidate.derivedFrom}
                       nodes={nodes}
                       previews={requestPreviews}
                       onSelect={locateNode}
                     />
                     <CandidateRelationshipList
-                      title="Depends on"
+                      title={t('Depends on')}
                       nodeIds={selectedCandidate.dependsOn}
                       nodes={nodes}
                       previews={requestPreviews}
@@ -1839,7 +1866,7 @@ export function TaskDecompositionWorkspace({
                 <section className="mt-7">
                   <div className="flex items-center justify-between gap-3">
                     <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                      Resources
+                      {t('Resources')}
                     </h3>
                     <span className="text-[10px] text-muted-foreground">
                       {selectedCandidate.resources.length}
@@ -1869,7 +1896,7 @@ export function TaskDecompositionWorkspace({
                 {selectedCandidate.assumptions.length > 0 ? (
                   <section className="mt-7">
                     <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                      Assumptions
+                      {t('Assumptions')}
                     </h3>
                     <ul className="mt-3 space-y-2 text-xs leading-5 text-muted-foreground">
                       {selectedCandidate.assumptions.map((assumption) => (
@@ -1882,7 +1909,7 @@ export function TaskDecompositionWorkspace({
                 {Object.keys(selectedCandidate.metadata).length > 0 ? (
                   <section className="mt-7">
                     <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                      Metadata
+                      {t('Metadata')}
                     </h3>
                     <pre className="mt-3 overflow-x-auto rounded-xl bg-secondary p-3 text-[10px] leading-4">
                       {JSON.stringify(selectedCandidate.metadata, null, 2)}
@@ -1901,8 +1928,8 @@ export function TaskDecompositionWorkspace({
                       discardingCandidate ||
                       selectedCandidateIsRevising
                     }
-                    aria-label="Discard Candidate"
-                    title="Discard Candidate"
+                    aria-label={t('Discard Candidate')}
+                    title={t('Discard Candidate')}
                     onClick={() => setCandidateDeleteOpen(true)}
                   >
                     <Trash2 />
@@ -1918,7 +1945,7 @@ export function TaskDecompositionWorkspace({
                     }
                     onClick={reviseCandidate}
                   >
-                    <Pencil /> Revise
+                    <Pencil /> {t('Revise')}
                   </Button>
                   <Button
                     type="button"
@@ -1930,12 +1957,12 @@ export function TaskDecompositionWorkspace({
                     }
                     onClick={acceptCandidate}
                   >
-                    {accepting ? 'Accepting…' : 'Accept revision'}
+                    {accepting ? t('Accepting…') : t('Accept revision')}
                   </Button>
                 </div>
                 {selectedCandidateIsRevising ? (
                   <p className="text-[10px] text-muted-foreground">
-                    The next revision is running.
+                    {t('The next revision is running.')}
                   </p>
                 ) : null}
                 {candidateActionError ? (
@@ -1961,11 +1988,13 @@ export function TaskDecompositionWorkspace({
               <Trash2 />
             </AlertDialogMedia>
             <AlertDialogTitle>
-              Discard {selectedCandidate?.title}?
+              {t('Discard')}
+              {selectedCandidate?.title}?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              This Candidate and its output will move to the operating system
-              Trash. Other Candidates from the same proposal stay unchanged.
+              {t(
+                'This Candidate and its output will move to the operating system Trash. Other Candidates from the same proposal stay unchanged.',
+              )}
               {candidateActionError ? (
                 <span className="mt-2 block text-destructive">
                   {candidateActionError}
@@ -1975,14 +2004,14 @@ export function TaskDecompositionWorkspace({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={discardingCandidate}>
-              Cancel
+              {t('Cancel')}
             </AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
               disabled={discardingCandidate}
               onClick={discardCandidate}
             >
-              {discardingCandidate ? 'Discarding…' : 'Discard'}
+              {discardingCandidate ? t('Discarding…') : t('Discard')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1999,11 +2028,18 @@ export function TaskDecompositionWorkspace({
             <AlertDialogMedia>
               <Trash2 />
             </AlertDialogMedia>
-            <AlertDialogTitle>Delete {selectedNode?.title}?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {t('Delete')}
+              {selectedNode?.title}?
+            </AlertDialogTitle>
             <AlertDialogDescription>
               {developmentPreview
-                ? 'This removes the node from the development preview until the page reloads.'
-                : 'The node folder will move to the operating system Trash. Its upstream relationships will disappear with it.'}
+                ? t(
+                    'This removes the node from the development preview until the page reloads.',
+                  )
+                : t(
+                    'The node folder will move to the operating system Trash. Its upstream relationships will disappear with it.',
+                  )}
               {deleteError ? (
                 <span className="mt-2 block text-destructive">
                   {deleteError}
@@ -2012,13 +2048,15 @@ export function TaskDecompositionWorkspace({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={deleting}>
+              {t('Cancel')}
+            </AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
               disabled={deleting}
               onClick={deleteSelectedNode}
             >
-              {deleting ? 'Deleting…' : 'Delete'}
+              {deleting ? t('Deleting…') : t('Delete')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -2116,6 +2154,7 @@ function RelationshipList({
   nodes: Array<{ id: string; title: string }>;
   onSelect: (nodeId: string) => void;
 }) {
+  const { t } = useUiText();
   return (
     <div>
       <div className="mb-1.5 flex items-center justify-between gap-3">
@@ -2147,7 +2186,7 @@ function RelationshipList({
         </div>
       ) : (
         <div className="rounded-xl border border-dashed border-border px-3 py-2.5 text-[10px] text-muted-foreground">
-          None
+          {t('None')}
         </div>
       )}
     </div>

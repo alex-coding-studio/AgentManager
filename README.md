@@ -57,6 +57,18 @@ The hostname is machine-specific and must not be committed to configuration.
 Tailscale Serve keeps the site inside the tailnet; this project does not require
 or enable public Funnel access.
 
+## Settings and interface language
+
+Open **Settings** from the project sidebar or project-list header. Choose English
+or Simplified Chinese under **Interface language**. The preference is saved
+automatically in `~/.agent-manager/settings.json` (or `AGENT_MANAGER_HOME`) and
+applies when the site is reopened.
+
+This changes website interface text only. User input, Agent-generated cards,
+Markdown, JSON, and project files remain unchanged. See
+[Interface Language](docs/INTERFACE_LANGUAGE.md) for the boundary and persistence
+details.
+
 ## Local data
 
 The machine registry is stored at `~/.agent-manager/config.json`. Each project
@@ -90,6 +102,7 @@ Set `AGENT_MANAGER_HOME` to use a different machine-registry directory.
 ```bash
 npm run typecheck
 npm run lint
+npm run test:settings
 npm run build
 ```
 

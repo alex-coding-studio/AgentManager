@@ -1,4 +1,5 @@
 'use client';
+import { useUiText } from '@/components/ui-language-provider';
 
 import { memo, useEffect, useMemo, useRef } from 'react';
 import {
@@ -37,6 +38,8 @@ type TaskCardData = Record<string, unknown> & {
   color: string;
   description?: string;
   resourceSummary?: string;
+  candidateRevision?: number;
+  candidateResourceCount?: number;
   transientKind?: TaskGraphPreview['kind'];
   status?: string;
   agentLabel?: string;
@@ -87,6 +90,7 @@ export function TaskGraphCanvas({
   onDecompose: (nodeId: string) => void;
   onCancelRun: (runId: string) => void;
 }) {
+  const { t } = useUiText();
   const selectionKey = (selectedNodeIds ?? []).join(',');
   const graph = useMemo(
     () =>
@@ -150,6 +154,11 @@ export function TaskGraphCanvas({
 
   return (
     <ReactFlow<TaskFlowNode, Edge>
+      ariaLabelConfig={{
+        'controls.zoomIn.ariaLabel': t('Zoom In'),
+        'controls.zoomOut.ariaLabel': t('Zoom Out'),
+        'controls.fitView.ariaLabel': t('Fit View'),
+      }}
       nodes={flowNodes}
       edges={flowEdges}
       nodeTypes={nodeTypes}
@@ -188,7 +197,7 @@ export function TaskGraphCanvas({
       nodesConnectable={false}
       deleteKeyCode={null}
       className="bg-background"
-      aria-label="Graph canvas"
+      aria-label={t('Graph canvas')}
     >
       <GraphInternalsUpdater
         nodeIdsKey={graphNodeIdsKey}
@@ -209,15 +218,15 @@ export function TaskGraphCanvas({
       >
         <span className="flex items-center gap-1.5">
           <span className="h-px w-5 bg-muted-foreground" />
-          Lineage
+          {t('Lineage')}
         </span>
         <span className="flex items-center gap-1.5">
           <span className="w-5 border-t border-dashed border-amber-600" />
-          Selected dependencies
+          {t('Selected dependencies')}
         </span>
         <span className="flex items-center gap-1.5">
           <span className="w-5 border-t-2 border-dashed border-violet-500" />
-          Candidate
+          {t('Candidate')}
         </span>
       </Panel>
       <Controls
@@ -249,6 +258,7 @@ function GraphInternalsUpdater({
 }
 
 function TaskCard({ data, selected }: NodeProps<TaskFlowNode>) {
+  const { t } = useUiText();
   const id = data.displayId;
   const preview = data.kind === 'preview';
   const running = data.transientKind === 'run';
@@ -297,7 +307,7 @@ function TaskCard({ data, selected }: NodeProps<TaskFlowNode>) {
                 ? 'bg-secondary text-secondary-foreground'
                 : 'bg-foreground text-background',
             )}
-            title={running ? 'Running' : data.type}
+            title={running ? t('Running') : data.type}
             style={
               preview
                 ? {
@@ -307,14 +317,14 @@ function TaskCard({ data, selected }: NodeProps<TaskFlowNode>) {
                 : undefined
             }
           >
-            {running ? 'Running' : data.type}
+            {running ? t('Running') : data.type}
           </span>
           {running ? (
             <button
               type="button"
               className="nodrag nopan grid size-8 shrink-0 place-items-center rounded-full text-muted-foreground transition hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
-              aria-label="Cancel Agent Run"
-              title="Cancel Agent Run"
+              aria-label={t('Cancel Agent Run')}
+              title={t('Cancel Agent Run')}
               onClick={(event) => {
                 event.stopPropagation();
                 data.onCancelRun(data.runId ?? id);
@@ -327,8 +337,8 @@ function TaskCard({ data, selected }: NodeProps<TaskFlowNode>) {
             <button
               type="button"
               className="nodrag nopan grid size-8 shrink-0 place-items-center rounded-full text-muted-foreground transition hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
-              aria-label={`Open details for ${data.title}`}
-              title="Open details"
+              aria-label={t('Open details for {title}', { title: data.title })}
+              title={t('Open details')}
               onClick={(event) => {
                 event.stopPropagation();
                 data.onInspect(id);
@@ -351,9 +361,14 @@ function TaskCard({ data, selected }: NodeProps<TaskFlowNode>) {
             {running ? (
               <span className="flex items-center gap-1.5">
                 <LoaderCircle className="size-3 animate-spin" />
-                {data.agentLabel ?? data.title.split(' ')[0] ?? 'Agent'} is
-                working…
+                {data.agentLabel ?? data.title.split(' ')[0] ?? 'Agent'}{' '}
+                {t('is working…')}
               </span>
+            ) : data.candidateRevision !== undefined ? (
+              t('Revision {revision} · {count} Resources', {
+                revision: data.candidateRevision,
+                count: data.candidateResourceCount ?? 0,
+              })
             ) : (
               data.resourceSummary
             )}
@@ -372,7 +387,7 @@ function TaskCard({ data, selected }: NodeProps<TaskFlowNode>) {
           ))}
           {data.resources.length > 3 ? (
             <span className="px-1.5 text-[10px] text-muted-foreground">
-              +{data.resources.length - 3} more
+              +{data.resources.length - 3} {t('more')}
             </span>
           ) : null}
         </div>
@@ -386,8 +401,11 @@ function TaskCard({ data, selected }: NodeProps<TaskFlowNode>) {
               ? 'opacity-100'
               : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100',
           )}
-          aria-label={`${data.plusLabel ?? 'Decompose'} from ${data.title}`}
-          title={data.plusLabel ?? 'Decompose'}
+          aria-label={t('{action} from {title}', {
+            action: t(data.plusLabel ?? 'Decompose'),
+            title: data.title,
+          })}
+          title={t(data.plusLabel ?? 'Decompose')}
           onClick={(event) => {
             event.stopPropagation();
             data.onDecompose(id);
@@ -474,6 +492,8 @@ function buildFlowGraph(
         status: preview?.status,
         agentLabel: preview?.agentLabel,
         runId: preview?.runId,
+        candidateRevision: preview?.candidate?.revision,
+        candidateResourceCount: preview?.candidate?.resources.length,
         resourceSummary: preview
           ? preview.kind === 'candidate' && preview.candidate
             ? `Revision ${preview.candidate.revision} · ${preview.candidate.resources.length} Resources`

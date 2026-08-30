@@ -1,4 +1,5 @@
 'use client';
+import { useUiText } from '@/components/ui-language-provider';
 
 import Link from 'next/link';
 import { useRef, useState, type DragEvent } from 'react';
@@ -44,6 +45,7 @@ export function TaskDecompositionContextWorkspace({
   projectId: string;
   initialContext: TaskDecompositionContext;
 }) {
+  const { t } = useUiText();
   const [context, setContext] = useState(initialContext);
   const [instructions, setInstructions] = useState(initialContext.instructions);
   const [savedInstructions, setSavedInstructions] = useState(
@@ -182,17 +184,18 @@ export function TaskDecompositionContextWorkspace({
             href={`/projects/${projectId}/decomposition`}
             className="mb-4 inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition hover:text-foreground"
           >
-            <ArrowLeft className="size-3.5" /> Decomposition canvas
+            <ArrowLeft className="size-3.5" /> {t('Decomposition canvas')}
           </Link>
           <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-            Decomposition
+            {t('Decomposition')}
           </p>
           <h1 className="text-3xl font-semibold tracking-[-0.035em]">
-            Context
+            {t('Context')}
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-            Add project-specific guidance and reference files that should be
-            available whenever this feature asks an Agent to decompose work.
+            {t(
+              'Add project-specific guidance and reference files that should be available whenever this feature asks an Agent to decompose work.',
+            )}
           </p>
         </div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -202,7 +205,7 @@ export function TaskDecompositionContextWorkspace({
               context.initialized ? 'bg-emerald-500' : 'bg-border',
             )}
           />
-          {context.initialized ? 'Context ready' : 'Not configured'}
+          {context.initialized ? t('Context ready') : t('Not configured')}
         </div>
       </header>
 
@@ -210,10 +213,11 @@ export function TaskDecompositionContextWorkspace({
         <section className="overflow-hidden rounded-2xl border border-border bg-card shadow-[0_1px_0_rgb(15_23_42/5%),0_14px_40px_rgb(15_23_42/4%)]">
           <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4 sm:px-6">
             <div>
-              <h2 className="text-sm font-semibold">Instructions</h2>
+              <h2 className="text-sm font-semibold">{t('Instructions')}</h2>
               <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                User-owned constraints and preferences. The feature Harness is
-                separate and will not overwrite this file.
+                {t(
+                  'User-owned constraints and preferences. The feature Harness is separate and will not overwrite this file.',
+                )}
               </p>
             </div>
             <span className="shrink-0 rounded-full bg-secondary px-2.5 py-1 font-mono text-[10px] text-secondary-foreground">
@@ -224,8 +228,10 @@ export function TaskDecompositionContextWorkspace({
             <Textarea
               value={instructions}
               maxLength={100_000}
-              aria-label="Decomposition instructions"
-              placeholder="Describe project-specific constraints, preferred resolution, naming conventions, acceptance expectations, or anything the Agent should account for while decomposing this scope."
+              aria-label={t('Decomposition instructions')}
+              placeholder={t(
+                'Describe project-specific constraints, preferred resolution, naming conventions, acceptance expectations, or anything the Agent should account for while decomposing this scope.',
+              )}
               onChange={(event) => {
                 setInstructions(event.target.value);
                 setMessage('');
@@ -234,14 +240,15 @@ export function TaskDecompositionContextWorkspace({
             />
             <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-[11px] text-muted-foreground">
-                {instructions.length.toLocaleString()} / 100,000 characters
+                {instructions.length.toLocaleString()}{' '}
+                {t('/ 100,000 characters')}
               </p>
               <Button
                 type="button"
                 disabled={!dirty || saving}
                 onClick={saveInstructions}
               >
-                <Save /> {saving ? 'Saving…' : 'Save instructions'}
+                <Save /> {saving ? t('Saving…') : t('Save instructions')}
               </Button>
             </div>
           </div>
@@ -252,10 +259,12 @@ export function TaskDecompositionContextWorkspace({
             <div className="border-b border-border px-5 py-4">
               <div className="flex items-center gap-2">
                 <Paperclip className="size-4" />
-                <h2 className="text-sm font-semibold">Attachments</h2>
+                <h2 className="text-sm font-semibold">{t('Attachments')}</h2>
               </div>
               <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                Markdown and JSON references owned by this feature context.
+                {t(
+                  'Markdown and JSON references owned by this feature context.',
+                )}
               </p>
             </div>
             <div className="p-4">
@@ -277,10 +286,12 @@ export function TaskDecompositionContextWorkspace({
               >
                 <Upload className="size-4" />
                 <span className="mt-2 text-xs font-medium">
-                  {uploading ? 'Adding…' : 'Drop files or choose attachments'}
+                  {uploading
+                    ? t('Adding…')
+                    : t('Drop files or choose attachments')}
                 </span>
                 <span className="mt-1 text-[10px] text-muted-foreground">
-                  Markdown or JSON · 2 MB each
+                  {t('Markdown or JSON · 2 MB each')}
                 </span>
               </button>
               <input
@@ -316,7 +327,7 @@ export function TaskDecompositionContextWorkspace({
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-xs font-medium">
                             {previewing === attachment.fileName
-                              ? 'Opening…'
+                              ? t('Opening…')
                               : attachment.fileName}
                           </span>
                           <span className="block text-[10px] text-muted-foreground">
@@ -329,7 +340,7 @@ export function TaskDecompositionContextWorkspace({
                         variant="ghost"
                         size="icon-xs"
                         aria-label={`Remove ${attachment.fileName}`}
-                        title="Remove attachment"
+                        title={t('Remove attachment')}
                         onClick={() => setDeleteCandidate(attachment)}
                       >
                         <Trash2 />
@@ -339,7 +350,9 @@ export function TaskDecompositionContextWorkspace({
                 </ul>
               ) : (
                 <p className="mt-4 rounded-xl bg-secondary px-4 py-3 text-xs leading-5 text-muted-foreground">
-                  No attachments yet. Instructions can be used on their own.
+                  {t(
+                    'No attachments yet. Instructions can be used on their own.',
+                  )}
                 </p>
               )}
             </div>
@@ -348,12 +361,12 @@ export function TaskDecompositionContextWorkspace({
           <section className="rounded-2xl border border-border bg-[color-mix(in_oklch,var(--background),var(--foreground)_2%)] p-5">
             <div className="flex items-center gap-2">
               <ShieldCheck className="size-4" />
-              <h2 className="text-sm font-semibold">Harness boundary</h2>
+              <h2 className="text-sm font-semibold">{t('Harness boundary')}</h2>
             </div>
             <p className="mt-2 text-xs leading-5 text-muted-foreground">
-              AgentManager’s feature-level generation contract will be designed
-              separately. It will consume this user context but remain
-              independently versioned and replaceable.
+              {t(
+                'AgentManager’s feature-level generation contract will be designed separately. It will consume this user context but remain independently versioned and replaceable.',
+              )}
             </p>
           </section>
         </div>
@@ -406,8 +419,8 @@ export function TaskDecompositionContextWorkspace({
                   variant="ghost"
                   size="icon"
                   className="ml-auto"
-                  aria-label="Close JSON preview"
-                  title="Close"
+                  aria-label={t('Close JSON preview')}
+                  title={t('Close')}
                   onClick={() => setPreview(null)}
                 >
                   <X />
@@ -429,10 +442,12 @@ export function TaskDecompositionContextWorkspace({
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Remove context attachment?</DialogTitle>
+            <DialogTitle>{t('Remove context attachment?')}</DialogTitle>
             <DialogDescription>
-              {deleteCandidate?.fileName} will be deleted from this project’s
-              Decomposition context folder.
+              {deleteCandidate?.fileName}{' '}
+              {t(
+                'will be deleted from this project’s Decomposition context folder.',
+              )}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -442,7 +457,7 @@ export function TaskDecompositionContextWorkspace({
               disabled={deleting}
               onClick={() => setDeleteCandidate(null)}
             >
-              Cancel
+              {t('Cancel')}
             </Button>
             <Button
               type="button"
@@ -450,7 +465,7 @@ export function TaskDecompositionContextWorkspace({
               disabled={deleting}
               onClick={deleteAttachment}
             >
-              <Trash2 /> {deleting ? 'Removing…' : 'Remove'}
+              <Trash2 /> {deleting ? t('Removing…') : t('Remove')}
             </Button>
           </DialogFooter>
         </DialogContent>
