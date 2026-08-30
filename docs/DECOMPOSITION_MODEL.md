@@ -65,6 +65,13 @@ Workspace-specific activity does not become part of the Formal Node:
 The Node records where it came from and which action created it. Those fields
 describe provenance, not workspace ownership.
 
+Just Do It goals have an independent execution lifecycle. Deleting a source
+Formal Node does not delete its execution workspace; the retained goal shows
+that its source was deleted. A surviving source Node can display a lightweight
+associated completion indicator without gaining a Completed lifecycle state.
+Stable source content does not require a source-update synchronization flow.
+See [Just Do It source association](JUST_DO_IT.md#goal-dashboard-and-source-association--settled).
+
 ## Three independent operations
 
 AgentManager exposes three different questions over the same product graph.
@@ -112,7 +119,7 @@ in What's Next, Decomposition, manual authoring, or another future capability.
 It turns the selected meaning into delivery-sized slices with:
 
 - bounded inputs and authoritative Context;
-- one explicit output;
+- an explicit delivery outcome and inspectable output;
 - acceptance criteria and verification gates;
 - known execution dependencies;
 - an Agent or human owner when execution begins; and
@@ -127,40 +134,23 @@ Implementation is both a delivery tool and a way to test whether an idea is
 actually feasible. Its evidence can inspire further growth or a revised
 product decision without making delivery state part of the product graph.
 
-### Just Do It prerequisite delivery contract
+### Just Do It workflow and prerequisites
 
-Settled during the 2026-08-29 design discussion; runtime implementation is
-pending. A dependency serves both as a prerequisite before execution and as
-an input source after the prerequisite has been delivered.
+Users explicitly add a goal Card, discuss a Plan, and work through its Actions.
+Each Action supports repeated Input / Process / Output / Validation rounds;
+producing an output is not equivalent to passing verification. The current
+design focuses on a manual software-delivery loop, with automatic advancement
+and shared local Git versioning deferred.
 
-For a goal A that depends on goal B:
+For A depending on B, A may be planned but cannot execute until B's agreed
+delivery is verified. B's actual artifacts then become dependency inputs to A,
+with visible provenance and on-demand context access. Goal-level dependencies
+do not expand B's internal Plan into A's Canvas or add execution state to the
+Formal Node.
 
-- The user may inspect A, add it to Just Do It, and discuss its Plan before B
-  is complete, but cannot start executing A while B remains unmet.
-- Show the unmet prerequisite and a navigation entry to B. Do not silently
-  add B to Just Do It or start it on the user's behalf.
-- B is complete when its agreed delivery outcome has been verified, not when
-  an Agent Run ends or a Formal Node is accepted in an exploration workspace.
-- Once B is complete, make its actual delivered outcome available as A's
-  dependency input for both planning and execution.
-- If A already has a provisional Plan, reconcile it against B's actual
-  delivery before allowing execution instead of retaining earlier assumptions.
-
-A displays its dependency on B in its input/context area, including fulfillment
-status, a concise delivery summary, artifact locations and versions, necessary
-usage instructions or limitations, and verification evidence links. Provide a
-way to inspect B without expanding B's entire Plan and Actions into A's Canvas.
-Goal-level dependencies remain outside the internal execution plan; internal
-prerequisites are handled within the selected goal at the appropriate granularity.
-
-Use B's delivered artifacts rather than only its original Card description.
-Supply a bounded dependency summary and resolvable artifact references, with
-on-demand access to further evidence. Do not eagerly inject B's complete
-conversation, failed attempts, or review history into A.
-
-The intended loop is: B unmet means A waits; B verified makes its delivery an
-input to A; A can then begin execution. Execution fulfillment belongs to Just
-Do It and does not add delivery-state management to the shared Formal Node.
+The authoritative workflow, prerequisite contract, and open decisions are in
+[`JUST_DO_IT.md`](JUST_DO_IT.md). Its state schema and rollback mechanics are
+not yet finalized; the navigation placeholder is not an implemented workflow.
 
 ## The user owns routing
 

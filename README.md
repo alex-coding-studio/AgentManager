@@ -115,6 +115,9 @@ See [Product Foundation](docs/PRODUCT.md),
 [Roadmap](docs/ROADMAP.md) for the current product boundary and next delivery
 steps.
 
+See [Just Do It](docs/JUST_DO_IT.md) for the execution-workspace design,
+including settled workflow decisions and questions still open before implementation.
+
 ## License
 
 MIT
