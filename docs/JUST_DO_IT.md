@@ -154,8 +154,12 @@ Planning has distinct screens:
 3. Generation reveals a clearly unconfirmed Plan Preview. A short Overview is
    the default reading level. The left side lists step titles; selecting a step
    reveals only its input, expected output, and validation detail.
-4. The user can adjust one step in place, adjust the whole Plan, or add a step.
-   Scoped changes preserve unrelated steps. No full-response reading is required.
+4. The user describes adjustments to one step or to the whole Plan. Requests
+   such as "three steps feel too broad; make them four" belong to whole-plan
+   feedback. The Agent supplies new step definitions, inputs, outputs and
+   validation; do not offer a manual Add step form that makes the user author
+   those contracts. Scoped changes preserve unrelated steps. No full-response
+   reading is required.
 5. Confirming the entire Plan finalizes those step contracts and enters the
    execution-ready Action workspace.
 

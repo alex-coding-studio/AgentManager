@@ -7,9 +7,8 @@ import {
   type Dispatch,
   type ReactNode,
 } from 'react';
-import { Check, LoaderCircle, Pencil, Plus, Sparkles } from 'lucide-react';
+import { Check, LoaderCircle, Pencil, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog,
@@ -77,7 +76,7 @@ export function DemoPlanningWorkspace({
   const { t } = useUiText();
   const plan = planningFor(goal);
   const [selectedId, setSelectedId] = useState('overview');
-  const [editing, setEditing] = useState<'whole' | 'step' | 'add' | null>(null);
+  const [editing, setEditing] = useState<'whole' | 'step' | null>(null);
   const selected = plan.steps.find((item) => item.id === selectedId);
   const busy = goal.actions.some((item) => item.job);
   const locked =
@@ -208,15 +207,6 @@ export function DemoPlanningWorkspace({
               </button>
             ))}
           </div>
-          <Button
-            className="mt-3 w-full"
-            variant="ghost"
-            disabled={busy}
-            onClick={() => setEditing('add')}
-          >
-            <Plus />
-            {t('Add planned step')}
-          </Button>
           <p className="px-2 pt-3 text-[11px] leading-5 text-muted-foreground">
             {t('Usually 5–7 steps; fewer is fine. Keep the goal manageable.')}
           </p>
@@ -330,11 +320,11 @@ export function DemoPlanningWorkspace({
           />
         </DialogContent>
       </Dialog>
-      {((editing === 'step' && selected) || editing === 'add') && (
-        <StepEditor
+      {editing === 'step' && selected && (
+        <StepAdjustment
           goal={goal}
           dispatch={dispatch}
-          step={editing === 'step' ? selected : undefined}
+          step={selected}
           onClose={() => setEditing(null)}
         />
       )}
@@ -423,6 +413,13 @@ function PlanningSetup({
         <Textarea
           className="mt-2 min-h-24"
           value={adjusting ? plan.feedback : plan.requirements}
+          placeholder={
+            adjusting
+              ? t(
+                  'For example: three steps feel too broad. Could you break them into four?',
+                )
+              : undefined
+          }
           disabled={disabled}
           onChange={(event) =>
             dispatch(
@@ -441,6 +438,22 @@ function PlanningSetup({
           }
         />
       </label>
+      {adjusting && (
+        <button
+          type="button"
+          disabled={disabled}
+          className="text-left text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground"
+          onClick={() =>
+            dispatch({
+              type: 'plan-update',
+              goalId: goal.id,
+              feedback: '3 步有点少，可以细化成 4 步吗？',
+            })
+          }
+        >
+          {t('Try the demo: refine three steps into four')}
+        </button>
+      )}
       {adjusting && (
         <details>
           <summary className="cursor-pointer text-xs text-muted-foreground">
@@ -564,45 +577,14 @@ function PlanningSetup({
   );
 }
 
-function StepEditor({
+function StepAdjustment({
   goal,
   dispatch,
   step,
   onClose,
-}: Props & { step?: DemoPlanStep; onClose: () => void }) {
+}: Props & { step: DemoPlanStep; onClose: () => void }) {
   const { t } = useUiText();
-  const [draft, setDraft] = useState<Omit<DemoPlanStep, 'id'>>(
-    step ?? { title: '', input: '', output: '', validation: '' },
-  );
-  const invalid = [
-    draft.title,
-    draft.input,
-    draft.output,
-    draft.validation,
-  ].some((value) => !value.trim());
-  const save = () => {
-    if (step) {
-      dispatch({
-        type: 'plan-update',
-        goalId: goal.id,
-        steps: planningFor(goal).steps.map((item) =>
-          item.id === step.id ? { ...item, ...draft, id: step.id } : item,
-        ),
-      });
-      dispatch({
-        type: 'plan-update',
-        goalId: goal.id,
-        feedback: draft.guidance ?? '',
-      });
-      dispatch({
-        type: 'plan-start',
-        goalId: goal.id,
-        variant: 'standard',
-        targetId: step.id,
-      });
-    } else dispatch({ type: 'plan-add-step', goalId: goal.id, step: draft });
-    onClose();
-  };
+  const [feedback, setFeedback] = useState(step.guidance ?? '');
   return (
     <Dialog
       open
@@ -610,60 +592,39 @@ function StepEditor({
         if (!open) onClose();
       }}
     >
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>
-            {t(step ? 'Adjust this step' : 'Add planned step')}
-          </DialogTitle>
+          <DialogTitle>{t('Adjust this step')}</DialogTitle>
         </DialogHeader>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-sm font-medium">{step.title}</p>
+        <p className="text-xs leading-6 text-muted-foreground">
           {t(
-            'Edit this step in place. Other steps stay unchanged; confirmation still applies to the whole plan.',
+            'Describe the change. You do not need to write the input, output, or validation yourself. This demo retains guidance; real AI integration comes later.',
           )}
         </p>
         <label className="text-xs">
-          {t('Step title')}
-          <Input
-            className="mt-1"
-            value={draft.title}
-            onChange={(event) =>
-              setDraft({ ...draft, title: event.target.value })
-            }
+          {t('Requested step change')}
+          <Textarea
+            className="mt-2 min-h-28"
+            value={feedback}
+            onChange={(event) => setFeedback(event.target.value)}
           />
         </label>
-        {(['input', 'output', 'validation'] as const).map((field) => (
-          <label key={field} className="text-xs">
-            {t(
-              field === 'input'
-                ? 'Input'
-                : field === 'output'
-                  ? 'Expected output'
-                  : 'Validation',
-            )}
-            <Textarea
-              className="mt-1 min-h-20"
-              value={draft[field]}
-              onChange={(event) =>
-                setDraft({ ...draft, [field]: event.target.value })
-              }
-            />
-          </label>
-        ))}
-        {step && (
-          <label className="text-xs">
-            {t('Step guidance')}
-            <Textarea
-              className="mt-1"
-              value={draft.guidance ?? ''}
-              onChange={(event) =>
-                setDraft({ ...draft, guidance: event.target.value })
-              }
-            />
-          </label>
-        )}
-        <Button disabled={invalid} onClick={save}>
-          <Check />
-          {t(step ? 'Update step · demo' : 'Add to plan preview')}
+        <Button
+          disabled={!feedback.trim()}
+          onClick={() => {
+            dispatch({ type: 'plan-update', goalId: goal.id, feedback });
+            dispatch({
+              type: 'plan-start',
+              goalId: goal.id,
+              variant: 'standard',
+              targetId: step.id,
+            });
+            onClose();
+          }}
+        >
+          <Sparkles />
+          {t('Update step · demo')}
         </Button>
       </DialogContent>
     </Dialog>

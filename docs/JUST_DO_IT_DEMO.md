@@ -44,8 +44,11 @@ content remains Chinese regardless of interface language, like user content.
   Agent/model/effort configuration lead to one start action. Generation replaces
   the form with Loading, then reveals Overview plus a numbered Plan Preview.
 - Overview is the initial reading level; selecting a title opens just that
-  step's input, output, and validation. Adjust one step, adjust the whole Plan,
-  or add a step before confirming everything together. Only the current draft
+  step's input, output, and validation. Describe changes to one step or the whole
+  Plan before confirming everything together. There is no manual Add step form:
+  the website example supports asking to refine three steps into four through
+  whole-plan feedback, generating the additional contracts automatically.
+  Only the current draft
   exists: no planning response history, revision selector, or giant Markdown
   response duplicating the steps. Execution output history remains unchanged.
 - Extra resources reuse ContextAttachmentPicker: a collapsed section with
@@ -120,9 +123,13 @@ attempts show their current Response; the History picker is output history,
 not a complete durable run audit. Harness and integration design follow after
 this UI exploration, not as hidden behavior of the demo.
 
-The Plan generator is deliberately scripted. It applies edited step boundaries
-and retains current guidance but does not claim to interpret arbitrary input;
-direct contract editing and the shorter-plan scenario make adjustments explorable.
+The Plan generator is deliberately scripted. It retains current guidance but
+does not claim to interpret arbitrary input. For the three-step website sample,
+the suggested "3 步有点少，可以细化成 4 步吗？" feedback splits interface work
+into input/list and selection/feedback steps with prepared contracts. Repeating
+it does not append duplicate steps, and it does not split already delivered work.
+The shorter-plan scenario remains available under demo controls. These presets
+demonstrate the interaction, not a real planning Harness.
 There are no previous planning responses or draft snapshots. Model/effort choices and Issue
 numbers are illustrative only. Runtime capability discovery, GitHub authority,
 retry/deduplication, and shared configuration persistence remain future work.

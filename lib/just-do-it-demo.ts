@@ -422,6 +422,36 @@ function simulatedPlan(
   const steps = (plan.steps.length ? plan.steps : plan.templates).map(
     (item) => ({ ...item }),
   );
+  const feedback = plan.job?.feedback ?? plan.feedback;
+  const refineToFour =
+    /(?:细化|拆分|分成|拆成).{0,5}(?:4|四)\s*(?:个)?\s*步/.test(feedback) &&
+    !/不要|不用|不必|无需|别/.test(feedback);
+  if (
+    refineToFour &&
+    steps.length === 3 &&
+    steps[1].id === 'interface' &&
+    goal.actions.every((item) => !item.rounds.length)
+  ) {
+    const original = steps[1];
+    steps.splice(
+      1,
+      1,
+      {
+        ...original,
+        title: '搭建目标输入与示例列表',
+        output: '可输入目标的页面与固定示例任务列表，不接真实 AI。',
+        validation: '提交一个目标后能看到对应示例列表；输入校验与空状态可用。',
+      },
+      {
+        id: 'selection-feedback',
+        title: '完成卡片选择与状态反馈',
+        input: '上一项交付的目标输入页面和示例列表。',
+        output: '可以选中第一张任务卡，并清楚看到选中和取消选择的反馈。',
+        validation: '鼠标和键盘都能完成选择与取消；原有输入和列表行为不退化。',
+      },
+    );
+    return steps;
+  }
   if (
     variant === 'compact' &&
     steps.length > 2 &&
@@ -533,7 +563,6 @@ export type DemoEvent =
       variant: 'standard' | 'compact' | 'error';
       targetId?: string;
     }
-  | { type: 'plan-add-step'; goalId: string; step: Omit<DemoPlanStep, 'id'> }
   | { type: 'plan-settle'; goalId: string; jobId: number }
   | { type: 'plan-cancel'; goalId: string }
   | { type: 'plan-accept'; goalId: string }
@@ -644,31 +673,6 @@ export function demoReducer(state: DemoState, event: DemoEvent): DemoState {
               targetId: event.targetId,
               resources: plan.resources.map((item) => ({ ...item })),
             },
-          },
-        },
-        id,
-      );
-    }
-    if (event.type === 'plan-add-step') {
-      if (
-        !plan.generated ||
-        plan.job ||
-        goal.actions.some((item) => item.job) ||
-        [
-          event.step.title,
-          event.step.input,
-          event.step.output,
-          event.step.validation,
-        ].some((text) => !text.trim())
-      )
-        return state;
-      const id = state.sequence + 1;
-      return updateGoal(
-        {
-          ...goal,
-          planning: {
-            ...plan,
-            steps: [...plan.steps, { ...event.step, id: `planned-${id}` }],
           },
         },
         id,

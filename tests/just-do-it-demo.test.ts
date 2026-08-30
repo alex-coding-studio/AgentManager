@@ -244,7 +244,7 @@ void test('canceled or failed planning cannot confirm stale draft or apply late 
   );
 });
 
-void test('a targeted planning update leaves siblings untouched and adding a step creates no Action', () => {
+void test('scoped feedback preserves siblings and whole-plan feedback can refine three steps into four', () => {
   let state = generatePlan(
     demoReducer(createDemoState(), { type: 'add-goal' }),
   );
@@ -267,15 +267,11 @@ void test('a targeted planning update leaves siblings untouched and adding a ste
   assert.equal(steps[2], initial[2]);
   assert.equal(steps[0].guidance, '不安装全局依赖。');
   state = demoReducer(state, {
-    type: 'plan-add-step',
+    type: 'plan-update',
     goalId: 'library',
-    step: {
-      title: '检查启动说明',
-      input: 'README',
-      output: '可复现的启动说明',
-      validation: '按说明能打开首页',
-    },
+    feedback: '3 步有点少，可以细化成 4 步吗？',
   });
+  state = generatePlan(state);
   assert.equal(state.goals.at(-1)!.planning!.steps.length, 4);
   assert.equal(state.goals.at(-1)!.actions.length, 0);
   state = demoReducer(state, { type: 'plan-accept', goalId: 'library' });
@@ -314,6 +310,29 @@ void test('planning resources are bounded in UTF-8 bytes and remain input to the
     /本轮不接真实 AI/,
   );
   assert.equal('responses' in state.goals.at(-1)!.planning!, false);
+});
+
+void test('four-step demo feedback is idempotent and never splits already delivered work', () => {
+  let state = generatePlan(
+    demoReducer(createDemoState(), { type: 'add-goal' }),
+  );
+  const request: DemoEvent = {
+    type: 'plan-update',
+    goalId: 'library',
+    feedback: '3 步有点少，可以细化成 4 步吗？',
+  };
+  state = generatePlan(demoReducer(state, request));
+  assert.equal(state.goals.at(-1)!.planning!.steps.length, 4);
+  state = generatePlan(demoReducer(state, request));
+  assert.equal(state.goals.at(-1)!.planning!.steps.length, 4);
+  assert.equal(
+    new Set(state.goals.at(-1)!.planning!.steps.map((step) => step.id)).size,
+    4,
+  );
+  let delivered = createDemoState();
+  delivered = demoReducer(delivered, { ...request, goalId: 'website' });
+  delivered = generatePlan(delivered, 'website');
+  assert.equal(delivered.goals[0].planning!.steps.length, 3);
 });
 
 void test('library selections and local Markdown share bounded inputs without losing their origin', () => {

@@ -5,6 +5,12 @@ export function isUiLanguage(value: unknown): value is UiLanguage {
 }
 
 export const chineseUi: Record<string, string> = {
+  'For example: three steps feel too broad. Could you break them into four?':
+    '例如：3 步有点少，可以细化成 4 步吗？',
+  'Try the demo: refine three steps into four': '演示可试：把三步细化成四步',
+  'Requested step change': '希望这一步怎样调整',
+  'Describe the change. You do not need to write the input, output, or validation yourself. This demo retains guidance; real AI integration comes later.':
+    '直接说明想改什么，不必自己填写输入、输出和验收。当前演示保留调整要求，真实 AI 后续接入。',
   'Demo library only. Local files stay in this tab; no project library is read or changed.':
     '资料库为示例。本地文件仅在本页保留，不读取或修改真实项目资料库。',
   'Start planning': '开始规划',
