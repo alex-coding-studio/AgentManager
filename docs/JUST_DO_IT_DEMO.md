@@ -30,6 +30,10 @@ content remains Chinese regardless of interface language, like user content.
   show the deletion notice in the same footer position instead of a broken link.
 - Progress reads "Plan progress / Completed N / M steps" and counts verified
   Actions, not PRs or source nodes.
+- Directly below the progress bar, Current action names the first unverified
+  Action being handled or ready to handle, or None when the goal is complete.
+  It reserves two lines and truncates
+  overflow; compact Cards remain equal in height regardless of content length.
 - A goal opens a Plan rail and Action workbench. The workbench separates
   prepared input, output, review, and next-round feedback; the existing
   Markdown reader supports focused reading and optional annotation.

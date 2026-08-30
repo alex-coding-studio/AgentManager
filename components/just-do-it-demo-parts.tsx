@@ -105,10 +105,10 @@ export function DemoGoalCard({
   projectId: string;
 }) {
   const { t } = useUiText();
-  const next = goal.actions.find((item) => item.stage !== 'verified');
+  const current = goal.actions.find((item) => item.stage !== 'verified');
   const complete = goalComplete(goal);
   return (
-    <article className="group flex h-80 min-w-0 flex-col rounded-2xl border border-border border-t-2 border-t-foreground/70 bg-card p-5 text-left transition hover:border-foreground/35 hover:shadow-lg">
+    <article className="group flex h-72 min-w-0 flex-col rounded-2xl border border-border border-t-2 border-t-foreground/70 bg-card p-4 text-left transition hover:border-foreground/35 hover:shadow-lg">
       <button
         onClick={onOpen}
         type="button"
@@ -126,17 +126,21 @@ export function DemoGoalCard({
             <DemoStatus label={goalStatus(state, goal)} />
           </span>
         </div>
-        <p className="mt-2 line-clamp-3 h-15 shrink-0 text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">
+        <p className="mt-2 line-clamp-2 h-10 shrink-0 text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">
           {goal.summary}
         </p>
-        <p className="mt-3 h-5 w-full shrink-0 truncate text-xs text-muted-foreground">
-          {complete ? t('Every action has been verified.') : next?.title}
-        </p>
-        <div className="mt-auto w-full pt-3">
+        <div className="mt-auto w-full pt-2">
           <DemoProgress goal={goal} />
         </div>
+        <p
+          className="mt-2 line-clamp-2 h-8 w-full shrink-0 text-xs leading-4 text-muted-foreground [overflow-wrap:anywhere]"
+          title={complete ? t('None') : current?.title}
+        >
+          <span className="font-medium">{t('Current action')}：</span>
+          {complete ? t('None') : (current?.title ?? t('None'))}
+        </p>
       </button>
-      <div className="mt-3 flex h-11 shrink-0 items-center justify-between gap-2 border-t border-border pt-2 text-[10px] text-muted-foreground">
+      <div className="mt-2 flex h-9 shrink-0 items-center justify-between gap-2 border-t border-border pt-1 text-[10px] text-muted-foreground">
         <span className="inline-flex min-w-0 items-center gap-1.5 whitespace-nowrap">
           <GitBranch className="size-3" />
           {t('Demo branch')}
