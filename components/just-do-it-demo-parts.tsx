@@ -9,10 +9,13 @@ import {
   LoaderCircle,
 } from 'lucide-react';
 import { useUiText } from '@/components/ui-language-provider';
+import Link from 'next/link';
+import { graphCardLabel } from '@/lib/graph-identity';
 import { cn } from '@/lib/utils';
 import {
   goalComplete,
   goalStatus,
+  demoSourceHref,
   type DemoGoal,
   type DemoState,
 } from '@/lib/just-do-it-demo';
@@ -61,13 +64,16 @@ export function DemoProgress({ goal }: { goal: DemoGoal }) {
   return (
     <div className="space-y-2">
       <div className="flex justify-between gap-2 text-xs text-muted-foreground">
-        <span>{t('Verified actions')}</span>
+        <span>{t('Plan progress')}</span>
         <span className="font-mono tabular-nums">
-          {done} / {goal.actions.length}
+          {t('Completed {done} / {total} steps', {
+            done,
+            total: goal.actions.length,
+          })}
         </span>
       </div>
       <progress
-        aria-label={t('Verified actions')}
+        aria-label={t('Plan progress')}
         max={goal.actions.length}
         value={done}
         className="sr-only"
@@ -91,57 +97,76 @@ export function DemoGoalCard({
   goal,
   state,
   onOpen,
+  projectId,
 }: {
   goal: DemoGoal;
   state: DemoState;
   onOpen: () => void;
+  projectId: string;
 }) {
   const { t } = useUiText();
   const next = goal.actions.find((item) => item.stage !== 'verified');
   const complete = goalComplete(goal);
   return (
-    <button
-      onClick={onOpen}
-      type="button"
-      className="group flex min-h-64 min-w-0 flex-col rounded-2xl border border-border border-t-2 border-t-foreground/70 bg-card p-5 text-left transition hover:border-foreground/35 hover:shadow-lg focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
-    >
-      <div className="mb-4 flex items-center justify-between gap-2">
-        <span className="rounded-md bg-foreground px-2 py-1 text-[10px] font-medium text-background">
-          {t(goal.source)}
-        </span>
-        <ArrowUpRight className="size-4 text-muted-foreground transition group-hover:text-foreground" />
-      </div>
-      <h2 className="text-base font-semibold leading-6">{goal.title}</h2>
-      <p className="mt-2 line-clamp-2 text-xs leading-5 text-muted-foreground">
-        {goal.summary}
-      </p>
-      <div className="mt-4">
-        <DemoStatus label={goalStatus(state, goal)} />
-      </div>
-      <p className="mt-3 truncate text-xs text-muted-foreground">
-        {complete ? t('Every action has been verified.') : next?.title}
-      </p>
-      <div className="mt-auto pt-5">
-        <DemoProgress goal={goal} />
-      </div>
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3 text-[10px] text-muted-foreground">
-        <span className="inline-flex items-center gap-1.5">
+    <article className="group flex h-80 min-w-0 flex-col rounded-2xl border border-border border-t-2 border-t-foreground/70 bg-card p-5 text-left transition hover:border-foreground/35 hover:shadow-lg">
+      <button
+        onClick={onOpen}
+        type="button"
+        aria-label={t('Open goal: {title}', { title: goal.title })}
+        className="flex min-h-0 min-w-0 flex-1 flex-col rounded-lg text-left focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
+      >
+        <div className="grid w-full shrink-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
+          <h2
+            className="line-clamp-3 min-w-0 text-base font-semibold leading-6 [overflow-wrap:anywhere]"
+            title={goal.title}
+          >
+            {goal.title}
+          </h2>
+          <span className="flex max-w-32 items-start justify-self-end">
+            <DemoStatus label={goalStatus(state, goal)} />
+          </span>
+        </div>
+        <p className="mt-2 line-clamp-3 h-15 shrink-0 text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">
+          {goal.summary}
+        </p>
+        <p className="mt-3 h-5 w-full shrink-0 truncate text-xs text-muted-foreground">
+          {complete ? t('Every action has been verified.') : next?.title}
+        </p>
+        <div className="mt-auto w-full pt-3">
+          <DemoProgress goal={goal} />
+        </div>
+      </button>
+      <div className="mt-3 flex h-11 shrink-0 items-center justify-between gap-2 border-t border-border pt-2 text-[10px] text-muted-foreground">
+        <span className="inline-flex min-w-0 items-center gap-1.5 whitespace-nowrap">
           <GitBranch className="size-3" />
           {t('Demo branch')}
+          <span aria-hidden="true">·</span>
+          <GitPullRequest className="size-3" />
+          {goal.actions.filter((item) => item.rounds.length).length} PR
         </span>
         {goal.sourceDeleted ? (
-          <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-300">
+          <span className="ml-auto inline-flex min-w-0 items-center gap-1 text-right text-amber-700 dark:text-amber-300">
             <Link2Off className="size-3" />
             {t('Source node deleted')}
           </span>
         ) : (
-          <span className="inline-flex items-center gap-1.5">
-            <GitPullRequest className="size-3" />
-            {goal.actions.filter((item) => item.rounds.length).length}{' '}
-            {t('Sample PRs')}
-          </span>
+          <Link
+            href={demoSourceHref(projectId, goal)}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={t('Open source node {id} in a new tab', {
+              id: graphCardLabel(goal.sourceId),
+            })}
+            title={t('Open source node {id} in a new tab', {
+              id: graphCardLabel(goal.sourceId),
+            })}
+            className="ml-auto inline-flex min-h-8 items-center gap-1 rounded px-1 font-mono hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {graphCardLabel(goal.sourceId)}
+            <ArrowUpRight className="size-3" />
+          </Link>
         )}
       </div>
-    </button>
+    </article>
   );
 }

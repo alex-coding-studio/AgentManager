@@ -8,6 +8,7 @@ import type { TaskGraphPreview } from '@/lib/task-graph-layout';
 import { TASK_GRAPH_NODE_MIN_HEIGHT } from '@/lib/graph-card-metrics';
 
 export type GraphNodeCardData = Record<string, unknown> & {
+  readOnly?: boolean;
   displayId: string;
   kind: 'formal' | 'preview';
   title: string;
@@ -176,7 +177,7 @@ export function GraphNodeCard({
           {graphCardLabel(id)}
         </span>
       </div>
-      {!preview ? (
+      {!preview && !data.readOnly ? (
         <button
           type="button"
           className={cn(

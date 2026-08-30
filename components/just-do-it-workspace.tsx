@@ -71,7 +71,7 @@ const sectionStyle = 'rounded-2xl border border-border bg-card';
 const labelStyle =
   'text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground';
 
-export function JustDoItWorkspace() {
+export function JustDoItWorkspace({ projectId }: { projectId: string }) {
   const { t } = useUiText();
   const [state, dispatch] = useReducer(demoReducer, undefined, createDemoState);
   const [goalId, setGoalId] = useState<string | null>(null);
@@ -185,6 +185,7 @@ export function JustDoItWorkspace() {
                 key={goal.id}
                 goal={goal}
                 state={state}
+                projectId={projectId}
                 onOpen={() => setGoalId(goal.id)}
               />
             ))}

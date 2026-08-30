@@ -146,7 +146,7 @@ export function createDemoState(): DemoState {
         summary:
           '用固定示例串起目标输入、任务卡片和选择第一步，先验证交互，再接真实 AI。',
         source: "What's Next",
-        sourceId: 'sample-website',
+        sourceId: 'NODE-a81f30c2',
         sourceDeleted: false,
         dependencyIds: [],
         requirements:
@@ -175,7 +175,7 @@ export function createDemoState(): DemoState {
         summary:
           '基于已验收的网站骨架接入一次真实请求，让等待、取消和失败都可以理解。',
         source: 'Break It Down',
-        sourceId: 'sample-integration',
+        sourceId: 'NODE-b924e1d7',
         sourceDeleted: false,
         dependencyIds: ['website'],
         requirements: '沿用本地网站的输入与卡片交互，不扩展到自动执行代码。',
@@ -199,7 +199,7 @@ export function createDemoState(): DemoState {
         title: '让主要流程可以用键盘操作',
         summary: '关注焦点顺序、对话框关闭后的焦点返回和可见反馈。',
         source: 'Break It Down',
-        sourceId: 'sample-keyboard',
+        sourceId: 'NODE-c036f2e8',
         sourceDeleted: false,
         dependencyIds: [],
         requirements: '先覆盖输入、选择和返回，不添加全局快捷键系统。',
@@ -213,7 +213,7 @@ export function createDemoState(): DemoState {
         summary:
           '执行遇到错误时保留上下文，通过反馈和重试继续完成同一个 Action。',
         source: 'Break It Down',
-        sourceId: 'sample-checks',
+        sourceId: 'NODE-d147a3f9',
         sourceDeleted: false,
         dependencyIds: [],
         requirements: '使用已有工具，不增加外部服务。',
@@ -226,7 +226,7 @@ export function createDemoState(): DemoState {
         title: '整理新项目的启动说明',
         summary: '来源节点已删除，但目标内容、计划和执行记录仍然保留。',
         source: "What's Next",
-        sourceId: 'sample-notes',
+        sourceId: 'NODE-e258b4a0',
         sourceDeleted: true,
         dependencyIds: [],
         requirements:
@@ -240,7 +240,7 @@ export function createDemoState(): DemoState {
         title: '让晚上使用的界面更舒适',
         summary: '完成深色界面的阅读验证；完成结果可以回显到来源节点。',
         source: "What's Next",
-        sourceId: 'sample-appearance',
+        sourceId: 'NODE-f369c5b1',
         sourceDeleted: false,
         dependencyIds: [],
         requirements: '沿用现有配色，不改变用户生成的内容。',
@@ -275,7 +275,7 @@ export function createLibraryGoal(): DemoGoal {
     title: '给首次打开网站的人一个清楚的起点',
     summary: '用一个轻量空状态帮助用户理解可以输入什么，以及接下来会发生什么。',
     source: "What's Next",
-    sourceId: 'sample-onboarding',
+    sourceId: 'NODE-a470d6c2',
     sourceDeleted: false,
     dependencyIds: [],
     requirements: '不添加教学弹窗，用一个示例和明确的开始按钮。',
@@ -294,6 +294,19 @@ export function createLibraryGoal(): DemoGoal {
     ],
     todos: [],
   };
+}
+
+export function demoSourceHref(projectId: string, goal: DemoGoal) {
+  const modulePath =
+    goal.source === "What's Next" ? 'whats-next' : 'decomposition';
+  return `/projects/${encodeURIComponent(projectId)}/${modulePath}?preview=implementation-source&node=${encodeURIComponent(goal.sourceId)}`;
+}
+
+export function findDemoSource(source: DemoGoal['source'], nodeId: string) {
+  return [...createDemoState().goals, createLibraryGoal()].find(
+    (goal) =>
+      goal.source === source && goal.sourceId === nodeId && !goal.sourceDeleted,
+  );
 }
 
 export function goalComplete(goal: DemoGoal) {

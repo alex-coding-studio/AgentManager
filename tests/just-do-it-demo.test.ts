@@ -4,11 +4,41 @@ import {
   canExecute,
   createDemoState,
   demoReducer,
+  demoSourceHref,
+  findDemoSource,
+  createLibraryGoal,
   goalComplete,
   unmetDependencies,
   type DemoState,
   type DemoEvent,
 } from '../lib/just-do-it-demo.ts';
+
+void test('source links identify the right module and unique sample node without resolving deleted or foreign sources', () => {
+  const goals = [...createDemoState().goals, createLibraryGoal()];
+  assert.equal(new Set(goals.map((goal) => goal.sourceId)).size, goals.length);
+  for (const goal of goals) {
+    assert.match(goal.sourceId, /^NODE-[0-9a-f]{8}$/);
+    const url = new URL(demoSourceHref('project-id', goal), 'http://localhost');
+    assert.equal(
+      url.pathname,
+      `/projects/project-id/${goal.source === "What's Next" ? 'whats-next' : 'decomposition'}`,
+    );
+    assert.equal(url.searchParams.get('node'), goal.sourceId);
+    assert.equal(url.searchParams.get('preview'), 'implementation-source');
+    assert.equal(
+      findDemoSource(goal.source, goal.sourceId)?.id,
+      goal.sourceDeleted ? undefined : goal.id,
+    );
+    assert.equal(
+      findDemoSource(
+        goal.source === "What's Next" ? 'Break It Down' : "What's Next",
+        goal.sourceId,
+      ),
+      undefined,
+    );
+  }
+  assert.equal(findDemoSource("What's Next", '../../unknown'), undefined);
+});
 
 function target(state: DemoState, goalId = 'website', actionId = 'interface') {
   return state.goals

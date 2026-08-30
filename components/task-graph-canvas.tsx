@@ -51,6 +51,7 @@ export function TaskGraphCanvas({
   selectedNodeIds,
   plusLabel,
   edgeAlignedOverlays = false,
+  readOnly = false,
   onMultiSelect,
   onFocusNode,
   onInspectNode,
@@ -65,6 +66,7 @@ export function TaskGraphCanvas({
   selectedNodeIds?: string[];
   plusLabel?: string;
   edgeAlignedOverlays?: boolean;
+  readOnly?: boolean;
   onMultiSelect?: (nodeId: string) => void;
   onFocusNode: (nodeId: string) => void;
   onInspectNode: (nodeId: string) => void;
@@ -98,6 +100,7 @@ export function TaskGraphCanvas({
         dependenciesOnly,
         selectionKey ? selectionKey.split(',') : [],
         plusLabel,
+        readOnly,
       ),
     [
       focusedNodeId,
@@ -110,6 +113,7 @@ export function TaskGraphCanvas({
       plusLabel,
       previews,
       selectionKey,
+      readOnly,
     ],
   );
   const [flowNodes, setFlowNodes, onNodesChange] = useNodesState(graph.nodes);
@@ -289,6 +293,7 @@ function buildFlowGraph(
   dependenciesOnly: boolean,
   selectedNodeIds: string[] = [],
   plusLabel?: string,
+  readOnly = false,
 ) {
   const layout = buildTaskGraphLayout(nodes, previews);
   const focusedNodeId =
@@ -325,6 +330,7 @@ function buildFlowGraph(
         transition: 'opacity 180ms ease',
       },
       data: {
+        readOnly,
         displayId: layoutNode.id,
         kind: layoutNode.kind,
         title: node?.title ?? preview?.title ?? 'Decomposition request',

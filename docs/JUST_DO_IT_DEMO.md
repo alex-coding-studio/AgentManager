@@ -20,6 +20,16 @@ content remains Chinese regardless of interface language, like user content.
 
 - The dashboard shows goal Cards, verified Action counts, attention filters,
   search, source identity, and illustrative Git/PR associations.
+- Goal Cards have a fixed height. Status stays at the upper right; titles wrap
+  up to three lines without moving it. The footer groups branch/PR counts on
+  the left and a Node alias with a source-navigation arrow on the right.
+- The source link opens the corresponding module in a new tab, preserving the
+  in-memory execution demo. `preview=implementation-source&node=<alias>` shows
+  a clearly labeled, read-only sample Canvas focused on that fictional Node.
+  These routes resolve fixtures before reading real graph data. Deleted sources
+  show the deletion notice in the same footer position instead of a broken link.
+- Progress reads "Plan progress / Completed N / M steps" and counts verified
+  Actions, not PRs or source nodes.
 - A goal opens a Plan rail and Action workbench. The workbench separates
   prepared input, output, review, and next-round feedback; the existing
   Markdown reader supports focused reading and optional annotation.

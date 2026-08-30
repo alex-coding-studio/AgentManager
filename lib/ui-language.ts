@@ -5,6 +5,14 @@ export function isUiLanguage(value: unknown): value is UiLanguage {
 }
 
 export const chineseUi: Record<string, string> = {
+  'Plan progress': '计划进度',
+  'Completed {done} / {total} steps': '已完成 {done} / {total} 步',
+  'Open goal: {title}': '打开目标：{title}',
+  'Open source node {id} in a new tab': '在新标签页定位来源节点 {id}',
+  'Demo source canvas': '演示来源画布',
+  'Located source: {id}': '已定位来源：{id}',
+  'Fictional source node. This read-only canvas does not load or change your real graph.':
+    '虚构的来源节点。此只读画布不读取或修改真实图数据。',
   Demo: '演示',
   'Interactive demo': '交互演示',
   'Sample data only. No Agent, GitHub, or project writes.':
