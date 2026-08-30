@@ -50,7 +50,7 @@ Keep user-facing output concise: observable behavior, remaining limitations, and
 const stageInstructions: Record<ExecutionStage, string> = {
   planning: `Generate a useful current Plan, not a questionnaire or a request for permission to recommend a route. The source goal supplies product direction. Put your execution recommendation directly into an Overview and meaningful steps; the user reviews and guides the result. Roughly five to seven steps is a comfort guideline, not a minimum or maximum. Each step has semantic input, a user-observable output, and a way to validate it. Technical discovery belongs to the Agent. Preserve explicit scope and exclusions. Do not execute the Plan or finalize it. For a single-step adjustment, return the whole current Plan with only the target step changed; preserve all other IDs, order, contracts and the Overview. For a whole-plan adjustment, preserve IDs of retained steps and assign UUIDs only to genuinely new steps. Never add a second planning-history UI. Stop after returning the draft.`,
   execution: `Execute only the selected Action of the finalized Plan, within separately granted runtime permissions. Inspect the real working tree and prerequisite artifacts; do not trust Session memory over current evidence. Make necessary in-scope technical adjustments and self-check the result. Deliver observable results and actual artifact references, or honestly report blocked/error with partial progress and remaining work. Self-checking is not user acceptance. Do not modify the Plan, automatically start the next Action, merge, or perform a rollback. Stop at the output boundary.`,
-  review: `Review only the specified current output against the selected Action and user requirements. Apply designated review Skills within the manual workflow. Return findings and evidence for that exact output ID. A ready recommendation is not approval by the user, a merge, or completion. Do not fix code, run a correction loop, create Issues, merge, or start another Action. Stop after the review response.`,
+  review: `Review only the specified current output against the selected Action and user requirements. Apply designated review Skills within the manual workflow. Return findings and evidence for that exact output ID. Put blocking issues in findings and nonblocking suggestions in advisories. A ready verdict may include advisories, but not blocking findings or failed checks. A ready recommendation is not approval by the user, a merge, or completion. Do not fix code, run a correction loop, create Issues, merge, or start another Action. Stop after the review response.`,
   todo: `Organize the user's follow-up into an Issue-ready title, concise summary, body and suggested labels, retaining the original intent and relevant provenance. The host creates the Issue only under separate authorization; do not create one or fabricate a URL. Current delivery problems stay in the Action unless the user explicitly chooses to defer them or accept a limited result. When that decision is missing, return needs-decision with the concrete conflict, not an invented deferral. A Todo does not change the Plan or complete an Action. Later promotion selects a parent Node and preserves the Issue association; never automatically import or execute it. Stop after returning the draft or decision request.`,
 };
 
@@ -375,7 +375,14 @@ export function parseCardHarnessResult(
       ...observedArtifactRefs,
     ]);
     const refs = result.checks.flatMap((item) => item.evidenceRefs);
-    if (result.stage === 'execution') refs.push(...result.artifactRefs);
+    if (result.stage === 'execution') {
+      const observed = new Set(observedArtifactRefs);
+      if (result.artifactRefs.some((ref) => !observed.has(ref))) {
+        throw new Error(
+          'Unobserved delivery: input references are not new output evidence.',
+        );
+      }
+    }
     if (refs.some((ref) => !known.has(ref)))
       throw new Error('Unobserved artifact reference.');
     if (

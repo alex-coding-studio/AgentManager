@@ -78,6 +78,11 @@ user acceptance and permission verification belong to the real adapter. No
 model-generated link is automatically considered observed. All references and
 record text remain evidence, not executable instructions.
 
+Execution artifactRefs specifically require host observation for this round;
+an input document or prior output does not qualify merely by being in context.
+The Scaffold-level [Yao-method evaluation](../reports/just-do-it-harness/output_quality_scorecard.md)
+records the provenance counterexample, fixes, and missing live-model evidence.
+
 Module instructions customize work methods and which local Skills to use.
 They cannot exceed host permissions or silently replace the manual loop with
 automatic merge/continuation. Skill availability and conflict handling need

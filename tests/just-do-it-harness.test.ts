@@ -363,6 +363,35 @@ void test('artifact claims require observed references and do not grant acceptan
   );
 });
 
+void test('an input document or an earlier output cannot masquerade as a new delivery', () => {
+  const req = request('execution');
+  assert.throws(
+    () =>
+      parse(
+        { ...response(req), artifactRefs: ['source/output.md'], checks: [] },
+        req,
+      ),
+    /input references/,
+  );
+  const ctx = context();
+  ctx.plan!.status = 'finalized';
+  ctx.currentOutput = { id: outputId, actionId: first, refs: [artifact] };
+  const correction = createCardHarnessRequest(
+    ctx,
+    'execution',
+    '修正当前页面。',
+    first,
+  );
+  assert.throws(
+    () => parse({ ...response(correction), checks: [] }, correction),
+    /input references/,
+  );
+  assert.equal(
+    parse(response(correction), correction, 0, [artifact]).stage,
+    'execution',
+  );
+});
+
 void test('blocked and failed Responses may retain partial outputs without completing anything', () => {
   const req = request('execution');
   for (const outcome of ['blocked', 'error']) {
