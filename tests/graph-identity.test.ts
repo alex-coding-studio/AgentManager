@@ -47,13 +47,16 @@ async function json(root: string, file: string) {
   return JSON.parse(await readFile(path.join(root, file), 'utf8'));
 }
 
-void test('card labels omit prefixes and never exceed eight characters', () => {
-  assert.equal(graphCardLabel('CANDIDATE-db6d8a4e'), 'db6d8a4e');
-  assert.equal(graphCardLabel('NODE-db6d8a4e'), 'db6d8a4e');
-  assert.equal(graphCardLabel('CANDIDATE-2222abcdef12'), '2222abcd');
+void test('card labels preserve Node and Candidate prefixes and full allocated suffixes', () => {
+  assert.equal(graphCardLabel('CANDIDATE-db6d8a4e'), 'Candidate-db6d8a4e');
+  assert.equal(graphCardLabel('NODE-db6d8a4e'), 'Node-db6d8a4e');
   assert.equal(
-    graphCardLabel('RUN-f7d2edb7-8055-40b1-827b-dec0db6d8a4e').length,
-    8,
+    graphCardLabel('CANDIDATE-2222abcdef12'),
+    'Candidate-2222abcdef12',
+  );
+  assert.equal(
+    graphCardLabel('RUN-f7d2edb7-8055-40b1-827b-dec0db6d8a4e'),
+    'Run-db6d8a4e',
   );
 });
 

@@ -12,9 +12,11 @@ Aliases use the last eight hexadecimal characters of the UUID, extending by four
 characters if a suffix is already owned by another UUID. Candidate and Formal
 Node aliases retain the same suffix. API parameters, resource paths, and directory
 names use these aliases. There is no numeric sequence or high-water counter.
-Canvas headers show only the first eight characters of the suffix, without the
-prefix, on one line. Tooltips and inspectors retain the full alias; shortening
-the header never changes identity, storage paths, or relationships.
+Canvas headers use two rows: the first shows `Node-` or `Candidate-` with the
+complete allocated suffix and the detail/cancel action; the second shows the type
+label and relationship count. Type labels wrap rather than truncate. The card's
+minimum height and layout reservation share one constant. This presentation never
+changes identity, storage paths, generated type names, or relationships.
 Aliases are not the canonical identity. Run and Session
 IDs identify execution and conversation, not product objects.
 

@@ -27,7 +27,12 @@ export const NODE_ALIAS_PATTERN = `^NODE-${GRAPH_ALIAS_SUFFIX}$`;
 export const CANDIDATE_ALIAS_PATTERN = `^CANDIDATE-(?:[0-9]{4,}|${GRAPH_ALIAS_SUFFIX})$`;
 
 export function graphCardLabel(alias: string) {
-  return (alias.split('-').at(-1) ?? alias).slice(0, 8);
+  if (alias.startsWith('NODE-')) return `Node-${alias.slice(5)}`;
+  if (alias.startsWith('CANDIDATE-')) return `Candidate-${alias.slice(10)}`;
+  if (alias.startsWith('RUN-')) return `Run-${alias.slice(-8)}`;
+  if (alias.startsWith('REQUEST-PREVIEW-'))
+    return `Preview-${alias.split('-').at(-1)}`;
+  return alias;
 }
 
 export const GRAPH_IDENTITY_PROMPT = `AgentManager owns UUIDs and permanent aliases. For new Candidates, candidateId is only a unique reference within this response; you may reuse CANDIDATE-0001 in another response. A reference to a Candidate declared in this response means that new Candidate, not an existing object with the same label. Use the current packet's aliases for external references. AgentManager assigns CANDIDATE-<UUID suffix> aliases and remaps structured sibling dependencies. previousProposalAliases reports how your preceding response was renamed; use those permanent aliases in later references. Refine/revise must echo the existing target alias exactly, never allocate a new identity. Permanent NODE and CANDIDATE suffixes are 8-32 lowercase hexadecimal characters. Never invent a global sequence, UUID, or permanent alias. Keep identifiers in structured fields rather than embedding local labels in Markdown.`;

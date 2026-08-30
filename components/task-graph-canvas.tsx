@@ -24,6 +24,7 @@ import { FileText, GitFork, Info, LoaderCircle, Plus, X } from 'lucide-react';
 import type { TaskGraphNode } from '@/lib/task-graph';
 import {
   buildTaskGraphLayout,
+  TASK_GRAPH_NODE_MIN_HEIGHT,
   type TaskGraphPreview,
 } from '@/lib/task-graph-layout';
 import { cn } from '@/lib/utils';
@@ -265,15 +266,22 @@ function TaskCard({ data, selected }: NodeProps<TaskFlowNode>) {
   return (
     <div
       className={cn(
-        'group relative min-h-[156px] w-72 rounded-2xl border border-t-[3px] bg-background p-4 text-left shadow-[0_10px_30px_rgb(15_23_42/6%)] transition',
+        'group relative w-72 rounded-2xl border border-t-[3px] bg-background p-4 text-left shadow-[0_10px_30px_rgb(15_23_42/6%)] transition',
         selected && 'ring-3 ring-ring/20',
         data.selectedForRun && 'ring-3 ring-violet-500/45',
         preview && 'border-dashed bg-secondary/35',
       )}
       style={
         running
-          ? { borderColor: data.color, borderWidth: 2 }
-          : { borderTopColor: preview ? data.color : 'var(--foreground)' }
+          ? {
+              minHeight: TASK_GRAPH_NODE_MIN_HEIGHT,
+              borderColor: data.color,
+              borderWidth: 2,
+            }
+          : {
+              minHeight: TASK_GRAPH_NODE_MIN_HEIGHT,
+              borderTopColor: preview ? data.color : 'var(--foreground)',
+            }
       }
     >
       <Handle
@@ -282,43 +290,15 @@ function TaskCard({ data, selected }: NodeProps<TaskFlowNode>) {
         id="lineage-target"
         className="!size-2.5 !border-2 !border-background !bg-muted-foreground"
       />
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex min-h-8 items-center justify-between gap-3">
         <span
-          className="shrink-0 whitespace-nowrap font-mono text-[10px] font-medium tracking-wide text-muted-foreground"
+          className="min-w-0 break-all font-mono text-[10px] font-medium tracking-wide text-muted-foreground"
           title={id}
           aria-label={id}
         >
           {graphCardLabel(id)}
         </span>
-        <span className="flex min-w-0 items-center gap-1.5">
-          {!preview && data.relationshipCount > 0 ? (
-            <span
-              className="flex items-center gap-1 text-[9px] text-muted-foreground"
-              title={`${data.relationshipCount} direct relationships`}
-            >
-              <GitFork className="size-3" />
-              {data.relationshipCount}
-            </span>
-          ) : null}
-          <span
-            className={cn(
-              'truncate rounded-full px-2 py-0.5 text-[10px] font-medium capitalize',
-              preview
-                ? 'bg-secondary text-secondary-foreground'
-                : 'bg-foreground text-background',
-            )}
-            title={running ? t('Running') : data.type}
-            style={
-              preview
-                ? {
-                    backgroundColor: `color-mix(in srgb, ${data.color} 12%, transparent)`,
-                    color: data.color,
-                  }
-                : undefined
-            }
-          >
-            {running ? t('Running') : data.type}
-          </span>
+        <span className="flex shrink-0 items-center gap-1.5">
           {running ? (
             <button
               type="button"
@@ -349,7 +329,38 @@ function TaskCard({ data, selected }: NodeProps<TaskFlowNode>) {
           ) : null}
         </span>
       </div>
-      <h2 className="mt-4 line-clamp-3 text-sm font-semibold leading-5">
+      <div className="mt-2 flex items-start justify-between gap-2">
+        <span
+          data-node-type-label
+          className={cn(
+            'min-w-0 rounded-lg px-2 py-0.5 text-[10px] font-medium leading-4 whitespace-normal capitalize [overflow-wrap:anywhere]',
+            preview
+              ? 'bg-secondary text-secondary-foreground'
+              : 'bg-foreground text-background',
+          )}
+          title={running ? t('Running') : data.type}
+          style={
+            preview
+              ? {
+                  backgroundColor: `color-mix(in srgb, ${data.color} 12%, transparent)`,
+                  color: data.color,
+                }
+              : undefined
+          }
+        >
+          {running ? t('Running') : data.type}
+        </span>
+        {!preview && data.relationshipCount > 0 ? (
+          <span
+            className="flex shrink-0 items-center gap-1 py-0.5 text-[9px] leading-4 text-muted-foreground"
+            title={`${data.relationshipCount} direct relationships`}
+          >
+            <GitFork className="size-3" />
+            {data.relationshipCount}
+          </span>
+        ) : null}
+      </div>
+      <h2 className="mt-3 line-clamp-3 text-sm font-semibold leading-5">
         {data.title}
       </h2>
       {preview ? (
@@ -466,9 +477,9 @@ function buildFlowGraph(
       type: 'task',
       position: { x: layoutNode.x, y: layoutNode.y },
       width: 288,
-      height: 156,
+      height: TASK_GRAPH_NODE_MIN_HEIGHT,
       initialWidth: 288,
-      initialHeight: 156,
+      initialHeight: TASK_GRAPH_NODE_MIN_HEIGHT,
       draggable: false,
       deletable: false,
       zIndex: 20,

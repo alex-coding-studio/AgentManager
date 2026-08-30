@@ -44,7 +44,8 @@ export type TaskGraphLayoutEdge = {
 };
 
 const nodeWidth = 288;
-const nodeHeight = 156;
+export const TASK_GRAPH_NODE_MIN_HEIGHT = 184;
+const nodeHeight = TASK_GRAPH_NODE_MIN_HEIGHT;
 
 export function buildTaskGraphLayout(
   nodes: TaskGraphNode[],
