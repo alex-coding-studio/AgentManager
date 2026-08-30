@@ -15,6 +15,7 @@ import {
 import { AgentSelectField, AgentToggle } from '@/components/agent-selector';
 import { ContextAttachmentPicker } from '@/components/context-attachment-picker';
 import { WhatsNextContextToolbar } from '@/components/whats-next-context-toolbar';
+import { createBrowserUuid } from '@/lib/browser-uuid';
 import {
   MarkdownReader,
   type MarkdownFeedbackSelection,
@@ -556,7 +557,7 @@ function WhatsNextCanvas({
     setPendingFeedback((current) => [
       ...current,
       {
-        feedbackId: `FEEDBACK-${crypto.randomUUID()}`,
+        feedbackId: `FEEDBACK-${createBrowserUuid()}`,
         path: selectedCandidatePreview.outputPath!,
         baseRevision: selectedCandidate.revision,
         startLine: feedbackDraft.selection.startLine,

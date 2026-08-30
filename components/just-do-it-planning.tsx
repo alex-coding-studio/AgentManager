@@ -1,5 +1,7 @@
 'use client';
 
+import { createBrowserUuid } from '@/lib/browser-uuid';
+
 import {
   useEffect,
   useRef,
@@ -414,7 +416,7 @@ function PlanningSetup({
         ...plan.resources,
         ...(await Promise.all(
           files.map(async (file) => ({
-            id: crypto.randomUUID(),
+            id: createBrowserUuid(),
             name: file.name,
             content: await file.text(),
           })),
