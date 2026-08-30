@@ -56,6 +56,46 @@ the cost benefit is measured rather than assumed.
 - Restrict Candidate revision to the same Candidate identifier and next
   revision. Structural sibling or child changes return clarification.
 
+## Deferred proposal: Shared local Git versioning
+
+Captured during the Just Do It design discussion on 2026-08-29. This is an
+exploratory direction, not an approved architecture or migration task. Continue
+defining the Just Do It workflow first; this proposal must not block it.
+
+Investigate using an App-managed local Git repository as the shared versioning
+foundation for What's Next, Break It Down, and Just Do It, without requiring
+GitHub:
+
+- Keep a stable file path for each Node or Action artifact. Each completed
+  output round creates a commit instead of another version-specific artifact
+  directory. A commit records an output, not successful validation.
+- Read earlier versions and diffs from Git. Present rounds and revisions in
+  the UI without requiring users to understand Git commands.
+- Support selecting an earlier version as the baseline for further work.
+- Reuse the same mechanism for Candidate refinement and Action output/review
+  cycles rather than implementing separate artifact histories per module.
+- Retain request, feedback, provider-session, usage, failure, and validation
+  records linked to the relevant output version; Git does not remove the need
+  for Run identity or execution evidence.
+
+Questions to resolve before implementation:
+
+- Repository boundaries and isolation from the user's existing code history.
+- Node-level, proposal-level, and Action-level restore scope, including graph
+  relationships; restoring one item must not reset unrelated work.
+- Concurrent writes, commit ownership, and consistent artifact/metadata updates.
+- How App artifact commits relate to actual code commits and external effects.
+- How restoring content changes the next Agent input without assuming its
+  provider session has also been rewound.
+- Retention, deletion, sensitive data exclusions, and migration of existing
+  per-Run artifact directories. Do not create a permanent duplicate versioning
+  system or migrate current user data as part of this discussion.
+
+The current implementation writes artifacts under distinct Run directories;
+the proposal is to replace that artifact-version mechanism, not merely add a
+Git audit log alongside it. Reset, scoped restore, revert, and branching policy
+remain open design choices.
+
 ## Deferred: Run observability
 
 Run observability is intentionally outside the first MVP. The initial transport
