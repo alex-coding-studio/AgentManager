@@ -10,6 +10,9 @@ are discussed; real integration and task validation are subsequent work.
 The subsequent 2026-08-30 Harness discussion settles the planning/reopening
 boundary and user decision authority below. These rules supersede older intent
 where noted; the frozen demo has not been updated to enforce them.
+An offline [Harness foundation](JUST_DO_IT_HARNESS.md) now provides phase prompts,
+request/result validation and a file-backed Card worklog. It is not wired to
+the UI, providers or GitHub, and has not been evaluated with live Agent output.
 This document records the
 settled product intent and explicitly separates unresolved mechanics and
 deferred ideas. It does not authorize implementation or data migration.
@@ -183,6 +186,9 @@ Planning has distinct screens:
 Planning retains only the current draft. Do not save or expose planning response
 history, revision numbers, or Git checkpoints. This supersedes the earlier
 response-history proposal; it does not remove execution Action output history.
+Internal work records may retain original user feedback and concise planning
+decisions for handoff. They are not a planning-version browser or a requirement
+to store every full draft snapshot.
 The information is organized by reading depth, not duplicated in a giant
 Markdown response and a second Plan form. Extra Resources become planning and
 execution inputs; their presence does not authorize unrelated work.
@@ -307,6 +313,10 @@ for correction or follow-up. It does not veto acceptance merely because its
 preferred level of completeness has not been reached. A user may explicitly
 accept a partial result without rewriting the finalized Plan in place.
 
+When the user accepts the Card's overall result as sufficient, it may finish
+with remaining work recorded as Todos/Issues and later child Nodes. Do not
+require every initially imagined feature to be implemented before closure or
+pretend deferred steps ran. New work follows the source Node into a later Card.
 Record acceptance and technical evidence separately: accepting a result does
 not turn failed tests into passing tests, a favorable review into a merge, or
 unfinished features into delivered features. Preserve what the user accepted
@@ -358,6 +368,13 @@ planning from execution and using a fresh review Session are proposed defaults
 to evaluate, not already implemented runtime behavior.
 
 ### Local Skills — requested integration, mechanics open
+
+The module needs user-customizable global Instructions, including which local
+Skills to use and how optional Skill behaviors should yield to these module
+rules when they conflict. The three input layers are module work methods,
+signed-off Plan scope, and current Action feedback. These do not replace host
+permissions. The offline Harness accepts these instructions as context; a real
+settings surface, persistence and provider loading remain unimplemented.
 
 Execution and verification should be able to use relevant installed development
 and review Skills. Action scope and user decisions define the desired outcome;
@@ -541,6 +558,14 @@ Plan editing. Git branches, worktrees, commit attribution, and reversal of
 external effects are candidate mechanisms, not a promise that a hard reset
 restores everything. This bounded rollback requirement does not select the
 deferred product-wide Git storage migration.
+
+The later ruling permits reverting already merged PRs within the same Card's
+linear work through revert commits. Installed tools or caches need not all be
+uninstalled; restore project-owned dependency declarations and usable project
+state. Cross-Card cascading reversal is not allowed: if other Cards already use
+this delivery, block local re-planning by rollback and return to What's Next or
+Break It Down to organize new corrective work. Do not revert a prerequisite
+under active downstream consumers.
 
 Canceling a Run, abandoning an Action, selecting an earlier output, and deleting
 history are different operations. Their exact UI and recovery policy remain open.

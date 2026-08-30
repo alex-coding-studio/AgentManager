@@ -129,6 +129,12 @@ Use **Add a goal** to try whole-plan generation, feedback, and confirmation
 before any Actions appear. The demo also includes per-role model profiles and
 Issue-style follow-ups; neither invokes a provider or writes to GitHub.
 
+The [Just Do It Harness foundation](docs/JUST_DO_IT_HARNESS.md) is available
+separately from the frozen UI. Run `npm run test:implementation-harness` for
+contract/storage checks or `npm run preview:implementation-harness` to generate
+a temporary Prompt, fixture response and progressive-disclosure handoff example.
+Neither command invokes an Agent or modifies registered project data.
+
 ## License
 
 MIT
