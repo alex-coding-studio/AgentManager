@@ -5,6 +5,24 @@ export function isUiLanguage(value: unknown): value is UiLanguage {
 }
 
 export const chineseUi: Record<string, string> = {
+  'Not started': '未开始',
+  'Already added': '已加入',
+  'Open goal': '打开目标',
+  'Goal map': '任务框架',
+  'Goal source': '目标来源',
+  'Prerequisite → dependent': '执行依赖：前置 → 后续',
+  'Decomposition / origin · not execution order':
+    '分解／来源关系 · 不代表执行顺序',
+  'Click a Card to add it or open its existing Plan.':
+    '点击卡片添加目标；已加入的会打开已有计划。',
+  'No unfinished formal Nodes in this module.':
+    '这个模块还没有未完成的正式节点。',
+  'Choose your next goal from the task map. Prerequisites are on the left; dependent work follows on the right.':
+    '从任务框架中选择接下来要做的事。前置任务在左，依赖它的任务在右。',
+  'Some dependencies form a cycle; execution order cannot be inferred.':
+    '部分依赖形成了循环，无法确定执行顺序。',
+  'Some prerequisites are outside this view. Adding a goal does not execute it.':
+    '部分前置节点不在当前视图中。添加目标不会开始执行。',
   'Send to Agent': '发送给 Agent',
   'Planning only': '仅规划',
   'Agent running': 'Agent 运行中',

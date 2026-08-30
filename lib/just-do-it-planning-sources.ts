@@ -11,6 +11,7 @@ export type PlanningSource = {
   title: string;
   summary: string;
   dependsOn: string[];
+  derivedFrom?: string[];
   outputPaths: string[];
 };
 
@@ -69,9 +70,20 @@ export async function listPlanningSources(
         uid: node.uid,
         title: node.title,
         summary: typeof node.summary === 'string' ? node.summary : '',
-        dependsOn: Array.isArray(node.dependsOn)
-          ? node.dependsOn.filter((id: unknown) => typeof id === 'string')
-          : [],
+        dependsOn: Array.isArray(node.relations?.dependsOn)
+          ? node.relations.dependsOn.filter(
+              (id: unknown) => typeof id === 'string',
+            )
+          : Array.isArray(node.dependsOn)
+            ? node.dependsOn.filter((id: unknown) => typeof id === 'string')
+            : [],
+        derivedFrom: Array.isArray(node.relations?.derivedFrom)
+          ? node.relations.derivedFrom.filter(
+              (id: unknown) => typeof id === 'string',
+            )
+          : Array.isArray(node.derivedFrom)
+            ? node.derivedFrom.filter((id: unknown) => typeof id === 'string')
+            : [],
         outputPaths: outputs.includes(ownOutput)
           ? [ownOutput]
           : outputs.filter((ref) => typeof ref === 'string'),

@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/dialog';
 import { ContextAttachmentPicker } from '@/components/context-attachment-picker';
 import { PlanningStepDetails } from '@/components/planning-step-details';
+import { GoalSourcePicker } from '@/components/goal-source-picker';
 import { useUiText } from '@/components/ui-language-provider';
 import { cn } from '@/lib/utils';
 import type {
@@ -738,47 +739,33 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
           </Button>
         </DialogContent>
       </Dialog>
-      <Dialog open={importing} onOpenChange={setImporting}>
-        <DialogContent className="max-h-[85dvh] overflow-auto sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>{t('Add a goal')}</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            {t(
-              'Choose a formal Node. Its output is retained for planning; the source is unchanged.',
-            )}
-          </p>
-          {!view?.sources.length && (
-            <p className="text-sm">{t('No formal Nodes available yet.')}</p>
-          )}
-          {view?.sources.map((source) => (
-            <button
-              key={`${source.module}:${source.uid}`}
-              disabled={pending}
-              className="rounded-xl border border-border p-4 text-left hover:bg-secondary disabled:opacity-50"
-              onClick={async () => {
-                const imported = await mutate({
-                  action: 'import',
-                  module: source.module,
-                  uid: source.uid,
-                });
-                if (imported) {
-                  openCard(imported.id);
-                  setImporting(false);
-                }
-              }}
-            >
-              <span className="text-xs text-muted-foreground">
-                {source.module === 'whats-next'
-                  ? "What's Next"
-                  : 'Break It Down'}{' '}
-                · {source.id}
-              </span>
-              <h3 className="mt-2 font-medium">{source.title}</h3>
-            </button>
-          ))}
-        </DialogContent>
-      </Dialog>
+      <GoalSourcePicker
+        open={importing}
+        onOpenChange={setImporting}
+        sources={view?.sources ?? []}
+        cards={view?.cards ?? []}
+        pending={pending}
+        error={error}
+        onChoose={async (source) => {
+          const existing = view?.cards.find(
+            (item) => item.source.uid === source.uid,
+          );
+          if (existing) {
+            openCard(existing.id);
+            setImporting(false);
+            return;
+          }
+          const imported = await mutate({
+            action: 'import',
+            module: source.module,
+            uid: source.uid,
+          });
+          if (imported) {
+            openCard(imported.id);
+            setImporting(false);
+          }
+        }}
+      />
       <Dialog
         open={editing !== null && Boolean(card)}
         onOpenChange={(open) => {
