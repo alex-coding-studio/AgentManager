@@ -375,17 +375,17 @@ function buildFlowGraph(
         height: 14,
         color:
           edge.relation === 'request'
-            ? '#8b5cf6'
+            ? 'var(--graph-candidate)'
             : edge.relation === 'dependency'
-              ? '#d97706'
+              ? 'var(--graph-dependency)'
               : 'var(--muted-foreground)',
       },
       style: {
         stroke:
           edge.relation === 'request'
-            ? '#8b5cf6'
+            ? 'var(--graph-candidate)'
             : edge.relation === 'dependency'
-              ? '#d97706'
+              ? 'var(--graph-dependency)'
               : 'var(--muted-foreground)',
         strokeWidth: 1.5,
         opacity: related ? 1 : 0.1,
@@ -414,9 +414,11 @@ function nodeTypeColor(type: string) {
 }
 
 function transientColor(preview: TaskGraphPreview | undefined) {
-  if (preview?.kind === 'run') return '#2563eb';
+  if (preview?.kind === 'run') return 'var(--graph-running)';
   if (preview?.kind === 'outcome') {
-    return preview.status === 'failed' ? '#dc2626' : '#d97706';
+    return preview.status === 'failed'
+      ? 'var(--graph-error)'
+      : 'var(--graph-dependency)';
   }
-  return '#8b5cf6';
+  return 'var(--graph-candidate)';
 }

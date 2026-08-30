@@ -1,5 +1,8 @@
-import { readAppSettings, saveAppLanguage } from '@/lib/app-settings';
-import { isUiLanguage } from '@/lib/ui-language';
+import {
+  readAppSettings,
+  updateAppSettings,
+  isSettingsPatch,
+} from '@/lib/app-settings';
 
 export async function GET() {
   return Response.json(await readAppSettings(), {
@@ -17,19 +20,13 @@ export async function PATCH(request: Request) {
       { status: 400 },
     );
   }
-  if (
-    !body ||
-    typeof body !== 'object' ||
-    !('language' in body) ||
-    !isUiLanguage(body.language) ||
-    Object.keys(body).some((key) => key !== 'language')
-  )
+  if (!isSettingsPatch(body))
     return Response.json(
-      { error: 'Unsupported interface language.' },
+      { error: 'Unsupported application settings.' },
       { status: 400 },
     );
   try {
-    return Response.json(await saveAppLanguage(body.language));
+    return Response.json(await updateAppSettings(body));
   } catch {
     return Response.json(
       { error: 'Could not save settings.' },

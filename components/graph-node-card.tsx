@@ -49,7 +49,7 @@ export function GraphNodeCard({
     <div
       aria-busy={running}
       className={cn(
-        'group relative flex w-72 flex-col rounded-2xl border border-t-[3px] bg-background px-4 py-3 text-left shadow-[0_10px_30px_rgb(15_23_42/6%)] transition',
+        'group relative flex w-72 flex-col rounded-2xl border border-t-[3px] bg-card px-4 py-3 text-left shadow-[0_10px_30px_rgb(15_23_42/6%)] transition',
         selected && 'ring-3 ring-ring/20',
         data.selectedForRun && 'ring-3 ring-violet-500/45',
         preview && 'border-dashed bg-secondary/35',

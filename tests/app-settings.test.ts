@@ -3,7 +3,14 @@ import test from 'node:test';
 import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { readAppSettings, saveAppLanguage } from '../lib/app-settings.ts';
+import {
+  readAppSettings,
+  saveAppLanguage,
+  updateAppSettings,
+  isSettingsPatch,
+} from '../lib/app-settings.ts';
+import { resolveUiTheme, THEME_BOOTSTRAP } from '../lib/ui-theme.ts';
+import { runInNewContext } from 'node:vm';
 import { chineseUi, isUiLanguage, translateUi } from '../lib/ui-language.ts';
 
 void test('running status supports named agents and the generic Agent label', () => {
@@ -35,13 +42,77 @@ void test('language defaults to English and persists both supported choices', as
     assert.equal((await readAppSettings(home)).language, 'zh-CN');
     assert.deepEqual(
       JSON.parse(await readFile(path.join(home, 'settings.json'), 'utf8')),
-      { schemaVersion: 1, language: 'zh-CN' },
+      { schemaVersion: 1, language: 'zh-CN', theme: 'system' },
     );
     await saveAppLanguage('en', home);
     assert.equal((await readAppSettings(home)).language, 'en');
   } finally {
     await rm(home, { recursive: true, force: true });
   }
+});
+
+void test('appearance persists without replacing language, including concurrent partial saves', async () => {
+  const home = await mkdtemp(
+    path.join(os.tmpdir(), 'agentmanager-theme-test-'),
+  );
+  try {
+    await writeFile(
+      path.join(home, 'settings.json'),
+      JSON.stringify({ schemaVersion: 1, language: 'zh-CN' }),
+    );
+    assert.equal((await readAppSettings(home)).theme, 'system');
+    await updateAppSettings({ theme: 'dark' }, home);
+    assert.deepEqual(await readAppSettings(home), {
+      schemaVersion: 1,
+      language: 'zh-CN',
+      theme: 'dark',
+    });
+    await Promise.all([
+      saveAppLanguage('en', home),
+      updateAppSettings({ theme: 'light' }, home),
+    ]);
+    assert.deepEqual(await readAppSettings(home), {
+      schemaVersion: 1,
+      language: 'en',
+      theme: 'light',
+    });
+    for (const value of [
+      { theme: 'invalid' },
+      { theme: undefined },
+      { language: 'zh-CN', extra: true },
+      {},
+    ]) {
+      assert.equal(isSettingsPatch(value), false);
+      await assert.rejects(
+        () => updateAppSettings(value as never, home),
+        /Unsupported/,
+      );
+    }
+    assert.equal((await readAppSettings(home)).theme, 'light');
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+void test('explicit appearance overrides the system and bootstrap agrees before hydration', () => {
+  for (const theme of ['light', 'dark', 'system'] as const)
+    for (const systemDark of [true, false]) {
+      let actual: unknown;
+      runInNewContext(THEME_BOOTSTRAP, {
+        document: {
+          documentElement: {
+            dataset: { theme },
+            classList: {
+              toggle: (_name: string, dark: boolean) => {
+                actual = dark;
+              },
+            },
+          },
+        },
+        window: { matchMedia: () => ({ matches: systemDark }) },
+      });
+      assert.equal(actual, resolveUiTheme(theme, systemDark) === 'dark');
+    }
 });
 
 void test('unsupported language never changes the saved preference', async () => {

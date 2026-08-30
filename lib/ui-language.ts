@@ -5,6 +5,12 @@ export function isUiLanguage(value: unknown): value is UiLanguage {
 }
 
 export const chineseUi: Record<string, string> = {
+  Appearance: '外观',
+  'Follow system': '跟随系统',
+  Light: '浅色',
+  Dark: '深色',
+  'Choose a light or dark interface, or follow your system appearance.':
+    '选择浅色或深色界面，也可以跟随系统外观。',
   '{agent} is running': '{agent} 运行中',
   'Show only {count} direct dependencies': '只显示 {count} 个直接依赖关系',
   'Show direct dependencies for {title}': '查看直接依赖：{title}',

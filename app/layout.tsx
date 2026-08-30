@@ -3,6 +3,8 @@ import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import { readAppSettings } from '@/lib/app-settings';
 import { UiLanguageProvider } from '@/components/ui-language-provider';
+import { AppearanceProvider } from '@/components/appearance-provider';
+import { THEME_BOOTSTRAP } from '@/lib/ui-theme';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -24,14 +26,27 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const { language } = await readAppSettings();
+  const { language, theme } = await readAppSettings();
   return (
-    <html lang={language} suppressHydrationWarning>
+    <html
+      lang={language}
+      data-theme={theme}
+      className={theme === 'dark' ? 'dark' : undefined}
+      suppressHydrationWarning
+    >
+      <head>
+        <script
+          id="appearance-bootstrap"
+          dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP }}
+        />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <UiLanguageProvider key={language} language={language}>
-          {children}
+          <AppearanceProvider key={theme} theme={theme}>
+            {children}
+          </AppearanceProvider>
         </UiLanguageProvider>
       </body>
     </html>
