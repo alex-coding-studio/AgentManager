@@ -87,6 +87,13 @@ the cost benefit is measured rather than assumed.
 - Restrict Candidate revision to the same Candidate identifier and next
   revision. Structural sibling or child changes return clarification.
 
+## Deferred: Todo to task promotion
+
+Allow an actionable GitHub Todo to become a task Card under a user-selected
+parent Node, preserving its Issue association. Define the appropriate Node
+acceptance and routing behavior separately. Current Todo UI stays a lightweight
+Issue index and does not implement this conversion.
+
 ## Deferred proposal: Shared local Git versioning
 
 Captured during the Just Do It design discussion on 2026-08-29. This is an

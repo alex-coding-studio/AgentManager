@@ -47,7 +47,11 @@ import {
   DemoPlanningWorkspace,
   DemoPlanningTimer,
 } from '@/components/just-do-it-planning';
-import { DemoIssueDraft, DemoIssueTodos } from '@/components/just-do-it-issues';
+import {
+  DemoIssueDraft,
+  DemoIssueTodos,
+  DemoTodoNotice,
+} from '@/components/just-do-it-issues';
 import {
   DemoAgentProfile,
   DemoProfileSummary,
@@ -637,6 +641,7 @@ function ActionWorkbench({
   const [roundIndex, setRoundIndex] = useState<number | null>(null);
   const [prOpen, setPrOpen] = useState(false);
   const [issueOpen, setIssueOpen] = useState(false);
+  const [todoNotice, setTodoNotice] = useState(0);
   const [validationIdea, setValidationIdea] = useState<string | null>(null);
   const feedbackRef = useRef<HTMLTextAreaElement>(null);
   const latest = target.rounds.at(-1);
@@ -1105,8 +1110,12 @@ function ActionWorkbench({
           onClose={() => setIssueOpen(false)}
           onCreated={() => {
             if (!validationIdea) setFeedback('');
+            setTodoNotice((value) => value + 1);
           }}
         />
+      )}
+      {todoNotice > 0 && (
+        <DemoTodoNotice key={todoNotice} onDismiss={() => setTodoNotice(0)} />
       )}
       <Dialog open={prOpen} onOpenChange={setPrOpen}>
         <DialogContent className="sm:max-w-lg">

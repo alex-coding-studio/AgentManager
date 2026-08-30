@@ -5,6 +5,10 @@ export function isUiLanguage(value: unknown): value is UiLanguage {
 }
 
 export const chineseUi: Record<string, string> = {
+  'Follow-up work for a later plan.': '留待后续计划处理的事项。',
+  'Demo Issue: GitHub is not connected.': '示例 Issue，尚未连接 GitHub。',
+  'Not connected': '未连接',
+  'Todo added · demo': '已添加 Todo · 演示',
   'Follow-up recorded': '已加入演示 Todo',
   'Tell the Agent what to remember': '让 Agent 记下一个想法',
   'Describe the later work in your own words. The Agent organizes the Issue and its context. This is a scripted demo; no real GitHub Issue is created.':

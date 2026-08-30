@@ -394,7 +394,7 @@ void test('independent execution and review profiles are captured on the output 
   assert.equal(result.reviewProfile?.effort, 'high');
 });
 
-void test('Issue Todos retain source Action and round without changing delivery or Plan progress', () => {
+void test('Issue summaries retain their Action association without changing delivery or Plan progress', () => {
   let state = createDemoState();
   const before = state.goals[0].actions;
   state = demoReducer(state, {
@@ -407,9 +407,12 @@ void test('Issue Todos retain source Action and round without changing delivery 
   });
   const issue = state.goals[0].todos.at(-1)!;
   assert.equal(issue.actionId, 'interface');
-  assert.equal(issue.round, 1);
   assert.ok(issue.issueNumber);
-  assert.equal(issue.acceptance, '排序在刷新后保留');
+  assert.equal(issue.summary, '排序在刷新后保留');
+  assert.deepEqual(issue.labels, [
+    'todo',
+    state.goals[0].sourceId.toLowerCase(),
+  ]);
   assert.equal(state.goals[0].actions, before);
   state = demoReducer(state, {
     type: 'todo-toggle',
@@ -437,8 +440,10 @@ void test('natural-language follow-ups generate Issue metadata with the original
     ...organized,
   });
   const issue = state.goals[0].todos.at(-1)!;
-  assert.equal(issue.round, 1);
-  assert.equal(issue.origin?.sourceId, state.goals[0].sourceId);
+  assert.equal('origin' in issue, false);
+  assert.equal('request' in issue, false);
+  assert.equal('acceptance' in issue, false);
+  assert.ok(issue.summary);
   assert.equal(state.goals[0].actions, actions);
 });
 
@@ -455,8 +460,9 @@ void test('validation follow-ups preserve their review source and never resolve 
     goalId: 'website',
     ...organized,
   });
-  assert.equal(state.goals[0].todos.at(-1)!.origin?.kind, 'validation');
-  assert.equal(state.goals[0].todos.at(-1)!.origin?.reviewResult, 'changes');
+  assert.equal(organized.origin.kind, 'validation');
+  assert.equal(organized.origin.reviewResult, 'changes');
+  assert.equal('origin' in state.goals[0].todos.at(-1)!, false);
   assert.equal(target(state).result, 'changes');
   assert.equal(
     demoReducer(state, {

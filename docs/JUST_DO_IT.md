@@ -323,6 +323,23 @@ follow-up only when deferral is appropriate. Recording it must not silently
 waive a blocker or mark the current Action verified. Issue formation is a
 collaboration/response flow, not a manual metadata-entry form.
 
+Successful creation closes the input composer automatically and shows a brief
+non-modal notification. Do not require reading a second result dialog or clicking
+Done. With real integration, the notification can link to the created Issue;
+the demo only reports a local Todo and must not fabricate a GitHub link.
+Failures or clarification needs should retain the input for continued work.
+
+The local Todo section is a lightweight GitHub-style index: title, short summary,
+Issue number, labels, status, URL, and minimal association identifiers. Complete
+Issue content and contextual discussion belong on GitHub, not a second local
+detail viewer or duplicated context store. Open the external Issue to read more.
+Do not add local close/reopen controls merely to reproduce GitHub management.
+
+A later, more useful local action is to develop an actionable Todo into a task
+Card and choose the appropriate parent Node. Retain its Issue association; do
+not automatically expand the current Plan. This promotion workflow is deferred
+and has no button or implementation in this round.
+
 Validation feedback that improves the current delivery remains in the same
 Action's correction loop. Only newly introduced, out-of-scope work is deferred;
 when that classification is ambiguous, ask instead of silently postponing a fix.

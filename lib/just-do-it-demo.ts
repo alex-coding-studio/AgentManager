@@ -81,12 +81,10 @@ export type DemoTodo = {
   text: string;
   done: boolean;
   issueNumber?: number;
-  reason?: string;
-  acceptance?: string;
+  summary?: string;
+  labels?: string[];
+  url?: string;
   actionId?: string;
-  round?: number;
-  request?: string;
-  origin?: DemoTodoOrigin;
 };
 export type DemoTodoOrigin = {
   kind: 'idea' | 'validation';
@@ -823,19 +821,16 @@ export function demoReducer(state: DemoState, event: DemoEvent): DemoState {
                 text: event.text.trim(),
                 done: false,
                 issueNumber: state.sequence + 101,
-                reason:
+                summary: (
+                  event.acceptance?.trim() ||
                   event.reason?.trim() ||
-                  '新增需求，不属于当前已确认的交付范围。',
-                acceptance:
-                  event.acceptance?.trim() || '后续实施前补充验收约定。',
+                  '留待后续计划处理的事项。'
+                ).slice(0, 240),
+                labels: [
+                  'todo',
+                  (event.origin?.sourceId ?? goal.sourceId).toLowerCase(),
+                ],
                 actionId: event.actionId,
-                request: event.request,
-                origin: event.origin,
-                round: event.origin
-                  ? event.origin.round
-                  : goal.actions
-                      .find((item) => item.id === event.actionId)
-                      ?.rounds.at(-1)?.number,
               },
             ],
           },

@@ -1,7 +1,20 @@
 'use client';
 
-import { useEffect, useRef, useState, type Dispatch } from 'react';
-import { Check, CircleDot, LoaderCircle, Plus, Sparkles } from 'lucide-react';
+import {
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+  type Dispatch,
+} from 'react';
+import {
+  ArrowUpRight,
+  CircleDot,
+  LoaderCircle,
+  Plus,
+  Sparkles,
+  X,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -38,9 +51,6 @@ export function DemoIssueDraft({
   const { t } = useUiText();
   const [text, setText] = useState(initialText);
   const [working, setWorking] = useState(false);
-  const [result, setResult] = useState<ReturnType<
-    typeof organizeDemoFollowUp
-  > | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(
     () => () => {
@@ -54,10 +64,9 @@ export function DemoIssueDraft({
     setWorking(true);
     timer.current = setTimeout(() => {
       dispatch({ type: 'todo-add', goalId: goal.id, ...organized });
-      setResult(organized);
-      setWorking(false);
       timer.current = null;
       onCreated?.();
+      onClose();
     }, 1600);
   };
   return (
@@ -69,11 +78,7 @@ export function DemoIssueDraft({
     >
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>
-            {t(
-              result ? 'Follow-up recorded' : 'Tell the Agent what to remember',
-            )}
-          </DialogTitle>
+          <DialogTitle>{t('Tell the Agent what to remember')}</DialogTitle>
           <DialogDescription>
             {t(
               'Describe the later work in your own words. The Agent organizes the Issue and its context. This is a scripted demo; no real GitHub Issue is created.',
@@ -91,42 +96,6 @@ export function DemoIssueDraft({
               {t('Cancel')}
             </Button>
           </div>
-        ) : result ? (
-          <>
-            <div className="rounded-xl border border-border p-4">
-              <p className="text-[10px] text-muted-foreground">
-                todo · {result.origin.sourceId.toLowerCase()}
-              </p>
-              <h3 className="mt-2 text-base font-semibold">{result.text}</h3>
-              <p className="mt-3 text-sm leading-6">{result.acceptance}</p>
-              <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                {result.reason}
-              </p>
-              <details className="mt-3 text-xs">
-                <summary className="cursor-pointer">
-                  {t('Original request & context')}
-                </summary>
-                <p className="mt-2 whitespace-pre-wrap leading-6">
-                  {result.request}
-                </p>
-                <p className="mt-2 leading-5 text-muted-foreground">
-                  {result.origin.goalTitle}
-                  {result.origin.actionTitle
-                    ? ' · ' + result.origin.actionTitle
-                    : ''}
-                </p>
-                {result.origin.outputSummary && (
-                  <p className="mt-2 leading-5 text-muted-foreground">
-                    {result.origin.outputSummary}
-                  </p>
-                )}
-              </details>
-            </div>
-            <Button onClick={onClose}>
-              <Check />
-              {t('Done')}
-            </Button>
-          </>
         ) : (
           <>
             <label className="text-xs font-medium">
@@ -156,6 +125,29 @@ export function DemoIssueDraft({
   );
 }
 
+export function DemoTodoNotice({ onDismiss }: { onDismiss: () => void }) {
+  const { t } = useUiText();
+  const dismiss = useEffectEvent(onDismiss);
+  useEffect(() => {
+    const timer = setTimeout(() => dismiss(), 4500);
+    return () => clearTimeout(timer);
+  }, []);
+  return (
+    <output className="fixed right-5 bottom-5 z-60 flex max-w-[calc(100vw-2.5rem)] items-center gap-3 rounded-xl border border-border bg-popover px-4 py-3 text-sm text-popover-foreground shadow-lg">
+      <CircleDot className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+      {t('Todo added · demo')}
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        aria-label={t('Close')}
+        onClick={onDismiss}
+      >
+        <X />
+      </Button>
+    </output>
+  );
+}
+
 export function DemoIssueTodos({
   goal,
   dispatch,
@@ -165,6 +157,7 @@ export function DemoIssueTodos({
 }) {
   const { t } = useUiText();
   const [adding, setAdding] = useState(false);
+  const [notice, setNotice] = useState(0);
   return (
     <section className="rounded-2xl border border-border bg-card p-5">
       <div className="flex items-center justify-between gap-3">
@@ -179,84 +172,67 @@ export function DemoIssueTodos({
           'GitHub Issues will own these Todos. This preview only simulates Issue metadata and open/closed state.',
         )}
       </p>
-      <div className="mt-4 space-y-3">
-        {goal.todos.map((item, index) => (
-          <article
-            key={item.id}
-            className="rounded-xl border border-border p-4"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <h3 className="text-sm font-medium">
-                <CircleDot className="mr-2 inline size-3.5 text-emerald-600" />
-                {item.text}
-              </h3>
-              <span className="shrink-0 text-xs text-muted-foreground">
-                {t(item.done ? 'Closed' : 'Open')}
-              </span>
-            </div>
-            <p className="mt-2 text-[11px] text-muted-foreground">
-              {t('Sample Issue')} #{item.issueNumber ?? index + 101} · todo ·{' '}
-              {goal.sourceId.toLowerCase()}
-              {item.origin
-                ? ` · ${t(item.origin.kind === 'validation' ? 'From validation' : 'User idea')}`
-                : ''}
-            </p>
-            <p className="mt-3 text-xs leading-5">
-              {item.reason ?? '新增能力，当前交付不包含。'}
-            </p>
-            <p className="mt-2 text-xs leading-5 text-muted-foreground">
-              {t('Expected future outcome')}:{' '}
-              {item.acceptance ?? '实施前确认具体边界与验收方式。'}
-            </p>
-            {item.actionId && (
-              <p className="mt-2 text-xs text-muted-foreground">
-                {t('From action')}:{' '}
-                {item.origin?.actionTitle ??
-                  goal.actions.find((action) => action.id === item.actionId)
-                    ?.title ??
-                  item.actionId}
-                {item.round
-                  ? ` · ${t('Round')} ${item.round} · ${t('Sample PR')}`
-                  : ''}
-              </p>
-            )}
-            {item.request && (
-              <details className="mt-3 text-xs">
-                <summary className="cursor-pointer text-muted-foreground">
-                  {t('Original request & context')}
-                </summary>
-                <p className="mt-2 whitespace-pre-wrap leading-6">
-                  {item.request}
+      {goal.todos.length > 0 && (
+        <div className="mt-4 divide-y divide-border overflow-hidden rounded-xl border border-border">
+          {goal.todos.map((item, index) => (
+            <article key={item.id} className="flex items-start gap-3 px-4 py-3">
+              <CircleDot
+                className={
+                  item.done
+                    ? 'mt-1 size-4 shrink-0 text-violet-500'
+                    : 'mt-1 size-4 shrink-0 text-emerald-600'
+                }
+              />
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <h3 className="text-sm font-medium">{item.text}</h3>
+                  <span className="text-[11px] text-muted-foreground">
+                    #{item.issueNumber ?? index + 101} ·{' '}
+                    {t(item.done ? 'Closed' : 'Open')}
+                  </span>
+                </div>
+                <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
+                  {item.summary ?? t('Follow-up work for a later plan.')}
                 </p>
-                <p className="mt-2 text-muted-foreground">
-                  {item.origin?.goalTitle}
-                </p>
-                {item.origin?.outputSummary && (
-                  <p className="mt-2 text-muted-foreground">
-                    {item.origin.outputSummary}
-                  </p>
-                )}
-              </details>
-            )}
-            <Button
-              className="mt-3"
-              variant="outline"
-              size="sm"
-              onClick={() =>
-                dispatch({
-                  type: 'todo-toggle',
-                  goalId: goal.id,
-                  todoId: item.id,
-                })
-              }
-            >
-              {t(
-                item.done ? 'Simulate Issue reopened' : 'Simulate Issue closed',
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {(item.labels ?? ['todo', goal.sourceId.toLowerCase()]).map(
+                    (label) => (
+                      <span
+                        key={label}
+                        className="rounded-full border border-border px-2 py-0.5 text-[10px] text-muted-foreground"
+                      >
+                        {label}
+                      </span>
+                    ),
+                  )}
+                </div>
+              </div>
+              {item.url &&
+              /^https:\/\/github\.com\/[^/]+\/[^/]+\/issues\/\d+$/.test(
+                item.url,
+              ) ? (
+                <a
+                  href={item.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-0.5 inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  GitHub
+                  <ArrowUpRight className="size-3" />
+                </a>
+              ) : (
+                <span
+                  aria-disabled="true"
+                  title={t('Demo Issue: GitHub is not connected.')}
+                  className="mt-0.5 inline-flex shrink-0 items-center gap-1 text-[10px] text-muted-foreground/60"
+                >
+                  GitHub · {t('Not connected')}
+                </span>
               )}
-            </Button>
-          </article>
-        ))}
-      </div>
+            </article>
+          ))}
+        </div>
+      )}
       {!goal.todos.length && (
         <p className="py-8 text-center text-sm text-muted-foreground">
           {t('No ideas parked here yet.')}
@@ -267,7 +243,11 @@ export function DemoIssueTodos({
           goal={goal}
           dispatch={dispatch}
           onClose={() => setAdding(false)}
+          onCreated={() => setNotice((value) => value + 1)}
         />
+      )}
+      {notice > 0 && (
+        <DemoTodoNotice key={notice} onDismiss={() => setNotice(0)} />
       )}
     </section>
   );
