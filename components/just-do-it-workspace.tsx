@@ -361,6 +361,8 @@ function GoalWorkbench({
     goal.actions.find((item) => item.id === actionId) ?? goal.actions[0];
   const blocked = unmetDependencies(state, goal);
   const complete = goalComplete(goal);
+  const showingPlan =
+    panel === 'plan' || (!goal.planConfirmed && panel !== 'todos');
   return (
     <div className="mx-auto max-w-[1600px] px-5 py-5 lg:px-8">
       <button
@@ -413,85 +415,92 @@ function GoalWorkbench({
           </span>
         </div>
       )}
-      <div className="grid items-start gap-5 xl:grid-cols-[238px_minmax(0,1fr)]">
-        <aside className={cn(sectionStyle, 'min-w-0 p-4 xl:sticky xl:top-5')}>
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="flex items-center gap-2 text-sm font-semibold">
-              <ListChecks className="size-4" />
-              {t('Plan')}
-            </h2>
-            <button
-              className="rounded px-2 py-1 text-xs text-muted-foreground hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring"
-              onClick={() => setPanel('plan')}
-            >
-              {t('Edit plan')}
-            </button>
-          </div>
-          {goal.planConfirmed ? (
-            <DemoProgress goal={goal} />
-          ) : (
-            <p className="text-xs leading-5 text-muted-foreground">
-              {t('No Actions yet. Confirm the entire plan first.')}
-            </p>
-          )}
-          <div className="mt-5 space-y-1.5">
-            {goal.planConfirmed &&
-              goal.actions.map((item, index) => (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    setActionId(item.id);
-                    setPanel('action');
-                  }}
-                  aria-pressed={panel === 'action' && item.id === target?.id}
-                  className={cn(
-                    'flex w-full items-start gap-3 rounded-xl p-3 text-left transition focus-visible:ring-2 focus-visible:ring-ring',
-                    panel === 'action' && item.id === target?.id
-                      ? 'bg-secondary'
-                      : 'hover:bg-secondary/50',
-                  )}
-                >
-                  <span
+      <div
+        className={cn(
+          'grid items-start gap-5',
+          !showingPlan && 'xl:grid-cols-[238px_minmax(0,1fr)]',
+        )}
+      >
+        {!showingPlan && (
+          <aside className={cn(sectionStyle, 'min-w-0 p-4 xl:sticky xl:top-5')}>
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="flex items-center gap-2 text-sm font-semibold">
+                <ListChecks className="size-4" />
+                {t('Plan')}
+              </h2>
+              <button
+                className="rounded px-2 py-1 text-xs text-muted-foreground hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring"
+                onClick={() => setPanel('plan')}
+              >
+                {t('Edit plan')}
+              </button>
+            </div>
+            {goal.planConfirmed ? (
+              <DemoProgress goal={goal} />
+            ) : (
+              <p className="text-xs leading-5 text-muted-foreground">
+                {t('No Actions yet. Confirm the entire plan first.')}
+              </p>
+            )}
+            <div className="mt-5 space-y-1.5">
+              {goal.planConfirmed &&
+                goal.actions.map((item, index) => (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      setActionId(item.id);
+                      setPanel('action');
+                    }}
+                    aria-pressed={panel === 'action' && item.id === target?.id}
                     className={cn(
-                      'mt-0.5 grid size-6 shrink-0 place-items-center rounded-full border text-[10px]',
-                      item.stage === 'verified'
-                        ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
-                        : 'border-border text-muted-foreground',
+                      'flex w-full items-start gap-3 rounded-xl p-3 text-left transition focus-visible:ring-2 focus-visible:ring-ring',
+                      panel === 'action' && item.id === target?.id
+                        ? 'bg-secondary'
+                        : 'hover:bg-secondary/50',
                     )}
                   >
-                    {item.job ? (
-                      <LoaderCircle className="size-3 animate-spin" />
-                    ) : item.stage === 'verified' ? (
-                      <Check className="size-3" />
-                    ) : (
-                      index + 1
-                    )}
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block text-xs font-medium leading-5">
-                      {item.title}
+                    <span
+                      className={cn(
+                        'mt-0.5 grid size-6 shrink-0 place-items-center rounded-full border text-[10px]',
+                        item.stage === 'verified'
+                          ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+                          : 'border-border text-muted-foreground',
+                      )}
+                    >
+                      {item.job ? (
+                        <LoaderCircle className="size-3 animate-spin" />
+                      ) : item.stage === 'verified' ? (
+                        <Check className="size-3" />
+                      ) : (
+                        index + 1
+                      )}
                     </span>
-                    <span className="mt-1 block text-[10px] text-muted-foreground">
-                      {t(actionStatus(item))}
+                    <span className="min-w-0">
+                      <span className="block text-xs font-medium leading-5">
+                        {item.title}
+                      </span>
+                      <span className="mt-1 block text-[10px] text-muted-foreground">
+                        {t(actionStatus(item))}
+                      </span>
                     </span>
-                  </span>
-                </button>
-              ))}
-          </div>
-          <button
-            className={cn(
-              'mt-5 flex w-full items-center justify-between rounded-lg border-t border-border px-2 pt-4 pb-2 text-xs text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring',
-              panel === 'todos' && 'text-foreground',
-            )}
-            onClick={() => setPanel('todos')}
-          >
-            <span className="flex items-center gap-2">
-              <MessageSquare className="size-3.5" />
-              {t('For later')}
-            </span>
-            <span>{goal.todos.filter((item) => !item.done).length}</span>
-          </button>
-        </aside>
+                  </button>
+                ))}
+            </div>
+            <button
+              className={cn(
+                'mt-5 flex w-full items-center justify-between rounded-lg border-t border-border px-2 pt-4 pb-2 text-xs text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring',
+                panel === 'todos' && 'text-foreground',
+              )}
+              onClick={() => setPanel('todos')}
+            >
+              <span className="flex items-center gap-2">
+                <MessageSquare className="size-3.5" />
+                {t('For later')}
+              </span>
+              <span>{goal.todos.filter((item) => !item.done).length}</span>
+            </button>
+          </aside>
+        )}
         <div className="min-w-0 space-y-4">
           {goal.dependencyIds.length > 0 && (
             <section
@@ -541,7 +550,7 @@ function GoalWorkbench({
               })}
             </section>
           )}
-          {panel === 'plan' || (!goal.planConfirmed && panel !== 'todos') ? (
+          {showingPlan ? (
             <DemoPlanningWorkspace
               key={goal.id}
               goal={goal}

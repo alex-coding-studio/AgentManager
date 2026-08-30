@@ -20,20 +20,29 @@ export const defaultDemoProfile = (): DemoProfile => ({
 export type DemoPlanStep = Pick<
   DemoAction,
   'id' | 'title' | 'input' | 'output' | 'validation'
->;
-export type DemoPlanResponse = {
-  revision: number;
-  input: string;
-  markdown: string;
-  profile: DemoProfile;
-  steps: DemoPlanStep[];
-};
+> & { guidance?: string };
+export type DemoPlanResource = { id: string; name: string; content: string };
+export function validDemoResources(resources: DemoPlanResource[]) {
+  const sizes = resources.map(
+    (item) => new TextEncoder().encode(item.content).length,
+  );
+  return (
+    resources.length <= 5 &&
+    new Set(resources.map((item) => item.id)).size === resources.length &&
+    resources.every((item) => /\.(md|txt)$/i.test(item.name)) &&
+    sizes.every((size) => size <= 262_144) &&
+    sizes.reduce((total, size) => total + size, 0) <= 1_048_576
+  );
+}
 export type DemoPlanning = {
   requirements: string;
   feedback: string;
   templates: DemoPlanStep[];
   steps: DemoPlanStep[];
-  responses: DemoPlanResponse[];
+  resources: DemoPlanResource[];
+  generated: boolean;
+  overview: string;
+  guidance?: string;
   profile: DemoProfile;
   error?: 'error' | 'canceled';
   job?: {
@@ -42,6 +51,8 @@ export type DemoPlanning = {
     requirements: string;
     feedback: string;
     profile: DemoProfile;
+    targetId?: string;
+    resources: DemoPlanResource[];
   };
 };
 export type DemoTodo = {
@@ -65,6 +76,7 @@ export type DemoRound = {
   reviewProfile?: DemoProfile;
 };
 export type DemoAction = {
+  guidance?: string;
   id: string;
   title: string;
   input: string;
@@ -359,6 +371,7 @@ function planStep(item: DemoAction): DemoPlanStep {
     input: item.input,
     output: item.output,
     validation: item.validation,
+    ...(item.guidance !== undefined ? { guidance: item.guidance } : {}),
   };
 }
 export function planningFor(goal: DemoGoal): DemoPlanning {
@@ -368,7 +381,9 @@ export function planningFor(goal: DemoGoal): DemoPlanning {
       feedback: '',
       templates: goal.actions.map(planStep),
       steps: goal.planConfirmed ? goal.actions.map(planStep) : [],
-      responses: [],
+      resources: [],
+      generated: goal.planConfirmed,
+      overview: goal.summary,
       profile: defaultDemoProfile(),
     }
   );
@@ -489,12 +504,15 @@ export type DemoEvent =
       feedback?: string;
       profile?: DemoProfile;
       steps?: DemoPlanStep[];
+      resources?: DemoPlanResource[];
     }
   | {
       type: 'plan-start';
       goalId: string;
       variant: 'standard' | 'compact' | 'error';
+      targetId?: string;
     }
+  | { type: 'plan-add-step'; goalId: string; step: Omit<DemoPlanStep, 'id'> }
   | { type: 'plan-settle'; goalId: string; jobId: number }
   | { type: 'plan-cancel'; goalId: string }
   | { type: 'plan-accept'; goalId: string }
@@ -556,6 +574,7 @@ export function demoReducer(state: DemoState, event: DemoEvent): DemoState {
     const plan = planningFor(goal);
     if (event.type === 'plan-update') {
       if (plan.job || goal.actions.some((item) => item.job)) return state;
+      if (event.resources && !validDemoResources(event.resources)) return state;
       const locked = goal.actions.filter((item) => item.rounds.length);
       if (
         event.steps &&
@@ -574,11 +593,20 @@ export function demoReducer(state: DemoState, event: DemoEvent): DemoState {
           feedback: event.feedback ?? plan.feedback,
           profile: event.profile ?? plan.profile,
           steps: event.steps ?? plan.steps,
+          resources: event.resources ?? plan.resources,
         },
       });
     }
     if (event.type === 'plan-start') {
       if (plan.job || goal.actions.some((item) => item.job)) return state;
+      if (
+        event.targetId &&
+        (!plan.steps.some((item) => item.id === event.targetId) ||
+          goal.actions.some(
+            (item) => item.id === event.targetId && item.rounds.length,
+          ))
+      )
+        return state;
       const id = state.sequence + 1;
       return updateGoal(
         {
@@ -592,7 +620,34 @@ export function demoReducer(state: DemoState, event: DemoEvent): DemoState {
               requirements: plan.requirements,
               feedback: plan.feedback,
               profile: { ...plan.profile },
+              targetId: event.targetId,
+              resources: plan.resources.map((item) => ({ ...item })),
             },
+          },
+        },
+        id,
+      );
+    }
+    if (event.type === 'plan-add-step') {
+      if (
+        !plan.generated ||
+        plan.job ||
+        goal.actions.some((item) => item.job) ||
+        [
+          event.step.title,
+          event.step.input,
+          event.step.output,
+          event.step.validation,
+        ].some((text) => !text.trim())
+      )
+        return state;
+      const id = state.sequence + 1;
+      return updateGoal(
+        {
+          ...goal,
+          planning: {
+            ...plan,
+            steps: [...plan.steps, { ...event.step, id: `planned-${id}` }],
           },
         },
         id,
@@ -612,34 +667,34 @@ export function demoReducer(state: DemoState, event: DemoEvent): DemoState {
           ...goal,
           planning: { ...plan, job: undefined, error: 'error' },
         });
-      const steps = simulatedPlan(goal, plan, plan.job.variant);
-      const revision = plan.responses.length + 1;
-      const input = [
-        goal.title,
-        goal.summary,
-        plan.job.requirements,
-        plan.job.feedback,
-      ]
-        .filter(Boolean)
-        .join('\n\n');
-      const markdown = `# 执行计划 · 第 ${revision} 版\n\n先把最小结果交付出来，再扩大能力。这个目标用 ${steps.length} 步说明即可，不为了凑到 5–7 步而增加准备工作。\n\n## 本轮输入\n\n${input}\n\n## 计划草案\n\n${steps.map((item, index) => `### ${index + 1}. ${item.title}\n\n**输入**\n\n${item.input}\n\n**预期交付**\n\n${item.output}\n\n**验收**\n\n${item.validation}`).join('\n\n')}\n\n> 这是预设的交互演示，不会理解任意提示词或检查真实环境。反馈被记录在本版中；请直接编辑步骤约定，或选择精简演示来比较版本。确认整份计划之前不会产生可执行 Action。`;
+      const steps = plan.job.targetId
+        ? plan.steps.map((item) =>
+            item.id === plan.job!.targetId
+              ? { ...item, guidance: plan.job!.feedback || item.guidance }
+              : item,
+          )
+        : simulatedPlan(goal, plan, plan.job.variant);
       return updateGoal({
         ...goal,
         planning: {
           ...plan,
           job: undefined,
           steps,
+          generated: true,
+          overview: plan.job.targetId
+            ? plan.overview
+            : `先${steps[0]?.title ?? '明确范围'}${
+                steps.length > 1
+                  ? `，再${steps
+                      .slice(1)
+                      .map((item) => item.title)
+                      .join('，再')}`
+                  : ''
+              }。每一步都以具体成果和验收约定为边界，整体确认后再执行。`,
+          guidance: plan.job.targetId
+            ? plan.guidance
+            : plan.job.feedback || plan.guidance,
           feedback: '',
-          responses: [
-            ...plan.responses,
-            {
-              revision,
-              input,
-              markdown,
-              profile: plan.job.profile,
-              steps: steps.map((item) => ({ ...item })),
-            },
-          ],
         },
       });
     }
@@ -647,7 +702,7 @@ export function demoReducer(state: DemoState, event: DemoEvent): DemoState {
       if (
         plan.job ||
         plan.error ||
-        !plan.responses.length ||
+        !plan.generated ||
         !plan.steps.length ||
         goal.actions.some((item) => item.job) ||
         new Set(plan.steps.map((item) => item.id)).size !== plan.steps.length ||
@@ -790,6 +845,10 @@ export function demoReducer(state: DemoState, event: DemoEvent): DemoState {
           input: [
             goal.requirements,
             target.input,
+            target.guidance ?? '',
+            ...(goal.planning?.resources.map(
+              (item) => `${item.name}\n${item.content}`,
+            ) ?? []),
             event.input,
             target.rounds.at(-1)?.review === 'changes'
               ? reviewFinding(target)

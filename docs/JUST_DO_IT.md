@@ -120,8 +120,9 @@ and behavior for multiple execution attempts remain to be decided.
 
 The user and Agent first discuss a proposed Plan and adjust it before starting.
 The confirmation unit is the entire Plan, never one step at a time. Before
-confirmation, show a planning conversation, full responses, and a draft of the
-step contracts, not executable Action cards. After explicit whole-plan
+confirmation, show an Overview and individually browsable planned steps,
+not executable Action cards or a long response duplicated by a second step list.
+After explicit whole-plan
 confirmation, those exact contracts become the Actions together; do not ask
 the Agent to reinterpret them into a second, potentially different plan.
 
@@ -142,10 +143,29 @@ The Agent should identify what is already available and what is genuinely
 required, not impose a generic preparation checklist. A local website skeleton
 does not automatically require a database or every future feature.
 
-Planning interaction follows: provide requirements and context, generate a
-draft, read the full response, give whole-plan feedback or annotate a passage,
-revise the draft, then confirm the entire Plan. Earlier responses remain readable.
-The exact Harness and provider-call orchestration are a later design task.
+Planning has distinct screens:
+
+1. Adding a goal opens its otherwise empty work area with a centered Start Plan
+   entry: fixed source context, user input, optional extra Resources, Agent,
+   model, reasoning effort, and one primary start action. There is no empty
+   Action rail or pre-created execution work to manage.
+2. Starting replaces that entry with a Loading state, rather than appending a
+   response under the original form.
+3. Generation reveals a clearly unconfirmed Plan Preview. A short Overview is
+   the default reading level. The left side lists step titles; selecting a step
+   reveals only its input, expected output, and validation detail.
+4. The user can adjust one step in place, adjust the whole Plan, or add a step.
+   Scoped changes preserve unrelated steps. No full-response reading is required.
+5. Confirming the entire Plan finalizes those step contracts and enters the
+   execution-ready Action workspace.
+
+Planning retains only the current draft. Do not save or expose planning response
+history, revision numbers, or Git checkpoints. This supersedes the earlier
+response-history proposal; it does not remove execution Action output history.
+The information is organized by reading depth, not duplicated in a giant
+Markdown response and a second Plan form. Extra Resources become planning and
+execution inputs; their presence does not authorize unrelated work.
+The exact Harness and provider-call orchestration remain later design work.
 
 Each Action's primary content is Input / Output / Validation. Processing is
 the temporary activity between input and output, not a required content panel:
@@ -365,6 +385,11 @@ Canceling a Run, abandoning an Action, selecting an earlier output, and deleting
 history are different operations. Their exact UI and recovery policy remain open.
 
 ## Deferred: shared local Git versioning
+
+The current pre-execution Plan draft is explicitly excluded from version-history
+work: it is a lightweight current-state discussion. The proposal below concerns
+artifact/version management across the product and execution outputs; it must
+not reintroduce a planning-history UI or checkpoint store.
 
 The proposed model is Git-native versioned work, not an additional audit log:
 stable artifact paths, one saved version per output round, review of that

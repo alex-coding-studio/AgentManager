@@ -25,6 +25,10 @@ and GitHub Issue creation/synchronization require a later integration contract.
 GitHub-backed Todos are distinct from the deferred local Git artifact-version
 proposal; neither implies the other has been implemented.
 
+The planning interaction now follows Start Plan, Loading, Overview with
+step-by-step preview, and whole-plan confirmation. It keeps a current draft only;
+planning response history and Git version management are explicitly excluded.
+
 ## Earlier Decomposition MVP planning baseline
 
 The following records the earlier planning baseline, not a current runtime

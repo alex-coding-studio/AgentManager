@@ -5,6 +5,49 @@ export function isUiLanguage(value: unknown): value is UiLanguage {
 }
 
 export const chineseUi: Record<string, string> = {
+  'Start planning': '开始规划',
+  'This goal is here. Nothing has been planned or started yet.':
+    '目标已添加，还没有计划，也没有开始执行。',
+  'Preparing your plan…': '正在生成计划…',
+  'Updating this planned step…': '正在调整这一步…',
+  'The start form is put away. Your plan will appear as individual steps when ready.':
+    '完成后将按步骤展示计划，你可以逐项查看和调整。',
+  'Plan preview': '计划预览 · 待确认',
+  'Review each step, then confirm the entire plan to create Actions.':
+    '先看概览和步骤，整体确认后再进入执行。',
+  'Adjust whole plan': '调整整份计划',
+  'Add planned step': '添加步骤',
+  'Usually 5–7 steps; fewer is fine. Keep the goal manageable.':
+    '通常 5–7 步比较容易把握，简单目标可以更少。',
+  'Planned step': '计划步骤',
+  'Adjust this step': '调整这一步',
+  'Step guidance': '本步补充说明',
+  'Plan guidance': '计划补充说明',
+  'Included from the source goal': '已带入的目标上下文',
+  'Adjustments to the plan': '希望怎样调整',
+  'Extra resources': '额外资料',
+  'Import planning resources': '导入规划资料',
+  'Import files': '导入文件',
+  'Optional Markdown or text. Read in this tab only; nothing is uploaded.':
+    '可选 Markdown 或文本，仅在本页读取，不上传到服务端。',
+  'Use up to 5 Markdown or text files, at most 256 KB each.':
+    '最多添加 5 个 Markdown 或文本文件，每个不超过 256 KB。',
+  'Extra resources must total at most 1 MB.': '额外资料合计不超过 1 MB。',
+  'Could not import these resources. Keep the total below 1 MB.':
+    '无法导入这些资料，请使用文本文件并将总量控制在 1 MB 以内。',
+  'Remove resource {name}': '移除资料 {name}',
+  'Start Plan · demo': '开始规划 · 演示',
+  'Update plan · demo': '更新计划 · 演示',
+  'Update step · demo': '更新这一步 · 演示',
+  'Scripted demo: adjustments replace the current draft. No planning history or Git versions are kept.':
+    '预设演示：调整只更新当前草案，规划阶段不保留历史或 Git 版本。',
+  'Edit this step in place. Other steps stay unchanged; confirmation still applies to the whole plan.':
+    '只调整这一步的边界，其他步骤保持不变；最终仍需确认整份计划。',
+  'Save step changes': '保存本步调整',
+  'Add to plan preview': '加入计划预览',
+  "This plan's scope": '本轮范围',
+  'Scan the titles on the left. Open a step only when you need its input, output, and validation details.':
+    '先扫一眼左侧标题；需要了解细节时，再点开某一步查看输入、产出和验收。',
   'Prerequisite deliveries': '前置成果',
   Model: '模型',
   'Provider default': '沿用默认配置',

@@ -9,6 +9,7 @@ import {
   createLibraryGoal,
   goalComplete,
   planningFor,
+  validDemoResources,
   unmetDependencies,
   type DemoState,
   type DemoEvent,
@@ -196,10 +197,9 @@ void test('only whole-plan confirmation materializes the exact draft contracts a
   );
 });
 
-void test('plan revisions retain full responses, feedback and requested configuration without premature Actions', () => {
+void test('plan adjustments replace the current draft without retaining response or revision history', () => {
   let state = demoReducer(createDemoState(), { type: 'add-goal' });
   state = generatePlan(state);
-  const first = state.goals.at(-1)!.planning!.responses[0];
   state = demoReducer(state, {
     type: 'plan-update',
     goalId: 'library',
@@ -209,10 +209,10 @@ void test('plan revisions retain full responses, feedback and requested configur
   state = generatePlan(state, 'library', 'compact');
   const plan = state.goals.at(-1)!.planning!;
   assert.equal(plan.steps.length, 2);
-  assert.equal(plan.responses[0], first);
-  assert.equal(plan.responses.length, 2);
-  assert.match(plan.responses[1].input, /减少步骤/);
-  assert.equal(plan.responses[1].profile.agent, 'Claude');
+  assert.equal('responses' in plan, false);
+  assert.equal('revision' in plan, false);
+  assert.match(plan.guidance!, /减少步骤/);
+  assert.equal(plan.profile.agent, 'Claude');
   assert.deepEqual(state.goals.at(-1)!.actions, []);
 });
 
@@ -235,11 +235,84 @@ void test('canceled or failed planning cannot confirm stale draft or apply late 
     state,
   );
   state = generatePlan(state, 'library', 'error');
-  assert.equal(state.goals.at(-1)!.planning!.responses.length, 1);
+  assert.equal(state.goals.at(-1)!.planning!.steps.length, 3);
+  assert.equal('responses' in state.goals.at(-1)!.planning!, false);
   assert.equal(
     demoReducer(state, { type: 'plan-accept', goalId: 'library' }),
     state,
   );
+});
+
+void test('a targeted planning update leaves siblings untouched and adding a step creates no Action', () => {
+  let state = generatePlan(
+    demoReducer(createDemoState(), { type: 'add-goal' }),
+  );
+  const initial = state.goals.at(-1)!.planning!.steps;
+  state = demoReducer(state, {
+    type: 'plan-update',
+    goalId: 'library',
+    feedback: '不安装全局依赖。',
+  });
+  state = demoReducer(state, {
+    type: 'plan-start',
+    goalId: 'library',
+    variant: 'standard',
+    targetId: initial[0].id,
+  });
+  const jobId = state.goals.at(-1)!.planning!.job!.id;
+  state = demoReducer(state, { type: 'plan-settle', goalId: 'library', jobId });
+  const steps = state.goals.at(-1)!.planning!.steps;
+  assert.equal(steps[1], initial[1]);
+  assert.equal(steps[2], initial[2]);
+  assert.equal(steps[0].guidance, '不安装全局依赖。');
+  state = demoReducer(state, {
+    type: 'plan-add-step',
+    goalId: 'library',
+    step: {
+      title: '检查启动说明',
+      input: 'README',
+      output: '可复现的启动说明',
+      validation: '按说明能打开首页',
+    },
+  });
+  assert.equal(state.goals.at(-1)!.planning!.steps.length, 4);
+  assert.equal(state.goals.at(-1)!.actions.length, 0);
+  state = demoReducer(state, { type: 'plan-accept', goalId: 'library' });
+  assert.equal(state.goals.at(-1)!.actions.length, 4);
+  assert.equal(state.goals.at(-1)!.actions[0].guidance, '不安装全局依赖。');
+});
+
+void test('planning resources are bounded in UTF-8 bytes and remain input to the accepted Action', () => {
+  let state = demoReducer(createDemoState(), { type: 'add-goal' });
+  const resources = [
+    { id: 'reference', name: 'boundary.md', content: '本轮不接真实 AI。' },
+  ];
+  assert.equal(validDemoResources(resources), true);
+  assert.equal(
+    validDemoResources([{ ...resources[0], content: '测'.repeat(90_000) }]),
+    false,
+  );
+  assert.equal(
+    validDemoResources([{ ...resources[0], name: 'binary.exe' }]),
+    false,
+  );
+  state = demoReducer(state, {
+    type: 'plan-update',
+    goalId: 'library',
+    resources,
+  });
+  state = generatePlan(state);
+  state = demoReducer(state, { type: 'plan-accept', goalId: 'library' });
+  state = run(state, 'execute', 'library', 'environment');
+  assert.match(
+    target(state, 'library', 'environment').rounds[0].input,
+    /boundary.md/,
+  );
+  assert.match(
+    target(state, 'library', 'environment').rounds[0].input,
+    /本轮不接真实 AI/,
+  );
+  assert.equal('responses' in state.goals.at(-1)!.planning!, false);
 });
 
 void test('independent execution and review profiles are captured on the output they produced', () => {

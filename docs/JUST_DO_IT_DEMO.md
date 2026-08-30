@@ -39,10 +39,18 @@ content remains Chinese regardless of interface language, like user content.
 - A goal opens a Plan rail and Action workbench. The workbench separates
   prepared input, output, review, and next-round feedback; the existing
   Markdown reader supports focused reading and optional annotation.
-- A newly added goal instead opens whole-plan discussion. Its Action list is
-  genuinely empty until the user confirms a generated draft. Planning supports
-  requirements, full response history, feedback, editable step contracts,
-  generation/cancellation/error simulation, and a shorter two-step variant.
+- A newly added goal opens a centered Start Plan form, with no Action rail.
+  Fixed source context, optional user input and extra text/Markdown files, and
+  Agent/model/effort configuration lead to one start action. Generation replaces
+  the form with Loading, then reveals Overview plus a numbered Plan Preview.
+- Overview is the initial reading level; selecting a title opens just that
+  step's input, output, and validation. Adjust one step, adjust the whole Plan,
+  or add a step before confirming everything together. Only the current draft
+  exists: no planning response history, revision selector, or giant Markdown
+  response duplicating the steps. Execution output history remains unchanged.
+- Extra files are read into tab-local memory, limited to five .md/.txt files,
+  256 KB per file and 1 MB total in UTF-8 bytes. No upload endpoint or filesystem
+  persistence is used. tests/fixtures/planning-boundary.md is a safe test input.
 - Planning, execution, and review reuse an Agent/model/effort selector. The model
   choices are explicitly fictional profiles, not discovered account capabilities.
   Output and review records retain the requested profile without invoking providers.
@@ -59,26 +67,26 @@ content remains Chinese regardless of interface language, like user content.
 
 ## Manual acceptance scenarios
 
-| Scenario                 | How to try it                                                                                                                     | Expected behavior                                                                                                                                                     |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Review loop              | Open the website-skeleton goal and simulate review of its second Action.                                                          | First-round review requests changes; merge remains unavailable.                                                                                                       |
-| Correction               | Add feedback, simulate correction, and simulate review again.                                                                     | A second output appears in the same Action; feedback and prior output remain available. Review passes but does not complete the Action.                               |
-| Explicit acceptance      | Simulate PR merged after successful review, or select manual review for a deliverable without unresolved findings.                | Only the selected Action becomes Verified; no automatic execution of the next Action.                                                                                 |
-| Earlier output           | Open History after a correction and select round 1.                                                                               | Earlier output remains readable; review and merge target the latest version, with an explicit notice.                                                                 |
-| Work continues elsewhere | Start a simulation and return to the dashboard or another goal.                                                                   | Result returns to the originating Action, not the newly selected Card.                                                                                                |
-| Cancel                   | Start execution and cancel while the spinner is visible.                                                                          | Attempt ends without a new output; late results cannot overwrite the canceled state.                                                                                  |
-| Failure and retry        | Open the repeatable-checks example or select Execution failed in Demo scenario controls.                                          | Failure leaves previous output intact; retry can return a new output without creating another Action.                                                                 |
-| Missing input            | Open the startup-notes example, or select Needs your input as the next execution result.                                          | Explain the missing runtime requirement; allow input and retry.                                                                                                       |
-| Unmet goal dependency    | Open the AI-integration goal before the website goal is complete.                                                                 | Planning remains available, but execution is blocked; the prerequisite links to its goal.                                                                             |
-| Delivered dependency     | Finish the website goal, then confirm the AI-integration Plan.                                                                    | Waiting notice clears; actual demo delivery summaries and version references appear as input context.                                                                 |
-| Initial planning         | Add the library's sample goal, provide requirements, simulate Generate Plan, inspect/edit contracts, and confirm the whole draft. | No Actions exist before confirmation; exact approved inputs, outputs and validation become Actions together.                                                          |
-| Plan adjustment          | Give whole-plan feedback, select the shorter example, and simulate revision. Compare response versions.                           | Earlier responses survive; historical responses cannot confirm the current draft. Existing delivered Actions are preserved when revising a previously confirmed Plan. |
-| Draft continuity         | Type Action feedback, switch to another Action or goal, then return.                                                              | Feedback stays associated with its original Action while the route remains mounted.                                                                                   |
-| Retained source          | Inspect startup notes, or use Simulate source deletion in the retained-source dialog.                                             | Goal, input context, Plan, outputs and progress remain; source is marked deleted.                                                                                     |
-| Completed goal           | Open the appearance example.                                                                                                      | All Actions are verified; the UI explains the associated source completion marker without changing real Canvas nodes.                                                 |
-| Todo                     | From Action feedback choose Track out-of-scope feedback as Todo. Supply a reason and expected future outcome.                     | A simulated Issue retains the goal/Action/round, labels, and metadata; no real Issue is created and Action progress is unchanged.                                     |
-| Search and empty results | Search for an unmatched phrase, then clear filters.                                                                               | An explicit empty state provides a return path.                                                                                                                       |
-| Reset                    | Use Reset demo and confirm.                                                                                                       | Only in-memory examples reset, including pending simulations and selection.                                                                                           |
+| Scenario                 | How to try it                                                                                                                     | Expected behavior                                                                                                                       |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Review loop              | Open the website-skeleton goal and simulate review of its second Action.                                                          | First-round review requests changes; merge remains unavailable.                                                                         |
+| Correction               | Add feedback, simulate correction, and simulate review again.                                                                     | A second output appears in the same Action; feedback and prior output remain available. Review passes but does not complete the Action. |
+| Explicit acceptance      | Simulate PR merged after successful review, or select manual review for a deliverable without unresolved findings.                | Only the selected Action becomes Verified; no automatic execution of the next Action.                                                   |
+| Earlier output           | Open History after a correction and select round 1.                                                                               | Earlier output remains readable; review and merge target the latest version, with an explicit notice.                                   |
+| Work continues elsewhere | Start a simulation and return to the dashboard or another goal.                                                                   | Result returns to the originating Action, not the newly selected Card.                                                                  |
+| Cancel                   | Start execution and cancel while the spinner is visible.                                                                          | Attempt ends without a new output; late results cannot overwrite the canceled state.                                                    |
+| Failure and retry        | Open the repeatable-checks example or select Execution failed in Demo scenario controls.                                          | Failure leaves previous output intact; retry can return a new output without creating another Action.                                   |
+| Missing input            | Open the startup-notes example, or select Needs your input as the next execution result.                                          | Explain the missing runtime requirement; allow input and retry.                                                                         |
+| Unmet goal dependency    | Open the AI-integration goal before the website goal is complete.                                                                 | Planning remains available, but execution is blocked; the prerequisite links to its goal.                                               |
+| Delivered dependency     | Finish the website goal, then confirm the AI-integration Plan.                                                                    | Waiting notice clears; actual demo delivery summaries and version references appear as input context.                                   |
+| Initial planning         | Add the library's sample goal, provide requirements, simulate Generate Plan, inspect/edit contracts, and confirm the whole draft. | No Actions exist before confirmation; exact approved inputs, outputs and validation become Actions together.                            |
+| Plan adjustment          | Open a planned step and adjust its boundary, or adjust the whole Plan and try the shorter example.                                | Only the current draft changes; unrelated steps remain intact. No response history is stored or displayed.                              |
+| Draft continuity         | Type Action feedback, switch to another Action or goal, then return.                                                              | Feedback stays associated with its original Action while the route remains mounted.                                                     |
+| Retained source          | Inspect startup notes, or use Simulate source deletion in the retained-source dialog.                                             | Goal, input context, Plan, outputs and progress remain; source is marked deleted.                                                       |
+| Completed goal           | Open the appearance example.                                                                                                      | All Actions are verified; the UI explains the associated source completion marker without changing real Canvas nodes.                   |
+| Todo                     | From Action feedback choose Track out-of-scope feedback as Todo. Supply a reason and expected future outcome.                     | A simulated Issue retains the goal/Action/round, labels, and metadata; no real Issue is created and Action progress is unchanged.       |
+| Search and empty results | Search for an unmatched phrase, then clear filters.                                                                               | An explicit empty state provides a return path.                                                                                         |
+| Reset                    | Use Reset demo and confirm.                                                                                                       | Only in-memory examples reset, including pending simulations and selection.                                                             |
 
 The simulation waits approximately two seconds. Its results are deterministic,
 not based on Agent reasoning: first-output review requests a correction, and
@@ -108,8 +116,9 @@ attempts show their current Response; the History picker is output history,
 not a complete durable run audit. Harness and integration design follow after
 this UI exploration, not as hidden behavior of the demo.
 
-The Plan generator is deliberately scripted. It records user feedback but does
-not claim to interpret arbitrary instructions; direct contract editing and the
-shorter-plan scenario make revisions explorable. Model/effort choices and Issue
+The Plan generator is deliberately scripted. It applies edited step boundaries
+and retains current guidance but does not claim to interpret arbitrary input;
+direct contract editing and the shorter-plan scenario make adjustments explorable.
+There are no previous planning responses or draft snapshots. Model/effort choices and Issue
 numbers are illustrative only. Runtime capability discovery, GitHub authority,
 retry/deduplication, and shared configuration persistence remain future work.
