@@ -5,6 +5,11 @@ export function isUiLanguage(value: unknown): value is UiLanguage {
 }
 
 export const chineseUi: Record<string, string> = {
+  'Show only {count} direct dependencies': '只显示 {count} 个直接依赖关系',
+  'Show direct dependencies for {title}': '查看直接依赖：{title}',
+  'In {inputs} · Out {outputs}': '输入 {inputs} · 输出 {outputs}',
+  'Rev {revision} · In {inputs} · Out {outputs}':
+    '版本 {revision} · 输入 {inputs} · 输出 {outputs}',
   '{agent} continues the same line of inquiry with only this round’s changes.':
     '{agent} 将沿当前方向继续，只补充本轮变化。',
   '{agent} responds with a Reflection and supported next directions.':

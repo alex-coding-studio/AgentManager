@@ -1,4 +1,6 @@
 import dagre from '@dagrejs/dagre';
+import { TASK_GRAPH_NODE_MIN_HEIGHT } from './graph-card-metrics.ts';
+export { TASK_GRAPH_NODE_MIN_HEIGHT } from './graph-card-metrics.ts';
 import type { HarnessCandidate } from '@/lib/task-decomposition-harness';
 import type { TaskGraphNode } from '@/lib/task-graph';
 import type { WhatsNextCandidate } from '@/lib/whats-next-harness';
@@ -44,7 +46,6 @@ export type TaskGraphLayoutEdge = {
 };
 
 const nodeWidth = 288;
-export const TASK_GRAPH_NODE_MIN_HEIGHT = 184;
 const nodeHeight = TASK_GRAPH_NODE_MIN_HEIGHT;
 
 export function buildTaskGraphLayout(
