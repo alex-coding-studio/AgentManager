@@ -34,6 +34,7 @@ import {
 } from '../lib/local-agent-transport.ts';
 import type { RegisteredProject } from '../lib/project-registry.ts';
 import type { CardHarnessRequest } from '../lib/just-do-it-harness.ts';
+import { JUST_DO_IT_BUILT_IN_INSTRUCTIONS } from '../lib/just-do-it-harness.ts';
 
 const uid = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const step1 = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -580,6 +581,57 @@ void test('own output is preferred and removing the source does not remove retai
     /不要接真实 AI/,
   );
   assert.equal((await service.read(project, uid)).id, card.id);
+});
+
+void test('custom instructions default to empty, preserve saved text, and can be cleared', async (t) => {
+  const project = await fixture(t);
+  assert.equal(await readPlanningInstructions(project), '');
+  await assert.rejects(
+    readFile(path.join(project.planningPath, 'implementation/instructions.md')),
+    { code: 'ENOENT' },
+  );
+  const custom =
+    'Use the local iOS setup Skill.\nKeep my additional requirements.\n';
+  await savePlanningInstructions(project, custom);
+  assert.equal(await readPlanningInstructions(project), custom);
+  await savePlanningInstructions(project, JUST_DO_IT_BUILT_IN_INSTRUCTIONS);
+  assert.equal(
+    await readPlanningInstructions(project),
+    JUST_DO_IT_BUILT_IN_INSTRUCTIONS,
+  );
+  await savePlanningInstructions(project, '');
+  assert.equal(await readPlanningInstructions(project), '');
+  await assert.rejects(
+    () => savePlanningInstructions(project, 'x'.repeat(20001)),
+    /at most 20000/,
+  );
+  assert.equal(await readPlanningInstructions(project), '');
+});
+
+void test('planning snapshots custom instructions independently of built-in rules', async (t) => {
+  const project = await fixture(t);
+  const { service, calls } = controlled();
+  const card = await service.importSource(project, 'whats-next', uid);
+  const custom = 'Use the local iOS setup Skill for engineering conventions.';
+  await savePlanningInstructions(project, custom);
+  await service.start(project, input(card));
+  assert.equal(calls[0].request.context.moduleInstructions, custom);
+  assert.equal(
+    calls[0].prompt.split(JUST_DO_IT_BUILT_IN_INSTRUCTIONS).length,
+    2,
+  );
+  await savePlanningInstructions(project, '');
+  assert.equal(calls[0].request.context.moduleInstructions, custom);
+  calls[0].resolve(result(calls[0].request));
+  const current = await settled(service, project);
+  await service.start(project, input(current));
+  assert.equal(calls[1].request.context.moduleInstructions, '');
+  assert.equal(
+    calls[1].prompt.split(JUST_DO_IT_BUILT_IN_INSTRUCTIONS).length,
+    2,
+  );
+  calls[1].resolve(result(calls[1].request));
+  await settled(service, project);
 });
 
 void test('instructions cannot read or write through a directory outside the planning root', async (t) => {

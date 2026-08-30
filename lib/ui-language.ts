@@ -48,9 +48,12 @@ export const chineseUi: Record<string, string> = {
   Planning: '规划中',
   'Not planned yet': '尚未规划',
   'Execution not connected': '执行尚未接入',
-  'Just Do It instructions': 'Just Do It 全局 Instructions',
-  'Project-wide working rules. Each new planning run takes a snapshot; running Agents are unchanged.':
-    '当前项目的工作规则。每次新规划读取一份快照，不改变已经运行中的 Agent。',
+  'Working instructions': '工作指令',
+  'Custom instructions (optional)': '自定义工作指令（可选）',
+  'Applies to every Just Do It Card in this project. System workflow rules are built in; only add your own preferences here. Changes apply to new planning runs, not running Agents.':
+    '适用于当前项目的所有 Just Do It 任务卡。系统流程规则已内置，只需填写你的补充要求。修改将在新规划中生效，不影响运行中的 Agent。',
+  'Add development conventions or local Skill instructions. Leave empty to use the built-in workflow.':
+    '填写开发约定、使用哪些本地 Skill 等。可以留空，系统会自动应用内置流程规则。',
   'Your additional requirements': '你的补充要求',
   'Model ID (optional)': '模型 ID（可选）',
   'Agent default': 'Agent 默认',
