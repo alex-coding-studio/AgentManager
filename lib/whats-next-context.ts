@@ -1,4 +1,15 @@
-import { readFile, readdir, stat } from 'node:fs/promises';
+import {
+  readFile,
+  readdir,
+  stat,
+  lstat,
+  realpath,
+  mkdir,
+  writeFile,
+  rename,
+  unlink,
+} from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import type { RegisteredProject } from '@/lib/project-registry';
 
@@ -17,12 +28,70 @@ export type WhatsNextContext = {
 export async function readWhatsNextContext(
   project: RegisteredProject,
 ): Promise<WhatsNextContext> {
-  const contextPath = featureContextPath(project);
-  const instructions = await readFile(
-    path.join(contextPath, 'instructions.md'),
-    'utf8',
-  ).catch(() => '');
+  const instructions = await readWhatsNextInstructions(project);
   return { instructions, attachments: await listAttachments(project) };
+}
+
+async function instructionsDirectory(
+  project: RegisteredProject,
+  create = false,
+) {
+  const directory = path.join(
+    await realpath(project.planningPath),
+    'whats-next',
+  );
+  if (create)
+    await mkdir(directory).catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== 'EEXIST') throw error;
+    });
+  try {
+    const info = await lstat(directory);
+    if (!info.isDirectory() || info.isSymbolicLink())
+      throw new Error('Invalid What’s Next context directory.');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+  return directory;
+}
+
+export async function readWhatsNextInstructions(project: RegisteredProject) {
+  const file = path.join(
+    await instructionsDirectory(project),
+    'instructions.md',
+  );
+  try {
+    const info = await lstat(file);
+    if (!info.isFile() || info.isSymbolicLink() || info.size > 80_000)
+      throw new Error('Invalid What’s Next instructions file.');
+    const instructions = await readFile(file, 'utf8');
+    if (instructions.length > 20_000)
+      throw new Error('Instructions exceed 20000 characters.');
+    return instructions;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return '';
+    throw error;
+  }
+}
+
+export async function saveWhatsNextInstructions(
+  project: RegisteredProject,
+  instructions: string,
+) {
+  if (typeof instructions !== 'string' || instructions.length > 20_000)
+    throw new Error('Instructions must be at most 20000 characters.');
+  if ((await readWhatsNextInstructions(project)) === instructions)
+    return { instructions };
+  const directory = await instructionsDirectory(project, true);
+  const temporary = path.join(directory, `instructions-${randomUUID()}.tmp`);
+  try {
+    await writeFile(temporary, instructions, { flag: 'wx' });
+    await rename(temporary, path.join(directory, 'instructions.md'));
+  } finally {
+    await unlink(temporary).catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== 'ENOENT') throw error;
+    });
+  }
+  return { instructions };
 }
 
 export async function readWhatsNextAttachment(
