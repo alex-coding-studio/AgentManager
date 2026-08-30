@@ -11,6 +11,37 @@ const runId = 'RUN-00000000-0000-4000-8000-000000000022';
 const refineRunId = 'RUN-00000000-0000-4000-8000-000000000023';
 const sessionId = 'SESSION-00000000-0000-4000-8000-000000000022';
 
+export function createWhatsNextRedoPreview() {
+  const original = createWhatsNextReviewPreview();
+  const before = original.runs[0]!;
+  if (before.result?.outcome !== 'proposal')
+    throw new Error('Proposal fixture is missing.');
+  const replacement: WhatsNextRunRecord = {
+    ...structuredClone(before),
+    runId: 'RUN-00000000-0000-4000-8000-000000000028',
+    startedAt: '2026-08-29T00:01:00.000Z',
+    replacement: {
+      state: 'pending',
+      candidateIds: before.result.candidates.map(
+        (candidate) => candidate.candidateId,
+      ),
+      runIds: [before.runId],
+      snapshot: 'preview',
+    },
+    result: {
+      ...structuredClone(before.result),
+      candidates: before.result.candidates.map((candidate, index) => ({
+        ...candidate,
+        candidateId: `CANDIDATE-abcdef0${index}`,
+        dependsOn: index === 0 ? [] : ['CANDIDATE-abcdef00'],
+        title: `Corrected direction ${index + 1}`,
+        outputMarkdown: `# Corrected direction ${index + 1}\n\n${candidate.outputMarkdown}`,
+      })),
+    },
+  };
+  return { ...original, runs: [before, replacement] };
+}
+
 export function createWhatsNextReviewPreview() {
   const start: TaskGraphNode = {
     schemaVersion: 1,

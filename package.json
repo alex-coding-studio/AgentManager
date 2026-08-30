@@ -18,7 +18,7 @@
     "test:graph": "node --experimental-strip-types --test tests/task-graph-layout.test.ts tests/task-graph-rules.test.ts tests/graph-identity.test.ts tests/uuid-alias-migration.test.mjs",
     "test:harness": "node --experimental-strip-types --test tests/task-decomposition-harness.test.ts",
     "test:runs": "node --experimental-strip-types --test tests/local-agent-transport.test.ts tests/task-decomposition-context-workspace.test.ts tests/task-decomposition-dependencies.test.ts tests/task-decomposition-runs.test.ts",
-    "test:whats-next": "node --experimental-strip-types --test tests/whats-next-harness.test.ts",
+    "test:whats-next": "node --experimental-strip-types --test tests/whats-next-harness.test.ts tests/whats-next-redo.test.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

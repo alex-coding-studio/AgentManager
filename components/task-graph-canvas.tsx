@@ -263,7 +263,7 @@ function TaskCard({ data, selected }: NodeProps<TaskFlowNode>) {
       style={
         running
           ? { borderColor: data.color, borderWidth: 2 }
-          : { borderTopColor: data.color }
+          : { borderTopColor: preview ? data.color : 'var(--foreground)' }
       }
     >
       <Handle
@@ -386,12 +386,8 @@ function TaskCard({ data, selected }: NodeProps<TaskFlowNode>) {
               ? 'opacity-100'
               : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100',
           )}
-          aria-label={`${data.plusLabel ?? 'Decompose'} ${data.title}`}
-          title={
-            data.plusLabel
-              ? `${data.plusLabel} from this node`
-              : 'Decompose from this node'
-          }
+          aria-label={`${data.plusLabel ?? 'Decompose'} from ${data.title}`}
+          title={data.plusLabel ?? 'Decompose'}
           onClick={(event) => {
             event.stopPropagation();
             data.onDecompose(id);
@@ -457,6 +453,7 @@ function buildFlowGraph(
       initialHeight: 156,
       draggable: false,
       deletable: false,
+      zIndex: 20,
       style: {
         opacity: focusedNodeId && !relatedIds.has(layoutNode.id) ? 0.18 : 1,
         transition: 'opacity 180ms ease',

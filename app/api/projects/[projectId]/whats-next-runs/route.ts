@@ -6,6 +6,7 @@ import {
   listLatestWhatsNextRuns,
   readWhatsNextRun,
   startWhatsNextRun,
+  resolveWhatsNextReplacement,
   type WhatsNextFeedbackAnchor,
 } from '@/lib/whats-next-runs';
 
@@ -26,6 +27,7 @@ export async function POST(
     const agent = formData.get('agent');
     const revisionRunId = formData.get('revisionRunId');
     const revisionCandidateId = formData.get('revisionCandidateId');
+    const redoProposal = formData.get('redoProposal') === 'true';
     const feedbackValue = formData.get('feedback');
     const sourceNodeIds = formData
       .getAll('sourceNodeIds')
@@ -56,6 +58,7 @@ export async function POST(
       contextRefs,
       files,
       feedback,
+      redoProposal,
       revisionRunId:
         typeof revisionRunId === 'string' && revisionRunId
           ? revisionRunId
@@ -158,6 +161,18 @@ export async function PATCH(
       runId?: unknown;
       candidateId?: unknown;
     };
+    if (
+      ['replace-proposal', 'keep-original'].includes(String(payload.action)) &&
+      typeof payload.runId === 'string'
+    ) {
+      return Response.json(
+        await resolveWhatsNextReplacement(
+          project,
+          payload.runId,
+          payload.action as 'replace-proposal' | 'keep-original',
+        ),
+      );
+    }
     if (
       !['accept', 'discard'].includes(String(payload.action)) ||
       typeof payload.runId !== 'string' ||

@@ -6,6 +6,7 @@ import {
   LoaderCircle,
   MessageSquareText,
   Pencil,
+  RotateCcw,
   Sparkles,
   Trash2,
   X,
@@ -46,6 +47,7 @@ import type {
   WhatsNextRunRecord,
 } from '@/lib/whats-next-runs';
 import { cn } from '@/lib/utils';
+import { redoProposalPlan, isPendingReplacement } from '@/lib/whats-next-redo';
 
 const AGENT_LABELS: Record<LocalAgentKind, string> = {
   codex: 'Codex',
@@ -56,6 +58,7 @@ type RunSnapshot = {
   sourceNodeIds: string[];
   instruction: string;
   revisionTarget?: { runId: string; candidateId: string };
+  redoProposal?: boolean;
 };
 
 export function WhatsNextWorkspace({
@@ -95,6 +98,10 @@ export function WhatsNextWorkspace({
 
   const [growSourceId, setGrowSourceId] = useState('');
   const [growInstruction, setGrowInstruction] = useState('');
+  const [redoProposal, setRedoProposal] = useState(false);
+  const [submittingGrow, setSubmittingGrow] = useState(false);
+  const [replacementReviewId, setReplacementReviewId] = useState('');
+  const [resolvingReplacement, setResolvingReplacement] = useState(false);
   const [growRefs, setGrowRefs] = useState<string[]>([]);
   const [growFiles, setGrowFiles] = useState<File[]>([]);
   const [growFolderPath, setGrowFolderPath] = useState(folders[0]?.path ?? '');
@@ -141,6 +148,29 @@ export function WhatsNextWorkspace({
   const locateSequence = useRef(0);
 
   const growSource = nodes.find((node) => node.id === growSourceId) ?? null;
+  const redoBoundary = (() => {
+    if (!growSource) return { count: 0, reason: '' };
+    try {
+      return {
+        count: redoProposalPlan(nodes, runs, [growSource.id]).candidateIds
+          .length,
+        reason: '',
+      };
+    } catch (error) {
+      return {
+        count: 0,
+        reason:
+          error instanceof Error ? error.message : 'Cannot redo this proposal.',
+      };
+    }
+  })();
+  const replacementReview =
+    runs.find((run) => run.runId === replacementReviewId) ?? null;
+  const pendingReplacements = runs.filter(
+    (run) =>
+      isPendingReplacement(run) &&
+      !['running', 'validating', 'canceled', 'failed'].includes(run.status),
+  );
   const editStart = nodes.find((node) => node.id === editStartId) ?? null;
   const combineNodes = combineIds.flatMap((nodeId) => {
     const node = nodes.find((value) => value.id === nodeId);
@@ -165,6 +195,15 @@ export function WhatsNextWorkspace({
       (item) => item.id === inspectorId && item.kind === 'candidate',
     ) ?? null;
   const selectedCandidate = selectedCandidatePreview?.candidate ?? null;
+  const selectedCandidateLocked = Boolean(
+    selectedCandidate &&
+    runs.some(
+      (run) =>
+        isPendingReplacement(run) &&
+        !['failed', 'canceled'].includes(run.status) &&
+        run.replacement!.candidateIds.includes(selectedCandidate.candidateId),
+    ),
+  );
   const acceptedCandidateIds = new Set(
     nodes.flatMap((node) =>
       node.provenance?.candidateId ? [node.provenance.candidateId] : [],
@@ -266,6 +305,7 @@ export function WhatsNextWorkspace({
     files?: File[];
     feedback?: WhatsNextFeedbackAnchor[];
     revisionTarget?: { runId: string; candidateId: string };
+    redoProposal?: boolean;
   }) {
     const body = new FormData();
     for (const nodeId of input.sourceNodeIds) {
@@ -273,6 +313,7 @@ export function WhatsNextWorkspace({
     }
     body.append('instruction', input.instruction);
     body.append('agent', selectedAgent);
+    if (input.redoProposal) body.append('redoProposal', 'true');
     for (const ref of input.contextRefs ?? []) body.append('contextRefs', ref);
     for (const file of input.files ?? []) body.append('files', file);
     if (input.feedback?.length) {
@@ -297,6 +338,7 @@ export function WhatsNextWorkspace({
       sourceNodeIds: input.sourceNodeIds,
       instruction: input.instruction,
       revisionTarget: input.revisionTarget,
+      redoProposal: input.redoProposal,
     });
     setRuns((current) => upsertRun(current, payload.run!));
     setPreviews((current) =>
@@ -346,7 +388,13 @@ export function WhatsNextWorkspace({
   }
 
   async function submitGrow() {
-    if (!growSource) return;
+    if (
+      !growSource ||
+      submittingGrow ||
+      (redoProposal && (redoBoundary.reason || !growInstruction.trim()))
+    )
+      return;
+    setSubmittingGrow(true);
     setError('');
     try {
       await startRun({
@@ -354,10 +402,13 @@ export function WhatsNextWorkspace({
         instruction: growInstruction,
         contextRefs: growRefs,
         files: growFiles,
+        redoProposal,
       });
       closeGrow();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Something failed.');
+    } finally {
+      setSubmittingGrow(false);
     }
   }
 
@@ -381,6 +432,7 @@ export function WhatsNextWorkspace({
     setGrowInstruction('');
     setGrowRefs([]);
     setGrowFiles([]);
+    setRedoProposal(false);
   }
 
   async function cancelRun(runId: string) {
@@ -403,6 +455,68 @@ export function WhatsNextWorkspace({
     } else {
       setGrowSourceId(snapshot.sourceNodeIds[0] ?? '');
       setGrowInstruction(snapshot.instruction);
+      setRedoProposal(snapshot.redoProposal ?? false);
+    }
+  }
+
+  async function resolveReplacement(
+    action: 'replace-proposal' | 'keep-original',
+  ) {
+    if (!replacementReview || resolvingReplacement) return;
+    setResolvingReplacement(true);
+    setError('');
+    try {
+      if (developmentPreview) {
+        const nextRuns =
+          action === 'keep-original'
+            ? runs.filter((run) => run.runId !== replacementReview.runId)
+            : runs
+                .filter(
+                  (run) =>
+                    !replacementReview.replacement!.runIds.includes(run.runId),
+                )
+                .map((run) =>
+                  run.runId === replacementReview.runId
+                    ? {
+                        ...run,
+                        replacement: {
+                          ...run.replacement!,
+                          state: 'applied' as const,
+                        },
+                      }
+                    : run,
+                );
+        setRuns(nextRuns);
+        setPreviews(mergePreviews([], nextRuns.flatMap(runToPreviews)));
+        setReplacementReviewId('');
+        setFocusedNodeId('');
+        setInspectorId('');
+        return;
+      }
+      const response = await fetch(
+        `/api/projects/${projectId}/whats-next-runs`,
+        {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ action, runId: replacementReview.runId }),
+        },
+      );
+      const payload = await response.json();
+      if (!response.ok)
+        throw new Error(payload.error ?? 'Could not resolve the proposal.');
+      setReplacementReviewId('');
+      setFocusedNodeId('');
+      setInspectorId('');
+      await loadRunsFromServer();
+      if (payload.run?.cleanupWarning) setError(payload.run.cleanupWarning);
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : 'Could not resolve the proposal.',
+      );
+    } finally {
+      setResolvingReplacement(false);
     }
   }
 
@@ -698,7 +812,7 @@ export function WhatsNextWorkspace({
         focusedNodeId={focusedNodeId}
         locateRequest={locateRequest}
         selectedNodeIds={combineIds}
-        plusLabel="Ask what's next from"
+        plusLabel="Ask what's next"
         edgeAlignedOverlays
         onMultiSelect={(nodeId) =>
           setCombineIds((current) => toggle(current, nodeId))
@@ -744,6 +858,28 @@ export function WhatsNextWorkspace({
           </p>
         ) : null}
       </div>
+
+      {pendingReplacements.length ? (
+        <div className="absolute right-5 top-5 flex max-w-xs flex-col gap-2">
+          {pendingReplacements.map((run) => (
+            <Button
+              key={run.runId}
+              variant="outline"
+              onClick={() => {
+                setError('');
+                setReplacementReviewId(run.runId);
+              }}
+            >
+              <RotateCcw className="size-4" />
+              Review replacement (
+              {run.result?.outcome === 'proposal'
+                ? run.result.candidates.length
+                : 'response'}
+              )
+            </Button>
+          ))}
+        </div>
+      ) : null}
 
       {combineIds.length >= 2 ? (
         <div className="absolute right-5 bottom-5 w-[360px] rounded-2xl border border-border bg-background p-4 shadow-[0_18px_50px_rgb(15_23_42/12%)]">
@@ -832,15 +968,54 @@ export function WhatsNextWorkspace({
             >
               <div>
                 <h2 className="text-sm font-semibold">
-                  {continuingGrow ? 'Continue from' : 'Explore from'}{' '}
+                  {redoProposal
+                    ? 'Redo proposal from'
+                    : continuingGrow
+                      ? 'Continue from'
+                      : 'Explore from'}{' '}
                   {growSource.id}
                 </h2>
                 <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                  {continuingGrow
-                    ? `${AGENT_LABELS[selectedAgent]} continues the same line of inquiry with only this round’s changes.`
-                    : `${AGENT_LABELS[selectedAgent]} responds with a Reflection and supported next directions.`}{' '}
+                  {redoProposal
+                    ? 'Correct the whole unaccepted proposal. Original directions stay until you review and confirm their replacement.'
+                    : continuingGrow
+                      ? `${AGENT_LABELS[selectedAgent]} continues the same line of inquiry with only this round’s changes.`
+                      : `${AGENT_LABELS[selectedAgent]} responds with a Reflection and supported next directions.`}{' '}
                   Inherited Resources stay on the source Node; additions apply
                   only to this request.
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-border p-3">
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={!redoProposal ? 'default' : 'outline'}
+                    onClick={() => setRedoProposal(false)}
+                  >
+                    Explore more
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={redoProposal ? 'default' : 'outline'}
+                    onClick={() => setRedoProposal(true)}
+                    disabled={Boolean(redoBoundary.reason)}
+                    title={
+                      redoBoundary.reason ||
+                      'Redo all unaccepted directions from this parent'
+                    }
+                  >
+                    <RotateCcw className="size-3.5" />
+                    Redo proposal
+                  </Button>
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {redoBoundary.reason ||
+                    (redoProposal
+                      ? `${redoBoundary.count} directions will be reconsidered together. No Formal Nodes will be changed.`
+                      : 'Explore more adds directions without replacing the current proposal.')}
                 </p>
               </div>
 
@@ -855,16 +1030,20 @@ export function WhatsNextWorkspace({
                   htmlFor="whats-next-instruction"
                   className="text-xs font-medium"
                 >
-                  Instruction{' '}
+                  {redoProposal ? 'Correction' : 'Instruction'}{' '}
                   <span className="font-normal text-muted-foreground">
-                    optional
+                    {redoProposal ? 'required' : 'optional'}
                   </span>
                 </label>
                 <Textarea
                   id="whats-next-instruction"
                   value={growInstruction}
                   maxLength={1_000}
-                  placeholder="Steer this round, or let the Agent respond from the current Node."
+                  placeholder={
+                    redoProposal
+                      ? 'What did this proposal misunderstand, and what do you want instead?'
+                      : 'Steer this round, or let the Agent respond from the current Node.'
+                  }
                   className="min-h-28"
                   onChange={(event) => setGrowInstruction(event.target.value)}
                 />
@@ -928,17 +1107,90 @@ export function WhatsNextWorkspace({
               />
 
               <div className="sticky bottom-0 -mx-4 border-t border-border bg-popover px-4 py-4">
-                <Button type="submit" className="w-full">
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={
+                    developmentPreview ||
+                    submittingGrow ||
+                    (redoProposal &&
+                      (!growInstruction.trim() || Boolean(redoBoundary.reason)))
+                  }
+                >
                   <Sparkles className="size-4" />
-                  {continuingGrow
-                    ? 'Continue exploration'
-                    : 'Start exploration'}
+                  {submittingGrow
+                    ? 'Starting…'
+                    : redoProposal
+                      ? 'Generate replacement proposal'
+                      : continuingGrow
+                        ? 'Continue exploration'
+                        : 'Start exploration'}
                 </Button>
                 {error ? (
                   <p className="mt-2 text-xs text-destructive">{error}</p>
                 ) : null}
               </div>
             </form>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={replacementReview !== null}
+        onOpenChange={(open) => {
+          if (!open && !resolvingReplacement) setReplacementReviewId('');
+        }}
+      >
+        <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden sm:max-w-4xl">
+          {replacementReview ? (
+            <>
+              <div>
+                <h2 className="text-sm font-semibold">
+                  Review replacement proposal
+                </h2>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  The original{' '}
+                  {replacementReview.replacement?.candidateIds.length ?? 0}{' '}
+                  directions are unchanged. Replace only if this response
+                  follows your correction. Superseded proposal history goes to
+                  system Trash; new directions still need individual acceptance.
+                </p>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                {replacementReview.result ? (
+                  <MarkdownReader
+                    title="Replacement response"
+                    filePath={`whats-next/runs/${replacementReview.runId}/response.md`}
+                    markdown={renderWhatsNextResponseMarkdown(
+                      replacementReview.result,
+                    )}
+                  />
+                ) : null}
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  disabled={resolvingReplacement}
+                  onClick={() => void resolveReplacement('keep-original')}
+                >
+                  Keep original
+                </Button>
+                <Button
+                  disabled={
+                    resolvingReplacement ||
+                    replacementReview.result?.outcome !== 'proposal'
+                  }
+                  onClick={() => void resolveReplacement('replace-proposal')}
+                >
+                  Replace proposal
+                </Button>
+              </div>
+              {error ? (
+                <p role="alert" className="text-xs text-destructive">
+                  {error}
+                </p>
+              ) : null}
+            </>
           ) : null}
         </DialogContent>
       </Dialog>
@@ -1200,6 +1452,7 @@ export function WhatsNextWorkspace({
                         size="sm"
                         disabled={
                           developmentPreview ||
+                          selectedCandidateLocked ||
                           (!reviseNote.trim() && pendingFeedback.length === 0)
                         }
                         onClick={() => void reviseCandidate()}
@@ -1214,7 +1467,12 @@ export function WhatsNextWorkspace({
                       type="button"
                       variant="destructive"
                       size="icon"
-                      disabled={accepting || discarding || developmentPreview}
+                      disabled={
+                        accepting ||
+                        discarding ||
+                        developmentPreview ||
+                        selectedCandidateLocked
+                      }
                       aria-label="Discard this direction"
                       title="Discard this direction"
                       onClick={() => void updateCandidate('discard')}
@@ -1230,7 +1488,10 @@ export function WhatsNextWorkspace({
                       variant="outline"
                       className="flex-1"
                       disabled={
-                        accepting || discarding || Boolean(revisionTarget)
+                        accepting ||
+                        discarding ||
+                        Boolean(revisionTarget) ||
+                        selectedCandidateLocked
                       }
                       onClick={() =>
                         setRevisionTarget({
@@ -1244,7 +1505,12 @@ export function WhatsNextWorkspace({
                     <Button
                       type="button"
                       className="flex-1"
-                      disabled={accepting || discarding || developmentPreview}
+                      disabled={
+                        accepting ||
+                        discarding ||
+                        developmentPreview ||
+                        selectedCandidateLocked
+                      }
                       onClick={() => void updateCandidate('accept')}
                     >
                       {accepting ? 'Accepting…' : 'Accept'}
@@ -1638,6 +1904,7 @@ function runToPreviews(run: WhatsNextRunRecord): TaskGraphPreview[] {
   }
 
   if (run.result?.outcome === 'proposal') {
+    if (isPendingReplacement(run)) return [];
     return run.result.candidates.map((candidate) => ({
       ...base,
       id: candidate.candidateId,
