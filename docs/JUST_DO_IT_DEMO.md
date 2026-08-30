@@ -9,7 +9,7 @@ then choose Open preview. The explicit preview route is
 `/projects/<projectId>/implementation?preview=just-do-it`.
 The normal route does not mount the simulation or display fictional goals.
 Unknown or repeated preview values do not activate the simulation.
-Exit preview returns to the unconnected entry; leaving discards tab-local changes.
+Exit preview returns to the live planning workspace; leaving discards tab-local demo changes.
 
 ## UI baseline frozen — 2026-08-30
 
@@ -143,7 +143,7 @@ Reducer tests cover execution gates, review/correction/merge, late-result
 rejection, failure recovery, source retention, completed-step preservation,
 idempotent import, Todo/draft ownership, and concurrent Action results.
 
-Freeze verification on 2026-08-30: all 127 tests across the seven repository
+Freeze verification on 2026-08-30: all 131 tests across the seven repository
 suites passed, along with typecheck, lint, and the production build. The build
 still reports dynamic-filesystem tracing warnings in the existing What's Next
 and Decomposition Run modules. Browser checks covered normal entry, explicit

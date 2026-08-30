@@ -227,23 +227,21 @@ void test('single-step adjustment preserves siblings, IDs, order and Overview', 
   );
   const steps = structuredClone(req.context.plan!.steps);
   steps[0].input = 'Inspect existing runtime configuration';
-  assert.equal(parse({ ...response(req), steps }, req).stage, 'planning');
-  steps[1].output = 'Add real AI';
-  assert.throws(() => parse({ ...response(req), steps }, req), /sibling/);
+  const patch = response(req);
+  delete patch.overview;
+  delete patch.steps;
+  patch.step = steps[0];
+  const adopted = parse(patch, req);
+  assert.equal(adopted.stage, 'planning');
+  if (adopted.stage !== 'planning') throw new Error('Wrong stage');
+  assert.equal(adopted.overview, req.context.plan!.overview);
+  assert.deepEqual(adopted.steps, steps);
+  assert.throws(() => parse({ ...patch, step: steps[1] }, req), /target step/);
+  assert.throws(() => parse({ ...patch, overview: 'New goal' }, req));
+  assert.throws(() => parse({ ...response(req), steps }, req), /target step/);
+  const whole = request();
   assert.throws(
-    () =>
-      parse(
-        { ...response(req), steps: [...req.context.plan!.steps].reverse() },
-        req,
-      ),
-    /sibling/,
-  );
-  assert.throws(
-    () => parse({ ...response(req), overview: 'New goal' }, req),
-    /sibling/,
-  );
-  assert.throws(
-    () => parse({ ...response(req), steps: [steps[0], steps[0]] }, req),
+    () => parse({ ...response(whole), steps: [steps[0], steps[0]] }, whole),
     /Duplicate/,
   );
 });

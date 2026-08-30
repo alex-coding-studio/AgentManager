@@ -26,6 +26,8 @@ type LocalAgentRunInput = {
   workingDirectory: string;
   prompt: string;
   resumeSessionId?: string;
+  model?: string;
+  effort?: 'low' | 'medium' | 'high' | 'xhigh';
 };
 
 type CodexEvent =
@@ -91,13 +93,13 @@ export function parseClaudeEvent(line: string): ClaudeEvent | null {
 }
 
 function startCodexRun(input: LocalAgentRunInput): LocalAgentRun {
-  const child = spawnCodex(input.workingDirectory, input.resumeSessionId);
+  const child = spawnCodex(input);
   child.stdin.end(input.prompt);
   return trackLocalAgentRun(child, consumeCodexRun);
 }
 
 function startClaudeRun(input: LocalAgentRunInput): LocalAgentRun {
-  const child = spawnClaude(input.workingDirectory, input.resumeSessionId);
+  const child = spawnClaude(input);
   child.stdin.end(input.prompt);
   return trackLocalAgentRun(child, consumeClaudeRun);
 }
@@ -126,33 +128,44 @@ function trackLocalAgentRun(
   };
 }
 
-function spawnCodex(workingDirectory: string, resumeSessionId?: string) {
+export function buildCodexArguments(input: LocalAgentRunInput) {
+  const { workingDirectory, resumeSessionId } = input;
+  return [
+    ...(resumeSessionId
+      ? [
+          'exec',
+          'resume',
+          '--ignore-user-config',
+          '--ignore-rules',
+          '--skip-git-repo-check',
+          '--json',
+        ]
+      : [
+          'exec',
+          '--ignore-user-config',
+          '--ignore-rules',
+          '--skip-git-repo-check',
+          '--sandbox',
+          'read-only',
+          '--json',
+          '-C',
+          workingDirectory,
+        ]),
+    ...(input.model ? ['--model', input.model] : []),
+    ...(input.effort
+      ? ['-c', `model_reasoning_effort=${JSON.stringify(input.effort)}`]
+      : []),
+    ...(resumeSessionId ? [resumeSessionId] : []),
+    '-',
+  ];
+}
+
+function spawnCodex(input: LocalAgentRunInput) {
+  const { workingDirectory } = input;
   const environment = { ...process.env };
   delete environment.OPENAI_API_KEY;
 
-  const arguments_ = resumeSessionId
-    ? [
-        'exec',
-        'resume',
-        '--ignore-user-config',
-        '--ignore-rules',
-        '--skip-git-repo-check',
-        '--json',
-        resumeSessionId,
-        '-',
-      ]
-    : [
-        'exec',
-        '--ignore-user-config',
-        '--ignore-rules',
-        '--skip-git-repo-check',
-        '--sandbox',
-        'read-only',
-        '--json',
-        '-C',
-        workingDirectory,
-        '-',
-      ];
+  const arguments_ = buildCodexArguments(input);
   return spawn('codex', arguments_, {
     cwd: workingDirectory,
     env: environment,
@@ -160,7 +173,10 @@ function spawnCodex(workingDirectory: string, resumeSessionId?: string) {
   });
 }
 
-export function buildClaudeArguments(resumeSessionId?: string) {
+export function buildClaudeArguments(
+  resumeSessionId?: string,
+  profile?: Pick<LocalAgentRunInput, 'model' | 'effort'>,
+) {
   return [
     '--print',
     '--safe-mode',
@@ -170,15 +186,18 @@ export function buildClaudeArguments(resumeSessionId?: string) {
     '--output-format',
     'stream-json',
     '--verbose',
+    ...(profile?.model ? ['--model', profile.model] : []),
+    ...(profile?.effort ? ['--effort', profile.effort] : []),
     ...(resumeSessionId ? ['--resume', resumeSessionId] : []),
   ];
 }
 
-function spawnClaude(workingDirectory: string, resumeSessionId?: string) {
+function spawnClaude(input: LocalAgentRunInput) {
+  const { workingDirectory, resumeSessionId } = input;
   const environment = { ...process.env };
   delete environment.ANTHROPIC_API_KEY;
 
-  return spawn('claude', buildClaudeArguments(resumeSessionId), {
+  return spawn('claude', buildClaudeArguments(resumeSessionId, input), {
     cwd: workingDirectory,
     env: environment,
     stdio: ['pipe', 'pipe', 'pipe'],

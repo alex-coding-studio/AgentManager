@@ -121,11 +121,13 @@ including settled workflow decisions and questions still open before implementat
 The Just Do It sidebar entry opens `/projects/<projectId>/implementation`,
 where **Open preview** enters the [interactive demo](docs/JUST_DO_IT_DEMO.md)
 at `/projects/<projectId>/implementation?preview=just-do-it`.
-The UI baseline is frozen as of 2026-08-30; real execution is not connected.
+The UI baseline is frozen as of 2026-08-30. The ordinary route now supports
+[real Planning](docs/JUST_DO_IT_PLANNING.md): import a formal Node, generate and
+adjust a Plan with a local Agent, then Finalize. Action execution is not connected.
 Preview uses fictional, in-memory data: no Agent calls, GitHub changes, or
 project writes. Reload or leave preview to reset the examples.
 
-Use **Add a goal** to try whole-plan generation, feedback, and confirmation
+In Preview, use **Add a goal** to try whole-plan generation, feedback, and confirmation
 before any Actions appear. The demo also includes per-role model profiles and
 Issue-style follow-ups; neither invokes a provider or writes to GitHub.
 

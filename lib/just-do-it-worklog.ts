@@ -207,10 +207,19 @@ export async function appendCardWorkRecord(
   cardId: string,
   expectedRevision: number,
   record: CardWorkRecord,
+  documents: Readonly<Record<string, string>> = {},
 ): Promise<CardWorklog> {
   assertCardUuid(cardId);
   if (!validRecord(record)) throw new Error('Invalid Card work record.');
   const frozenRecord = structuredClone(record);
+  const frozenDocuments = { ...documents };
+  for (const [name, content] of Object.entries(frozenDocuments)) {
+    assertDocumentName(name);
+    if (['event.json', 'reference.md', 'HANDOFF.md', 'INDEX.md'].includes(name))
+      throw new Error('Reserved worklog document name.');
+    if (typeof content !== 'string' || Buffer.byteLength(content) > 2_097_152)
+      throw new Error('Worklog document too large.');
+  }
   if (
     frozenRecord.kind === 'agent-note' &&
     frozenRecord.basedOnRevision !== expectedRevision
@@ -235,6 +244,9 @@ export async function appendCardWorkRecord(
   const entries = [...current.entries, entry];
   try {
     await Promise.all([
+      ...Object.entries(frozenDocuments).map(([name, content]) =>
+        writeFile(path.join(pending, name), content, { flag: 'wx' }),
+      ),
       writeFile(
         path.join(pending, 'event.json'),
         JSON.stringify(entry, null, 2) + '\n',
@@ -265,6 +277,30 @@ export async function appendCardWorkRecord(
     await rm(pending, { recursive: true, force: true });
   }
   return readCardWorklog(root, cardId);
+}
+
+function assertDocumentName(name: string) {
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*\.(json|md|txt)$/.test(name))
+    throw new Error('Invalid worklog document name.');
+}
+
+export async function readCardWorkDocument(
+  root: string,
+  cardId: string,
+  revision: number,
+  name: string,
+) {
+  assertCardUuid(cardId);
+  assertDocumentName(name);
+  if (!Number.isSafeInteger(revision) || revision < 1 || revision > 99_999_999)
+    throw new Error('Invalid revision.');
+  const directory = path.join(root, cardId, revisionName(revision));
+  for (const dir of [path.join(root, cardId), directory]) {
+    const stat = await lstat(dir);
+    if (!stat.isDirectory() || stat.isSymbolicLink())
+      throw new Error('Invalid worklog directory.');
+  }
+  return readRegular(path.join(directory, name));
 }
 
 function compact(value: string) {
