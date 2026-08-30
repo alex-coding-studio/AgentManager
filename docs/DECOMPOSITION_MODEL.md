@@ -127,6 +127,41 @@ Implementation is both a delivery tool and a way to test whether an idea is
 actually feasible. Its evidence can inspire further growth or a revised
 product decision without making delivery state part of the product graph.
 
+### Just Do It prerequisite delivery contract
+
+Settled during the 2026-08-29 design discussion; runtime implementation is
+pending. A dependency serves both as a prerequisite before execution and as
+an input source after the prerequisite has been delivered.
+
+For a goal A that depends on goal B:
+
+- The user may inspect A, add it to Just Do It, and discuss its Plan before B
+  is complete, but cannot start executing A while B remains unmet.
+- Show the unmet prerequisite and a navigation entry to B. Do not silently
+  add B to Just Do It or start it on the user's behalf.
+- B is complete when its agreed delivery outcome has been verified, not when
+  an Agent Run ends or a Formal Node is accepted in an exploration workspace.
+- Once B is complete, make its actual delivered outcome available as A's
+  dependency input for both planning and execution.
+- If A already has a provisional Plan, reconcile it against B's actual
+  delivery before allowing execution instead of retaining earlier assumptions.
+
+A displays its dependency on B in its input/context area, including fulfillment
+status, a concise delivery summary, artifact locations and versions, necessary
+usage instructions or limitations, and verification evidence links. Provide a
+way to inspect B without expanding B's entire Plan and Actions into A's Canvas.
+Goal-level dependencies remain outside the internal execution plan; internal
+prerequisites are handled within the selected goal at the appropriate granularity.
+
+Use B's delivered artifacts rather than only its original Card description.
+Supply a bounded dependency summary and resolvable artifact references, with
+on-demand access to further evidence. Do not eagerly inject B's complete
+conversation, failed attempts, or review history into A.
+
+The intended loop is: B unmet means A waits; B verified makes its delivery an
+input to A; A can then begin execution. Execution fulfillment belongs to Just
+Do It and does not add delivery-state management to the shared Formal Node.
+
 ## The user owns routing
 
 There is no required sequence among Grow, Decompose, and Implement.
