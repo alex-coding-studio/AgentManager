@@ -30,7 +30,8 @@ real provider path has not been smoke-tested in this delivery.
 
 Every request receives the retained source, current Plan and Card handoff with
 references, independent of previous provider memory. Session reuse is deferred.
-Project-wide instructions can be edited on the dashboard; they are stored in
+Project-wide instructions open from Context in the top module header, available
+on both the dashboard and inside a Card rather than below the goal list. They are stored in
 `.agent-manager/implementation/instructions.md` and snapshotted per run. Editing
 them does not alter an active run. Automatic local Skill discovery/loading is
 still deferred and instructions cannot expand runtime permissions.
