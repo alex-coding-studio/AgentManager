@@ -1,4 +1,12 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { candidatePromptView } from './graph-identity.ts';
+import {
+  ensureGraphIdentities,
+  identifyCandidates,
+  readIdentifiedEntities,
+  reserveNodeIdentity,
+  reservedCandidateAliases,
+} from './graph-identity-store.ts';
 import {
   access,
   copyFile,
@@ -214,7 +222,9 @@ export async function startTaskDecompositionRun(
       primary: contextWorkspace.manifest.primary,
       related: contextWorkspace.manifest.related,
     },
-    revisionTarget: revisionTarget?.candidate ?? null,
+    revisionTarget: revisionTarget
+      ? candidatePromptView(revisionTarget.candidate)
+      : null,
     reservedCandidateIds: reservedCandidateIds.filter(
       (candidateId) => candidateId !== revisionTarget?.candidate.candidateId,
     ),
@@ -319,6 +329,7 @@ export async function readTaskDecompositionRun(
   runId: string,
 ) {
   validateRunId(runId);
+  await ensureGraphIdentities(project.planningPath, 'task-graph');
   const record = JSON.parse(
     await readFile(
       path.join(taskDecompositionRunPath(project, runId), 'run.json'),
@@ -326,6 +337,13 @@ export async function readTaskDecompositionRun(
     ),
   ) as TaskDecompositionRunRecord;
   record.operation ??= record.revisionOf ? 'revise-candidate' : 'propose';
+  if (record.result?.outcome === 'proposal') {
+    record.result.candidates = await readIdentifiedEntities(
+      project.planningPath,
+      'task-graph',
+      record.result.candidates,
+    );
+  }
   await ensureCandidateArtifacts(project, record);
   return record;
 }
@@ -390,11 +408,7 @@ export async function acceptTaskDecompositionCandidate(
   if (!candidate) throw new Error('The Candidate could not be found.');
 
   const existingNodes = await listTaskGraphNodes(project);
-  const accepted = existingNodes.find(
-    (node) =>
-      node.provenance?.candidateId === candidateId &&
-      node.provenance?.runId === runId,
-  );
+  const accepted = existingNodes.find((node) => node.uid === candidate.uid);
   if (accepted) return { node: accepted, nodes: existingNodes };
   const resolvedDependencies = resolveCandidateDependencies(
     candidate.candidateId,
@@ -402,12 +416,12 @@ export async function acceptTaskDecompositionCandidate(
     existingNodes,
   );
 
-  const nextNumber =
-    existingNodes.reduce((largest, node) => {
-      const number = Number(node.id.replace(/^NODE-/, ''));
-      return Number.isFinite(number) ? Math.max(largest, number) : largest;
-    }, 0) + 1;
-  const nodeId = `NODE-${String(nextNumber).padStart(4, '0')}`;
+  if (!candidate.uid) throw new Error('Candidate stable identity is missing.');
+  const { id: nodeId } = await reserveNodeIdentity(
+    project.planningPath,
+    'task-graph',
+    candidate.uid,
+  );
   const nodesPath = path.join(project.planningPath, 'task-graph', 'nodes');
   const nodePath = path.join(nodesPath, nodeId);
   const temporaryPath = path.join(nodesPath, `.${nodeId}-${randomUUID()}.tmp`);
@@ -428,6 +442,8 @@ export async function acceptTaskDecompositionCandidate(
     const node: TaskGraphNode = {
       schemaVersion: 1,
       id: nodeId,
+      uid: candidate.uid,
+      relations: candidate.relations,
       role: 'node',
       type: candidate.type,
       title: candidate.title,
@@ -635,6 +651,14 @@ async function finishTaskDecompositionRun(
     }
     const endedAt = new Date().toISOString();
     record.status = result.outcome;
+    if (result.outcome === 'proposal') {
+      result.candidates = await identifyCandidates(
+        project.planningPath,
+        'task-graph',
+        result.candidates,
+        revisionTarget,
+      );
+    }
     record.result = result;
     await ensureCandidateArtifacts(project, record);
     record.updatedAt = endedAt;
@@ -789,6 +813,8 @@ async function saveUploadedResources(
 function graphMapEntry(node: TaskGraphNode) {
   return {
     id: node.id,
+    uid: node.uid,
+    relations: node.relations,
     role: node.role,
     type: node.type,
     title: node.title,
@@ -920,16 +946,7 @@ async function collectLatestUnacceptedCandidates(project: RegisteredProject) {
 }
 
 async function collectReservedCandidateIds(project: RegisteredProject) {
-  const runs = await readAllTaskDecompositionRuns(project);
-  return [
-    ...new Set(
-      runs.flatMap((run) =>
-        run.result?.outcome === 'proposal'
-          ? run.result.candidates.map((candidate) => candidate.candidateId)
-          : [],
-      ),
-    ),
-  ];
+  return reservedCandidateAliases(project.planningPath, 'task-graph');
 }
 
 async function readAllTaskDecompositionRuns(project: RegisteredProject) {

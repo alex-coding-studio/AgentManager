@@ -30,6 +30,10 @@ feasible for the next decision.
 
 ## Formal Nodes are shared product objects
 
+The immutable UUID and stable relationship contract is defined in
+[`STABLE_NODE_IDENTITIES.md`](STABLE_NODE_IDENTITIES.md). Candidate acceptance
+changes its display alias and lifecycle, not its product-object identity.
+
 A Formal Node is accepted, durable meaning in the product graph. It is not a
 Task Decomposition object, a What's Next object, or an Implementation object.
 

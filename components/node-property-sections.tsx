@@ -35,6 +35,7 @@ export function NodeResourceSections({
 export function NodeProvenanceFacts({ node }: { node: TaskGraphNode }) {
   return (
     <dl className="space-y-3 text-xs">
+      {node.uid ? <PropertyRow label="Stable ID" value={node.uid} /> : null}
       <PropertyRow
         label="Created through"
         value={
@@ -113,7 +114,7 @@ function PropertyRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between gap-4">
       <dt className="text-muted-foreground">{label}</dt>
-      <dd className="text-right">{value}</dd>
+      <dd className="min-w-0 break-all text-right">{value}</dd>
     </div>
   );
 }

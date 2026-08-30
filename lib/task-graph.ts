@@ -11,6 +11,12 @@ import {
 } from 'node:fs/promises';
 import path from 'node:path';
 import trash from 'trash';
+import type { GraphIdentityFields } from './graph-identity.ts';
+import {
+  ensureGraphIdentities,
+  readIdentifiedEntities,
+  reserveNodeIdentity,
+} from './graph-identity-store.ts';
 import type { RegisteredProject } from '@/lib/project-registry';
 import {
   assertCanvasCanCreateStartNode,
@@ -25,7 +31,7 @@ export function assertGraphRoot(value: unknown): GraphRoot {
   throw new Error('The graph is invalid.');
 }
 
-export type TaskGraphNode = {
+export type TaskGraphNode = GraphIdentityFields & {
   schemaVersion: 1;
   id: string;
   role: 'start' | 'node';
@@ -59,6 +65,7 @@ export async function listTaskGraphNodes(
   project: RegisteredProject,
   graphRoot: GraphRoot = 'task-graph',
 ) {
+  await ensureGraphIdentities(project.planningPath, graphRoot);
   const nodesPath = path.join(project.planningPath, graphRoot, 'nodes');
   const entries = await readdir(nodesPath, { withFileTypes: true }).catch(
     () => [],
@@ -68,7 +75,7 @@ export async function listTaskGraphNodes(
     .map((entry) => entry.name)
     .sort((left, right) => right.localeCompare(left));
 
-  return Promise.all(
+  const nodes = await Promise.all(
     fileNames.map(async (fileName) => {
       const node = JSON.parse(
         await readFile(path.join(nodesPath, fileName, 'node.json'), 'utf8'),
@@ -88,6 +95,7 @@ export async function listTaskGraphNodes(
       return node;
     }),
   );
+  return readIdentifiedEntities(project.planningPath, graphRoot, nodes, true);
 }
 
 export async function createStartNode(
@@ -129,12 +137,10 @@ export async function createStartNode(
   await mkdir(nodesPath, { recursive: true });
   const existingNodes = await listTaskGraphNodes(project, graphRoot);
   assertCanvasCanCreateStartNode(existingNodes);
-  const nextNumber =
-    existingNodes.reduce((largest, node) => {
-      const number = Number(node.id.replace(/^NODE-/, ''));
-      return Number.isFinite(number) ? Math.max(largest, number) : largest;
-    }, 0) + 1;
-  const id = `NODE-${String(nextNumber).padStart(4, '0')}`;
+  const { id, uid } = await reserveNodeIdentity(
+    project.planningPath,
+    graphRoot,
+  );
   const nodePath = path.join(nodesPath, id);
   const temporaryNodePath = path.join(nodesPath, `.${id}-${randomUUID()}.tmp`);
   await mkdir(temporaryNodePath);
@@ -174,6 +180,8 @@ export async function createStartNode(
     const node: TaskGraphNode = {
       schemaVersion: 1,
       id,
+      uid,
+      relations: { derivedFrom: [], dependsOn: [] },
       role: 'start',
       type: 'source',
       title,

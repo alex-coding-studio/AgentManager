@@ -1,4 +1,5 @@
 import Ajv2020 from 'ajv/dist/2020.js';
+import type { GraphIdentityFields } from './graph-identity.ts';
 
 export const TASK_DECOMPOSITION_HARNESS_ID = 'agent-manager.task-decomposition';
 export const TASK_DECOMPOSITION_HARNESS_REVISION = 5;
@@ -32,7 +33,7 @@ export type HarnessResourceReference = {
   path: string;
 };
 
-export type HarnessCandidate = {
+export type HarnessCandidate = GraphIdentityFields & {
   candidateId: string;
   revision: number;
   type: string;
