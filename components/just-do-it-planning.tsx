@@ -78,7 +78,10 @@ export function DemoPlanningWorkspace({
   const [selectedId, setSelectedId] = useState('overview');
   const [editing, setEditing] = useState<'whole' | 'step' | null>(null);
   const selected = plan.steps.find((item) => item.id === selectedId);
-  const busy = goal.actions.some((item) => item.job);
+  const busy = Boolean(plan.job) || goal.actions.some((item) => item.job);
+  const updatingSelected = Boolean(
+    plan.job?.targetId && plan.job.targetId === selected?.id,
+  );
   const locked =
     selected &&
     goal.actions.some(
@@ -91,7 +94,7 @@ export function DemoPlanningWorkspace({
       !item.output.trim() ||
       !item.validation.trim(),
   );
-  if (plan.job)
+  if (plan.job && !plan.job.targetId)
     return (
       <section
         className="mx-auto grid min-h-80 max-w-2xl place-content-center justify-items-center gap-4 rounded-2xl border border-border bg-card p-8 text-center"
@@ -192,6 +195,7 @@ export function DemoPlanningWorkspace({
                 key={item.id}
                 type="button"
                 aria-pressed={selected?.id === item.id}
+                aria-busy={plan.job?.targetId === item.id}
                 onClick={() => setSelectedId(item.id)}
                 className={cn(
                   'flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
@@ -204,6 +208,9 @@ export function DemoPlanningWorkspace({
                   {String(index + 1).padStart(2, '0')}
                 </span>
                 <span className="text-sm leading-5">{item.title}</span>
+                {plan.job?.targetId === item.id && (
+                  <LoaderCircle className="ml-auto size-3.5 shrink-0 animate-spin text-blue-600 dark:text-blue-300" />
+                )}
               </button>
             ))}
           </div>
@@ -250,39 +257,69 @@ export function DemoPlanningWorkspace({
             </p>
           </article>
         ) : (
-          <article className="min-w-0 rounded-2xl border border-border bg-card p-5">
-            <div className="mb-5 flex items-start justify-between gap-3">
-              <div>
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                  {t('Planned step')}{' '}
-                  {plan.steps.findIndex((item) => item.id === selected.id) + 1}
-                </p>
-                <h2 className="mt-2 text-xl font-semibold leading-8">
-                  {selected.title}
-                </h2>
+          <article
+            aria-busy={updatingSelected}
+            className="relative min-w-0 rounded-2xl border border-border bg-card p-5"
+          >
+            <div
+              className={cn(updatingSelected && 'invisible')}
+              inert={updatingSelected || undefined}
+            >
+              <div className="mb-5 flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                    {t('Planned step')}{' '}
+                    {plan.steps.findIndex((item) => item.id === selected.id) +
+                      1}
+                  </p>
+                  <h2 className="mt-2 text-xl font-semibold leading-8">
+                    {selected.title}
+                  </h2>
+                </div>
+                <Button
+                  variant="outline"
+                  disabled={busy || locked}
+                  onClick={() => setEditing('step')}
+                >
+                  <Pencil />
+                  {t('Adjust this step')}
+                </Button>
               </div>
-              <Button
-                variant="outline"
-                disabled={busy || locked}
-                onClick={() => setEditing('step')}
-              >
-                <Pencil />
-                {t('Adjust this step')}
-              </Button>
-            </div>
-            {locked && (
-              <p className="mb-4 text-xs text-muted-foreground">
-                {t('Existing delivery retained')}
-              </p>
-            )}
-            <div className="space-y-5">
-              <PlanFact label="Input">{selected.input}</PlanFact>
-              <PlanFact label="Expected output">{selected.output}</PlanFact>
-              <PlanFact label="Validation">{selected.validation}</PlanFact>
-              {selected.guidance && (
-                <PlanFact label="Step guidance">{selected.guidance}</PlanFact>
+              {locked && (
+                <p className="mb-4 text-xs text-muted-foreground">
+                  {t('Existing delivery retained')}
+                </p>
               )}
+              <div className="space-y-5">
+                <PlanFact label="Input">{selected.input}</PlanFact>
+                <PlanFact label="Expected output">{selected.output}</PlanFact>
+                <PlanFact label="Validation">{selected.validation}</PlanFact>
+                {selected.guidance && (
+                  <PlanFact label="Step guidance">{selected.guidance}</PlanFact>
+                )}
+              </div>
             </div>
+            {updatingSelected && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-5 text-center">
+                <LoaderCircle className="size-7 animate-spin text-blue-600 dark:text-blue-300" />
+                <output className="text-sm font-medium">
+                  {t('Updating this planned step…')}
+                </output>
+                <p className="text-xs text-muted-foreground">
+                  {t(
+                    'Only this step is updating. You can still browse the plan on the left.',
+                  )}
+                </p>
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    dispatch({ type: 'plan-cancel', goalId: goal.id })
+                  }
+                >
+                  {t('Cancel')}
+                </Button>
+              </div>
+            )}
           </article>
         )}
       </div>

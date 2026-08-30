@@ -160,6 +160,9 @@ Planning has distinct screens:
    validation; do not offer a manual Add step form that makes the user author
    those contracts. Scoped changes preserve unrelated steps. No full-response
    reading is required.
+   A single-step adjustment loads only that step's detail pane. Keep the Plan
+   list, selection, and surrounding layout mounted; other steps remain browsable.
+   Do not replace the entire preview with a loading screen for a scoped update.
 5. Confirming the entire Plan finalizes those step contracts and enters the
    execution-ready Action workspace.
 

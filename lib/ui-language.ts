@@ -5,6 +5,8 @@ export function isUiLanguage(value: unknown): value is UiLanguage {
 }
 
 export const chineseUi: Record<string, string> = {
+  'Only this step is updating. You can still browse the plan on the left.':
+    '仅更新这一步，你仍可浏览左侧计划。',
   'For example: three steps feel too broad. Could you break them into four?':
     '例如：3 步有点少，可以细化成 4 步吗？',
   'Try the demo: refine three steps into four': '演示可试：把三步细化成四步',
