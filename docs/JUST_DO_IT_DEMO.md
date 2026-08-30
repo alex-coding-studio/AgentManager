@@ -49,8 +49,10 @@ content remains Chinese regardless of interface language, like user content.
 - Action content uses Input, expected Output, and Validation; Processing is only
   an activity state. The development-environment sample names concrete files,
   restrictions, startup instructions, and acceptance evidence.
-- The Context and delivery panel keeps retained source material and fulfilled
-  prerequisite deliveries accessible without embedding another execution graph.
+- A compact Source control beside the goal title opens retained source content.
+  Requirements stay in planning rather than being repeated in a generic context
+  panel. Prerequisite deliveries appear only for goals with dependencies, above
+  their plan or Action as input; branch and PR metadata belong to Action outputs.
 - The prototype uses provisional stage/activity/result presentation, not a
   finalized production state schema. No real rollback, import, source deletion,
   merge, or completion propagation is performed.

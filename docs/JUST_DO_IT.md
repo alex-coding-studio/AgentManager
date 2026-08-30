@@ -318,11 +318,16 @@ source after the prerequisite has been delivered. For goal A depending on B:
 - Reconcile any provisional Plan for A against B's actual delivery before
   allowing A to execute.
 
-A's input/context area displays B's fulfillment status, delivery summary,
+A's conditional prerequisite-input section displays B's fulfillment status, delivery summary,
 artifact locations and versions, necessary usage instructions or limitations,
 and verification evidence links. It links to B without expanding B's complete
 Plan and Actions into A's Canvas. Goal-level dependencies are managed outside
 the internal plan; internal prerequisites are handled at their own granularity.
+
+Do not combine source provenance, repeated requirements, branch metadata, and
+prerequisites into a generic Context and delivery panel. Source content is
+accessible beside the goal title, requirements belong in planning, prerequisites
+appear only when present, and branch/PR references belong to Action output.
 
 Use actual delivered artifacts, not just B's original description of intended
 work. Provide bounded summaries and resolvable references with on-demand access

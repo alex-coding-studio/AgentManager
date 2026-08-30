@@ -372,18 +372,29 @@ function GoalWorkbench({
       </button>
       <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div className="max-w-3xl">
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            <span className={labelStyle}>{t(goal.source)}</span>
-            {goal.sourceDeleted && (
+          {goal.sourceDeleted && (
+            <div className="mb-2 flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-1 text-xs text-amber-700 dark:text-amber-300">
                 <Link2Off className="size-3" />
                 {t('Source node deleted')}
               </span>
-            )}
+            </div>
+          )}
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl font-semibold leading-9 tracking-tight">
+              {goal.title}
+            </h1>
+            <button
+              type="button"
+              onClick={() => setSourceOpen(true)}
+              aria-label={t('View retained source')}
+              title={goal.sourceId}
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs text-muted-foreground hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <FileText className="size-3.5" />
+              {t('Source')}
+            </button>
           </div>
-          <h1 className="text-2xl font-semibold leading-9 tracking-tight">
-            {goal.title}
-          </h1>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
             {goal.summary}
           </p>
@@ -482,27 +493,53 @@ function GoalWorkbench({
           </button>
         </aside>
         <div className="min-w-0 space-y-4">
-          {blocked.length > 0 && (
-            <div className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-4">
+          {goal.dependencyIds.length > 0 && (
+            <section
+              className={cn(
+                'rounded-xl border p-4',
+                blocked.length
+                  ? 'border-amber-500/25 bg-amber-500/5'
+                  : 'border-border bg-card',
+              )}
+            >
               <h2 className="text-sm font-medium">
-                {t('Waiting for prerequisite')}
+                {t('Prerequisite deliveries')}
               </h2>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                {t(
-                  'You can prepare this plan, but execution waits for the upstream delivery.',
-                )}
-              </p>
-              {blocked.map((id) => (
-                <button
-                  key={id}
-                  className="mt-3 flex items-center gap-2 rounded text-xs underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-ring"
-                  onClick={() => onOpenGoal(id)}
-                >
-                  {state.goals.find((item) => item.id === id)?.title ?? id}
-                  <ArrowRight className="size-3" />
-                </button>
-              ))}
-            </div>
+              {blocked.length > 0 && (
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  {t(
+                    'You can prepare this plan, but execution waits for the upstream delivery.',
+                  )}
+                </p>
+              )}
+              {goal.dependencyIds.map((id) => {
+                const dep = state.goals.find((item) => item.id === id);
+                const delivered = Boolean(dep && goalComplete(dep));
+                return (
+                  <div key={id} className="mt-3 space-y-2 text-xs">
+                    <button
+                      className="flex items-center gap-2 rounded text-left font-medium focus-visible:ring-2 focus-visible:ring-ring"
+                      onClick={() => onOpenGoal(id)}
+                    >
+                      {delivered ? (
+                        <Check className="size-3 text-emerald-600 dark:text-emerald-400" />
+                      ) : (
+                        <Link2 className="size-3" />
+                      )}
+                      {dep?.title ?? id}
+                      <ChevronRight className="size-3" />
+                    </button>
+                    <p className="leading-5 text-muted-foreground">
+                      {delivered && dep
+                        ? `${t('Delivered input')}: ${dep.actions.map((item) => `${item.rounds.at(-1)?.summary ?? item.output} (${item.rounds.at(-1)?.commit ?? 'demo'})`).join(' ')}`
+                        : t(
+                            'Delivery context becomes available after verification.',
+                          )}
+                    </p>
+                  </div>
+                );
+              })}
+            </section>
           )}
           {panel === 'plan' || (!goal.planConfirmed && panel !== 'todos') ? (
             <DemoPlanningWorkspace
@@ -524,64 +561,6 @@ function GoalWorkbench({
               onPlan={() => setPanel('plan')}
             />
           )}
-          <section className={cn(sectionStyle, 'p-4')}>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className={labelStyle}>{t('Context & delivery')}</h2>
-              <button
-                onClick={() => setSourceOpen(true)}
-                className="inline-flex items-center gap-1.5 rounded text-xs text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <FileText className="size-3.5" />
-                {t('View retained source')}
-              </button>
-            </div>
-            <p className="mt-3 text-xs leading-6 text-muted-foreground">
-              {goal.requirements}
-            </p>
-            <div className="mt-3 flex flex-wrap gap-4 border-t border-border pt-3 text-[11px] text-muted-foreground">
-              <span className="flex items-center gap-1.5">
-                <GitBranch className="size-3" />
-                demo/{goal.id}
-              </span>
-              <span className="flex items-center gap-1.5">
-                {goal.sourceDeleted ? (
-                  <Link2Off className="size-3" />
-                ) : (
-                  <Link2 className="size-3" />
-                )}
-                {goal.sourceDeleted ? t('Source node deleted') : goal.sourceId}
-              </span>
-            </div>
-            {goal.dependencyIds.map((id) => {
-              const dep = state.goals.find((item) => item.id === id);
-              return (
-                <div
-                  key={id}
-                  className="mt-4 rounded-lg bg-secondary/50 p-3 text-xs"
-                >
-                  <button
-                    onClick={() => onOpenGoal(id)}
-                    className="flex items-center gap-2 text-left font-medium"
-                  >
-                    {dep && goalComplete(dep) ? (
-                      <Check className="size-3 text-emerald-500" />
-                    ) : (
-                      <Link2 className="size-3" />
-                    )}
-                    {dep?.title ?? id}
-                    <ChevronRight className="size-3" />
-                  </button>
-                  <p className="mt-2 leading-5 text-muted-foreground">
-                    {dep && goalComplete(dep)
-                      ? `${t('Delivered input')}: ${dep.actions.map((item) => `${item.rounds.at(-1)?.summary ?? item.output} (${item.rounds.at(-1)?.commit ?? 'demo'})`).join(' ')}`
-                      : t(
-                          'Delivery context becomes available after verification.',
-                        )}
-                  </p>
-                </div>
-              );
-            })}
-          </section>
         </div>
       </div>
       <Dialog open={sourceOpen} onOpenChange={setSourceOpen}>
@@ -855,6 +834,10 @@ function ActionWorkbench({
                 )}
               </p>
             )}
+            <p className="mb-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <GitBranch className="size-3" />
+              demo/{goal.id}/{target.id}
+            </p>
             <DemoProfileSummary value={viewed?.profile} />
             <MarkdownReader
               title={`${t('Round')} ${viewed?.number} · output.md`}

@@ -5,6 +5,7 @@ export function isUiLanguage(value: unknown): value is UiLanguage {
 }
 
 export const chineseUi: Record<string, string> = {
+  'Prerequisite deliveries': '前置成果',
   Model: '模型',
   'Provider default': '沿用默认配置',
   'Reasoning model · demo': '推理模型 · 演示',
