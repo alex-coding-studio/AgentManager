@@ -23,6 +23,12 @@ natural-language plan adjustment, whole-plan confirmation, the manual Action
 output/verification loop, and lightweight Todos. Simulation controls, fictional
 model profiles, delays, and fixtures stay preview-only when live integration is added.
 
+Later Harness rulings in JUST_DO_IT.md supersede older design assumptions without
+changing this frozen simulation. In particular, the real workflow will require
+full execution rollback before Plan edits after any output, and must distinguish
+explicit user acceptance from technical check results. The demo's existing
+Plan-edit and acceptance gates are not evidence that those rules are implemented.
+
 ## Isolation
 
 The route reads project registration for the existing shell only. Its goals,
