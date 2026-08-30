@@ -1,11 +1,25 @@
 # Roadmap
 
-AgentManager's next priority is the smallest complete Decomposition loop.
-Operational analytics remain planned work and must not delay that loop.
+## Current focus — Just Do It workflow design
 
-## Current MVP
+As of the 2026-08-29 discussion, the focus is defining Just Do It's manual
+planning, execution, and verification workflow over shared Formal Nodes.
+See [JUST_DO_IT.md](JUST_DO_IT.md) for settled intent and remaining decisions.
+The current round is documentation only: no execution runtime, Harness changes,
+automatic review/merge pipeline, or storage migration is authorized.
 
-### 1. Agent Run loop — implemented, pending live acceptance
+Local Git versioning and operational analytics remain deferred. They must not
+delay completing the workflow discussion. Implementation scope and acceptance
+checks will be agreed separately after the unresolved design questions are settled.
+
+## Earlier Decomposition MVP planning baseline
+
+The following records the earlier planning baseline, not a current runtime
+status or acceptance report. It includes historical proposal/storage behavior;
+do not use it to override later product contracts or infer that current data may
+be deleted. Current conceptual boundaries are in [DECOMPOSITION_MODEL.md](DECOMPOSITION_MODEL.md).
+
+### 1. Agent Run loop
 
 - Replace the local-only Request Preview action with `Send to Agent`.
 - Create a minimal Run record with `runId`, status, transport, start and end
