@@ -140,7 +140,7 @@ export const chineseUi: Record<string, string> = {
   'From action': '来源步骤',
   'Simulate Issue reopened': '模拟重新打开',
   'Simulate Issue closed': '模拟关闭 Issue',
-  'Track out-of-scope feedback as Todo': '将范围外反馈记为 Todo',
+  'Add Todo': '添加 Todo',
   'Plan progress': '计划进度',
   'Completed {done} / {total} steps': '已完成 {done} / {total} 步',
   'Open goal: {title}': '打开目标：{title}',

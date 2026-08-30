@@ -1060,7 +1060,7 @@ function ActionWorkbench({
                   setIssueOpen(true);
                 }}
               >
-                {t('Track out-of-scope feedback as Todo')}
+                {t('Add Todo')}
               </Button>
               <Button
                 size="lg"
