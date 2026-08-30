@@ -203,6 +203,61 @@ void test('places a request preview without colliding in the target rank', () =>
   assert.notEqual(preview.y, secondChild.y);
 });
 
+for (const feature of ['whats-next', 'task-decomposition'] as const) {
+  void test(`${feature} acceptance preserves all coordinates across promotion and reload`, () => {
+    const root = node('NODE-0001');
+    let previews = Array.from({ length: 5 }, (_, index) => ({
+      id: `CANDIDATE-000${index + 1}`,
+      sourceNodeId: root.id,
+      instruction: '',
+      inheritedResourceCount: 0,
+      additionalResourceCount: 0,
+      kind: 'candidate' as const,
+      derivedFrom: [root.id],
+    }));
+    const originals = [...previews];
+    const formal = [root];
+    const baseline = buildTaskGraphLayout(formal, previews);
+
+    for (const index of [1, 4, 0, 3, 2]) {
+      const candidate = originals[index]!;
+      const promoted = node(`NODE-000${formal.length + 1}`, [root.id]);
+      promoted.provenance = {
+        feature,
+        candidateId: candidate.id,
+        revision: 4,
+        runId: 'RUN-0001',
+      };
+      formal.push(promoted);
+      previews = previews.filter((entry) => entry.id !== candidate.id);
+      const after = buildTaskGraphLayout(formal, previews);
+      const reloaded = buildTaskGraphLayout(
+        [...formal].reverse(),
+        [...previews].reverse(),
+      );
+      for (const entry of after.nodes) {
+        const originalId =
+          formal.find((item) => item.id === entry.id)?.provenance
+            ?.candidateId ?? entry.id;
+        const previous = position(baseline, originalId);
+        assert.deepEqual([entry.x, entry.y], [previous.x, previous.y]);
+        const restored = position(reloaded, entry.id);
+        assert.deepEqual([restored.x, restored.y], [entry.x, entry.y]);
+      }
+      assert.equal(after.edges.length, 5);
+      assert.ok(
+        after.edges.some(
+          (edge) =>
+            edge.source === root.id &&
+            edge.target === promoted.id &&
+            edge.relation === 'lineage',
+        ),
+      );
+      assert.ok(!after.nodes.some((entry) => entry.id === candidate.id));
+    }
+  });
+}
+
 function position(graph: ReturnType<typeof buildTaskGraphLayout>, id: string) {
   const result = graph.nodes.find((candidate) => candidate.id === id);
   assert.ok(result);
