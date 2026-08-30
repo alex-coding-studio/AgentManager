@@ -19,6 +19,13 @@ baseline. These are design rules, not behavior already enforced by the frozen
 preview. Next resolve rollback scope, partial acceptance/downstream readiness,
 and Skill/runtime integration. Do not redesign the frozen UI in this docs round.
 
+The [offline Harness foundation](JUST_DO_IT_HARNESS.md) now covers four stage
+prompts, identity/scope/result validation and a durable Card worklog with a short
+main handoff plus on-demand references. Fixed tests and an isolated sample
+generator exercise the contracts; no model-quality or real-execution claim is
+made. Next wire a bounded real planning run to those contracts and evaluate
+handoff across Sessions before authorizing execution/GitHub integrations.
+
 As of the 2026-08-29 discussion, the focus is defining Just Do It's manual
 planning, execution, and verification workflow for GitHub-backed software
 projects over shared Formal Nodes. The goal dashboard has independent execution
