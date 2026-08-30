@@ -2,8 +2,9 @@ import dagre from '@dagrejs/dagre';
 import type { HarnessCandidate } from '@/lib/task-decomposition-harness';
 import type { TaskGraphNode } from '@/lib/task-graph';
 import type { WhatsNextCandidate } from '@/lib/whats-next-harness';
+import type { GraphIdentityFields, IdentityEntity } from './graph-identity.ts';
 
-export type TaskGraphPreview = {
+export type TaskGraphPreview = GraphIdentityFields & {
   id: string;
   sourceNodeId: string;
   instruction: string;
@@ -28,6 +29,7 @@ export type TaskGraphPreview = {
 
 export type TaskGraphLayoutNode = {
   id: string;
+  uid: string;
   kind: 'formal' | 'preview';
   x: number;
   y: number;
@@ -48,28 +50,64 @@ export function buildTaskGraphLayout(
   nodes: TaskGraphNode[],
   previews: TaskGraphPreview[],
 ) {
+  const nodeUid = (node: TaskGraphNode) =>
+    node.uid ?? node.provenance?.candidateId ?? node.id;
+  const previewUid = (preview: TaskGraphPreview) =>
+    preview.uid ?? preview.candidate?.uid ?? preview.id;
+  const formalUids = new Set(nodes.map(nodeUid));
+  const visiblePreviews = previews.filter(
+    (preview) => !formalUids.has(previewUid(preview)),
+  );
+  const layoutIdByNodeId = new Map<string, string>();
+  for (const preview of previews)
+    layoutIdByNodeId.set(preview.id, previewUid(preview));
+  for (const node of nodes) {
+    layoutIdByNodeId.set(node.id, nodeUid(node));
+    if (node.provenance)
+      layoutIdByNodeId.set(node.provenance.candidateId, nodeUid(node));
+  }
+  const displayIdByUid = new Map([
+    ...visiblePreviews.map(
+      (preview) => [previewUid(preview), preview.id] as const,
+    ),
+    ...nodes.map((node) => [nodeUid(node), node.id] as const),
+  ]);
+  const references = (
+    entity: IdentityEntity,
+    relation: 'derivedFrom' | 'dependsOn',
+    fallback: string[],
+  ) =>
+    entity.relations
+      ? entity.relations[relation].flatMap((uid) =>
+          displayIdByUid.has(uid) ? [displayIdByUid.get(uid)!] : [],
+        )
+      : fallback.map(
+          (alias) =>
+            displayIdByUid.get(layoutIdByNodeId.get(alias) ?? alias) ?? alias,
+        );
   const layoutNodes: Array<{
     id: string;
+    uid: string;
     kind: TaskGraphLayoutNode['kind'];
     derivedFrom: string[];
   }> = [
     ...nodes.map((node) => ({
       id: node.id,
+      uid: nodeUid(node),
       kind: 'formal' as const,
-      derivedFrom: node.derivedFrom ?? [],
+      derivedFrom: references(node, 'derivedFrom', node.derivedFrom ?? []),
     })),
-    ...previews.map((preview) => ({
+    ...visiblePreviews.map((preview) => ({
       id: preview.id,
+      uid: previewUid(preview),
       kind: 'preview' as const,
-      derivedFrom: preview.derivedFrom ?? [preview.sourceNodeId],
+      derivedFrom: references(
+        preview.candidate ?? preview,
+        'derivedFrom',
+        preview.derivedFrom ?? [preview.sourceNodeId],
+      ),
     })),
   ];
-  const layoutIdByNodeId = new Map([
-    ...nodes.map(
-      (node) => [node.id, node.provenance?.candidateId ?? node.id] as const,
-    ),
-    ...previews.map((preview) => [preview.id, preview.id] as const),
-  ]);
   const layoutId = (id: string) => layoutIdByNodeId.get(id)!;
   const compareIds = (left: string, right: string) =>
     layoutId(left).localeCompare(layoutId(right), 'en', { numeric: true });
@@ -119,10 +157,17 @@ export function buildTaskGraphLayout(
     };
   });
   const dependencySources = [
-    ...nodes.map((node) => ({ id: node.id, dependsOn: node.dependsOn })),
-    ...previews.map((preview) => ({
+    ...nodes.map((node) => ({
+      id: node.id,
+      dependsOn: references(node, 'dependsOn', node.dependsOn),
+    })),
+    ...visiblePreviews.map((preview) => ({
       id: preview.id,
-      dependsOn: preview.dependsOn ?? [],
+      dependsOn: references(
+        preview.candidate ?? preview,
+        'dependsOn',
+        preview.dependsOn ?? [],
+      ),
     })),
   ];
   const dependencyEdges: TaskGraphLayoutEdge[] = dependencySources.flatMap(

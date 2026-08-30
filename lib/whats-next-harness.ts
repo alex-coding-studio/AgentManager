@@ -1,4 +1,8 @@
 import Ajv2020 from 'ajv/dist/2020.js';
+import {
+  candidatePromptView,
+  type GraphIdentityFields,
+} from './graph-identity.ts';
 
 export const WHATS_NEXT_HARNESS_ID = 'agent-manager.whats-next';
 export const WHATS_NEXT_HARNESS_REVISION = 3;
@@ -49,7 +53,7 @@ export type WhatsNextResourceReference = {
   path: string;
 };
 
-export type WhatsNextCandidate = {
+export type WhatsNextCandidate = GraphIdentityFields & {
   candidateId: string;
   revision: number;
   type: string;
@@ -66,7 +70,10 @@ export type WhatsNextCandidate = {
 };
 
 export function createWhatsNextRevisionTarget(candidate: WhatsNextCandidate) {
-  return { ...candidate, requiredRevision: candidate.revision + 1 };
+  return {
+    ...candidatePromptView(candidate),
+    requiredRevision: candidate.revision + 1,
+  };
 }
 
 export type WhatsNextReflection = {

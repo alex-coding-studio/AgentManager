@@ -1,5 +1,12 @@
 import { createHash, randomUUID } from 'node:crypto';
 import {
+  ensureGraphIdentities,
+  identifyCandidates,
+  readIdentifiedEntities,
+  reserveNodeIdentity,
+  reservedCandidateAliases,
+} from './graph-identity-store.ts';
+import {
   access,
   copyFile,
   mkdir,
@@ -320,6 +327,7 @@ export async function readWhatsNextRun(
   runId: string,
 ) {
   validateRunId(runId);
+  await ensureGraphIdentities(project.planningPath, GRAPH_ROOT);
   const stored = JSON.parse(
     await readFile(
       path.join(whatsNextRunPath(project, runId), 'run.json'),
@@ -331,6 +339,13 @@ export async function readWhatsNextRun(
   }
   stored.operation ??= stored.revisionOf ? 'refine-candidate' : 'explore';
   const record = stored as WhatsNextRunRecord;
+  if (record.result?.outcome === 'proposal') {
+    record.result.candidates = await readIdentifiedEntities(
+      project.planningPath,
+      GRAPH_ROOT,
+      record.result.candidates,
+    );
+  }
   if (record.result && !record.result.reflection) {
     record.result.reflection = {
       markdown: record.result.exploration.notes.length
@@ -435,6 +450,14 @@ export async function recoverWhatsNextRunResult(
   });
   const timestamp = new Date().toISOString();
   record.status = result.outcome;
+  if (result.outcome === 'proposal') {
+    result.candidates = await identifyCandidates(
+      project.planningPath,
+      GRAPH_ROOT,
+      result.candidates,
+      revisionTarget ?? undefined,
+    );
+  }
   record.result = result;
   record.error = null;
   record.updatedAt = timestamp;
@@ -488,11 +511,7 @@ export async function acceptWhatsNextCandidate(
   if (!candidate) throw new Error('The Candidate could not be found.');
 
   const existingNodes = await listTaskGraphNodes(project, GRAPH_ROOT);
-  const accepted = existingNodes.find(
-    (node) =>
-      node.provenance?.candidateId === candidateId &&
-      node.provenance?.runId === runId,
-  );
+  const accepted = existingNodes.find((node) => node.uid === candidate.uid);
   if (accepted) return { node: accepted, nodes: existingNodes };
 
   const resolvedDependencies = resolveCandidateDependencies(
@@ -501,12 +520,12 @@ export async function acceptWhatsNextCandidate(
     existingNodes,
   );
 
-  const nextNumber =
-    existingNodes.reduce((largest, node) => {
-      const number = Number(node.id.replace(/^NODE-/, ''));
-      return Number.isFinite(number) ? Math.max(largest, number) : largest;
-    }, 0) + 1;
-  const nodeId = `NODE-${String(nextNumber).padStart(4, '0')}`;
+  if (!candidate.uid) throw new Error('Candidate stable identity is missing.');
+  const { id: nodeId } = await reserveNodeIdentity(
+    project.planningPath,
+    GRAPH_ROOT,
+    candidate.uid,
+  );
   const nodesPath = path.join(project.planningPath, GRAPH_ROOT, 'nodes');
   const nodePath = path.join(nodesPath, nodeId);
   const temporaryPath = path.join(nodesPath, `.${nodeId}-${randomUUID()}.tmp`);
@@ -527,6 +546,8 @@ export async function acceptWhatsNextCandidate(
     const node: TaskGraphNode = {
       schemaVersion: 1,
       id: nodeId,
+      uid: candidate.uid,
+      relations: candidate.relations,
       role: 'node',
       type: candidate.type,
       title: candidate.title,
@@ -710,6 +731,14 @@ async function finishWhatsNextRun(
     }
     const endedAt = new Date().toISOString();
     record.status = result.outcome;
+    if (result.outcome === 'proposal') {
+      result.candidates = await identifyCandidates(
+        project.planningPath,
+        GRAPH_ROOT,
+        result.candidates,
+        revisionTarget,
+      );
+    }
     record.result = result;
     record.updatedAt = endedAt;
     record.endedAt = endedAt;
@@ -874,6 +903,8 @@ async function saveUploadedResources(
 function graphMapEntry(node: TaskGraphNode) {
   return {
     id: node.id,
+    uid: node.uid,
+    relations: node.relations,
     role: node.role,
     type: node.type,
     title: node.title,
@@ -1053,16 +1084,7 @@ async function collectLatestUnacceptedCandidates(project: RegisteredProject) {
 }
 
 async function collectReservedCandidateIds(project: RegisteredProject) {
-  const runs = await readAllWhatsNextRuns(project);
-  return [
-    ...new Set(
-      runs.flatMap((run) =>
-        run.result?.outcome === 'proposal'
-          ? run.result.candidates.map((candidate) => candidate.candidateId)
-          : [],
-      ),
-    ),
-  ];
+  return reservedCandidateAliases(project.planningPath, GRAPH_ROOT);
 }
 
 async function readAllWhatsNextRuns(project: RegisteredProject) {

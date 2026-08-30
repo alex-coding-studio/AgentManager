@@ -28,6 +28,7 @@ import {
 import { cn } from '@/lib/utils';
 
 type TaskCardData = Record<string, unknown> & {
+  displayId: string;
   kind: 'formal' | 'preview';
   title: string;
   type: string;
@@ -123,19 +124,16 @@ export function TaskGraphCanvas({
   );
 
   useEffect(() => {
-    setFlowNodes(
-      graph.nodes.map((node) => ({
-        ...node,
-        selected: node.id === focusedNodeId,
-      })),
-    );
+    setFlowNodes(graph.nodes);
     setFlowEdges(graph.edges);
   }, [focusedNodeId, graph, setFlowEdges, setFlowNodes]);
 
   useEffect(() => {
     if (!locateRequest || !flowInstance.current) return;
     const instance = flowInstance.current;
-    const node = instance.getNode(locateRequest.nodeId);
+    const node = instance
+      .getNodes()
+      .find((entry) => entry.data.displayId === locateRequest.nodeId);
     if (!node) return;
     const width = node.measured?.width ?? 288;
     const height = node.measured?.height ?? 156;
@@ -170,14 +168,14 @@ export function TaskGraphCanvas({
           node.data.kind === 'formal' &&
           (event.ctrlKey || event.metaKey)
         ) {
-          onMultiSelect(node.id);
+          onMultiSelect(node.data.displayId);
           return;
         }
         if (
           node.data.kind === 'preview' &&
           node.data.transientKind === 'request'
         ) {
-          onSelectPreview(node.id);
+          onSelectPreview(node.data.displayId);
         } else onFocusNode(node.id);
       }}
       onPaneClick={() => onFocusNode('')}
@@ -249,7 +247,8 @@ function GraphInternalsUpdater({
   return null;
 }
 
-function TaskCard({ id, data, selected }: NodeProps<TaskFlowNode>) {
+function TaskCard({ data, selected }: NodeProps<TaskFlowNode>) {
+  const id = data.displayId;
   const preview = data.kind === 'preview';
   const running = data.transientKind === 'run';
   return (
@@ -408,7 +407,7 @@ function TaskCard({ id, data, selected }: NodeProps<TaskFlowNode>) {
 function buildFlowGraph(
   nodes: TaskGraphNode[],
   previews: TaskGraphPreview[],
-  focusedNodeId: string,
+  requestedFocusId: string,
   onDecompose: (nodeId: string) => void,
   onInspect: (nodeId: string) => void,
   onCancelRun: (runId: string) => void,
@@ -416,9 +415,18 @@ function buildFlowGraph(
   plusLabel?: string,
 ) {
   const layout = buildTaskGraphLayout(nodes, previews);
+  const focusedNodeId =
+    layout.nodes.find(
+      (entry) =>
+        entry.id === requestedFocusId ||
+        entry.uid === requestedFocusId ||
+        nodes.find((node) => node.id === entry.id)?.provenance?.candidateId ===
+          requestedFocusId,
+    )?.id ?? '';
   const selectedIds = new Set(selectedNodeIds);
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const previewById = new Map(previews.map((preview) => [preview.id, preview]));
+  const uidById = new Map(layout.nodes.map((node) => [node.id, node.uid]));
   const focusedEdges = focusedNodeId
     ? layout.edges.filter(
         (edge) =>
@@ -433,7 +441,8 @@ function buildFlowGraph(
     const node = nodeById.get(layoutNode.id);
     const preview = previewById.get(layoutNode.id);
     return {
-      id: layoutNode.id,
+      id: layoutNode.uid,
+      selected: layoutNode.id === focusedNodeId,
       type: 'task',
       position: { x: layoutNode.x, y: layoutNode.y },
       width: 288,
@@ -447,6 +456,7 @@ function buildFlowGraph(
         transition: 'opacity 180ms ease',
       },
       data: {
+        displayId: layoutNode.id,
         kind: layoutNode.kind,
         title: node?.title ?? preview?.title ?? 'Decomposition request',
         type: node?.type ?? preview?.type ?? 'Preview',
@@ -491,9 +501,9 @@ function buildFlowGraph(
       edge.source === focusedNodeId ||
       edge.target === focusedNodeId;
     return {
-      id: edge.id,
-      source: edge.source,
-      target: edge.target,
+      id: `${edge.relation === 'dependency' ? 'depends' : 'derived'}:${uidById.get(edge.source)}:${uidById.get(edge.target)}`,
+      source: uidById.get(edge.source)!,
+      target: uidById.get(edge.target)!,
       sourceHandle: 'lineage-source',
       targetHandle: 'lineage-target',
       type: 'default',
