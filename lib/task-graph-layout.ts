@@ -64,6 +64,15 @@ export function buildTaskGraphLayout(
       derivedFrom: preview.derivedFrom ?? [preview.sourceNodeId],
     })),
   ];
+  const layoutIdByNodeId = new Map([
+    ...nodes.map(
+      (node) => [node.id, node.provenance?.candidateId ?? node.id] as const,
+    ),
+    ...previews.map((preview) => [preview.id, preview.id] as const),
+  ]);
+  const layoutId = (id: string) => layoutIdByNodeId.get(id)!;
+  const compareIds = (left: string, right: string) =>
+    layoutId(left).localeCompare(layoutId(right), 'en', { numeric: true });
   const knownIds = new Set(layoutNodes.map((node) => node.id));
   const lineageEdges: TaskGraphLayoutEdge[] = layoutNodes.flatMap((node) =>
     node.derivedFrom
@@ -86,20 +95,27 @@ export function buildTaskGraphLayout(
       marginx: 24,
       marginy: 24,
     });
-  for (const node of layoutNodes) {
-    graph.setNode(node.id, { width: nodeWidth, height: nodeHeight });
+  for (const node of [...layoutNodes].sort((left, right) =>
+    compareIds(left.id, right.id),
+  )) {
+    graph.setNode(layoutId(node.id), { width: nodeWidth, height: nodeHeight });
   }
-  for (const edge of lineageEdges) {
-    graph.setEdge(edge.source, edge.target);
+  for (const edge of [...lineageEdges].sort(
+    (left, right) =>
+      compareIds(left.source, right.source) ||
+      compareIds(left.target, right.target),
+  )) {
+    graph.setEdge(layoutId(edge.source), layoutId(edge.target));
   }
   dagre.layout(graph);
 
   const positionedNodes: TaskGraphLayoutNode[] = layoutNodes.map((node) => {
-    const position = graph.node(node.id) as { x: number; y: number };
+    const stableId = layoutId(node.id);
+    const position = graph.node(stableId) as { x: number; y: number };
     return {
       ...node,
-      x: position.x - nodeWidth / 2 + horizontalOffset(node.id),
-      y: position.y - nodeHeight / 2 + verticalOffset(node.id),
+      x: position.x - nodeWidth / 2 + horizontalOffset(stableId),
+      y: position.y - nodeHeight / 2 + verticalOffset(stableId),
     };
   });
   const dependencySources = [
