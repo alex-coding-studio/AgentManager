@@ -1,7 +1,9 @@
 'use client';
 import { useUiText } from '@/components/ui-language-provider';
+import { cn } from '@/lib/utils';
 
-import { memo, useEffect, useMemo, useRef } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { graphFocus, directDependencyCount } from '@/lib/task-graph-focus';
 import {
   Background,
   BackgroundVariant,
@@ -20,39 +22,19 @@ import {
   type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { FileText, GitFork, Info, LoaderCircle, Plus, X } from 'lucide-react';
+import {
+  GraphNodeCard,
+  type GraphNodeCardData,
+} from '@/components/graph-node-card';
+import { cardResourceCounts } from '@/lib/task-graph-resources';
 import type { TaskGraphNode } from '@/lib/task-graph';
 import {
   buildTaskGraphLayout,
+  TASK_GRAPH_NODE_MIN_HEIGHT,
   type TaskGraphPreview,
 } from '@/lib/task-graph-layout';
-import { cn } from '@/lib/utils';
-import { graphCardLabel } from '@/lib/graph-identity';
 
-type TaskCardData = Record<string, unknown> & {
-  displayId: string;
-  kind: 'formal' | 'preview';
-  title: string;
-  type: string;
-  resources: TaskGraphNode['resources'];
-  color: string;
-  description?: string;
-  resourceSummary?: string;
-  candidateRevision?: number;
-  candidateResourceCount?: number;
-  transientKind?: TaskGraphPreview['kind'];
-  status?: string;
-  agentLabel?: string;
-  runId?: string;
-  relationshipCount: number;
-  selectedForRun?: boolean;
-  plusLabel?: string;
-  onDecompose: (nodeId: string) => void;
-  onInspect: (nodeId: string) => void;
-  onCancelRun: (runId: string) => void;
-};
-
-type TaskFlowNode = Node<TaskCardData, 'task'>;
+type TaskFlowNode = Node<GraphNodeCardData, 'task'>;
 
 const nodeTypes = { task: memo(TaskCard) };
 const defaultFitViewOptions = {
@@ -91,6 +73,17 @@ export function TaskGraphCanvas({
   onCancelRun: (runId: string) => void;
 }) {
   const { t } = useUiText();
+  const [dependencyFocusId, setDependencyFocusId] = useState('');
+  const focusDependencies = useCallback(
+    (id: string) => {
+      setDependencyFocusId(id);
+      onFocusNode(id);
+    },
+    [onFocusNode],
+  );
+  const dependenciesOnly = Boolean(
+    dependencyFocusId && dependencyFocusId === focusedNodeId,
+  );
   const selectionKey = (selectedNodeIds ?? []).join(',');
   const graph = useMemo(
     () =>
@@ -101,11 +94,15 @@ export function TaskGraphCanvas({
         onDecompose,
         onInspectNode,
         onCancelRun,
+        focusDependencies,
+        dependenciesOnly,
         selectionKey ? selectionKey.split(',') : [],
         plusLabel,
       ),
     [
       focusedNodeId,
+      focusDependencies,
+      dependenciesOnly,
       nodes,
       onCancelRun,
       onDecompose,
@@ -141,7 +138,7 @@ export function TaskGraphCanvas({
       .find((entry) => entry.data.displayId === locateRequest.nodeId);
     if (!node) return;
     const width = node.measured?.width ?? 288;
-    const height = node.measured?.height ?? 156;
+    const height = node.measured?.height ?? TASK_GRAPH_NODE_MIN_HEIGHT;
     void instance.setCenter(
       node.position.x + width / 2,
       node.position.y + height / 2,
@@ -173,6 +170,7 @@ export function TaskGraphCanvas({
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
       onNodeClick={(event, node) => {
+        setDependencyFocusId('');
         if (
           onMultiSelect &&
           node.data.kind === 'formal' &&
@@ -188,7 +186,10 @@ export function TaskGraphCanvas({
           onSelectPreview(node.data.displayId);
         } else onFocusNode(node.id);
       }}
-      onPaneClick={() => onFocusNode('')}
+      onPaneClick={() => {
+        setDependencyFocusId('');
+        onFocusNode('');
+      }}
       nodesDraggable={false}
       minZoom={0.2}
       maxZoom={1.8}
@@ -258,162 +259,15 @@ function GraphInternalsUpdater({
 }
 
 function TaskCard({ data, selected }: NodeProps<TaskFlowNode>) {
-  const { t } = useUiText();
-  const id = data.displayId;
-  const preview = data.kind === 'preview';
-  const running = data.transientKind === 'run';
   return (
-    <div
-      className={cn(
-        'group relative min-h-[156px] w-72 rounded-2xl border border-t-[3px] bg-background p-4 text-left shadow-[0_10px_30px_rgb(15_23_42/6%)] transition',
-        selected && 'ring-3 ring-ring/20',
-        data.selectedForRun && 'ring-3 ring-violet-500/45',
-        preview && 'border-dashed bg-secondary/35',
-      )}
-      style={
-        running
-          ? { borderColor: data.color, borderWidth: 2 }
-          : { borderTopColor: preview ? data.color : 'var(--foreground)' }
-      }
-    >
+    <div className="relative">
       <Handle
         type="target"
         position={Position.Left}
         id="lineage-target"
         className="!size-2.5 !border-2 !border-background !bg-muted-foreground"
       />
-      <div className="flex items-center justify-between gap-3">
-        <span
-          className="shrink-0 whitespace-nowrap font-mono text-[10px] font-medium tracking-wide text-muted-foreground"
-          title={id}
-          aria-label={id}
-        >
-          {graphCardLabel(id)}
-        </span>
-        <span className="flex min-w-0 items-center gap-1.5">
-          {!preview && data.relationshipCount > 0 ? (
-            <span
-              className="flex items-center gap-1 text-[9px] text-muted-foreground"
-              title={`${data.relationshipCount} direct relationships`}
-            >
-              <GitFork className="size-3" />
-              {data.relationshipCount}
-            </span>
-          ) : null}
-          <span
-            className={cn(
-              'truncate rounded-full px-2 py-0.5 text-[10px] font-medium capitalize',
-              preview
-                ? 'bg-secondary text-secondary-foreground'
-                : 'bg-foreground text-background',
-            )}
-            title={running ? t('Running') : data.type}
-            style={
-              preview
-                ? {
-                    backgroundColor: `color-mix(in srgb, ${data.color} 12%, transparent)`,
-                    color: data.color,
-                  }
-                : undefined
-            }
-          >
-            {running ? t('Running') : data.type}
-          </span>
-          {running ? (
-            <button
-              type="button"
-              className="nodrag nopan grid size-8 shrink-0 place-items-center rounded-full text-muted-foreground transition hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
-              aria-label={t('Cancel Agent Run')}
-              title={t('Cancel Agent Run')}
-              onClick={(event) => {
-                event.stopPropagation();
-                data.onCancelRun(data.runId ?? id);
-              }}
-            >
-              <X className="size-4" />
-            </button>
-          ) : null}
-          {!preview || data.transientKind === 'candidate' ? (
-            <button
-              type="button"
-              className="nodrag nopan grid size-8 shrink-0 place-items-center rounded-full text-muted-foreground transition hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
-              aria-label={t('Open details for {title}', { title: data.title })}
-              title={t('Open details')}
-              onClick={(event) => {
-                event.stopPropagation();
-                data.onInspect(id);
-              }}
-            >
-              <Info className="size-4" />
-            </button>
-          ) : null}
-        </span>
-      </div>
-      <h2 className="mt-4 line-clamp-3 text-sm font-semibold leading-5">
-        {data.title}
-      </h2>
-      {preview ? (
-        <div className="mt-2">
-          <p className="line-clamp-2 text-[11px] leading-5 text-muted-foreground">
-            {data.description}
-          </p>
-          <p className="mt-2 text-[10px] text-muted-foreground">
-            {running ? (
-              <span className="flex items-center gap-1.5">
-                <LoaderCircle className="size-3 animate-spin" />
-                {data.agentLabel ?? data.title.split(' ')[0] ?? 'Agent'}{' '}
-                {t('is working…')}
-              </span>
-            ) : data.candidateRevision !== undefined ? (
-              t('Revision {revision} · {count} Resources', {
-                revision: data.candidateRevision,
-                count: data.candidateResourceCount ?? 0,
-              })
-            ) : (
-              data.resourceSummary
-            )}
-          </p>
-        </div>
-      ) : (
-        <div className="mt-5 space-y-1.5">
-          {data.resources.slice(0, 3).map((resource) => (
-            <span
-              key={`${resource.kind}:${resource.path}`}
-              className="flex max-w-full items-center gap-1.5 px-1.5 py-1 text-[11px] text-muted-foreground"
-            >
-              <FileText className="size-3 shrink-0" />
-              <span className="truncate">{resourceName(resource.path)}</span>
-            </span>
-          ))}
-          {data.resources.length > 3 ? (
-            <span className="px-1.5 text-[10px] text-muted-foreground">
-              +{data.resources.length - 3} {t('more')}
-            </span>
-          ) : null}
-        </div>
-      )}
-      {!preview ? (
-        <button
-          type="button"
-          className={cn(
-            'nodrag nopan absolute top-1/2 -right-4 z-10 grid size-8 -translate-y-1/2 place-items-center rounded-full border border-border bg-foreground text-background shadow-md transition hover:scale-105 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30',
-            selected
-              ? 'opacity-100'
-              : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100',
-          )}
-          aria-label={t('{action} from {title}', {
-            action: t(data.plusLabel ?? 'Decompose'),
-            title: data.title,
-          })}
-          title={t(data.plusLabel ?? 'Decompose')}
-          onClick={(event) => {
-            event.stopPropagation();
-            data.onDecompose(id);
-          }}
-        >
-          <Plus className="size-3.5" />
-        </button>
-      ) : null}
+      <GraphNodeCard data={data} selected={selected} />
       <Handle
         type="source"
         position={Position.Right}
@@ -431,6 +285,8 @@ function buildFlowGraph(
   onDecompose: (nodeId: string) => void,
   onInspect: (nodeId: string) => void,
   onCancelRun: (runId: string) => void,
+  onFocusDependencies: (nodeId: string) => void,
+  dependenciesOnly: boolean,
   selectedNodeIds: string[] = [],
   plusLabel?: string,
 ) {
@@ -447,16 +303,8 @@ function buildFlowGraph(
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const previewById = new Map(previews.map((preview) => [preview.id, preview]));
   const uidById = new Map(layout.nodes.map((node) => [node.id, node.uid]));
-  const focusedEdges = focusedNodeId
-    ? layout.edges.filter(
-        (edge) =>
-          edge.source === focusedNodeId || edge.target === focusedNodeId,
-      )
-    : [];
-  const relatedIds = new Set([
-    focusedNodeId,
-    ...focusedEdges.flatMap((edge) => [edge.source, edge.target]),
-  ]);
+  const focus = graphFocus(layout.edges, focusedNodeId, dependenciesOnly);
+  const relatedIds = focus.nodeIds;
   const flowNodes: TaskFlowNode[] = layout.nodes.map((layoutNode) => {
     const node = nodeById.get(layoutNode.id);
     const preview = previewById.get(layoutNode.id);
@@ -466,9 +314,9 @@ function buildFlowGraph(
       type: 'task',
       position: { x: layoutNode.x, y: layoutNode.y },
       width: 288,
-      height: 156,
+      height: TASK_GRAPH_NODE_MIN_HEIGHT,
       initialWidth: 288,
-      initialHeight: 156,
+      initialHeight: TASK_GRAPH_NODE_MIN_HEIGHT,
       draggable: false,
       deletable: false,
       zIndex: 20,
@@ -481,24 +329,18 @@ function buildFlowGraph(
         kind: layoutNode.kind,
         title: node?.title ?? preview?.title ?? 'Decomposition request',
         type: node?.type ?? preview?.type ?? 'Preview',
-        resources: node?.resources ?? [],
-        relationshipCount: node
-          ? node.dependsOn.length +
-            nodes.filter((candidate) => candidate.dependsOn.includes(node.id))
-              .length
-          : 0,
-        description: preview?.description ?? preview?.instruction,
+        ...cardResourceCounts(node, preview),
+        relationshipCount: directDependencyCount(layout.edges, layoutNode.id),
+        dependenciesFocused:
+          dependenciesOnly && layoutNode.id === focusedNodeId,
+        onFocusDependencies,
+        description:
+          node?.summary ?? preview?.description ?? preview?.instruction,
         transientKind: preview?.kind ?? 'request',
         status: preview?.status,
         agentLabel: preview?.agentLabel,
         runId: preview?.runId,
-        candidateRevision: preview?.candidate?.revision,
-        candidateResourceCount: preview?.candidate?.resources.length,
-        resourceSummary: preview
-          ? preview.kind === 'candidate' && preview.candidate
-            ? `Revision ${preview.candidate.revision} · ${preview.candidate.resources.length} Resources`
-            : `${preview.inheritedResourceCount} inherited · ${preview.additionalResourceCount} added`
-          : undefined,
+        revision: preview?.candidate?.revision,
         color:
           node?.presentation?.color ??
           (layoutNode.kind === 'preview'
@@ -519,10 +361,7 @@ function buildFlowGraph(
         (edge.source === focusedNodeId || edge.target === focusedNodeId)),
   );
   const edges: Edge[] = visibleEdges.map((edge) => {
-    const related =
-      !focusedNodeId ||
-      edge.source === focusedNodeId ||
-      edge.target === focusedNodeId;
+    const related = !focusedNodeId || focus.edgeIds.has(edge.id);
     return {
       id: `${edge.relation === 'dependency' ? 'depends' : 'derived'}:${uidById.get(edge.source)}:${uidById.get(edge.target)}`,
       source: uidById.get(edge.source)!,
@@ -564,10 +403,6 @@ function buildFlowGraph(
     };
   });
   return { nodes: flowNodes, edges };
-}
-
-function resourceName(resourcePath: string) {
-  return resourcePath.split('/').at(-1) ?? resourcePath;
 }
 
 function nodeTypeColor(type: string) {

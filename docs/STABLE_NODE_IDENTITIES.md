@@ -12,9 +12,29 @@ Aliases use the last eight hexadecimal characters of the UUID, extending by four
 characters if a suffix is already owned by another UUID. Candidate and Formal
 Node aliases retain the same suffix. API parameters, resource paths, and directory
 names use these aliases. There is no numeric sequence or high-water counter.
-Canvas headers show only the first eight characters of the suffix, without the
-prefix, on one line. Tooltips and inspectors retain the full alias; shortening
-the header never changes identity, storage paths, or relationships.
+Canvas headers show the small type label with the relationship count and
+detail/cancel action grouped on its right. `Node-` or `Candidate-` with the
+complete allocated suffix appears in small muted text at the bottom right,
+without a divider. Input/output counts share that footer row on the left, together
+with the revision for Candidates. Formal cards use the inspector's input/output
+partition; Candidates count distinct Resource paths as input and their generated
+document as one output. New loading requests show zero outputs, while refinement
+retains the existing Candidate output. Actual file names and open actions remain
+in the inspector. The footer stays in
+normal flow so it cannot overlap content. Formal summaries and Candidate
+descriptions preview up to three lines, using the space saved by the shared
+metadata footer rather than reducing the reading font size.
+Type labels wrap rather than truncate. The card's
+minimum height and layout reservation share one constant. This presentation never
+changes identity, storage paths, generated type names, or relationships.
+
+`GraphNodeCard` is the shared presentation component for Formal, Candidate and
+Loading cards; React Flow handles and graph selection stay in the canvas adapter.
+Clicking a card highlights its incident lineage and dependency relationships.
+Clicking its dependency-count button highlights only the incident dependency
+edges and their endpoints. The count comes from those same edges, so a count of
+one highlights exactly the selected card and one neighbor. Other cards and edges
+are dimmed, and a normal card click restores the broader focus mode.
 Aliases are not the canonical identity. Run and Session
 IDs identify execution and conversation, not product objects.
 

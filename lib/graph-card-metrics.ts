@@ -1,0 +1,1 @@
+export const TASK_GRAPH_NODE_MIN_HEIGHT = 160;
