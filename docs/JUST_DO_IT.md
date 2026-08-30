@@ -25,9 +25,12 @@ most execution complexity rather than only execute a checklist supplied by the u
 These are independent choices, not mandatory pipeline stages. A Formal Node
 from either exploration workspace may enter Just Do It directly. The original
 Node keeps its identity and meaning; implementation does not move it out of its
-source workspace or attach execution/PR status to the product graph itself.
+source workspace or add execution/PR states to its lifecycle. A lightweight
+associated completion indicator is permitted without changing that lifecycle.
 
-Focus the first workflow on software work. Other domains motivated the general
+Focus the first workflow on the user's GitHub-backed software projects. GitHub
+provides code-delivery and review evidence; this does not select the separate,
+deferred App-managed local Git versioning architecture. Other domains motivated the general
 Input / Process / Output / Validation model, but domain-specific execution,
 verification, and reversal are not part of the present design scope.
 
@@ -54,6 +57,63 @@ setup, and scaffolding while presenting one usable environment for acceptance.
 Granularity is relative. Actions may be finer or coarser; additional substeps
 remain owned by the original Action. There is no required one-command,
 one-session, or one-PR correspondence.
+
+## Goal dashboard and source association — settled
+
+The outer workspace is an operations dashboard, not a third product relationship
+graph. It manages goals explicitly added from What's Next or Break It Down.
+Each goal Card summarizes its title and purpose, delivery progress, current
+Action/activity, and associated Git work or GitHub PRs. Opening it reveals its
+Plan, completed and remaining Actions, outputs, and verification details, with
+controls for assigning work and giving feedback to an Agent.
+
+Prioritize understanding progress and what requires attention: a new output,
+pending review, or a need for user input. Dependencies remain visible when relevant,
+especially when they prevent execution, but do not dominate the dashboard.
+Exact grouping, filtering, visual layout, and branch/PR presentation remain open.
+
+Associate PRs and their actual state with the Actions they concern, then summarize
+them on the goal Card. One merged PR does not necessarily complete the entire
+goal. Branch, commit, and PR mappings must describe actual work, not imply an
+enforced one-Action/one-PR rule.
+
+### Stable source content, independent lifecycles
+
+Adding a goal establishes a link to the source Formal Node and retains the
+goal content and necessary input context for the execution workspace. It is not
+a second independent product Node, nor a live mirror of mutable source content.
+
+Under the agreed product model, accepted Formal Node content is stable through
+normal in-app operations. There is no ordinary source-update synchronization
+flow in this MVP. Do not add "source changed, update your Plan" prompts merely
+because someone could edit output.md outside the App. Recording an execution
+baseline identifies what the work is based on; it does not imply expected source
+edits. User additions and Plan/Action revisions belong inside Just Do It and
+do not rewrite the source Node.
+
+Source existence and execution lifecycle are independent:
+
+- Deleting the source Node is allowed and must not cascade into deletion of
+  its Just Do It goal, Plan, Actions, progress, or outputs.
+- Mark the retained goal "Source node deleted" and make the unavailable source
+  navigation explicit. Retain readable goal content and necessary context rather
+  than leaving only a broken reference. The retention mechanism is not yet chosen.
+- Deleting or abandoning Just Do It work does not delete the source Formal Node.
+  Action rollback is a separate execution concern, not source-node deletion.
+
+### Completion feedback on the source Canvas
+
+When the associated Just Do It goal is complete, a surviving source Node may
+show a small green dot or short Completed annotation. This is a read-only
+associated execution result, not a new Node state: the Canvas retains its
+Loading/Candidate/Formal presentation model, and the source remains Formal.
+Do not introduce a Completed Node lifecycle state or mirror the full execution,
+review, or failure state machine into What's Next or Break It Down.
+
+If the source has been deleted, completion does not recreate it. Clicking the
+completion indicator to open the associated Just Do It workspace is a deferred
+UI convenience, not a prerequisite for the initial workflow. Exact appearance
+and behavior for multiple execution attempts remain to be decided.
 
 ## Form the Plan before execution — settled
 
@@ -243,8 +303,11 @@ discussion, or assume it is already the selected implementation architecture.
 - Todo capture, visibility, and promotion into future work.
 - Action isolation, safe deletion/rollback, and already delivered work.
 - Dependency delivery/version selection, multiple prerequisites, and the effect
-  of upstream revisions after downstream work has begun.
+  of upstream execution changes after downstream work has begun. This concerns
+  delivered work, not ordinary editing of the stable source Formal Node.
 - Goal completion and progress presentation when the Plan changes.
+- Whether one source Node can have multiple execution attempts and how their
+  associated completion results would be displayed.
 - Concrete MVP implementation scope and acceptance checks.
 
 These are design questions, not authorization to add automation, a general

@@ -3,7 +3,11 @@
 ## Current focus — Just Do It workflow design
 
 As of the 2026-08-29 discussion, the focus is defining Just Do It's manual
-planning, execution, and verification workflow over shared Formal Nodes.
+planning, execution, and verification workflow for GitHub-backed software
+projects over shared Formal Nodes. The goal dashboard has independent execution
+lifecycles, retains work after source deletion, and can report completion back
+to surviving source Nodes without adding a new Node state. Clicking that
+completion indicator to navigate to Just Do It is a later UI refinement.
 See [JUST_DO_IT.md](JUST_DO_IT.md) for settled intent and remaining decisions.
 The current round is documentation only: no execution runtime, Harness changes,
 automatic review/merge pipeline, or storage migration is authorized.

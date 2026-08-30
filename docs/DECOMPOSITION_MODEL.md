@@ -65,6 +65,13 @@ Workspace-specific activity does not become part of the Formal Node:
 The Node records where it came from and which action created it. Those fields
 describe provenance, not workspace ownership.
 
+Just Do It goals have an independent execution lifecycle. Deleting a source
+Formal Node does not delete its execution workspace; the retained goal shows
+that its source was deleted. A surviving source Node can display a lightweight
+associated completion indicator without gaining a Completed lifecycle state.
+Stable source content does not require a source-update synchronization flow.
+See [Just Do It source association](JUST_DO_IT.md#goal-dashboard-and-source-association--settled).
+
 ## Three independent operations
 
 AgentManager exposes three different questions over the same product graph.
