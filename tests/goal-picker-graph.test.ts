@@ -2,10 +2,66 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   buildGoalPickerGraph,
+  canAddGoalSource,
+  goalPickerEdgeLane,
   GOAL_PICKER_WIDTH,
   GOAL_PICKER_HEIGHT,
   type GoalPickerEntry,
 } from '../lib/goal-picker-graph.ts';
+
+void test('already added, running and finalized entries remain non-selectable', () => {
+  assert.equal(canAddGoalSource(entry(1)), true);
+  assert.equal(canAddGoalSource(entry(1), true), false);
+  for (const executionStatus of [
+    'added',
+    'planning',
+    'plan-ready',
+    'completed',
+  ] as const) {
+    assert.equal(canAddGoalSource(entry(1, { executionStatus })), false);
+  }
+});
+
+void test('a high unrelated Card cannot lift a local detour over the whole graph', () => {
+  const nodes = [
+    { entry: entry(1), x: 0, y: 200 },
+    { entry: entry(2), x: 280, y: 234 },
+    { entry: entry(3), x: 560, y: 200 },
+    { entry: entry(4), x: 0, y: 0 },
+  ];
+  const edge = {
+    id: 'dependency',
+    source: entry(1).uid,
+    target: entry(3).uid,
+    kind: 'dependency' as const,
+  };
+  const lane = goalPickerEdgeLane(nodes, edge);
+  assert.equal(lane, 216);
+  assert.equal(lane, goalPickerEdgeLane(nodes.slice(0, 3), edge));
+  assert.equal(
+    goalPickerEdgeLane(
+      nodes.filter((node) => node.entry.uid !== entry(2).uid),
+      edge,
+    ),
+    undefined,
+  );
+});
+
+void test('local detours also avoid nearby upper and lower obstructions', () => {
+  const nodes = [
+    { entry: entry(1), x: 0, y: 200 },
+    { entry: entry(2), x: 280, y: 234 },
+    { entry: entry(3), x: 560, y: 200 },
+    { entry: entry(4), x: 280, y: 130 },
+  ];
+  const lane = goalPickerEdgeLane(nodes, {
+    id: 'dependency',
+    source: entry(1).uid,
+    target: entry(3).uid,
+    kind: 'dependency',
+  });
+  assert.equal(lane, 346);
+});
 
 function entry(
   n: number,
@@ -44,7 +100,7 @@ void test('two prerequisites precede their dependent, resolving aliases and UUID
   assert.equal(graph.dependencyCycle, false);
 });
 
-void test('decomposition is compacted leaf-first without inventing execution dependencies', () => {
+void test('lineage does not create edges or impose execution order in the picker', () => {
   const graph = buildGoalPickerGraph(
     [
       entry(1),
@@ -54,15 +110,11 @@ void test('decomposition is compacted leaf-first without inventing execution dep
     ],
     'task-graph',
   );
-  assert.ok(
-    x(graph, 4) < x(graph, 3) &&
-      x(graph, 3) < x(graph, 2) &&
-      x(graph, 2) < x(graph, 1),
-  );
-  assert.ok(graph.edges.every((edge) => edge.kind === 'lineage'));
+  assert.equal(graph.edges.length, 0);
+  assert.equal(new Set(graph.nodes.map((node) => node.x)).size, 1);
 });
 
-void test('real dependency order wins when reversed lineage would contradict it', () => {
+void test('only real dependencies affect order even when lineage points elsewhere', () => {
   const graph = buildGoalPickerGraph(
     [
       entry(1),
@@ -72,7 +124,7 @@ void test('real dependency order wins when reversed lineage would contradict it'
   );
   assert.ok(x(graph, 1) < x(graph, 2));
   assert.equal(graph.dependencyCycle, false);
-  assert.equal(graph.edges.filter((edge) => edge.kind === 'lineage').length, 1);
+  assert.equal(graph.edges.length, 1);
   assert.equal(
     graph.edges.filter((edge) => edge.kind === 'dependency').length,
     1,

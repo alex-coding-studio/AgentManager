@@ -750,11 +750,7 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
           const existing = view?.cards.find(
             (item) => item.source.uid === source.uid,
           );
-          if (existing) {
-            openCard(existing.id);
-            setImporting(false);
-            return;
-          }
+          if (existing) return;
           const imported = await mutate({
             action: 'import',
             module: source.module,

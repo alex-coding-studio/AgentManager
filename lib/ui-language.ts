@@ -5,6 +5,8 @@ export function isUiLanguage(value: unknown): value is UiLanguage {
 }
 
 export const chineseUi: Record<string, string> = {
+  'Choose a goal to add. Added Cards are shown for context only.':
+    '选择未加入的目标；已加入卡片仅作结构参考，不可再次选择。',
   'Not started': '未开始',
   'Already added': '已加入',
   'Open goal': '打开目标',

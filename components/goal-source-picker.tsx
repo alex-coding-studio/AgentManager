@@ -27,6 +27,8 @@ import { useUiText } from '@/components/ui-language-provider';
 import { cn } from '@/lib/utils';
 import {
   buildGoalPickerGraph,
+  canAddGoalSource,
+  goalPickerEdgeLane,
   GOAL_PICKER_HEIGHT,
   GOAL_PICKER_WIDTH,
   type GoalPickerEntry,
@@ -42,13 +44,6 @@ type CompactNode = Node<
   },
   'compactGoal'
 >;
-const statusLabels = {
-  'not-started': 'Not started',
-  added: 'Already added',
-  planning: 'Agent running',
-  'plan-ready': 'Plan finalized',
-  completed: 'Completed',
-};
 const fitOptions = { padding: 0.18, minZoom: 0.25, maxZoom: 1 };
 const nodeTypes = { compactGoal: CompactGoalCard };
 const edgeTypes = { goalRelation: GoalRelationEdge };
@@ -83,6 +78,8 @@ function GoalRelationEdge({
 function CompactGoalCard({ data }: NodeProps<CompactNode>) {
   const { t } = useUiText();
   const { entry } = data;
+  const alreadyAdded = entry.executionStatus !== 'not-started';
+  const canAdd = canAddGoalSource(entry, data.disabled);
   return (
     <>
       <Handle
@@ -93,18 +90,23 @@ function CompactGoalCard({ data }: NodeProps<CompactNode>) {
       />
       <button
         type="button"
-        disabled={data.disabled}
+        disabled={!canAdd}
         title={entry.title}
-        aria-label={`${t(entry.executionStatus === 'not-started' ? 'Add a goal' : 'Open goal')}: ${entry.title}`}
-        onClick={() => data.onChoose(entry)}
-        className="nodrag nopan pointer-events-auto flex h-full w-full flex-col justify-between rounded-xl border border-border bg-card px-3 py-3 text-left shadow-sm transition hover:border-foreground/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50"
+        aria-label={`${t(alreadyAdded ? 'Already added' : 'Add a goal')}: ${entry.title}`}
+        onClick={() => {
+          if (canAdd) data.onChoose(entry);
+        }}
+        className={cn(
+          'nodrag nopan pointer-events-auto flex h-full w-full flex-col justify-between rounded-xl border border-border px-3 py-3 text-left shadow-sm transition enabled:hover:border-foreground/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50',
+          alreadyAdded ? 'bg-muted text-muted-foreground' : 'bg-card',
+        )}
       >
         <span className="line-clamp-2 text-[13px] font-medium leading-[18px]">
           {entry.title}
         </span>
         <span className="mt-2 flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
           <span className="shrink-0">
-            {t(statusLabels[entry.executionStatus])}
+            {t(alreadyAdded ? 'Already added' : 'Not started')}
           </span>
           <span className="min-w-0 truncate font-mono" title={entry.id}>
             Node-{entry.id.slice(5)}
@@ -146,44 +148,19 @@ export function GoalSourceGraph({
     style: { width: GOAL_PICKER_WIDTH, height: GOAL_PICKER_HEIGHT },
     data: { entry, disabled, onChoose },
   }));
-  const edges = graph.edges.map((edge, index) => {
-    const source = graph.nodes.find((node) => node.entry.uid === edge.source)!;
-    const target = graph.nodes.find((node) => node.entry.uid === edge.target)!;
-    const needsLane =
-      target.x - source.x > GOAL_PICKER_WIDTH + 65 || target.x <= source.x;
-    const lane = needsLane
-      ? Math.min(
-          ...graph.nodes
-            .filter(
-              (node) =>
-                node.x + GOAL_PICKER_WIDTH >= Math.min(source.x, target.x) &&
-                node.x <= Math.max(source.x, target.x) + GOAL_PICKER_WIDTH,
-            )
-            .map((node) => node.y),
-        ) -
-        20 -
-        (index % 3) * 8
-      : undefined;
+  const edges = graph.edges.map((edge) => {
+    const lane = goalPickerEdgeLane(graph.nodes, edge);
     return {
       ...edge,
       type: 'goalRelation',
       data: { lane },
-      markerEnd:
-        edge.kind === 'dependency'
-          ? {
-              type: MarkerType.ArrowClosed,
-              color: '#c58a36',
-              width: 16,
-              height: 16,
-            }
-          : undefined,
-      style: {
-        stroke:
-          edge.kind === 'dependency' ? '#c58a36' : 'var(--muted-foreground)',
-        strokeWidth: edge.kind === 'dependency' ? 1.7 : 1,
-        strokeDasharray: edge.kind === 'lineage' ? '4 4' : undefined,
-        opacity: edge.kind === 'lineage' ? 0.55 : 1,
+      markerEnd: {
+        type: MarkerType.ArrowClosed,
+        color: '#c58a36',
+        width: 16,
+        height: 16,
       },
+      style: { stroke: '#c58a36', strokeWidth: 1.7 },
     };
   });
   return (
@@ -236,12 +213,8 @@ export function GoalSourceGraph({
           <span className="w-7 border-t-2 border-[#c58a36]" />
           {t('Prerequisite → dependent')}
         </span>
-        <span className="flex items-center gap-2">
-          <span className="w-7 border-t border-dashed border-muted-foreground" />
-          {t('Decomposition / origin · not execution order')}
-        </span>
         <span className="ml-auto">
-          {t('Click a Card to add it or open its existing Plan.')}
+          {t('Choose a goal to add. Added Cards are shown for context only.')}
         </span>
       </footer>
     </div>

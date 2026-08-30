@@ -16,10 +16,14 @@ The preview's simulation controls are never mounted on the live route.
 Add a goal opens a near-fullscreen source map with separate What's Next and
 Break It Down tabs. Compact 216-by-94 cards show title, planning/added status and
 Node alias. Explicit dependencies run prerequisite-to-dependent from left to
-right; muted lineage links retain child-to-parent structure without asserting
-execution order. Dependency constraints take priority over reversed lineage.
+right. This view shows execution dependencies only: lineage neither renders a
+link nor affects placement. Decomposition/source relationships remain on the
+original Canvases; their stored data is unchanged.
 Missing/cyclic dependencies are disclosed; isolated formal Nodes remain visible.
-Clicking an already imported Node opens its existing Plan without another import.
+Already imported Nodes remain as dimmed, disabled context Cards labeled Already
+added; they cannot navigate or trigger another import from this picker. Long
+links detour around actual blocking Cards using the nearest clear lane, not
+above unrelated high Nodes elsewhere in the graph.
 Issues are intentionally absent. Execution-completed entries are excluded by the
 graph adapter, but the live planning-only store has no execution completion yet:
 Plan finalization never hides a Node or claims its task has been completed.
