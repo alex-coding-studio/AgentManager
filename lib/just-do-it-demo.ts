@@ -85,7 +85,51 @@ export type DemoTodo = {
   acceptance?: string;
   actionId?: string;
   round?: number;
+  request?: string;
+  origin?: DemoTodoOrigin;
 };
+export type DemoTodoOrigin = {
+  kind: 'idea' | 'validation';
+  goalTitle: string;
+  sourceId: string;
+  actionTitle?: string;
+  round?: number;
+  outputSummary?: string;
+  outputCommit?: string;
+  reviewResult?: 'changes' | 'approved';
+};
+
+export function organizeDemoFollowUp(
+  goal: DemoGoal,
+  request: string,
+  actionId?: string,
+  kind: DemoTodoOrigin['kind'] = 'idea',
+) {
+  const source = goal.actions.find((item) => item.id === actionId);
+  const output = source?.rounds.at(-1);
+  const multiDevice = /多端登录|多设备登录|multi.?device.*login/i.test(request);
+  return {
+    text: multiDevice
+      ? '支持多端登录'
+      : request.trim().split('\n')[0].slice(0, 100),
+    request: request.trim(),
+    reason: '按用户要求记录为后续事项，不改变当前 Action 的交付范围。',
+    acceptance: multiDevice
+      ? '支持在多个设备上登录。后续实施前确认设备范围、会话保留和退出规则，以及对应验收场景。'
+      : '后续实施前，结合用户原始需求明确范围、预期成果与验收方式。',
+    actionId,
+    origin: {
+      kind,
+      goalTitle: goal.title,
+      sourceId: goal.sourceId,
+      actionTitle: source?.title,
+      round: output?.number,
+      outputSummary: output?.summary,
+      outputCommit: output?.commit,
+      reviewResult: output?.review,
+    },
+  };
+}
 export type DemoRound = {
   number: number;
   input: string;
@@ -579,6 +623,8 @@ export type DemoEvent =
       reason?: string;
       acceptance?: string;
       actionId?: string;
+      request?: string;
+      origin?: DemoTodoOrigin;
     }
   | { type: 'todo-toggle'; goalId: string; todoId: string }
   | {
@@ -783,9 +829,13 @@ export function demoReducer(state: DemoState, event: DemoEvent): DemoState {
                 acceptance:
                   event.acceptance?.trim() || '后续实施前补充验收约定。',
                 actionId: event.actionId,
-                round: goal.actions
-                  .find((item) => item.id === event.actionId)
-                  ?.rounds.at(-1)?.number,
+                request: event.request,
+                origin: event.origin,
+                round: event.origin
+                  ? event.origin.round
+                  : goal.actions
+                      .find((item) => item.id === event.actionId)
+                      ?.rounds.at(-1)?.number,
               },
             ],
           },

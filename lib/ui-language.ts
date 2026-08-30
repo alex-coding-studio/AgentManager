@@ -5,6 +5,25 @@ export function isUiLanguage(value: unknown): value is UiLanguage {
 }
 
 export const chineseUi: Record<string, string> = {
+  'Follow-up recorded': '已加入演示 Todo',
+  'Tell the Agent what to remember': '让 Agent 记下一个想法',
+  'Describe the later work in your own words. The Agent organizes the Issue and its context. This is a scripted demo; no real GitHub Issue is created.':
+    '用自己的话说后续想做什么，由 Agent 整理需求与上下文。当前为预设演示，不创建真实 GitHub Issue。',
+  'Organizing your follow-up…': '正在整理后续事项 · 演示…',
+  'Original request & context': '原始需求与来源上下文',
+  Done: '完成',
+  'What should we keep for later?': '有什么想法留到以后？',
+  'For example: we may need multi-device login later. Not in this delivery; add it to Todo.':
+    '例如：后续可能要加入多端登录支持，这一轮先不做，帮我加到 Todo。',
+  'The current goal, Action, and available output are included automatically. Current blockers still belong to this delivery.':
+    '自动带入当前目标、步骤与已有产出。本轮阻塞问题仍留在当前交付中解决。',
+  'Ask Agent to record it · demo': '交给 Agent 整理 · 演示',
+  'From validation': '来自验收',
+  'User idea': '临时想法',
+  'Optional review follow-up': '可选的后续事项 · 演示',
+  'Later, add a cross-platform verification checklist. This is outside the current local-only delivery and does not waive any blocking finding.':
+    '后续可补充跨平台验证清单。这不属于本轮本地交付，也不能替代当前阻塞问题的修复。',
+  'Ask Agent to add this to Issues': '让 Agent 整理为 Issue',
   'Only this step is updating. You can still browse the plan on the left.':
     '仅更新这一步，你仍可浏览左侧计划。',
   'For example: three steps feel too broad. Could you break them into four?':
@@ -112,7 +131,7 @@ export const chineseUi: Record<string, string> = {
   'Why later?': '为什么留到以后？',
   'Expected future outcome': '后续预期成果',
   'Simulate creating Issue': '模拟创建 Issue',
-  'New follow-up': '新增后续事项',
+  'New follow-up': '记个想法',
   'GitHub Issues will own these Todos. This preview only simulates Issue metadata and open/closed state.':
     '后续以 GitHub Issues 管理待办。本页仅模拟 Issue 信息及打开、关闭状态。',
   Open: '未关闭',

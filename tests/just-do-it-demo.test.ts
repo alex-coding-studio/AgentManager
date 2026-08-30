@@ -11,6 +11,7 @@ import {
   planningFor,
   validDemoResources,
   demoPlanningLibrary,
+  organizeDemoFollowUp,
   unmetDependencies,
   type DemoState,
   type DemoEvent,
@@ -417,6 +418,61 @@ void test('Issue Todos retain source Action and round without changing delivery 
   });
   assert.equal(state.goals[0].todos.at(-1)!.done, true);
   assert.equal(state.goals[0].actions, before);
+});
+
+void test('natural-language follow-ups generate Issue metadata with the original request and frozen context', () => {
+  let state = createDemoState();
+  const request = '后续可能要加入多端登录支持，这里先不做，帮我加到 Todo。';
+  const organized = organizeDemoFollowUp(state.goals[0], request, 'interface');
+  assert.equal(organized.text, '支持多端登录');
+  assert.equal(organized.request, request);
+  assert.equal(organized.origin.kind, 'idea');
+  assert.equal(organized.origin.round, 1);
+  assert.match(organized.acceptance, /后续实施前确认/);
+  state = run(state, 'execute');
+  const actions = state.goals[0].actions;
+  state = demoReducer(state, {
+    type: 'todo-add',
+    goalId: 'website',
+    ...organized,
+  });
+  const issue = state.goals[0].todos.at(-1)!;
+  assert.equal(issue.round, 1);
+  assert.equal(issue.origin?.sourceId, state.goals[0].sourceId);
+  assert.equal(state.goals[0].actions, actions);
+});
+
+void test('validation follow-ups preserve their review source and never resolve blocking findings', () => {
+  let state = run(createDemoState(), 'review');
+  const organized = organizeDemoFollowUp(
+    state.goals[0],
+    '以后补充跨平台验证，不在本轮做。',
+    'interface',
+    'validation',
+  );
+  state = demoReducer(state, {
+    type: 'todo-add',
+    goalId: 'website',
+    ...organized,
+  });
+  assert.equal(state.goals[0].todos.at(-1)!.origin?.kind, 'validation');
+  assert.equal(state.goals[0].todos.at(-1)!.origin?.reviewResult, 'changes');
+  assert.equal(target(state).result, 'changes');
+  assert.equal(
+    demoReducer(state, {
+      type: 'merge',
+      goalId: 'website',
+      actionId: 'interface',
+    }),
+    state,
+  );
+  const noOutput = organizeDemoFollowUp(
+    state.goals[0],
+    '以后再做',
+    'validation',
+  );
+  assert.equal(noOutput.origin.round, undefined);
+  assert.equal(noOutput.origin.outputCommit, undefined);
 });
 
 void test('default reviewer is independent from the selected executor and plan confirmation retains ready-step configuration', () => {

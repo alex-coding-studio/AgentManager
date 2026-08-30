@@ -637,6 +637,7 @@ function ActionWorkbench({
   const [roundIndex, setRoundIndex] = useState<number | null>(null);
   const [prOpen, setPrOpen] = useState(false);
   const [issueOpen, setIssueOpen] = useState(false);
+  const [validationIdea, setValidationIdea] = useState<string | null>(null);
   const feedbackRef = useRef<HTMLTextAreaElement>(null);
   const latest = target.rounds.at(-1);
   const viewed =
@@ -938,6 +939,32 @@ function ActionWorkbench({
               </p>
             )}
             <DemoProfileSummary value={latest?.reviewProfile} />
+            {latest?.review && (
+              <div className="mt-4 rounded-lg border border-border p-3">
+                <p className="text-xs font-medium">
+                  {t('Optional review follow-up')}
+                </p>
+                <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                  {t(
+                    'Later, add a cross-platform verification checklist. This is outside the current local-only delivery and does not waive any blocking finding.',
+                  )}
+                </p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="mt-2"
+                  disabled={busy}
+                  onClick={() => {
+                    setValidationIdea(
+                      '验收时想到：后续补充跨平台验证清单；本轮只验证当前本机环境，不在这次交付实施。请记到 Todo。',
+                    );
+                    setIssueOpen(true);
+                  }}
+                >
+                  {t('Ask Agent to add this to Issues')}
+                </Button>
+              </div>
+            )}
             <div className="mt-4 flex flex-wrap gap-2">
               {target.verification === 'agent' && (
                 <Button
@@ -1028,7 +1055,10 @@ function ActionWorkbench({
               <Button
                 variant="outline"
                 disabled={busy}
-                onClick={() => setIssueOpen(true)}
+                onClick={() => {
+                  setValidationIdea(null);
+                  setIssueOpen(true);
+                }}
               >
                 {t('Track out-of-scope feedback as Todo')}
               </Button>
@@ -1069,10 +1099,13 @@ function ActionWorkbench({
         <DemoIssueDraft
           goal={goal}
           actionId={target.id}
-          initialText={feedback}
+          initialText={validationIdea ?? feedback}
+          sourceKind={validationIdea ? 'validation' : 'idea'}
           dispatch={dispatch}
           onClose={() => setIssueOpen(false)}
-          onCreated={() => setFeedback('')}
+          onCreated={() => {
+            if (!validationIdea) setFeedback('');
+          }}
         />
       )}
       <Dialog open={prOpen} onOpenChange={setPrOpen}>

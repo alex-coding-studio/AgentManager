@@ -310,6 +310,19 @@ storage direction below supersedes the earlier generic local-checklist concept.
 
 ### GitHub Issue-backed Todos — agreed direction for this scope
 
+There are two entrances to one Agent-assisted workflow: an explicit place to
+capture a user's new idea, and a follow-up discovered during Validation. The
+user describes the request naturally, such as adding multi-device login later;
+the Agent organizes its Issue title, body, deferral context, source links, and
+open questions. Do not make the user fill title/reason/acceptance fields to
+record an idea. Attach the relevant goal, Action, available output, and review
+context automatically, preserving the user's original words.
+
+A validation-discovered inconsistency or extra scope can be proposed as a
+follow-up only when deferral is appropriate. Recording it must not silently
+waive a blocker or mark the current Action verified. Issue formation is a
+collaboration/response flow, not a manual metadata-entry form.
+
 Validation feedback that improves the current delivery remains in the same
 Action's correction loop. Only newly introduced, out-of-scope work is deferred;
 when that classification is ambiguous, ask instead of silently postponing a fix.
