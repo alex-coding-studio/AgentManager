@@ -826,11 +826,13 @@ function ActionWorkbench({
                 key={label}
                 className={cn(
                   'border-t-2 pt-2 text-[10px] sm:text-xs',
-                  currentStage === index
-                    ? 'border-foreground font-medium text-foreground'
-                    : index < currentStage
-                      ? 'border-emerald-500 text-muted-foreground'
-                      : 'border-border text-muted-foreground',
+                  currentStage === index && target.stage === 'verified'
+                    ? 'border-emerald-500 font-medium text-emerald-700 dark:text-emerald-400'
+                    : currentStage === index
+                      ? 'border-foreground font-medium text-foreground'
+                      : index < currentStage
+                        ? 'border-emerald-500 text-muted-foreground'
+                        : 'border-border text-muted-foreground',
                 )}
               >
                 <span className="mr-1.5 font-mono opacity-50">
