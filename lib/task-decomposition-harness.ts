@@ -12,7 +12,7 @@ Return only JSON matching the schema: a proposal, one bounded clarification, or 
 
 Atomicity is relative to the current purpose. Each Candidate needs one coherent intent, a sibling-distinguishable boundary, manageable Context, and independent inspection. It may still contain multiple implementation steps. Stop when another split adds little decision value, even if mechanical subdivision remains possible. The user is the final judge of feasible resolution. One Agent Session or pull request is only a delivery-sizing signal, never a universal product-level limit.
 
-Every Candidate needs a stable identifier and revision, concise type and title, ownership summary, derivedFrom origins, execution-only dependsOn, supported Resources, and type metadata. derivedFrom is lineage; dependsOn is only execution prerequisites and may name an accepted NODE or same-proposal Candidate. Never hide dependencies in metadata.
+Every Candidate needs a response-local identifier (or the existing identifier for revision), revision, concise type and title, ownership summary, derivedFrom origins, execution-only dependsOn, supported Resources, and type metadata. derivedFrom is lineage; dependsOn is only execution prerequisites and may name an accepted NODE or same-proposal Candidate. Never hide dependencies in metadata.
 
 Read every primary Workspace file. Use the graph map first; read a related file only for a specific unresolved impact. Check dependencies, reverse dependents, same-origin siblings, shared-Resource neighbors, adjacent Candidates, and protected Nodes. Before claiming impact, read that item's file and add it to reviewedNodeIds. Clarify if bounded inspection cannot resolve material ambiguity.
 
@@ -55,6 +55,7 @@ export type HarnessImpactReview = {
 };
 
 type HarnessResultBase = {
+  candidateAliases?: Record<string, string>;
   schemaVersion: 1;
   harness: {
     id: typeof TASK_DECOMPOSITION_HARNESS_ID;
@@ -97,10 +98,10 @@ export type HarnessValidationContext = {
 };
 
 const nonEmptyString = { type: 'string', minLength: 1, pattern: '\\S' };
-const nodeId = { type: 'string', pattern: '^NODE-[0-9]{4,}$' };
+const nodeId = { type: 'string', pattern: '^NODE-[0-9a-f]{8,32}$' };
 const candidateId = {
   type: 'string',
-  pattern: '^CANDIDATE-[0-9]{4,}$',
+  pattern: '^CANDIDATE-(?:[0-9]{4,}|[0-9a-f]{8,32})$',
 };
 const stringArray = {
   type: 'array',

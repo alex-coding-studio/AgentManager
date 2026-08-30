@@ -26,6 +26,7 @@ import {
   type TaskGraphPreview,
 } from '@/lib/task-graph-layout';
 import { cn } from '@/lib/utils';
+import { graphCardLabel } from '@/lib/graph-identity';
 
 type TaskCardData = Record<string, unknown> & {
   displayId: string;
@@ -272,10 +273,14 @@ function TaskCard({ data, selected }: NodeProps<TaskFlowNode>) {
         className="!size-2.5 !border-2 !border-background !bg-muted-foreground"
       />
       <div className="flex items-center justify-between gap-3">
-        <span className="font-mono text-[10px] font-medium tracking-wide text-muted-foreground">
-          {id}
+        <span
+          className="shrink-0 whitespace-nowrap font-mono text-[10px] font-medium tracking-wide text-muted-foreground"
+          title={id}
+          aria-label={id}
+        >
+          {graphCardLabel(id)}
         </span>
-        <span className="flex items-center gap-1.5">
+        <span className="flex min-w-0 items-center gap-1.5">
           {!preview && data.relationshipCount > 0 ? (
             <span
               className="flex items-center gap-1 text-[9px] text-muted-foreground"
@@ -287,11 +292,12 @@ function TaskCard({ data, selected }: NodeProps<TaskFlowNode>) {
           ) : null}
           <span
             className={cn(
-              'rounded-full px-2 py-0.5 text-[10px] font-medium capitalize',
+              'truncate rounded-full px-2 py-0.5 text-[10px] font-medium capitalize',
               preview
                 ? 'bg-secondary text-secondary-foreground'
                 : 'bg-foreground text-background',
             )}
+            title={running ? 'Running' : data.type}
             style={
               preview
                 ? {
@@ -306,7 +312,7 @@ function TaskCard({ data, selected }: NodeProps<TaskFlowNode>) {
           {running ? (
             <button
               type="button"
-              className="nodrag nopan grid size-8 place-items-center rounded-full text-muted-foreground transition hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
+              className="nodrag nopan grid size-8 shrink-0 place-items-center rounded-full text-muted-foreground transition hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
               aria-label="Cancel Agent Run"
               title="Cancel Agent Run"
               onClick={(event) => {
@@ -320,7 +326,7 @@ function TaskCard({ data, selected }: NodeProps<TaskFlowNode>) {
           {!preview || data.transientKind === 'candidate' ? (
             <button
               type="button"
-              className="nodrag nopan grid size-8 place-items-center rounded-full text-muted-foreground transition hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
+              className="nodrag nopan grid size-8 shrink-0 place-items-center rounded-full text-muted-foreground transition hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
               aria-label={`Open details for ${data.title}`}
               title="Open details"
               onClick={(event) => {

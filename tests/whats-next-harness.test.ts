@@ -30,8 +30,8 @@ const request = {
 
 const context = {
   request,
-  knownNodeIds: ['NODE-0001', 'NODE-0002'],
-  knownResourcePaths: ['task-graph/nodes/NODE-0001/resources/idea.md'],
+  knownNodeIds: ['NODE-00000001', 'NODE-00000002'],
+  knownResourcePaths: ['task-graph/nodes/NODE-00000001/resources/idea.md'],
 };
 
 function baseResult() {
@@ -52,7 +52,7 @@ function baseResult() {
       },
     },
     exploration: {
-      consideredNodeIds: ['NODE-0001'],
+      consideredNodeIds: ['NODE-00000001'],
       notes: ['The Start carries only the stated idea.'],
     },
   };
@@ -66,7 +66,7 @@ function candidate(id: string, overrides: Record<string, unknown> = {}) {
     type: 'module',
     title,
     summary: 'One possible next step grown from the Start.',
-    derivedFrom: ['NODE-0001'],
+    derivedFrom: ['NODE-00000001'],
     dependsOn: [],
     resources: [],
     typeTemplateRef: null,
@@ -226,7 +226,7 @@ void test('rejects an unknown origin Node', () => {
     () =>
       validateWhatsNextHarnessResult(
         proposal([
-          candidate('CANDIDATE-0001', { derivedFrom: ['NODE-9999'] }),
+          candidate('CANDIDATE-0001', { derivedFrom: ['NODE-00009999'] }),
           candidate('CANDIDATE-0002'),
         ]),
         context,
@@ -238,7 +238,9 @@ void test('rejects an unknown origin Node', () => {
 void test('accepts several origins on one direction', () => {
   const result = validateWhatsNextHarnessResult(
     proposal([
-      candidate('CANDIDATE-0001', { derivedFrom: ['NODE-0001', 'NODE-0002'] }),
+      candidate('CANDIDATE-0001', {
+        derivedFrom: ['NODE-00000001', 'NODE-00000002'],
+      }),
       candidate('CANDIDATE-0002'),
     ]),
     context,
@@ -356,7 +358,7 @@ void test('rejects graph changes during one-to-one Refine', () => {
         proposal([
           candidate('CANDIDATE-0001', {
             revision: 2,
-            dependsOn: ['NODE-0002'],
+            dependsOn: ['NODE-00000002'],
           }),
         ]),
         {

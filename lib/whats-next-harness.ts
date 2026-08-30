@@ -91,6 +91,7 @@ export type WhatsNextExploration = {
 };
 
 type WhatsNextResultBase = {
+  candidateAliases?: Record<string, string>;
   schemaVersion: 1;
   harness: {
     id: typeof WHATS_NEXT_HARNESS_ID;
@@ -135,8 +136,11 @@ export type WhatsNextValidationContext = {
 };
 
 const nonEmptyString = { type: 'string', minLength: 1, pattern: '\\S' };
-const nodeId = { type: 'string', pattern: '^NODE-[0-9]{4,}$' };
-const candidateId = { type: 'string', pattern: '^CANDIDATE-[0-9]{4,}$' };
+const nodeId = { type: 'string', pattern: '^NODE-[0-9a-f]{8,32}$' };
+const candidateId = {
+  type: 'string',
+  pattern: '^CANDIDATE-(?:[0-9]{4,}|[0-9a-f]{8,32})$',
+};
 const stringArray = { type: 'array', uniqueItems: true, items: nonEmptyString };
 const nodeIdArray = { type: 'array', uniqueItems: true, items: nodeId };
 const dependencyIdArray = {

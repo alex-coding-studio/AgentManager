@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import {
   ensureGraphIdentities,
-  identifyCandidates,
+  parseIdentifiedResult,
   readIdentifiedEntities,
   reserveNodeIdentity,
   reservedCandidateAliases,
@@ -242,6 +242,7 @@ export async function startWhatsNextRun(
       ? createWhatsNextRevisionTarget(revisionTarget.candidate)
       : null,
     feedback: input.feedback ?? [],
+    previousProposalAliases: coordinatorRun?.result?.candidateAliases ?? {},
     reservedCandidateIds: reservedCandidateIds.filter(
       (candidateId) => candidateId !== revisionTarget?.candidate.candidateId,
     ),
@@ -425,43 +426,42 @@ export async function recoverWhatsNextRunResult(
             : null,
         )
       : null;
-  const result = parseWhatsNextHarnessResult(finalOutput, {
-    request: {
-      sessionId: record.sessionId,
-      requestId: record.requestId,
-      inputFingerprint: record.inputFingerprint,
+  const result = await parseIdentifiedResult(
+    project.planningPath,
+    GRAPH_ROOT,
+    finalOutput,
+    {
+      request: {
+        sessionId: record.sessionId,
+        requestId: record.requestId,
+        inputFingerprint: record.inputFingerprint,
+      },
+      operation: record.operation,
+      revisionCandidateId: revisionTarget?.candidateId,
+      revisionTarget: revisionTarget ?? undefined,
+      knownNodeIds: nodes.map((node) => node.id),
+      knownResourcePaths: record.input?.resourcePaths ?? [],
+      acceptedCandidateIds: nodes.flatMap((node) =>
+        node.provenance?.candidateId ? [node.provenance.candidateId] : [],
+      ),
+      previousCandidateRevisions: revisionTarget
+        ? { [revisionTarget.candidateId]: revisionTarget.revision }
+        : undefined,
+      reservedCandidateIds:
+        record.operation === 'refine-candidate'
+          ? []
+          : await collectReservedCandidateIds(project),
+      knownCandidates: await collectLatestUnacceptedCandidates(project),
     },
-    operation: record.operation,
-    revisionCandidateId: revisionTarget?.candidateId,
-    revisionTarget: revisionTarget ?? undefined,
-    knownNodeIds: nodes.map((node) => node.id),
-    knownResourcePaths: record.input?.resourcePaths ?? [],
-    acceptedCandidateIds: nodes.flatMap((node) =>
-      node.provenance?.candidateId ? [node.provenance.candidateId] : [],
-    ),
-    previousCandidateRevisions: revisionTarget
-      ? { [revisionTarget.candidateId]: revisionTarget.revision }
-      : undefined,
-    reservedCandidateIds:
-      record.operation === 'refine-candidate'
-        ? []
-        : await collectReservedCandidateIds(project),
-    knownCandidates: await collectLatestUnacceptedCandidates(project),
-  });
+    parseWhatsNextHarnessResult,
+    revisionTarget ?? undefined,
+  );
   const timestamp = new Date().toISOString();
   record.status = result.outcome;
-  if (result.outcome === 'proposal') {
-    result.candidates = await identifyCandidates(
-      project.planningPath,
-      GRAPH_ROOT,
-      result.candidates,
-      revisionTarget ?? undefined,
-    );
-  }
   record.result = result;
   record.error = null;
   record.updatedAt = timestamp;
-  record.endedAt = timestamp;
+  record.endedAt ??= timestamp;
   await ensureCandidateArtifacts(project, record);
   await writeWhatsNextCheckpoint(project, record);
   await writeRunRecord(project, record);
@@ -699,26 +699,33 @@ async function finishWhatsNextRun(
     await writeRunRecord(project, record);
     if (isRunCanceled(record)) return;
 
-    const result = parseWhatsNextHarnessResult(agentResult.finalOutput, {
-      request: {
-        sessionId: record.sessionId,
-        requestId: record.requestId,
-        inputFingerprint: record.inputFingerprint,
+    const result = await parseIdentifiedResult(
+      project.planningPath,
+      GRAPH_ROOT,
+      agentResult.finalOutput,
+      {
+        request: {
+          sessionId: record.sessionId,
+          requestId: record.requestId,
+          inputFingerprint: record.inputFingerprint,
+        },
+        knownNodeIds: nodes.map((node) => node.id),
+        knownResourcePaths: resources.map((resource) => resource.logicalPath),
+        acceptedCandidateIds: nodes.flatMap((node) =>
+          node.provenance?.candidateId ? [node.provenance.candidateId] : [],
+        ),
+        previousCandidateRevisions: revisionTarget
+          ? { [revisionTarget.candidateId]: revisionTarget.revision }
+          : undefined,
+        reservedCandidateIds,
+        knownCandidates: await collectLatestUnacceptedCandidates(project),
+        operation: record.operation,
+        revisionCandidateId: revisionTarget?.candidateId,
+        revisionTarget,
       },
-      knownNodeIds: nodes.map((node) => node.id),
-      knownResourcePaths: resources.map((resource) => resource.logicalPath),
-      acceptedCandidateIds: nodes.flatMap((node) =>
-        node.provenance?.candidateId ? [node.provenance.candidateId] : [],
-      ),
-      previousCandidateRevisions: revisionTarget
-        ? { [revisionTarget.candidateId]: revisionTarget.revision }
-        : undefined,
-      reservedCandidateIds,
-      knownCandidates: await collectLatestUnacceptedCandidates(project),
-      operation: record.operation,
-      revisionCandidateId: revisionTarget?.candidateId,
+      parseWhatsNextHarnessResult,
       revisionTarget,
-    });
+    );
     if (
       revisionTarget &&
       result.outcome === 'proposal' &&
@@ -731,14 +738,6 @@ async function finishWhatsNextRun(
     }
     const endedAt = new Date().toISOString();
     record.status = result.outcome;
-    if (result.outcome === 'proposal') {
-      result.candidates = await identifyCandidates(
-        project.planningPath,
-        GRAPH_ROOT,
-        result.candidates,
-        revisionTarget,
-      );
-    }
     record.result = result;
     record.updatedAt = endedAt;
     record.endedAt = endedAt;
@@ -938,7 +937,9 @@ function validateRunRequest(input: RunRequest) {
   if (new Set(input.sourceNodeIds).size !== input.sourceNodeIds.length) {
     throw new Error('Origin Nodes must be unique.');
   }
-  if (input.sourceNodeIds.some((nodeId) => !/^NODE-\d{4,}$/.test(nodeId))) {
+  if (
+    input.sourceNodeIds.some((nodeId) => !/^NODE-[0-9a-f]{8,32}$/.test(nodeId))
+  ) {
     throw new Error('An origin Node is invalid.');
   }
   const instruction = input.instruction.trim();

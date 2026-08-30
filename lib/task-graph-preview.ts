@@ -6,75 +6,81 @@ const timestamp = '2026-08-28T00:00:00.000Z';
 
 export function createTaskGraphPreview() {
   const nodes = [
-    node('NODE-9001', 'start', 'source', 'Product definition', []),
-    node('NODE-9010', 'node', 'module', 'Context library', ['NODE-9001']),
-    node('NODE-9011', 'node', 'module', 'Decomposition', ['NODE-9001']),
-    node('NODE-9012', 'node', 'module', 'Dependency synchronization', [
-      'NODE-9001',
+    node('NODE-00009001', 'start', 'source', 'Product definition', []),
+    node('NODE-00009010', 'node', 'module', 'Context library', [
+      'NODE-00009001',
     ]),
-    node('NODE-9013', 'node', 'module', 'Agent transport', ['NODE-9001']),
-    node('NODE-9020', 'node', 'task', 'Bounded context packet', ['NODE-9010']),
+    node('NODE-00009011', 'node', 'module', 'Decomposition', ['NODE-00009001']),
+    node('NODE-00009012', 'node', 'module', 'Dependency synchronization', [
+      'NODE-00009001',
+    ]),
+    node('NODE-00009013', 'node', 'module', 'Agent transport', [
+      'NODE-00009001',
+    ]),
+    node('NODE-00009020', 'node', 'task', 'Bounded context packet', [
+      'NODE-00009010',
+    ]),
     node(
-      'NODE-9021',
+      'NODE-00009021',
       'node',
       'task',
       'Candidate generation',
-      ['NODE-9011'],
-      ['NODE-9020'],
+      ['NODE-00009011'],
+      ['NODE-00009020'],
     ),
     node(
-      'NODE-9022',
+      'NODE-00009022',
       'node',
       'task',
       'Candidate refinement',
-      ['NODE-9011'],
-      ['NODE-9021'],
+      ['NODE-00009011'],
+      ['NODE-00009021'],
     ),
     node(
-      'NODE-9023',
+      'NODE-00009023',
       'node',
       'task',
       'Graph reconciliation',
-      ['NODE-9012'],
-      ['NODE-9021'],
+      ['NODE-00009012'],
+      ['NODE-00009021'],
     ),
     node(
-      'NODE-9024',
+      'NODE-00009024',
       'node',
       'task',
       'Agent invocation',
-      ['NODE-9013'],
-      ['NODE-9020'],
+      ['NODE-00009013'],
+      ['NODE-00009020'],
     ),
     node(
-      'NODE-9030',
+      'NODE-00009030',
       'node',
       'capability',
       'Formal node promotion',
-      ['NODE-9022', 'NODE-9023'],
-      ['NODE-9021', 'NODE-9023'],
+      ['NODE-00009022', 'NODE-00009023'],
+      ['NODE-00009021', 'NODE-00009023'],
     ),
     node(
-      'NODE-9031',
+      'NODE-00009031',
       'node',
       'capability',
       'Dependency readiness',
-      ['NODE-9023'],
-      ['NODE-9030'],
+      ['NODE-00009023'],
+      ['NODE-00009030'],
     ),
     node(
-      'NODE-9032',
+      'NODE-00009032',
       'node',
       'capability',
       'Delivery handoff',
-      ['NODE-9024'],
-      ['NODE-9030', 'NODE-9031'],
+      ['NODE-00009024'],
+      ['NODE-00009030', 'NODE-00009031'],
     ),
   ];
   const previews: TaskGraphPreview[] = [
     {
-      id: 'REQUEST-PREVIEW-NODE-9022',
-      sourceNodeId: 'NODE-9022',
+      id: 'REQUEST-PREVIEW-NODE-00009022',
+      sourceNodeId: 'NODE-00009022',
       instruction: 'Split refinement into independently verifiable steps.',
       inheritedResourceCount: 2,
       additionalResourceCount: 1,
@@ -84,7 +90,13 @@ export function createTaskGraphPreview() {
 }
 
 export function createTaskGraphRefiningPreview() {
-  const source = node('NODE-9001', 'start', 'source', 'Product definition', []);
+  const source = node(
+    'NODE-00009001',
+    'start',
+    'source',
+    'Product definition',
+    [],
+  );
   const first = previewCandidate('CANDIDATE-9001', 1, 'Context boundaries');
   const second = previewCandidate('CANDIDATE-9002', 1, 'Dependency boundaries');
   const running: TaskGraphPreview = {
@@ -116,7 +128,7 @@ function previewCandidate(
     type: 'module',
     title,
     summary: `Development preview for ${title}.`,
-    derivedFrom: ['NODE-9001'],
+    derivedFrom: ['NODE-00009001'],
     dependsOn: [],
     resources: [],
     typeTemplateRef: null,
@@ -126,7 +138,7 @@ function previewCandidate(
   };
   return {
     id: candidateId,
-    sourceNodeId: 'NODE-9001',
+    sourceNodeId: 'NODE-00009001',
     instruction: 'Refine this boundary.',
     inheritedResourceCount: 1,
     additionalResourceCount: 0,

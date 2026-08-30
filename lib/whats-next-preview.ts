@@ -14,7 +14,7 @@ const sessionId = 'SESSION-00000000-0000-4000-8000-000000000022';
 export function createWhatsNextReviewPreview() {
   const start: TaskGraphNode = {
     schemaVersion: 1,
-    id: 'NODE-9001',
+    id: 'NODE-00009001',
     role: 'start',
     type: 'source',
     title: 'Build a local AgentManager for one developer',
@@ -26,7 +26,7 @@ export function createWhatsNextReviewPreview() {
     resources: [],
     derivedFrom: [],
     dependsOn: [],
-    typeTemplateRef: 'NODE-9001',
+    typeTemplateRef: 'NODE-00009001',
     metadata: {},
   };
   const candidates = [
@@ -224,7 +224,7 @@ function candidate(
     type: 'module',
     title,
     summary,
-    derivedFrom: ['NODE-9001'],
+    derivedFrom: ['NODE-00009001'],
     dependsOn,
     resources: [],
     typeTemplateRef: null,

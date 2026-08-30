@@ -11,6 +11,9 @@ import {
 import path from 'node:path';
 import {
   bindIdentity,
+  CANDIDATE_ALIAS_PATTERN,
+  NODE_ALIAS_PATTERN,
+  uuidAlias,
   identifyEntity,
   projectDisplayRelations,
   type GraphIdentityIndex,
@@ -55,8 +58,6 @@ async function readIndex(file: string): Promise<GraphIdentityIndex> {
     if (
       index.schemaVersion !== 1 ||
       !index.aliases ||
-      !Number.isInteger(index.nextNodeNumber) ||
-      index.nextNodeNumber < 1 ||
       !Array.isArray(index.formalAliases)
     ) {
       throw new Error('Invalid graph identity index.');
@@ -70,13 +71,16 @@ async function readIndex(file: string): Promise<GraphIdentityIndex> {
     ) {
       throw new Error('Invalid formal identity alias.');
     }
-    return index;
+    return {
+      schemaVersion: 1,
+      aliases: index.aliases,
+      formalAliases: index.formalAliases,
+    };
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     return {
       schemaVersion: 1,
       aliases: {},
-      nextNodeNumber: 1,
       formalAliases: [],
     };
   }
@@ -120,7 +124,7 @@ export async function ensureGraphIdentities(
     const index = await readIndex(file);
     const nodes = await records<IdentityEntity>(
       path.join(planningPath, scope, 'nodes'),
-      /^NODE-\d{4,}$/,
+      new RegExp(NODE_ALIAS_PATTERN),
       'node.json',
     );
     const runRoot =
@@ -218,15 +222,104 @@ export async function reserveNodeIdentity(
   const file = indexPath(planningPath, scope);
   return serialized(file, async () => {
     const index = await readIndex(file);
-    const uid = existingUid ?? randomUUID();
+    let uid = existingUid ?? randomUUID();
+    while (!existingUid && Object.values(index.aliases).includes(uid))
+      uid = randomUUID();
     const existing = Object.entries(index.aliases).find(
       ([alias, value]) => alias.startsWith('NODE-') && value === uid,
     );
     if (existing) return { id: existing[0], uid };
-    const id = `NODE-${String(index.nextNodeNumber).padStart(4, '0')}`;
+    const candidateAlias = Object.entries(index.aliases).find(
+      ([alias, value]) =>
+        alias.startsWith('CANDIDATE-') &&
+        value === uid &&
+        alias.slice(10).length >= 8 &&
+        alias.slice(10) ===
+          uid.replaceAll('-', '').slice(-alias.slice(10).length),
+    )?.[0];
+    const id = candidateAlias
+      ? candidateAlias.replace('CANDIDATE-', 'NODE-')
+      : uuidAlias(index, 'NODE', uid);
     bindIdentity(index, id, uid);
     await atomicJson(file, index);
     return { id, uid };
+  });
+}
+
+export async function parseIdentifiedResult<
+  T extends { outcome: string; candidates?: IdentityEntity[] },
+  C,
+>(
+  planningPath: string,
+  scope: Scope,
+  output: string,
+  context: C,
+  parse: (text: string, context: C) => T,
+  revisionTarget?: IdentityEntity,
+): Promise<T & { candidateAliases?: Record<string, string> }> {
+  if (revisionTarget) {
+    const result = parse(output, context);
+    if (result.outcome === 'proposal') {
+      if (
+        result.candidates?.length !== 1 ||
+        result.candidates[0]?.candidateId !== revisionTarget.candidateId
+      ) {
+        throw new Error(
+          'A revision must return exactly the requested Candidate identifier.',
+        );
+      }
+      result.candidates = await identifyCandidates(
+        planningPath,
+        scope,
+        result.candidates,
+        revisionTarget,
+      );
+    }
+    return result;
+  }
+  let raw;
+  try {
+    raw = JSON.parse(output);
+  } catch {
+    return parse(output, context);
+  }
+  if (raw?.outcome !== 'proposal' || !Array.isArray(raw.candidates))
+    return parse(output, context);
+  await ensureGraphIdentities(planningPath, scope);
+  const file = indexPath(planningPath, scope);
+  return serialized(file, async () => {
+    const index = await readIndex(file);
+    const aliases = new Map<string, string>();
+    for (const candidate of raw.candidates) {
+      if (
+        typeof candidate?.candidateId !== 'string' ||
+        !new RegExp(CANDIDATE_ALIAS_PATTERN).test(candidate.candidateId)
+      ) {
+        throw new Error('Invalid local Candidate identifier.');
+      }
+      if (aliases.has(candidate.candidateId))
+        throw new Error('Duplicate local Candidate identifier.');
+      let uid = randomUUID();
+      while (Object.values(index.aliases).includes(uid)) uid = randomUUID();
+      const alias = uuidAlias(index, 'CANDIDATE', uid);
+      bindIdentity(index, alias, uid);
+      aliases.set(candidate.candidateId, alias);
+    }
+    raw.candidates = raw.candidates.map((candidate: IdentityEntity) => ({
+      ...candidate,
+      candidateId: aliases.get(candidate.candidateId!),
+      dependsOn: Array.isArray(candidate.dependsOn)
+        ? candidate.dependsOn.map(
+            (reference) => aliases.get(reference) ?? reference,
+          )
+        : candidate.dependsOn,
+    }));
+    const result = parse(JSON.stringify(raw), context);
+    result.candidates = result.candidates!.map((candidate) =>
+      identifyEntity(candidate, index),
+    );
+    await atomicJson(file, index);
+    return { ...result, candidateAliases: Object.fromEntries(aliases) };
   });
 }
 
