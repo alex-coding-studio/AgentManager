@@ -42,6 +42,9 @@ export function GraphNodeCard({
   const id = data.displayId;
   const preview = data.kind === 'preview';
   const running = data.transientKind === 'run';
+  const runningLabel = t('{agent} is running', {
+    agent: data.agentLabel?.trim() || 'Agent',
+  });
   return (
     <div
       aria-busy={running}
@@ -73,7 +76,7 @@ export function GraphNodeCard({
               ? 'bg-secondary text-secondary-foreground'
               : 'bg-foreground text-background',
           )}
-          title={running ? t('Running') : data.type}
+          title={running ? runningLabel : data.type}
           style={
             preview
               ? {
@@ -89,7 +92,7 @@ export function GraphNodeCard({
               aria-hidden="true"
             />
           ) : null}
-          {running ? t('Running') : data.type}
+          {running ? runningLabel : data.type}
         </span>
         <span className="flex shrink-0 items-center gap-1.5">
           {data.relationshipCount > 0 ? (

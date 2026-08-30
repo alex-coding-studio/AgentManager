@@ -6,6 +6,25 @@ import path from 'node:path';
 import { readAppSettings, saveAppLanguage } from '../lib/app-settings.ts';
 import { chineseUi, isUiLanguage, translateUi } from '../lib/ui-language.ts';
 
+void test('running status supports named agents and the generic Agent label', () => {
+  assert.equal(
+    translateUi('zh-CN', '{agent} is running', { agent: 'Codex' }),
+    'Codex 运行中',
+  );
+  assert.equal(
+    translateUi('zh-CN', '{agent} is running', { agent: 'Claude' }),
+    'Claude 运行中',
+  );
+  assert.equal(
+    translateUi('zh-CN', '{agent} is running', { agent: 'Agent' }),
+    'Agent 运行中',
+  );
+  assert.equal(
+    translateUi('en', '{agent} is running', { agent: 'Codex' }),
+    'Codex is running',
+  );
+});
+
 void test('language defaults to English and persists both supported choices', async () => {
   const home = await mkdtemp(
     path.join(os.tmpdir(), 'agentmanager-settings-test-'),

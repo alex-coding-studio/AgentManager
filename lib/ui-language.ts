@@ -5,6 +5,7 @@ export function isUiLanguage(value: unknown): value is UiLanguage {
 }
 
 export const chineseUi: Record<string, string> = {
+  '{agent} is running': '{agent} 运行中',
   'Show only {count} direct dependencies': '只显示 {count} 个直接依赖关系',
   'Show direct dependencies for {title}': '查看直接依赖：{title}',
   'In {inputs} · Out {outputs}': '输入 {inputs} · 输出 {outputs}',
