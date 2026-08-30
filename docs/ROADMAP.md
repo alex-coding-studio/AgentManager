@@ -9,8 +9,10 @@ lifecycles, retains work after source deletion, and can report completion back
 to surviving source Nodes without adding a new Node state. Clicking that
 completion indicator to navigate to Just Do It is a later UI refinement.
 See [JUST_DO_IT.md](JUST_DO_IT.md) for settled intent and remaining decisions.
-The current round is documentation only: no execution runtime, Harness changes,
-automatic review/merge pipeline, or storage migration is authorized.
+The design-document round is followed by an authorized
+[isolated UI demo](JUST_DO_IT_DEMO.md) using sample data. Real execution,
+Harness integration, automatic review/merge, and storage migration remain out
+of scope until separately agreed.
 
 Local Git versioning and operational analytics remain deferred. They must not
 delay completing the workflow discussion. Implementation scope and acceptance

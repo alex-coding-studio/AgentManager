@@ -118,6 +118,10 @@ steps.
 See [Just Do It](docs/JUST_DO_IT.md) for the execution-workspace design,
 including settled workflow decisions and questions still open before implementation.
 
+The Just Do It sidebar entry opens an [interactive demo](docs/JUST_DO_IT_DEMO.md)
+at `/projects/<projectId>/implementation`. It uses fictional, in-memory data:
+no Agent calls, GitHub changes, or project writes. Reload to reset the examples.
+
 ## License
 
 MIT

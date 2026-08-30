@@ -43,7 +43,8 @@ const navigation = [
     label: 'Just Do It',
     icon: Play,
     path: '/implementation',
-    available: false,
+    available: true,
+    badge: 'Demo',
   },
 ];
 
@@ -111,6 +112,11 @@ export function ProjectShell({
                 <>
                   <Icon className="size-4" />
                   <span>{t(item.label)}</span>
+                  {item.badge ? (
+                    <span className="ml-auto text-[10px] opacity-65">
+                      {t(item.badge)}
+                    </span>
+                  ) : null}
                   {!item.available ? (
                     <span className="ml-auto text-[10px] uppercase tracking-wide">
                       {t('Soon')}
