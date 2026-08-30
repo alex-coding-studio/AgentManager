@@ -8,6 +8,8 @@ import {
   listProjects,
 } from '@/lib/project-registry';
 import { listTaskGraphNodes } from '@/lib/task-graph';
+import { findDemoSource } from '@/lib/just-do-it-demo';
+import { JustDoItSourcePreview } from '@/components/just-do-it-source-preview';
 import {
   createTaskGraphPreview,
   createTaskGraphRefiningPreview,
@@ -20,12 +22,25 @@ export default async function TaskDecompositionPage({
   searchParams,
 }: {
   params: Promise<{ projectId: string }>;
-  searchParams: Promise<{ preview?: string }>;
+  searchParams: Promise<{ preview?: string; node?: string }>;
 }) {
   const { projectId } = await params;
-  const { preview } = await searchParams;
+  const { preview, node } = await searchParams;
   const project = await getProject(projectId);
   if (!project) notFound();
+  if (preview === 'implementation-source') {
+    const goal = findDemoSource('Break It Down', node ?? '');
+    if (!goal) notFound();
+    return (
+      <ProjectShell
+        project={project}
+        projects={await listProjects()}
+        repositoryUrl={getGitHubRepositoryUrl(project)}
+      >
+        <JustDoItSourcePreview goal={goal} />
+      </ProjectShell>
+    );
+  }
   const [projects, folders, nodes] = await Promise.all([
     listProjects(),
     readContextBrowser(project),

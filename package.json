@@ -13,7 +13,7 @@
     "build": "next build",
     "start": "next start",
     "cli": "node ./bin/agent-manager.mjs",
-    "lint": "oxlint app components/appearance-provider.tsx components/graph-node-card.tsx components/ui-language-provider.tsx components/settings-workspace.tsx components/markdown-reader.tsx components/product-context-workspace.tsx components/project-shell.tsx components/project-workspace.tsx components/task-decomposition-context-workspace.tsx components/task-decomposition-workspace.tsx components/task-graph-canvas.tsx components/whats-next-workspace.tsx components/ui/button.tsx components/ui/card.tsx components/ui/checkbox.tsx components/ui/dialog.tsx components/ui/dropdown-menu.tsx components/ui/input.tsx components/ui/textarea.tsx lib tests",
+    "lint": "oxlint app components/just-do-it-source-preview.tsx components/just-do-it-workspace.tsx components/just-do-it-demo-parts.tsx components/appearance-provider.tsx components/graph-node-card.tsx components/ui-language-provider.tsx components/settings-workspace.tsx components/markdown-reader.tsx components/product-context-workspace.tsx components/project-shell.tsx components/project-workspace.tsx components/task-decomposition-context-workspace.tsx components/task-decomposition-workspace.tsx components/task-graph-canvas.tsx components/whats-next-workspace.tsx components/ui/button.tsx components/ui/card.tsx components/ui/checkbox.tsx components/ui/dropdown-menu.tsx components/ui/input.tsx components/ui/textarea.tsx lib tests",
     "format": "oxfmt",
     "test:graph": "node --experimental-strip-types --test tests/task-graph-layout.test.ts tests/task-graph-rules.test.ts tests/graph-identity.test.ts tests/uuid-alias-migration.test.mjs tests/graph-node-card.test.ts",
     "test:harness": "node --experimental-strip-types --test tests/task-decomposition-harness.test.ts",
@@ -21,6 +21,7 @@
     "test:whats-next": "node --experimental-strip-types --test tests/whats-next-harness.test.ts tests/whats-next-redo.test.mjs",
     "test:markdown": "node --experimental-strip-types --test tests/markdown-feedback-position.test.ts",
     "test:settings": "node --experimental-strip-types --test tests/app-settings.test.ts",
+    "test:implementation-demo": "node --experimental-strip-types --test tests/just-do-it-demo.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -5,6 +5,148 @@ export function isUiLanguage(value: unknown): value is UiLanguage {
 }
 
 export const chineseUi: Record<string, string> = {
+  'Plan progress': '计划进度',
+  'Completed {done} / {total} steps': '已完成 {done} / {total} 步',
+  'Open goal: {title}': '打开目标：{title}',
+  'Open source node {id} in a new tab': '在新标签页定位来源节点 {id}',
+  'Demo source canvas': '演示来源画布',
+  'Located source: {id}': '已定位来源：{id}',
+  'Fictional source node. This read-only canvas does not load or change your real graph.':
+    '虚构的来源节点。此只读画布不读取或修改真实图数据。',
+  Demo: '演示',
+  'Interactive demo': '交互演示',
+  'Sample data only. No Agent, GitHub, or project writes.':
+    '仅示例数据 · 不调用 Agent，不写入 GitHub 或项目',
+  'Reset demo': '重置演示',
+  'Execution workspace': '执行工作台',
+  'Turn a goal into something you can verify. One action at a time.':
+    '把想做的事，变成可验收的成果。一步一步来。',
+  'Add a goal': '添加目标',
+  'All goals': '全部目标',
+  'Needs attention': '等你处理',
+  'In progress': '推进中',
+  Completed: '已完成',
+  'Filter goals': '筛选目标',
+  'Search goals': '搜索目标',
+  'No goals match this view.': '没有符合条件的目标。',
+  'Clear filters': '清除筛选',
+  'Try the website goal for a review loop, or explore blocked, failed, deleted-source, and completed examples. Reloading resets this demo.':
+    '可以从网站骨架体验审查闭环，也可以试试受阻、失败、来源删除和完成的示例。刷新页面会重置演示。',
+  'Add a sample goal': '添加示例目标',
+  'This library is fictional. Your real source nodes will not be read or changed.':
+    '这是虚构的示例库，不会读取或修改你的真实来源节点。',
+  'Open existing goal': '打开已有目标',
+  'Add and prepare a plan': '添加并准备计划',
+  'Reset this demo?': '重置本次演示？',
+  'Only the examples in this tab will be reset. No project files are affected.':
+    '仅重置此标签页的示例，不影响任何项目文件。',
+  'Verified actions': '已验收步骤',
+  'Every action has been verified.': '所有步骤均已验收。',
+  'Demo branch': '示例分支',
+  'Sample PRs': '示例 PR',
+  'Source node deleted': '来源节点已删除',
+  'Goal complete. The source stays a Formal Node with an associated completion marker.':
+    '目标已完成。来源仍是正式节点，仅回显关联的完成标记。',
+  'Goal complete. The deleted source is not recreated.':
+    '目标已完成，不会重新创建已删除的来源节点。',
+  Plan: '计划',
+  'Edit plan': '调整计划',
+  'For later': '以后再做',
+  'Waiting for prerequisite': '等待前置成果',
+  'You can prepare this plan, but execution waits for the upstream delivery.':
+    '可以先准备计划，执行需要等待上游成果验收完成。',
+  'Context & delivery': '上下文与交付关联',
+  'View retained source': '查看保留的来源',
+  'Delivered input': '已交付的输入',
+  'Delivery context becomes available after verification.':
+    '验收完成后，实际交付成果将在这里作为输入提供。',
+  'Retained source context': '保留的来源上下文',
+  'Sample snapshot only. The real source graph is never changed.':
+    '仅示例快照，不修改真实来源图。',
+  'Source node deleted. This goal and its work are retained.':
+    '来源节点已删除，本目标及其工作仍完整保留。',
+  'Simulate source deletion': '模拟删除来源',
+  'Shape the plan before you start': '先把路线聊清楚，再动手',
+  'This plan is a prepared example, not an Agent response. Edit the upcoming steps and your requirements; verified work stays intact.':
+    '这是预设演示计划，不是真实 Agent 回答。你可以调整后续步骤与补充要求，已验收成果保持不变。',
+  'Your requirements': '你的补充要求',
+  'Plan step': '计划步骤',
+  'Save plan': '保存计划',
+  'Confirm plan': '确认计划',
+  'Capture a new idea without expanding this delivery. A blocker belongs to the current action, not here.':
+    '记下临时想到的新需求，不扩大本次交付。阻塞问题应在当前步骤解决，不放进这里。',
+  'New idea': '新的想法',
+  Add: '添加',
+  'No ideas parked here yet.': '暂时没有留待以后的想法。',
+  'Current action': '当前步骤',
+  'Ready to start': '准备开工',
+  'Ready to verify': '等待验收',
+  Verified: '已验收',
+  Processing: '执行中',
+  Verifying: '验证中',
+  'Changes requested': '需要修正',
+  'Ready to merge': '等待合并',
+  'Needs your input': '需要补充信息',
+  'Execution failed': '执行失败',
+  'Plan to confirm': '计划待确认',
+  'Agent is running': 'Agent 运行中',
+  'Confirm the plan before starting an action.': '开始执行前，请先确认计划。',
+  'Review plan': '查看计划',
+  'Verify the earlier actions before starting this one.':
+    '先验收前面的步骤，再开始这一步。',
+  'Input & expected outcome': '输入与预期成果',
+  'Expected output': '预期产出',
+  Input: '输入',
+  Process: '执行过程',
+  Validation: '验收方式',
+  'Simulating Agent review…': '正在模拟 Agent 审查…',
+  'Simulating execution…': '正在模拟执行…',
+  'You can leave this card. The result will return to this action.':
+    '可以离开这张卡，结果会回到对应步骤。',
+  'Cancel demo run': '取消演示运行',
+  'The simulated process stopped unexpectedly. No new output was created; previous output is retained. Retry when ready.':
+    '模拟进程意外退出，没有产生新版本，已有产出保留。准备好后可以重试。',
+  'The Agent needs the supported runtime version before continuing. Add that information below and retry.':
+    '继续之前需要明确支持的运行环境版本。请在下方补充信息后再试。',
+  'This attempt was canceled. Existing output and feedback remain available.':
+    '本次尝试已取消，已有产出和反馈仍然保留。',
+  'Latest output': '最新产出',
+  Round: '轮次',
+  History: '历史',
+  'Sample PR': '示例 PR',
+  'Viewing earlier output. Verification and merge always target the latest round.':
+    '正在阅读历史版本；验证和合并始终针对最新一轮。',
+  Verification: '验证',
+  'Review method': '审查方式',
+  'Agent review': 'Agent 审查',
+  'I will review': '我自己审查',
+  'Completion condition: PR merged. A saved output or a positive review is not completion.':
+    '完成条件：PR 已合并。保存产出或审查通过本身不代表完成。',
+  'Blocking: focus is not restored after closing the dialog. Add a regression check before merging.':
+    '阻塞意见：关闭对话框后没有恢复焦点。合并前需要修正并补充回归检查。',
+  'These findings will accompany the next correction round. No correction starts automatically.':
+    '这些意见会随下一轮修正一起带入，不会自动开始修改。',
+  'Review passed. Waiting for your merge decision.':
+    '审查通过，等待你决定是否合并。',
+  'Simulate review': '模拟审查',
+  'Simulate PR merged': '模拟 PR 已合并',
+  'Demo rule: first-round review requests changes; review after a correction passes.':
+    '演示规则：第一版审查会要求修正，修正后再次审查通过。',
+  'Verified delivery': '交付已验收',
+  'The sample PR is merged. This output can now support the next action.':
+    '示例 PR 已合并，该成果现在可以支持下一步。',
+  'Feedback for the next round': '下一轮的反馈',
+  'Additional instructions': '补充说明',
+  'Tell the Agent what to change or clarify…': '告诉 Agent 需要修改或澄清什么…',
+  'Execution agent': '执行 Agent',
+  'Simulate correction': '模拟修正',
+  'Simulate execution': '模拟执行',
+  'Demo scenario controls': '演示场景控制',
+  'Next execution result': '下一次执行结果',
+  'Return output': '返回产出',
+  'Sample pull request': '示例 Pull Request',
+  'Local illustration only. This PR does not exist on GitHub.':
+    '仅本地演示，该 PR 并不存在于 GitHub。',
   Appearance: '外观',
   'Follow system': '跟随系统',
   Light: '浅色',

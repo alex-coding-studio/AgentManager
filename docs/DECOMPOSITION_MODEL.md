@@ -17,8 +17,9 @@ and Just Do It (动手做). They expose growth, decomposition, and implementatio
 as independent choices, not a required sequence. Internal decomposition routes,
 storage identifiers, and Harness contracts retain their existing names.
 
-Just Do It currently replaces the disabled Dependencies navigation placeholder;
-its execution workflow is not implemented. Dependencies remain relationships
+Just Do It replaces the former Dependencies navigation placeholder with an
+[isolated demo](JUST_DO_IT_DEMO.md); its integrated execution workflow is not
+implemented. Dependencies remain relationships
 within the workspaces, not a separate product module.
 
 ## Relative atomicity
@@ -150,7 +151,7 @@ Formal Node.
 
 The authoritative workflow, prerequisite contract, and open decisions are in
 [`JUST_DO_IT.md`](JUST_DO_IT.md). Its state schema and rollback mechanics are
-not yet finalized; the navigation placeholder is not an implemented workflow.
+not yet finalized; the interactive demo is not an integrated execution workflow.
 
 ## The user owns routing
 

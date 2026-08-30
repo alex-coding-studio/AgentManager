@@ -2,8 +2,9 @@
 
 ## Status and document ownership
 
-Design discussion captured on 2026-08-29. Just Do It currently has a navigation
-placeholder, not an implemented execution workflow. This document records the
+Design discussion captured on 2026-08-29. Just Do It now has an isolated
+[interactive UI demo](JUST_DO_IT_DEMO.md), not an integrated execution workflow.
+This document records the
 settled product intent and explicitly separates unresolved mechanics and
 deferred ideas. It does not authorize implementation or data migration.
 
