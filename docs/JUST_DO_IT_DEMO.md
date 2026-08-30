@@ -48,7 +48,11 @@ content remains Chinese regardless of interface language, like user content.
   or add a step before confirming everything together. Only the current draft
   exists: no planning response history, revision selector, or giant Markdown
   response duplicating the steps. Execution output history remains unchanged.
-- Extra files are read into tab-local memory, limited to five .md/.txt files,
+- Extra resources reuse ContextAttachmentPicker: a collapsed section with
+  Context Library selection and local drag/drop/browse, not a separate importer.
+  The library is fictional demo material; no real project library is accessed.
+  Local files and selected library content share the same current planning inputs.
+- Extra files are read into tab-local memory, limited to five .md/.markdown/.txt files,
   256 KB per file and 1 MB total in UTF-8 bytes. No upload endpoint or filesystem
   persistence is used. tests/fixtures/planning-boundary.md is a safe test input.
 - Planning, execution, and review reuse an Agent/model/effort selector. The model

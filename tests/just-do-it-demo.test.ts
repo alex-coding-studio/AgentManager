@@ -10,6 +10,7 @@ import {
   goalComplete,
   planningFor,
   validDemoResources,
+  demoPlanningLibrary,
   unmetDependencies,
   type DemoState,
   type DemoEvent,
@@ -313,6 +314,43 @@ void test('planning resources are bounded in UTF-8 bytes and remain input to the
     /本轮不接真实 AI/,
   );
   assert.equal('responses' in state.goals.at(-1)!.planning!, false);
+});
+
+void test('library selections and local Markdown share bounded inputs without losing their origin', () => {
+  const local = {
+    id: 'local-reference',
+    name: 'notes.markdown',
+    content: 'Local acceptance notes.',
+  };
+  const library = demoPlanningLibrary[0];
+  assert.equal(validDemoResources([library, local]), true);
+  let state = demoReducer(createDemoState(), { type: 'add-goal' });
+  state = demoReducer(state, {
+    type: 'plan-update',
+    goalId: 'library',
+    resources: [{ ...library }, local],
+  });
+  assert.equal(
+    state.goals.at(-1)!.planning!.resources[0].libraryPath,
+    'Product/demo-experience.md',
+  );
+  state = generatePlan(state);
+  state = demoReducer(state, { type: 'plan-accept', goalId: 'library' });
+  state = run(state, 'execute', 'library', 'environment');
+  assert.match(
+    target(state, 'library', 'environment').rounds[0].input,
+    /demo-experience.md/,
+  );
+  assert.match(
+    target(state, 'library', 'environment').rounds[0].input,
+    /Local acceptance notes/,
+  );
+  state = demoReducer(state, {
+    type: 'plan-update',
+    goalId: 'library',
+    resources: [local],
+  });
+  assert.deepEqual(state.goals.at(-1)!.planning!.resources, [local]);
 });
 
 void test('independent execution and review profiles are captured on the output they produced', () => {

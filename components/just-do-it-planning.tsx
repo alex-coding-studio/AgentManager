@@ -7,16 +7,7 @@ import {
   type Dispatch,
   type ReactNode,
 } from 'react';
-import {
-  Check,
-  FileText,
-  LoaderCircle,
-  Pencil,
-  Plus,
-  Sparkles,
-  Upload,
-  X,
-} from 'lucide-react';
+import { Check, LoaderCircle, Pencil, Plus, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -28,16 +19,36 @@ import {
 } from '@/components/ui/dialog';
 import { useUiText } from '@/components/ui-language-provider';
 import { DemoAgentProfile } from '@/components/demo-agent-profile';
+import { ContextAttachmentPicker } from '@/components/context-attachment-picker';
+import type { ContextBrowserFolder } from '@/lib/product-context';
 import { cn } from '@/lib/utils';
 import {
   planningFor,
   validDemoResources,
+  demoPlanningLibrary,
   type DemoEvent,
   type DemoGoal,
   type DemoPlanStep,
 } from '@/lib/just-do-it-demo';
 
 type Props = { goal: DemoGoal; dispatch: Dispatch<DemoEvent> };
+
+const demoResourceFolders: ContextBrowserFolder[] = [
+  'Product',
+  'Engineering',
+].map((folder) => ({
+  path: folder,
+  name: folder,
+  title: folder,
+  entries: demoPlanningLibrary
+    .filter((item) => item.libraryPath?.startsWith(`${folder}/`))
+    .map((item) => ({
+      kind: 'file',
+      path: item.libraryPath!,
+      name: item.name,
+      title: item.name,
+    })),
+}));
 
 export function DemoPlanningTimer({
   goalId,
@@ -344,7 +355,8 @@ function PlanningSetup({
   );
   const [resourceError, setResourceError] = useState('');
   const [reading, setReading] = useState(false);
-  const picker = useRef<HTMLInputElement>(null);
+  const [folderPath, setFolderPath] = useState('Product');
+  const localResources = plan.resources.filter((item) => !item.libraryPath);
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -357,7 +369,8 @@ function PlanningSetup({
     setResourceError('');
     if (
       files.some(
-        (file) => !/\.(md|txt)$/i.test(file.name) || file.size > 262_144,
+        (file) =>
+          !/\.(md|markdown|txt)$/i.test(file.name) || file.size > 262_144,
       ) ||
       files.length + plan.resources.length > 5
     ) {
@@ -449,72 +462,56 @@ function PlanningSetup({
         </details>
       )}
       <section>
-        <div className="flex items-center justify-between gap-3">
-          <h3 className="text-xs font-medium">
-            {t('Extra resources')}{' '}
-            <span className="text-muted-foreground">
-              {plan.resources.length}
-            </span>
-          </h3>
-          <input
-            ref={picker}
-            type="file"
-            multiple
-            accept=".md,.txt"
-            className="hidden"
-            aria-label={t('Import planning resources')}
-            onChange={(event) => {
-              const files = Array.from(event.target.files ?? []);
-              event.target.value = '';
-              void addFiles(files);
-            }}
-          />
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={disabled}
-            onClick={() => picker.current?.click()}
-          >
-            <Upload />
-            {t('Import files')}
-          </Button>
-        </div>
+        <ContextAttachmentPicker
+          folders={demoResourceFolders}
+          folderPath={folderPath}
+          onFolderPath={setFolderPath}
+          refs={plan.resources.flatMap((item) =>
+            item.libraryPath ? [item.libraryPath] : [],
+          )}
+          onToggleRef={(path) => {
+            const resource = demoPlanningLibrary.find(
+              (item) => item.libraryPath === path,
+            );
+            if (!resource || disabled) return;
+            const resources = plan.resources.some(
+              (item) => item.id === resource.id,
+            )
+              ? plan.resources.filter((item) => item.id !== resource.id)
+              : [...plan.resources, { ...resource }];
+            if (!validDemoResources(resources)) {
+              setResourceError(
+                t('Use up to 5 Markdown or text files, at most 256 KB each.'),
+              );
+              return;
+            }
+            setResourceError('');
+            dispatch({ type: 'plan-update', goalId: goal.id, resources });
+          }}
+          files={localResources}
+          onAddFiles={(files) => {
+            if (!disabled) void addFiles(files);
+          }}
+          onRemoveFile={(index) => {
+            const item = localResources[index];
+            if (!item || disabled) return;
+            dispatch({
+              type: 'plan-update',
+              goalId: goal.id,
+              resources: plan.resources.filter(
+                (resource) => resource.id !== item.id,
+              ),
+            });
+          }}
+          label={t('Extra resources')}
+          disabled={disabled}
+          accept=".md,.markdown,.txt"
+        />
         <p className="mt-2 text-[10px] leading-4 text-muted-foreground">
           {t(
-            'Optional Markdown or text. Read in this tab only; nothing is uploaded.',
+            'Demo library only. Local files stay in this tab; no project library is read or changed.',
           )}
         </p>
-        {plan.resources.map((item) => (
-          <div
-            key={item.id}
-            className="mt-2 flex items-center gap-2 rounded-lg border border-border p-2 text-xs"
-          >
-            <FileText className="size-3.5 shrink-0" />
-            <details className="min-w-0 flex-1">
-              <summary className="cursor-pointer truncate">{item.name}</summary>
-              <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap break-words font-sans text-[11px]">
-                {item.content}
-              </pre>
-            </details>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label={t('Remove resource {name}', { name: item.name })}
-              disabled={disabled}
-              onClick={() =>
-                dispatch({
-                  type: 'plan-update',
-                  goalId: goal.id,
-                  resources: plan.resources.filter(
-                    (resource) => resource.id !== item.id,
-                  ),
-                })
-              }
-            >
-              <X />
-            </Button>
-          </div>
-        ))}
         {resourceError && (
           <p role="alert" className="mt-2 text-xs text-destructive">
             {resourceError}

@@ -5,6 +5,8 @@ export function isUiLanguage(value: unknown): value is UiLanguage {
 }
 
 export const chineseUi: Record<string, string> = {
+  'Demo library only. Local files stay in this tab; no project library is read or changed.':
+    '资料库为示例。本地文件仅在本页保留，不读取或修改真实项目资料库。',
   'Start planning': '开始规划',
   'This goal is here. Nothing has been planned or started yet.':
     '目标已添加，还没有计划，也没有开始执行。',

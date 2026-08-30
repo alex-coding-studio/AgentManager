@@ -21,7 +21,28 @@ export type DemoPlanStep = Pick<
   DemoAction,
   'id' | 'title' | 'input' | 'output' | 'validation'
 > & { guidance?: string };
-export type DemoPlanResource = { id: string; name: string; content: string };
+export type DemoPlanResource = {
+  id: string;
+  name: string;
+  content: string;
+  libraryPath?: string;
+};
+export const demoPlanningLibrary: DemoPlanResource[] = [
+  {
+    id: 'library:Product/demo-experience.md',
+    libraryPath: 'Product/demo-experience.md',
+    name: 'demo-experience.md',
+    content:
+      '# Demo experience\n\nKeep the local website readable in dark mode. Start with an editable goal and one clear next step. This is fictional Context Library material.',
+  },
+  {
+    id: 'library:Engineering/demo-runtime.md',
+    libraryPath: 'Engineering/demo-runtime.md',
+    name: 'demo-runtime.md',
+    content:
+      '# Demo runtime\n\nReuse the registered project folder. Preserve existing files and use local sample data. No database or live Agent connection in this demonstration.',
+  },
+];
 export function validDemoResources(resources: DemoPlanResource[]) {
   const sizes = resources.map(
     (item) => new TextEncoder().encode(item.content).length,
@@ -29,7 +50,7 @@ export function validDemoResources(resources: DemoPlanResource[]) {
   return (
     resources.length <= 5 &&
     new Set(resources.map((item) => item.id)).size === resources.length &&
-    resources.every((item) => /\.(md|txt)$/i.test(item.name)) &&
+    resources.every((item) => /\.(md|markdown|txt)$/i.test(item.name)) &&
     sizes.every((size) => size <= 262_144) &&
     sizes.reduce((total, size) => total + size, 0) <= 1_048_576
   );

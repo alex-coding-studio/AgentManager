@@ -17,16 +17,20 @@ export function ContextAttachmentPicker({
   onAddFiles,
   onRemoveFile,
   label,
+  disabled = false,
+  accept = '.md,.markdown',
 }: {
   folders: ContextBrowserFolder[];
   folderPath: string;
   onFolderPath: (path: string) => void;
   refs: string[];
   onToggleRef: (path: string) => void;
-  files: File[];
+  files: Array<Pick<File, 'name'>>;
   onAddFiles: (files: File[]) => void;
   onRemoveFile: (index: number) => void;
   label: string;
+  disabled?: boolean;
+  accept?: string;
 }) {
   const { t } = useUiText();
   const [open, setOpen] = useState(false);
@@ -60,6 +64,7 @@ export function ContextAttachmentPicker({
               <div className="flex flex-col">
                 <div className="relative">
                   <select
+                    disabled={disabled}
                     aria-label={t('Context Library folder')}
                     value={folderPath}
                     onChange={(event) => onFolderPath(event.target.value)}
@@ -82,6 +87,7 @@ export function ContextAttachmentPicker({
                         className="flex shrink-0 items-center gap-2 rounded-md px-2 py-1.5 text-xs hover:bg-secondary"
                       >
                         <Checkbox
+                          disabled={disabled}
                           checked={refs.includes(entry.path)}
                           onCheckedChange={() => onToggleRef(entry.path)}
                           aria-label={entry.name}
@@ -114,15 +120,23 @@ export function ContextAttachmentPicker({
               )}
               onDragOver={(event: DragEvent<HTMLDivElement>) => {
                 event.preventDefault();
+                if (disabled) return;
                 setDragging(true);
               }}
               onDragLeave={() => setDragging(false)}
               onDrop={(event: DragEvent<HTMLDivElement>) => {
                 event.preventDefault();
                 setDragging(false);
+                if (disabled) return;
                 onAddFiles(
                   [...event.dataTransfer.files].filter((file) =>
-                    /\.(md|markdown)$/i.test(file.name),
+                    accept
+                      .split(',')
+                      .some((extension) =>
+                        file.name
+                          .toLowerCase()
+                          .endsWith(extension.trim().toLowerCase()),
+                      ),
                   ),
                 );
               }}
@@ -130,7 +144,8 @@ export function ContextAttachmentPicker({
               <input
                 ref={fileInput}
                 type="file"
-                accept=".md,.markdown"
+                accept={accept}
+                disabled={disabled}
                 multiple
                 className="hidden"
                 onChange={(event) => {
@@ -140,6 +155,7 @@ export function ContextAttachmentPicker({
               />
               <button
                 type="button"
+                disabled={disabled}
                 className="flex w-full items-center justify-center gap-1.5 text-[11px] text-muted-foreground transition hover:text-foreground"
                 onClick={() => fileInput.current?.click()}
               >
@@ -160,8 +176,11 @@ export function ContextAttachmentPicker({
                   <span className="truncate">{file.name}</span>
                   <button
                     type="button"
+                    disabled={disabled}
                     className="ml-auto text-muted-foreground hover:text-foreground"
-                    aria-label={`Remove ${file.name}`}
+                    aria-label={t('Remove resource {name}', {
+                      name: file.name,
+                    })}
                     onClick={() => onRemoveFile(index)}
                   >
                     <X className="size-3" />
