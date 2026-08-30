@@ -236,6 +236,7 @@ export function JustDoItWorkspace({
             key={goal.planning!.job!.id}
             goalId={goal.id}
             jobId={goal.planning!.job!.id}
+            delayMs={goal.planning!.job!.targetId ? 10_000 : 1600}
             dispatch={dispatch}
           />
         ))}

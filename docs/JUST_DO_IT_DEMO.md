@@ -61,6 +61,8 @@ content remains Chinese regardless of interface language, like user content.
 - Single-step adjustment preserves the left Plan list and its selection. Only
   the selected detail pane gets a loading overlay, keeping its height stable;
   other steps remain browsable while confirmation and edits wait for completion.
+  Its simulated delay is 10 seconds to allow manual switching tests; whole-plan
+  generation keeps its shorter delay.
 - Planning, execution, and review reuse an Agent/model/effort selector. The model
   choices are explicitly fictional profiles, not discovered account capabilities.
   Output and review records retain the requested profile without invoking providers.

@@ -53,18 +53,20 @@ export function DemoPlanningTimer({
   goalId,
   jobId,
   dispatch,
+  delayMs = 1600,
 }: {
   goalId: string;
   jobId: number;
   dispatch: Dispatch<DemoEvent>;
+  delayMs?: number;
 }) {
   useEffect(() => {
     const timer = setTimeout(
       () => dispatch({ type: 'plan-settle', goalId, jobId }),
-      1600,
+      delayMs,
     );
     return () => clearTimeout(timer);
-  }, [goalId, jobId, dispatch]);
+  }, [goalId, jobId, dispatch, delayMs]);
   return null;
 }
 
