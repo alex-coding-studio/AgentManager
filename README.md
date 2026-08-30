@@ -118,9 +118,12 @@ steps.
 See [Just Do It](docs/JUST_DO_IT.md) for the execution-workspace design,
 including settled workflow decisions and questions still open before implementation.
 
-The Just Do It sidebar entry opens an [interactive demo](docs/JUST_DO_IT_DEMO.md)
-at `/projects/<projectId>/implementation`. It uses fictional, in-memory data:
-no Agent calls, GitHub changes, or project writes. Reload to reset the examples.
+The Just Do It sidebar entry opens `/projects/<projectId>/implementation`,
+where **Open preview** enters the [interactive demo](docs/JUST_DO_IT_DEMO.md)
+at `/projects/<projectId>/implementation?preview=just-do-it`.
+The UI baseline is frozen as of 2026-08-30; real execution is not connected.
+Preview uses fictional, in-memory data: no Agent calls, GitHub changes, or
+project writes. Reload or leave preview to reset the examples.
 
 Use **Add a goal** to try whole-plan generation, feedback, and confirmation
 before any Actions appear. The demo also includes per-role model profiles and

@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import {
   useEffect,
   useReducer,
@@ -124,19 +125,27 @@ export function JustDoItWorkspace({
         <span className="flex items-center gap-2">
           <FlaskConical className="size-3.5 shrink-0" />
           <strong className="font-medium text-foreground">
-            {t('Interactive demo')}
+            {t('Preview mode')}
           </strong>
           <span>
             {t('Sample data only. No Agent, GitHub, or project writes.')}
           </span>
         </span>
-        <button
-          className="inline-flex items-center gap-1.5 rounded px-1 py-1 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-          onClick={() => setResetting(true)}
-        >
-          <RotateCcw className="size-3" />
-          {t('Reset demo')}
-        </button>
+        <div className="flex items-center gap-3">
+          <Link
+            href={`/projects/${projectId}/implementation`}
+            className="rounded px-1 py-1 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {t('Exit preview')}
+          </Link>
+          <button
+            className="inline-flex items-center gap-1.5 rounded px-1 py-1 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={() => setResetting(true)}
+          >
+            <RotateCcw className="size-3" />
+            {t('Reset demo')}
+          </button>
+        </div>
       </div>
       {selected ? (
         <GoalWorkbench

@@ -5,6 +5,13 @@ export function isUiLanguage(value: unknown): value is UiLanguage {
 }
 
 export const chineseUi: Record<string, string> = {
+  'Preview mode': '预览模式',
+  'Open preview': '打开预览',
+  'Exit preview': '退出预览',
+  'Real planning and execution are not connected yet.':
+    '真实规划与执行尚未接入。',
+  'Explore the agreed workflow with sample data. No Agent, GitHub, or project writes. Changes reset when you reload or leave preview.':
+    '使用示例数据体验已确认的流程，不调用 Agent、不修改 GitHub 或项目。刷新或离开预览后，演示改动会重置。',
   'Follow-up work for a later plan.': '留待后续计划处理的事项。',
   'Demo Issue: GitHub is not connected.': '示例 Issue，尚未连接 GitHub。',
   'Not connected': '未连接',

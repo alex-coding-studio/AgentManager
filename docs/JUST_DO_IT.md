@@ -4,6 +4,9 @@
 
 Design discussion captured on 2026-08-29. Just Do It now has an isolated
 [interactive UI demo](JUST_DO_IT_DEMO.md), not an integrated execution workflow.
+On 2026-08-30, the user accepted the UI direction and froze its interaction
+baseline. It remains available in explicit Preview Mode while Harness contracts
+are discussed; real integration and task validation are subsequent work.
 This document records the
 settled product intent and explicitly separates unresolved mechanics and
 deferred ideas. It does not authorize implementation or data migration.

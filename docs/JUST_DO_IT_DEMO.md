@@ -5,7 +5,25 @@
 This is a UI prototype for the workflow in [JUST_DO_IT.md](JUST_DO_IT.md), not
 the execution Harness or a GitHub integration. Open any registered project's
 `/projects/<projectId>/implementation` route or the Just Do It sidebar entry,
-which is labeled Demo.
+then choose Open preview. The explicit preview route is
+`/projects/<projectId>/implementation?preview=just-do-it`.
+The normal route does not mount the simulation or display fictional goals.
+Unknown or repeated preview values do not activate the simulation.
+Exit preview returns to the unconnected entry; leaving discards tab-local changes.
+
+## UI baseline frozen — 2026-08-30
+
+The user accepted the current interaction direction and requested a UI freeze.
+This preview preserves that baseline for reference while the execution Harness
+is discussed. Do not redesign it or add workflow stages as part of Harness work
+without agreement. Fixes to regressions remain possible; freeze does not claim
+real Agent execution, persistence, GitHub integration, or production acceptance.
+The baseline includes compact goal Cards, Start Plan, Overview and step details,
+natural-language plan adjustment, whole-plan confirmation, the manual Action
+output/verification loop, and lightweight Todos. Simulation controls, fictional
+model profiles, delays, and fixtures stay preview-only when live integration is added.
+
+## Isolation
 
 The route reads project registration for the existing shell only. Its goals,
 source snapshots, Plans, outputs, commits, and PRs are fictional fixtures.
@@ -109,8 +127,8 @@ illustration explicitly labeled as nonexistent on GitHub.
 ## Verification and remaining limitations
 
 Additional planning checks: cancel or inject an error without creating Actions;
-retry with the same retained input; edit a proposed input/output/validation field
-and verify that confirmation copies it exactly; change execution and review
+retry with the same retained input; request a step adjustment
+and verify that confirmation copies the resulting contract exactly; change execution and review
 profiles independently; inspect the lightweight Todo index without changing delivery.
 Current Action fixes continue through correction, not the Issue draft.
 
@@ -119,8 +137,16 @@ Reducer tests cover execution gates, review/correction/merge, late-result
 rejection, failure recovery, source retention, completed-step preservation,
 idempotent import, Todo/draft ownership, and concurrent Action results.
 
-Human visual acceptance is still pending. In particular, evaluate whether the
-Plan rail, output reading area, and verification controls feel natural together.
+Freeze verification on 2026-08-30: all 127 tests across the seven repository
+suites passed, along with typecheck, lint, and the production build. The build
+still reports dynamic-filesystem tracing warnings in the existing What's Next
+and Decomposition Run modules. Browser checks covered normal entry, explicit
+preview, exit/re-entry reset, new-goal planning and confirmation, and rejection
+of unknown or repeated preview parameters. No browser errors were reported.
+This is not a new full mobile, language, or theme-matrix acceptance pass.
+
+The interaction baseline is accepted for freeze, not as a production release.
+Future real-work validation will assess the Harness against this preview.
 Current limitations are intentional: no real source imports or completion dots,
 no durable persistence, no real Agent-generated Plan or model discovery, no Action deletion/rollback,
 no Git history migration, and no external review/merge synchronization. Failed
