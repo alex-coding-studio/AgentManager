@@ -20,8 +20,10 @@ content remains Chinese regardless of interface language, like user content.
 
 - The dashboard shows goal Cards, verified Action counts, attention filters,
   search, source identity, and illustrative Git/PR associations.
-- Goal Cards have a fixed height. Status stays at the upper right; titles wrap
-  up to three lines without moving it. The footer groups branch/PR counts on
+- Goal Cards have a fixed 240px height. Status stays at the upper right; titles wrap
+  up to two lines without moving it. Description and current Action also have
+  two-line limits; the progress region follows content without an automatic
+  spacer. The footer groups branch/PR counts on
   the left and a Node alias with a source-navigation arrow on the right.
 - The source link opens the corresponding module in a new tab, preserving the
   in-memory execution demo. `preview=implementation-source&node=<alias>` shows

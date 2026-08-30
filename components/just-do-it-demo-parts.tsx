@@ -108,16 +108,16 @@ export function DemoGoalCard({
   const current = goal.actions.find((item) => item.stage !== 'verified');
   const complete = goalComplete(goal);
   return (
-    <article className="group flex h-72 min-w-0 flex-col rounded-2xl border border-border border-t-2 border-t-foreground/70 bg-card p-4 text-left transition hover:border-foreground/35 hover:shadow-lg">
+    <article className="group flex h-60 min-w-0 flex-col rounded-2xl border border-border border-t-2 border-t-foreground/70 bg-card p-4 text-left transition hover:border-foreground/35 hover:shadow-lg">
       <button
         onClick={onOpen}
         type="button"
         aria-label={t('Open goal: {title}', { title: goal.title })}
         className="flex min-h-0 min-w-0 flex-1 flex-col rounded-lg text-left focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
       >
-        <div className="grid w-full shrink-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
+        <div className="grid h-12 w-full shrink-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
           <h2
-            className="line-clamp-3 min-w-0 text-base font-semibold leading-6 [overflow-wrap:anywhere]"
+            className="line-clamp-2 min-w-0 text-base font-semibold leading-6 [overflow-wrap:anywhere]"
             title={goal.title}
           >
             {goal.title}
@@ -126,10 +126,10 @@ export function DemoGoalCard({
             <DemoStatus label={goalStatus(state, goal)} />
           </span>
         </div>
-        <p className="mt-2 line-clamp-2 h-10 shrink-0 text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">
+        <p className="mt-2 line-clamp-2 h-8 shrink-0 text-xs leading-4 text-muted-foreground [overflow-wrap:anywhere]">
           {goal.summary}
         </p>
-        <div className="mt-auto w-full pt-2">
+        <div className="mt-2 w-full shrink-0">
           <DemoProgress goal={goal} />
         </div>
         <p
@@ -140,7 +140,7 @@ export function DemoGoalCard({
           {complete ? t('None') : (current?.title ?? t('None'))}
         </p>
       </button>
-      <div className="mt-2 flex h-9 shrink-0 items-center justify-between gap-2 border-t border-border pt-1 text-[10px] text-muted-foreground">
+      <div className="mt-1 flex h-9 shrink-0 items-center justify-between gap-2 border-t border-border pt-1 text-[10px] text-muted-foreground">
         <span className="inline-flex min-w-0 items-center gap-1.5 whitespace-nowrap">
           <GitBranch className="size-3" />
           {t('Demo branch')}
