@@ -6,7 +6,6 @@ import {
   listLatestWhatsNextRuns,
   readWhatsNextRun,
   startWhatsNextRun,
-  resolveWhatsNextReplacement,
   type WhatsNextFeedbackAnchor,
 } from '@/lib/whats-next-runs';
 
@@ -161,18 +160,6 @@ export async function PATCH(
       runId?: unknown;
       candidateId?: unknown;
     };
-    if (
-      ['replace-proposal', 'keep-original'].includes(String(payload.action)) &&
-      typeof payload.runId === 'string'
-    ) {
-      return Response.json(
-        await resolveWhatsNextReplacement(
-          project,
-          payload.runId,
-          payload.action as 'replace-proposal' | 'keep-original',
-        ),
-      );
-    }
     if (
       !['accept', 'discard'].includes(String(payload.action)) ||
       typeof payload.runId !== 'string' ||

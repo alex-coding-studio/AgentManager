@@ -21,12 +21,11 @@ export function createWhatsNextRedoPreview() {
     runId: 'RUN-00000000-0000-4000-8000-000000000028',
     startedAt: '2026-08-29T00:01:00.000Z',
     replacement: {
-      state: 'pending',
+      state: 'applied',
       candidateIds: before.result.candidates.map(
         (candidate) => candidate.candidateId,
       ),
       runIds: [before.runId],
-      snapshot: 'preview',
     },
     result: {
       ...structuredClone(before.result),
@@ -39,7 +38,12 @@ export function createWhatsNextRedoPreview() {
       })),
     },
   };
-  return { ...original, runs: [before, replacement] };
+  return {
+    ...original,
+    runs: [before],
+    transitionRun: { ...replacement, status: 'running' as const, result: null },
+    completionRun: replacement,
+  };
 }
 
 export function createWhatsNextReviewPreview() {

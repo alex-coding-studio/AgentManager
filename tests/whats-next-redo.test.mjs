@@ -41,7 +41,6 @@ const {
   readWhatsNextRun,
   listLatestWhatsNextRuns,
   acceptWhatsNextCandidate,
-  resolveWhatsNextReplacement,
   cancelWhatsNextRun,
 } = await import('../lib/whats-next-runs.ts');
 const { redoProposalPlan, redoProposalContext } =
@@ -176,7 +175,7 @@ async function finished(project, run) {
   throw Error('Fixture Run did not finish');
 }
 
-void test('whole-proposal redo preserves originals until confirmation, then replaces 2 with 3 and blocks after acceptance', async () =>
+void test('Re-propose trashes the previous proposal before generation and exposes new cards without another action', async () =>
   fixture(async ({ project, input, original, root }) => {
     const oldFile = path.join(
       project.planningPath,
@@ -184,13 +183,30 @@ void test('whole-proposal redo preserves originals until confirmation, then repl
       original.runId,
       'run.json',
     );
-    const oldText = await readFile(oldFile, 'utf8');
+    const expectedContext = redoProposalContext(
+      redoProposalPlan(
+        await listTaskGraphNodes(project, 'whats-next'),
+        [original],
+        input.sourceNodeIds,
+      ),
+    );
     const started = await startWhatsNextRun(project, {
       ...input,
       redoProposal: true,
-      instruction:
-        'Do not repeat the product value. I want to build my own website and do not know where to begin.',
+      instruction: 'I want to build my own website. How do I begin?',
     });
+    assert.equal(started.replacement.state, 'applied');
+    await assert.rejects(() => access(oldFile));
+    assert.ok(
+      (await readdir(path.join(root, 'trash'))).some((name) =>
+        name.startsWith(original.runId),
+      ),
+    );
+    assert.ok(
+      !(await listLatestWhatsNextRuns(project)).some(
+        (run) => run.runId === original.runId,
+      ),
+    );
     await assert.rejects(
       () =>
         acceptWhatsNextCandidate(
@@ -198,27 +214,12 @@ void test('whole-proposal redo preserves originals until confirmation, then repl
           original.runId,
           original.result.candidates[0].candidateId,
         ),
-      /pending/,
-    );
-    await assert.rejects(
-      () => startWhatsNextRun(project, { ...input, redoProposal: true }),
-      /pending/,
+      /no longer available/,
     );
     const ready = await finished(project, started);
     assert.equal(ready.status, 'proposal', ready.error);
-    assert.notEqual(ready.sessionId, original.sessionId);
-    assert.equal(ready.replacement.state, 'pending');
     assert.equal(ready.result.candidates.length, 3);
-    assert.equal(await readFile(oldFile, 'utf8'), oldText);
-    await assert.rejects(
-      () =>
-        acceptWhatsNextCandidate(
-          project,
-          ready.runId,
-          ready.result.candidates[0].candidateId,
-        ),
-      /Confirm/,
-    );
+    assert.notEqual(ready.sessionId, original.sessionId);
     const request = JSON.parse(
       await readFile(
         path.join(
@@ -230,18 +231,8 @@ void test('whole-proposal redo preserves originals until confirmation, then repl
         'utf8',
       ),
     );
-    assert.equal(request.packet.operation, 'explore');
-    assert.ok(request.packet.proposalCorrection);
     const prior = request.packet.contextWorkspace.primary.find(
-      (r) => r.kind === 'previous-proposal',
-    );
-    assert.ok(prior);
-    const expectedContext = redoProposalContext(
-      redoProposalPlan(
-        await listTaskGraphNodes(project, 'whats-next'),
-        [original],
-        input.sourceNodeIds,
-      ),
+      (resource) => resource.kind === 'previous-proposal',
     );
     assert.equal(
       await readFile(
@@ -250,35 +241,9 @@ void test('whole-proposal redo preserves originals until confirmation, then repl
       ),
       expectedContext.markdown,
     );
-    assert.ok(
-      expectedContext.responseMarkdown.includes(
-        original.result.reflection.continuationAdvice.reason,
-      ),
-    );
-    assert.match(
-      await readFile(
-        path.join(project.planningPath, prior.logicalPath),
-        'utf8',
-      ),
-      /Direction 1/,
-    );
-    const applied = await resolveWhatsNextReplacement(
-      project,
-      ready.runId,
-      'replace-proposal',
-    );
-    assert.equal(applied.run.replacement.state, 'applied');
-    await assert.rejects(() => access(oldFile));
-    assert.ok(
-      (await readdir(path.join(root, 'trash'))).some((name) =>
-        name.startsWith(original.runId),
-      ),
-    );
-    const latest = await listLatestWhatsNextRuns(project);
-    assert.ok(!latest.some((run) => run.runId === original.runId));
-    for (const c of applied.run.result.candidates)
-      for (const r of c.resources)
-        await access(path.join(project.planningPath, r.path));
+    for (const candidate of ready.result.candidates)
+      for (const resource of candidate.resources)
+        await access(path.join(project.planningPath, resource.path));
     const accepted = await acceptWhatsNextCandidate(
       project,
       ready.runId,
@@ -291,7 +256,7 @@ void test('whole-proposal redo preserves originals until confirmation, then repl
     );
   }));
 
-void test('keep-original, provider failure and cancellation never replace the original proposal', async () =>
+void test('failed or canceled generation never restores deliberately abandoned proposals', async () =>
   fixture(async ({ project, input, original }) => {
     const oldFile = path.join(
       project.planningPath,
@@ -299,29 +264,24 @@ void test('keep-original, provider failure and cancellation never replace the or
       original.runId,
       'run.json',
     );
-    const originalText = await readFile(oldFile, 'utf8');
-    const replacement = await finished(
-      project,
-      await startWhatsNextRun(project, { ...input, redoProposal: true }),
-    );
-    await resolveWhatsNextReplacement(
-      project,
-      replacement.runId,
-      'keep-original',
-    );
-    assert.equal(await readFile(oldFile, 'utf8'), originalText);
     process.env.REDO_TEST_MODE = 'fail';
     const failed = await finished(
       project,
       await startWhatsNextRun(project, { ...input, redoProposal: true }),
     );
     assert.equal(failed.status, 'failed');
-    await assert.rejects(
-      () =>
-        resolveWhatsNextReplacement(project, failed.runId, 'replace-proposal'),
-      /successful proposal/,
+    await assert.rejects(() => access(oldFile));
+    assert.ok(
+      !(await listLatestWhatsNextRuns(project)).some(
+        (run) => run.runId === original.runId,
+      ),
     );
-    assert.equal(await readFile(oldFile, 'utf8'), originalText);
+    process.env.REDO_TEST_MODE = 'success';
+    const retry = await finished(
+      project,
+      await startWhatsNextRun(project, input),
+    );
+    assert.equal(retry.status, 'proposal');
     process.env.REDO_TEST_MODE = 'slow';
     const running = await startWhatsNextRun(project, {
       ...input,
@@ -332,32 +292,20 @@ void test('keep-original, provider failure and cancellation never replace the or
       (await readWhatsNextRun(project, running.runId)).status,
       'canceled',
     );
-    assert.equal(await readFile(oldFile, 'utf8'), originalText);
+    await assert.rejects(() =>
+      access(
+        path.join(
+          project.planningPath,
+          'whats-next/runs',
+          retry.runId,
+          'run.json',
+        ),
+      ),
+    );
   }));
 
-void test('confirmation rechecks the original revision and external dependents', async () =>
+void test('Formal children and external dependencies prevent abandonment before any files are removed', async () =>
   fixture(async ({ project, input, original }) => {
-    const pending = await finished(
-      project,
-      await startWhatsNextRun(project, { ...input, redoProposal: true }),
-    );
-    const oldFile = path.join(
-      project.planningPath,
-      'whats-next/runs',
-      original.runId,
-      'run.json',
-    );
-    const text = await readFile(oldFile, 'utf8');
-    const changed = JSON.parse(text);
-    changed.result.candidates[0].revision++;
-    await writeFile(oldFile, JSON.stringify(changed));
-    await assert.rejects(
-      () =>
-        resolveWhatsNextReplacement(project, pending.runId, 'replace-proposal'),
-      /changed/,
-    );
-    await access(oldFile);
-    await writeFile(oldFile, text);
     const nodes = await listTaskGraphNodes(project, 'whats-next');
     const outsider = {
       ...structuredClone(original),
@@ -383,41 +331,66 @@ void test('confirmation rechecks the original revision and external dependents',
       () => redoProposalPlan(nodes, [original, outsider], input.sourceNodeIds),
       /depend on/,
     );
-    await resolveWhatsNextReplacement(project, pending.runId, 'keep-original');
+    await acceptWhatsNextCandidate(
+      project,
+      original.runId,
+      original.result.candidates[0].candidateId,
+    );
+    await assert.rejects(
+      () => startWhatsNextRun(project, { ...input, redoProposal: true }),
+      /Formal Nodes/,
+    );
+    await access(
+      path.join(
+        project.planningPath,
+        'whats-next/runs',
+        original.runId,
+        'run.json',
+      ),
+    );
   }));
 
-void test('a cleanup failure cannot resurrect old proposals after another replacement', async () =>
+void test('Trash failure stops before Agent execution and reports failure without resurrecting abandoned cards', async () =>
   fixture(async ({ project, input, original }) => {
-    const first = await finished(
-      project,
-      await startWhatsNextRun(project, { ...input, redoProposal: true }),
-    );
     process.env.REDO_TEST_TRASH_FAIL = 'yes';
-    const applied = await resolveWhatsNextReplacement(
-      project,
-      first.runId,
-      'replace-proposal',
-    );
-    assert.ok(applied.run.cleanupWarning);
+    const failed = await startWhatsNextRun(project, {
+      ...input,
+      redoProposal: true,
+    });
+    assert.equal(failed.status, 'failed');
+    assert.match(failed.error, /No Agent was started/);
+    assert.equal(failed.agentSessionId, null);
+    assert.equal(failed.usage, null);
     assert.ok(
       !(await listLatestWhatsNextRuns(project)).some(
         (run) => run.runId === original.runId,
       ),
     );
-    delete process.env.REDO_TEST_TRASH_FAIL;
+    await access(
+      path.join(
+        project.planningPath,
+        'whats-next/runs',
+        original.runId,
+        'run.json',
+      ),
+    );
+  }));
+
+void test('a second Re-propose keeps previous abandonment records effective and supports retained context', async () =>
+  fixture(async ({ project, input, original }) => {
+    const first = await finished(
+      project,
+      await startWhatsNextRun(project, { ...input, redoProposal: true }),
+    );
     const second = await finished(
       project,
       await startWhatsNextRun(project, { ...input, redoProposal: true }),
     );
+    assert.equal(second.status, 'proposal', second.error);
     assert.ok(second.replacement.runIds.includes(original.runId));
-    await resolveWhatsNextReplacement(
-      project,
-      second.runId,
-      'replace-proposal',
-    );
-    const visible = await listLatestWhatsNextRuns(project);
+    assert.ok(second.replacement.runIds.includes(first.runId));
     assert.deepEqual(
-      visible.map((run) => run.runId),
+      (await listLatestWhatsNextRuns(project)).map((run) => run.runId),
       [second.runId],
     );
   }));

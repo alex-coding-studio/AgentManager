@@ -34,7 +34,6 @@ import {
 } from './whats-next-prompt.ts';
 import { renderWhatsNextResponseMarkdown } from './whats-next-response.ts';
 import {
-  isPendingReplacement,
   redoProposalPlan,
   redoProposalContext,
   type ProposalReplacement,
@@ -162,7 +161,6 @@ async function startWhatsNextRunUnlocked(
   validateRunRequest(input);
   const nodes = await listTaskGraphNodes(project, GRAPH_ROOT);
   const allRuns = await readAllWhatsNextRuns(project);
-  assertNoPendingReplacement(allRuns, input.sourceNodeIds);
   const redo = input.redoProposal
     ? redoProposalPlan(nodes, allRuns, input.sourceNodeIds)
     : null;
@@ -273,6 +271,21 @@ async function startWhatsNextRunUnlocked(
         }
       : undefined,
   );
+  if (redo) {
+    for (const [index, resource] of contextInputs.entries()) {
+      if (
+        !redo.runIds.some((id) =>
+          resource.logicalPath.startsWith(`whats-next/runs/${id}/`),
+        )
+      )
+        continue;
+      const name = `retained-context-${index}.md`;
+      await writeFile(path.join(resourcesPath, name), resource.content, {
+        flag: 'wx',
+      });
+      resource.logicalPath = `whats-next/runs/${runId}/resources/${name}`;
+    }
+  }
   const contextWorkspace = await writeTaskDecompositionContextWorkspace(
     runPath,
     contextInputs,
@@ -350,10 +363,9 @@ async function startWhatsNextRunUnlocked(
     revisionOf: revisionTarget?.candidate.candidateId,
     replacement: redo
       ? {
-          state: 'pending',
+          state: 'applied',
           candidateIds: redo.candidateIds,
           runIds: redo.runIds,
-          snapshot: createHash('sha256').update(redo.snapshot).digest('hex'),
         }
       : undefined,
     status: 'running',
@@ -378,6 +390,30 @@ async function startWhatsNextRunUnlocked(
     error: null,
   };
   await writeRunRecord(project, record);
+
+  if (redo) {
+    try {
+      const obsoletePaths: string[] = [];
+      for (const id of redo.runIds) {
+        const folder = whatsNextRunPath(project, id);
+        try {
+          await access(folder);
+          obsoletePaths.push(folder);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+        }
+      }
+      if (obsoletePaths.length) await trash(obsoletePaths);
+    } catch {
+      record.status = 'failed';
+      record.error =
+        'Could not move all abandoned proposal files to system Trash. No Agent was started; abandoned directions remain hidden.';
+      record.endedAt = new Date().toISOString();
+      record.updatedAt = record.endedAt;
+      await writeRunRecord(project, record);
+      return record;
+    }
+  }
 
   const agent = startLocalAgentRun(input.agent, {
     workingDirectory: runPath,
@@ -578,11 +614,8 @@ async function acceptWhatsNextCandidateUnlocked(
 ) {
   const allRuns = await readAllWhatsNextRuns(project);
   const availableRun = allRuns.find((run) => run.runId === runId);
-  if (!availableRun || isPendingReplacement(availableRun))
-    throw new Error(
-      'Confirm the replacement proposal before accepting its Candidates.',
-    );
-  assertNoPendingReplacement(allRuns, availableRun.sourceNodeIds);
+  if (!availableRun)
+    throw new Error('The Candidate proposal is no longer available.');
   if (
     [...activeRuns.values()].some(
       (active) =>
@@ -697,11 +730,8 @@ async function discardWhatsNextCandidateUnlocked(
 ) {
   const allRuns = await readAllWhatsNextRuns(project);
   const availableRun = allRuns.find((run) => run.runId === runId);
-  if (!availableRun || isPendingReplacement(availableRun))
-    throw new Error(
-      'Keep or replace the original proposal before changing individual Candidates.',
-    );
-  assertNoPendingReplacement(allRuns, availableRun.sourceNodeIds);
+  if (!availableRun)
+    throw new Error('The Candidate proposal is no longer available.');
   if (
     [...activeRuns.values()].some(
       (active) =>
@@ -1176,7 +1206,6 @@ async function findLatestCoordinatorRun(
           run.agentSessionMode === 'persistent' &&
           run.harness.revision === WHATS_NEXT_HARNESS_REVISION &&
           ['proposal', 'clarification', 'no-change'].includes(run.status) &&
-          !isPendingReplacement(run) &&
           [...run.sourceNodeIds].sort().join(',') === key,
       )
       .sort((left, right) =>
@@ -1191,8 +1220,7 @@ async function collectLatestUnacceptedCandidates(project: RegisteredProject) {
   for (const run of runs.sort((left, right) =>
     left.startedAt.localeCompare(right.startedAt),
   )) {
-    if (run.result?.outcome !== 'proposal' || isPendingReplacement(run))
-      continue;
+    if (run.result?.outcome !== 'proposal') continue;
     for (const candidate of run.result.candidates) {
       const current = latestByCandidate.get(candidate.candidateId);
       if (!current || candidate.revision > current.revision) {
@@ -1251,101 +1279,6 @@ async function mutateWhatsNext<T>(
     if (mutations.get(project.planningPath) === next)
       mutations.delete(project.planningPath);
   }
-}
-
-function assertNoPendingReplacement(
-  runs: WhatsNextRunRecord[],
-  sourceIds: string[],
-) {
-  if (
-    runs.some(
-      (run) =>
-        isPendingReplacement(run) &&
-        !['failed', 'canceled'].includes(run.status) &&
-        run.sourceNodeIds.some((id) => sourceIds.includes(id)),
-    )
-  ) {
-    throw new Error(
-      'Finish, cancel, or review the pending proposal replacement first.',
-    );
-  }
-}
-
-export async function resolveWhatsNextReplacement(
-  project: RegisteredProject,
-  runId: string,
-  action: 'replace-proposal' | 'keep-original',
-) {
-  return mutateWhatsNext(project, async () => {
-    const run = await readWhatsNextRun(project, runId);
-    if (run.replacement?.state === 'applied' && action === 'replace-proposal')
-      return { run };
-    if (!isPendingReplacement(run))
-      throw new Error('There is no pending replacement to review.');
-    if (['running', 'validating'].includes(run.status))
-      throw new Error('Cancel or finish the Run first.');
-    if (action === 'keep-original') {
-      await trash(whatsNextRunPath(project, runId));
-      return { runDeleted: true };
-    }
-    if (run.result?.outcome !== 'proposal')
-      throw new Error(
-        'Only a successful proposal can replace the current directions.',
-      );
-    const nodes = await listTaskGraphNodes(project, GRAPH_ROOT);
-    const runs = await readAllWhatsNextRuns(project);
-    const current = redoProposalPlan(nodes, runs, run.sourceNodeIds);
-    if (
-      createHash('sha256').update(current.snapshot).digest('hex') !==
-        run.replacement!.snapshot ||
-      JSON.stringify(current.runIds) !== JSON.stringify(run.replacement!.runIds)
-    )
-      throw new Error(
-        'The original proposal changed. Keep it and redo from the current state.',
-      );
-    for (const candidate of run.result.candidates) {
-      if (
-        candidate.derivedFrom.some((id) => !run.sourceNodeIds.includes(id)) ||
-        !candidate.derivedFrom.length
-      )
-        throw new Error(
-          'Replacement directions must belong to the selected origins.',
-        );
-      if (
-        candidate.dependsOn.some((id) => current.candidateIds.includes(id)) ||
-        candidate.resources.some((resource) =>
-          current.runIds.some((id) =>
-            resource.path.startsWith(`whats-next/runs/${id}/`),
-          ),
-        )
-      )
-        throw new Error(
-          'The replacement still references the old proposal. Keep the original and correct those references.',
-        );
-    }
-    run.replacement!.state = 'applied';
-    run.updatedAt = new Date().toISOString();
-    await writeRunRecord(project, run);
-    try {
-      await writeWhatsNextCheckpoint(project, run);
-      const paths: string[] = [];
-      for (const id of current.runIds) {
-        const folder = whatsNextRunPath(project, id);
-        try {
-          await access(folder);
-          paths.push(folder);
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-        }
-      }
-      if (paths.length) await trash(paths);
-    } catch {
-      run.cleanupWarning =
-        'The replacement is active, but post-confirmation cleanup could not complete. Superseded files remain hidden.';
-      await writeRunRecord(project, run);
-    }
-    return { run };
-  });
 }
 
 function chooseUniqueFileName(value: string, usedNames: Set<string>) {

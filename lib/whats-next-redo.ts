@@ -3,15 +3,10 @@ import type { WhatsNextRunRecord } from './whats-next-runs.ts';
 import { renderWhatsNextResponseMarkdown } from './whats-next-response.ts';
 
 export type ProposalReplacement = {
-  state: 'pending' | 'applied';
+  state: 'applied';
   candidateIds: string[];
   runIds: string[];
-  snapshot: string;
 };
-
-export function isPendingReplacement(run: WhatsNextRunRecord) {
-  return run.replacement?.state === 'pending';
-}
 
 export function redoProposalContext(
   plan: Pick<ReturnType<typeof redoProposalPlan>, 'histories' | 'targets'>,
@@ -78,8 +73,7 @@ export function redoProposalPlan(
     }
   >();
   for (const run of runs) {
-    if (isPendingReplacement(run) || run.result?.outcome !== 'proposal')
-      continue;
+    if (run.result?.outcome !== 'proposal') continue;
     for (const candidate of run.result.candidates) {
       const previous = latest.get(candidate.candidateId);
       if (!previous || previous.candidate.revision < candidate.revision)
@@ -123,7 +117,6 @@ export function redoProposalPlan(
     );
   const histories = runs.filter(
     (run) =>
-      !isPendingReplacement(run) &&
       run.result?.outcome === 'proposal' &&
       run.result.candidates.some((candidate) =>
         candidateIds.includes(candidate.candidateId),
@@ -164,12 +157,5 @@ export function redoProposalPlan(
     runIds,
     targets,
     histories,
-    snapshot: JSON.stringify(
-      targets
-        .map(({ runId, candidate }) => ({ runId, candidate }))
-        .sort((a, b) =>
-          a.candidate.candidateId.localeCompare(b.candidate.candidateId),
-        ),
-    ),
   };
 }
