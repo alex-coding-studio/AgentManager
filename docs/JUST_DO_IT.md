@@ -7,6 +7,9 @@ Design discussion captured on 2026-08-29. Just Do It now has an isolated
 On 2026-08-30, the user accepted the UI direction and froze its interaction
 baseline. It remains available in explicit Preview Mode while Harness contracts
 are discussed; real integration and task validation are subsequent work.
+The subsequent 2026-08-30 Harness discussion settles the planning/reopening
+boundary and user decision authority below. These rules supersede older intent
+where noted; the frozen demo has not been updated to enforce them.
 This document records the
 settled product intent and explicitly separates unresolved mechanics and
 deferred ideas. It does not authorize implementation or data migration.
@@ -121,7 +124,15 @@ and behavior for multiple execution attempts remain to be decided.
 
 ## Form the Plan before execution — settled
 
-The user and Agent first discuss a proposed Plan and adjust it before starting.
+The Agent generates a proposed Plan; the user reviews, guides, and approves it.
+Planning is not a questionnaire or a recurring request for permission to suggest
+a route. Put the Agent's recommended execution arrangement directly into the
+Overview and steps, then incorporate explicit user feedback into the current
+draft. Product direction is supplied by the source goal and earlier exploration;
+do not add a routine direction-clarification gate inside Just Do It.
+The user decides whether the Plan is satisfactory, not an Agent-defined quality
+score or completeness threshold. Technical response validation may check that
+the result can be represented safely; it must not substitute for user sign-off.
 The confirmation unit is the entire Plan, never one step at a time. Before
 confirmation, show an Overview and individually browsable planned steps,
 not executable Action cards or a long response duplicated by a second step list.
@@ -192,12 +203,40 @@ an environment, for example, produces a usable environment; version/startup
 checks are evidence, not a substitute for the outcome.
 
 Explicit requirements, assumptions, and deferred ideas should be distinguishable.
-The Plan is adjustable, not a guarantee that execution will reveal no surprises.
+The Plan is adjustable during planning, not a guarantee that execution will
+reveal no surprises. Reopening it follows the boundary below.
 
 Before execution, Output means expected delivery. After execution, display the
 actual artifacts and evidence separately so an intended outcome cannot be
-mistaken for completed work. Do not use vague placeholders such as "use relevant
-context" or "a configured website" as the complete Action contract.
+mistaken for completed work. Inputs can describe relevant functionality, project
+context, and constraints without enumerating filenames; the Agent discovers the
+implementation details. Outputs describe user-observable capabilities, not a
+mandatory inventory of code files. Keep implementation detail and evidence in
+the PR or linked artifacts, with a concise summary and entry point in the UI.
+Semantic clarity matters; exhaustively specified technical detail is not a
+prerequisite for user approval. The Agent owns the detailed handoff contract.
+
+### Finalization and reopening — settled boundary
+
+- Finalization accepts the complete Plan and permits the manual execution flow;
+  it is not permission to revise the development Plan throughout execution.
+- While no step has produced an output, the user may reopen the Plan, including
+  after finalization. Stop active execution before editing. The changed Plan
+  needs whole-plan confirmation again before execution resumes.
+- Once any step has produced an output, including an unaccepted output, do not
+  edit current or future Plan steps in place. If the overall Plan is no longer
+  satisfactory, first restore the entire Plan's execution work to a clean
+  pre-execution baseline, not just the selected step.
+- Reopen planning only after that restoration is confirmed. Resetting UI states,
+  deleting output records, or canceling a process does not establish restoration.
+- Corrections to implementation within the current Action's accepted scope stay
+  in its feedback loop. Internal technical substeps do not create a new Plan.
+
+This supersedes the earlier proposal to edit remaining Plan steps while simply
+preserving completed Actions. A deliberate full rollback withdraws the current
+execution result; it must not silently leave reverted deliveries marked accepted.
+What counts as an output for partial/failed attempts, and how to restore local
+and external effects safely, still require implementation decisions below.
 
 ### Example: prepare the development environment
 
@@ -207,17 +246,18 @@ For a Plan that has agreed Next.js, TypeScript, and npm:
   Plan, technology choices, user requirements, and restrictions on global tools
   or unrelated files. Inspect and preserve existing work; do not ask for a new
   repository name or create a second directory by default.
-- Expected output: package and lock files, necessary TypeScript/application
-  configuration, a minimal homepage, repeatable startup/check scripts, README
-  instructions, and a PR containing the changes.
+- Expected output: a runnable local website with a minimal homepage and repeatable
+  startup instructions, delivered through a PR. The Agent determines the necessary
+  package/configuration files and records those technical details in the PR.
 - Validation: follow the instructions to install and start the project, open
   the homepage without blocking errors, pass agreed type/build checks, check
   that database or real-Agent integration was not added outside scope, then
   review and merge the PR under this Action's acceptance agreement.
 
-Actual delivery should identify the files, commands, preview location, and PR
-that exist, not merely repeat the expected-output description. This example is
-a concrete contract, not proof that any setup has run.
+Actual delivery should link to the runnable preview and PR when available,
+with commands and implementation evidence accessible on demand, not merely
+repeat the expected-output description. This is an illustrative Agent-prepared
+contract, not a user-authored form or proof that any setup has run.
 
 ## Agent and model configuration — shared direction
 
@@ -259,6 +299,75 @@ certify the Action. Evidence belongs to the particular output being inspected.
 Full automatic review, correction, merge, and next-Action execution are deferred;
 they are not implied by accepting this manual workflow.
 
+### User acceptance and evidence — settled authority
+
+The user has final say on whether the current result is sufficient. The Agent
+reports delivered behavior, unfinished requirements, checks, risks, and options
+for correction or follow-up. It does not veto acceptance merely because its
+preferred level of completeness has not been reached. A user may explicitly
+accept a partial result without rewriting the finalized Plan in place.
+
+Record acceptance and technical evidence separately: accepting a result does
+not turn failed tests into passing tests, a favorable review into a merge, or
+unfinished features into delivered features. Preserve what the user accepted
+and any remaining limitations. The exact mapping from explicit partial acceptance
+to configured merge conditions and downstream readiness remains to be agreed;
+neither an implicit waiver nor a new permission for external writes is intended.
+Agent self-checking is preparation for review, not user acceptance by itself.
+
+## Harness responsibilities and handoffs — agreed direction
+
+The Harness coordinates four kinds of Agent work: planning, Action execution,
+verification, and Todo organization. This is not a requirement for four providers,
+four persistent Sessions, or four new UI surfaces. The system owns lifecycle
+transitions, version association, and execution gates rather than relying only
+on instructions to the Agent. The next Action is unlocked after acceptance of
+the previous Action; unlocking does not automatically start it.
+
+The handoff mechanism is Agent-facing, not a form the user must fill:
+
+- Planning to execution: the exact signed-off goal, step scope, user requirements,
+  constraints, relevant source context, and available prerequisite deliveries.
+- Execution to verification: the actual versioned output/PR, delivery summary,
+  self-check evidence, and unresolved items. Review targets that output version.
+- Verification to correction: findings, evidence, and the user's direction,
+  associated with the same Action and output rather than a new goal.
+- Feedback to follow-up: the original intent, relevant context, and source
+  association needed to create an Issue or later develop a task Node.
+
+These are semantic responsibilities, not a finalized JSON schema. Use concise
+UI summaries and artifact/PR links; the Agent handles detailed discovery and
+technical exchange without making the user read an entire transcript.
+
+### Execution Session continuity — default direction, integration open
+
+Prefer one execution Session across the sequential Actions of one goal and
+formal Plan, pausing at each output/acceptance boundary. Corrections may continue
+that Session. Session reuse is not an uninterrupted autonomous run or authority
+to start the next Action, create external records, or merge without permission.
+The Plan, artifacts, actual repository state, and acceptance evidence remain
+recoverable outside the provider conversation, so another capable Agent can
+continue. Aim for comparable accepted outcomes, not byte-identical code.
+
+Provide current Action instructions, new feedback, changed state, and references
+to relevant deliveries rather than reinjecting the complete conversation every
+time. Do not assume resume makes accumulated input free or guarantees a specific
+cost reduction. Provider-specific continuation, model changes, context rollover,
+recovery, and measurable cost accounting remain integration work. Separating
+planning from execution and using a fresh review Session are proposed defaults
+to evaluate, not already implemented runtime behavior.
+
+### Local Skills — requested integration, mechanics open
+
+Execution and verification should be able to use relevant installed development
+and review Skills. Action scope and user decisions define the desired outcome;
+Skills supply professional methods. Select and load them in the appropriate
+Session without inventing a new user-facing technical configuration workflow.
+Discovery, runtime compatibility, selection, and version/provenance recording
+still need a concrete design. Some Skills include PR/Issue/merge or autonomous
+continuation behavior: their lifecycle and permission requirements must be
+reconciled with this manual loop, not silently invoked as extra authority.
+
 ## State model — behavior agreed, exact schema open
 
 Three delivery stages are useful presentation anchors:
@@ -296,7 +405,8 @@ Relevant Todos can inform later planning or execution context.
 For example, a user may think of keyboard shortcuts while the website skeleton
 is being built. Record that idea without expanding the current Action. An issue
 that prevents the agreed outcome is a current blocker, not something that can
-be moved to Todo to declare success.
+be silently moved to Todo to declare success. The user can explicitly accept a
+limited result with that limitation recorded, as described above.
 
 Necessary small adjustments can be made within the Action's authorization and
 scope, with an explanation in the Output. The discussed example is a bounded
@@ -305,11 +415,10 @@ arbitrary cross-repository edits, shared-environment changes, or major upgrades.
 When scope or required authority changes, return the problem and options for
 discussion instead of silently expanding the Action.
 
-Updating current or future steps does not reset completed work. Internal
-substeps retain their original Action ownership. The user may abandon the
-current attempt and return to planning when the overall approach is unsuitable.
-Todo promotion and plan-edit interactions remain open; the GitHub-backed
-storage direction below supersedes the earlier generic local-checklist concept.
+Internal substeps retain their original Action ownership. Adjusting the overall
+Plan after any output requires the full rollback described above; a Todo is not
+a way around that boundary. The GitHub-backed storage direction below supersedes
+the earlier generic local-checklist concept.
 
 ### GitHub Issue-backed Todos — agreed direction for this scope
 
@@ -338,10 +447,13 @@ Issue content and contextual discussion belong on GitHub, not a second local
 detail viewer or duplicated context store. Open the external Issue to read more.
 Do not add local close/reopen controls merely to reproduce GitHub management.
 
-A later, more useful local action is to develop an actionable Todo into a task
-Card and choose the appropriate parent Node. Retain its Issue association; do
-not automatically expand the current Plan. This promotion workflow is deferred
-and has no button or implementation in this round.
+A Todo is a capture entrance, not a second full task-management hierarchy. The
+intended follow-up path is Todo/Issue to a new task Card under a selected parent
+Node, then explicit import into Just Do It. Users may instead go directly to
+What's Next, expand the source with a smaller goal such as dark mode or
+localization, and import it without creating a Todo first. Retain Issue and
+source associations when promoting a Todo; do not automatically expand the
+current Plan. Promotion remains deferred with no implementation in this round.
 
 Validation feedback that improves the current delivery remains in the same
 Action's correction loop. Only newly introduced, out-of-scope work is deferred;
@@ -404,7 +516,8 @@ and inform later steps, not merely generate activity indicators.
 The outer Card should communicate progress toward its goal. Exact progress-bar
 weighting is open: Action count is not automatically proportional to effort.
 Avoid equating time spent, number of Agent runs, or saved outputs with verified
-delivery. A later Plan change must not erase earlier completed work.
+delivery. Do not silently erase accepted work through a Plan edit; deliberate
+rollback is the explicit exception and must reflect the withdrawn deliveries.
 
 ## Abandonment, deletion, and rollback — intent recorded, mechanics open
 
@@ -420,6 +533,14 @@ Reversal of installed tools, remote changes, or already merged work cannot be
 assumed to follow from deleting local files. Handling Verified Actions and work
 already consumed downstream is unresolved. Do not silently discard user edits
 or claim effects were reverted when they were not.
+
+For reopening a Plan, clean means the execution-owned effects have actually
+been restored to the agreed starting baseline while pre-existing user work and
+unrelated changes remain intact. A partial or failed restoration cannot unlock
+Plan editing. Git branches, worktrees, commit attribution, and reversal of
+external effects are candidate mechanisms, not a promise that a hard reset
+restores everything. This bounded rollback requirement does not select the
+deferred product-wide Git storage migration.
 
 Canceling a Run, abandoning an Action, selecting an earlier output, and deleting
 history are different operations. Their exact UI and recovery policy remain open.
@@ -448,17 +569,23 @@ discussion, or assume it is already the selected implementation architecture.
 ## Remaining decisions before implementation
 
 - Final state machine, transient/error presentation, retry and cancellation UX.
-- Plan editing during execution and how newly necessary prerequisites surface.
-- Validation configuration, who may accept, and external completion synchronization.
+- Define output/side-effect detection for failed or canceled runs that changed
+  files but never returned a deliverable; no-output must not imply no changes.
+- Validation configuration and explicit partial acceptance: how user acceptance,
+  merge-based completion, technical evidence, and downstream readiness interact.
 - Output/feedback history, Agent continuation, and binding verification to a version.
 - GitHub Todo creation/synchronization, deduplication, and promotion into future work.
 - Actual provider model availability, per-role defaults, and session behavior
   when model or reasoning configuration changes.
 - Action isolation, safe deletion/rollback, and already delivered work.
+- The clean Plan baseline and reversible-effect inventory, especially installed
+  dependencies, shared user edits, published/merged PRs, and downstream consumers.
+- Local Skill discovery and selection, provider compatibility, and resolution
+  of Skill-driven authority or lifecycle conflicts with the manual Action loop.
 - Dependency delivery/version selection, multiple prerequisites, and the effect
   of upstream execution changes after downstream work has begun. This concerns
   delivered work, not ordinary editing of the stable source Formal Node.
-- Goal completion and progress presentation when the Plan changes.
+- Goal progress and source completion markers after an explicit full rollback.
 - Whether one source Node can have multiple execution attempts and how their
   associated completion results would be displayed.
 - Concrete MVP implementation scope and acceptance checks.

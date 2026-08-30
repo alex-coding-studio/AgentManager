@@ -10,6 +10,15 @@ Next, agree on the planning, execution-session, and verification Harness contrac
 then authorize real integration and validate a bounded end-to-end task.
 No live execution or Session-reuse implementation is part of this UI freeze.
 
+The subsequent Harness discussion is recorded in [JUST_DO_IT.md](JUST_DO_IT.md):
+Agent-generated Plan and user review/sign-off, user-owned acceptance with honest
+evidence, Agent-facing handoffs, bounded execution Session reuse, local Skill
+integration, and Todo-to-Node follow-up. A Plan may reopen before any output;
+after any output it requires a verified full rollback to its clean execution
+baseline. These are design rules, not behavior already enforced by the frozen
+preview. Next resolve rollback scope, partial acceptance/downstream readiness,
+and Skill/runtime integration. Do not redesign the frozen UI in this docs round.
+
 As of the 2026-08-29 discussion, the focus is defining Just Do It's manual
 planning, execution, and verification workflow for GitHub-backed software
 projects over shared Formal Nodes. The goal dashboard has independent execution
