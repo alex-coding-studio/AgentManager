@@ -1,5 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import readline from 'node:readline';
+import type { ReasoningEffort } from './local-agent-model-types.ts';
 
 export type LocalAgentKind = 'codex' | 'claude';
 
@@ -27,7 +28,7 @@ type LocalAgentRunInput = {
   prompt: string;
   resumeSessionId?: string;
   model?: string;
-  effort?: 'low' | 'medium' | 'high' | 'xhigh';
+  effort?: ReasoningEffort;
 };
 
 type CodexEvent =

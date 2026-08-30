@@ -56,6 +56,16 @@ export const chineseUi: Record<string, string> = {
     '填写开发约定、使用哪些本地 Skill 等。可以留空，系统会自动应用内置流程规则。',
   'Your additional requirements': '你的补充要求',
   'Model ID (optional)': '模型 ID（可选）',
+  'Custom model…': '自定义模型…',
+  'Custom model ID': '自定义模型 ID',
+  'Previously selected': '此前选择',
+  'Loading local models…': '正在读取本地模型…',
+  'Could not load models. Use Agent default or enter a custom model.':
+    '未能读取模型。可以使用 Agent 默认模型，或手动填写。',
+  'No models returned. Use Agent default or enter a custom model.':
+    '本地 Agent 未返回模型。可以使用默认模型，或手动填写。',
+  'Models reported by your local Agent. Availability is checked when running.':
+    '模型列表来自本地 Agent，实际可用性以运行结果为准。',
   'Agent default': 'Agent 默认',
   'Uses your local Agent login. Unsupported model settings return an error, without silently changing models.':
     '使用本地 Agent 登录。模型配置不受支持时会报错，不会悄悄换模型。',
