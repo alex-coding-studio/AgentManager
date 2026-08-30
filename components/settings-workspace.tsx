@@ -2,18 +2,28 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Languages } from 'lucide-react';
+import { Languages, Palette } from 'lucide-react';
+import { useAppearance } from '@/components/appearance-provider';
+import { isUiTheme, type UiTheme } from '@/lib/ui-theme';
 import { useUiText } from '@/components/ui-language-provider';
 import { isUiLanguage, type UiLanguage } from '@/lib/ui-language';
 
 export function SettingsWorkspace() {
   const { language, setLanguage, t } = useUiText();
+  const { theme, setTheme } = useAppearance();
   const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
   async function changeLanguage(next: UiLanguage) {
-    if (saving || next === language) return;
+    if (next === language) return;
+    await saveSettings({ language: next });
+  }
+  async function saveSettings(patch: {
+    language?: UiLanguage;
+    theme?: UiTheme;
+  }) {
+    if (saving) return;
     setSaving(true);
     setSaved(false);
     setError('');
@@ -21,12 +31,17 @@ export function SettingsWorkspace() {
       const response = await fetch('/api/settings', {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ language: next }),
+        body: JSON.stringify(patch),
       });
       const result = await response.json();
-      if (!response.ok || !isUiLanguage(result.language))
+      if (
+        !response.ok ||
+        !isUiLanguage(result.language) ||
+        !isUiTheme(result.theme)
+      )
         throw new Error('Could not save settings.');
       setLanguage(result.language);
+      setTheme(result.theme);
       setSaved(true);
       router.refresh();
     } catch {
@@ -76,6 +91,35 @@ export function SettingsWorkspace() {
             <option value="zh-CN" lang="zh-CN">
               简体中文
             </option>
+          </select>
+        </div>
+        <div className="mt-6 flex flex-col gap-5 border-t border-border pt-6 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex max-w-lg gap-3">
+            <Palette className="mt-0.5 size-5 shrink-0" />
+            <div>
+              <label htmlFor="interface-theme" className="text-sm font-medium">
+                {t('Appearance')}
+              </label>
+              <p className="mt-2 text-xs leading-6 text-muted-foreground">
+                {t(
+                  'Choose a light or dark interface, or follow your system appearance.',
+                )}
+              </p>
+            </div>
+          </div>
+          <select
+            id="interface-theme"
+            value={theme}
+            disabled={saving}
+            onChange={(event) => {
+              if (isUiTheme(event.target.value) && event.target.value !== theme)
+                void saveSettings({ theme: event.target.value });
+            }}
+            className="h-10 min-w-40 rounded-lg border border-border bg-background px-3 text-sm focus:ring-2 focus:ring-ring"
+          >
+            <option value="system">{t('Follow system')}</option>
+            <option value="light">{t('Light')}</option>
+            <option value="dark">{t('Dark')}</option>
           </select>
         </div>
         <output className="mt-5 block text-xs text-muted-foreground">

@@ -53,6 +53,11 @@ body {
 }
 
 :root {
+  color-scheme: light;
+  --graph-running: #2563eb;
+  --graph-candidate: #8b5cf6;
+  --graph-dependency: #d97706;
+  --graph-error: #dc2626;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -88,6 +93,11 @@ body {
 }
 
 .dark {
+  color-scheme: dark;
+  --graph-running: #60a5fa;
+  --graph-candidate: #a78bfa;
+  --graph-dependency: #fbbf24;
+  --graph-error: #f87171;
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);
@@ -113,12 +123,22 @@ body {
   --chart-5: oklch(0.269 0 0);
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary: oklch(0.922 0 0);
   --sidebar-primary-foreground: oklch(0.985 0 0);
   --sidebar-accent: oklch(0.269 0 0);
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+}
+
+:root .react-flow {
+  --xy-controls-button-background-color: var(--card);
+  --xy-controls-button-background-color-hover: var(--muted);
+  --xy-controls-button-color: var(--foreground);
+  --xy-controls-button-color-hover: var(--foreground);
+  --xy-controls-button-border-color: var(--border);
+  --xy-attribution-background-color: var(--background);
+  --xy-edge-stroke: var(--muted-foreground);
 }
 
 @layer base {
