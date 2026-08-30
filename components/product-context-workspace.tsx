@@ -1,4 +1,5 @@
 'use client';
+import { useUiText } from '@/components/ui-language-provider';
 
 import { useMemo, useRef, useState, type DragEvent } from 'react';
 import {
@@ -49,6 +50,7 @@ export function ProductContextWorkspace({
   projectId: string;
   initialSections: ContextSection[];
 }) {
+  const { t } = useUiText();
   const [sections, setSections] = useState(initialSections);
   const [selectedSlug, setSelectedSlug] = useState(
     initialSections[0]?.slug ?? '',
@@ -312,12 +314,12 @@ export function ProductContextWorkspace({
             <FolderPlus className="size-5" />
           </div>
           <h1 className="mt-5 text-2xl font-semibold tracking-tight">
-            Initialize Product Context
+            {t('Initialize Product Context')}
           </h1>
           <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-muted-foreground">
-            Create the fixed Product, Design, Engineering, Milestones,
-            References, and Other folders with README guidance for people and
-            agents.
+            {t(
+              'Create the fixed Product, Design, Engineering, Milestones, References, and Other folders with README guidance for people and agents.',
+            )}
           </p>
           <Button
             className="mt-6"
@@ -326,7 +328,7 @@ export function ProductContextWorkspace({
             disabled={initializing}
           >
             <FolderPlus />{' '}
-            {initializing ? 'Initializing…' : 'Create context structure'}
+            {initializing ? t('Initializing…') : t('Create context structure')}
           </Button>
           {error ? (
             <p className="mt-4 text-sm text-destructive">{error}</p>
@@ -340,14 +342,15 @@ export function ProductContextWorkspace({
     <div className="mx-auto max-w-7xl px-5 py-8 lg:px-8 lg:py-10">
       <div className="mb-8">
         <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-          Product context
+          {t('Product context')}
         </p>
         <h1 className="text-3xl font-semibold tracking-[-0.035em]">
-          Context library
+          {t('Context library')}
         </h1>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
-          Select a section to read its purpose and Agent loading guidance. The
-          folder structure is the source of truth.
+          {t(
+            'Select a section to read its purpose and Agent loading guidance. The folder structure is the source of truth.',
+          )}
         </p>
       </div>
 
@@ -355,7 +358,7 @@ export function ProductContextWorkspace({
         <div className="grid gap-4">
           <ul
             className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card"
-            aria-label="Context sections"
+            aria-label={t('Context sections')}
           >
             {sections.map((section) => {
               const selected = selectedSection?.slug === section.slug;
@@ -373,7 +376,7 @@ export function ProductContextWorkspace({
                     size="icon-xs"
                     className="ml-2"
                     aria-label={`Open ${section.title} folder in file manager`}
-                    title="Show in file manager"
+                    title={t('Show in file manager')}
                     onClick={() => {
                       void revealSection(section.slug).catch((error) => {
                         setError(
@@ -408,7 +411,7 @@ export function ProductContextWorkspace({
                     size="icon-xs"
                     className="mr-2 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100"
                     aria-label={`Rename ${section.title} folder`}
-                    title="Rename folder"
+                    title={t('Rename folder')}
                     onClick={() => {
                       selectSection(section);
                       setRenameFolderName(section.slug);
@@ -425,7 +428,7 @@ export function ProductContextWorkspace({
           <section className="overflow-hidden rounded-xl border border-border bg-card">
             <header className="flex h-10 items-center border-b border-border px-3">
               <p className="text-xs font-medium text-muted-foreground">
-                Documents
+                {t('Documents')}
               </p>
               <DropdownMenu>
                 <DropdownMenuTrigger
@@ -434,8 +437,8 @@ export function ProductContextWorkspace({
                       variant="ghost"
                       size="icon-xs"
                       className="ml-auto"
-                      aria-label="Add document"
-                      title="Add document"
+                      aria-label={t('Add document')}
+                      title={t('Add document')}
                     />
                   }
                 >
@@ -443,15 +446,15 @@ export function ProductContextWorkspace({
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-44">
                   <DropdownMenuItem onClick={() => setFolderOpen(true)}>
-                    <FolderPlus /> New Folder
+                    <FolderPlus /> {t('New Folder')}
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setCreateOpen(true)}>
-                    <FilePlus2 /> New Markdown
+                    <FilePlus2 /> {t('New Markdown')}
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => fileInputRef.current?.click()}
                   >
-                    <Upload /> Import Markdown
+                    <Upload /> {t('Import Markdown')}
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -503,7 +506,7 @@ export function ProductContextWorkspace({
               disabled={adding}
             >
               <Upload className="size-3.5" />
-              {adding ? 'Adding…' : 'Drop Markdown or choose files'}
+              {adding ? t('Adding…') : t('Drop Markdown or choose files')}
             </button>
             <input
               ref={fileInputRef}
@@ -537,10 +540,10 @@ export function ProductContextWorkspace({
                 <FileText className="size-4" />
               </div>
               <h2 className="mt-4 text-sm font-medium">
-                No Markdown documents
+                {t('No Markdown documents')}
               </h2>
               <p className="mt-1 text-xs text-muted-foreground">
-                Add or import a document for this folder.
+                {t('Add or import a document for this folder.')}
               </p>
             </div>
           </section>
@@ -551,14 +554,15 @@ export function ProductContextWorkspace({
         <DialogContent>
           <form onSubmit={createDocument}>
             <DialogHeader>
-              <DialogTitle>New Markdown document</DialogTitle>
+              <DialogTitle>{t('New Markdown document')}</DialogTitle>
               <DialogDescription>
-                Create a readable Markdown file inside {selectedSection?.title}.
+                {t('Create a readable Markdown file inside')}
+                {selectedSection?.title}.
               </DialogDescription>
             </DialogHeader>
             <div className="my-5 space-y-2">
               <label htmlFor="document-title" className="text-xs font-medium">
-                Document title
+                {t('Document title')}
               </label>
               <Input
                 id="document-title"
@@ -568,12 +572,14 @@ export function ProductContextWorkspace({
                 onChange={(event) => setDocumentTitle(event.target.value)}
               />
               <p className="text-[11px] text-muted-foreground">
-                The title becomes an English slug such as product-foundation.md.
+                {t(
+                  'The title becomes an English slug such as product-foundation.md.',
+                )}
               </p>
             </div>
             <DialogFooter>
               <Button type="submit" disabled={!documentTitle.trim() || adding}>
-                {adding ? 'Creating…' : 'Create document'}
+                {adding ? t('Creating…') : t('Create document')}
               </Button>
             </DialogFooter>
           </form>
@@ -584,15 +590,16 @@ export function ProductContextWorkspace({
         <DialogContent>
           <form onSubmit={createFolder}>
             <DialogHeader>
-              <DialogTitle>New context folder</DialogTitle>
+              <DialogTitle>{t('New context folder')}</DialogTitle>
               <DialogDescription>
-                Create a flexible Product Context section. A README can be added
-                later.
+                {t(
+                  'Create a flexible Product Context section. A README can be added later.',
+                )}
               </DialogDescription>
             </DialogHeader>
             <div className="my-5 space-y-2">
               <label htmlFor="folder-name" className="text-xs font-medium">
-                Folder name
+                {t('Folder name')}
               </label>
               <Input
                 id="folder-name"
@@ -602,7 +609,7 @@ export function ProductContextWorkspace({
                 onChange={(event) => setFolderName(event.target.value)}
               />
               <p className="text-[11px] text-muted-foreground">
-                The name becomes an English slug such as research-notes.
+                {t('The name becomes an English slug such as research-notes.')}
               </p>
             </div>
             <DialogFooter>
@@ -610,7 +617,7 @@ export function ProductContextWorkspace({
                 type="submit"
                 disabled={!folderName.trim() || creatingFolder}
               >
-                {creatingFolder ? 'Creating…' : 'Create folder'}
+                {creatingFolder ? t('Creating…') : t('Create folder')}
               </Button>
             </DialogFooter>
           </form>
@@ -621,9 +628,9 @@ export function ProductContextWorkspace({
         <DialogContent>
           <form onSubmit={renameFolder}>
             <DialogHeader>
-              <DialogTitle>Rename context folder</DialogTitle>
+              <DialogTitle>{t('Rename context folder')}</DialogTitle>
               <DialogDescription>
-                Rename the folder on disk without changing its documents.
+                {t('Rename the folder on disk without changing its documents.')}
               </DialogDescription>
             </DialogHeader>
             <div className="my-5 space-y-2">
@@ -631,7 +638,7 @@ export function ProductContextWorkspace({
                 htmlFor="rename-folder-name"
                 className="text-xs font-medium"
               >
-                Folder name
+                {t('Folder name')}
               </label>
               <Input
                 id="rename-folder-name"
@@ -640,7 +647,7 @@ export function ProductContextWorkspace({
                 onChange={(event) => setRenameFolderName(event.target.value)}
               />
               <p className="text-[11px] text-muted-foreground">
-                The folder path uses an English slug.
+                {t('The folder path uses an English slug.')}
               </p>
             </div>
             <DialogFooter>
@@ -648,7 +655,7 @@ export function ProductContextWorkspace({
                 type="submit"
                 disabled={!renameFolderName.trim() || renamingFolder}
               >
-                {renamingFolder ? 'Renaming…' : 'Rename folder'}
+                {renamingFolder ? t('Renaming…') : t('Rename folder')}
               </Button>
             </DialogFooter>
           </form>
@@ -662,21 +669,24 @@ export function ProductContextWorkspace({
               <Trash2 />
             </AlertDialogMedia>
             <AlertDialogTitle>
-              Delete {selectedDocument?.fileName}?
+              {t('Delete')}
+              {selectedDocument?.fileName}?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              This removes the Markdown file from the project. The{' '}
-              {selectedSection?.title} folder will remain.
+              {t('This removes the Markdown file from the project. The')}{' '}
+              {selectedSection?.title} {t('folder will remain.')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={deleting}>
+              {t('Cancel')}
+            </AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
               disabled={deleting}
               onClick={deleteDocument}
             >
-              {deleting ? 'Deleting…' : 'Delete'}
+              {deleting ? t('Deleting…') : t('Delete')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -693,16 +703,20 @@ export function ProductContextWorkspace({
             <AlertDialogMedia>
               <Upload />
             </AlertDialogMedia>
-            <AlertDialogTitle>Replace existing documents?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {t('Replace existing documents?')}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              {pendingImport?.conflicts.join(', ')} already{' '}
-              {pendingImport?.conflicts.length === 1 ? 'exists' : 'exist'} in
-              this folder. Importing will replace the existing{' '}
+              {pendingImport?.conflicts.join(', ')} {t('already')}{' '}
+              {pendingImport?.conflicts.length === 1 ? 'exists' : 'exist'}{' '}
+              {t('in this folder. Importing will replace the existing')}{' '}
               {pendingImport?.conflicts.length === 1 ? 'file' : 'files'}.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={adding}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={adding}>
+              {t('Cancel')}
+            </AlertDialogCancel>
             <AlertDialogAction
               disabled={adding}
               onClick={() => {
@@ -711,7 +725,7 @@ export function ProductContextWorkspace({
                 }
               }}
             >
-              {adding ? 'Replacing…' : 'Replace'}
+              {adding ? t('Replacing…') : t('Replace')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

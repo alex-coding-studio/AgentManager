@@ -1,4 +1,5 @@
 'use client';
+import { useUiText } from '@/components/ui-language-provider';
 
 import {
   useEffect,
@@ -60,6 +61,7 @@ function MarkdownReaderContent({
   compact?: boolean;
   className?: string;
 }) {
+  const { t } = useUiText();
   const [focusMode, setFocusMode] = useState(false);
   const [revealing, setRevealing] = useState(false);
   const [revealError, setRevealError] = useState('');
@@ -405,14 +407,14 @@ function MarkdownReaderContent({
               size="icon"
               aria-label={
                 annotationsEnabled
-                  ? 'Disable annotations'
-                  : 'Enable annotations'
+                  ? t('Disable annotations')
+                  : t('Enable annotations')
               }
               aria-pressed={annotationsEnabled}
               title={
                 annotationsEnabled
-                  ? 'Disable annotations'
-                  : 'Enable annotations'
+                  ? t('Disable annotations')
+                  : t('Enable annotations')
               }
               onClick={() => {
                 setAnnotationsEnabled((enabled) => !enabled);
@@ -429,8 +431,8 @@ function MarkdownReaderContent({
               type="button"
               variant="ghost"
               size="icon"
-              aria-label="Show README folder in file manager"
-              title="Show in file manager"
+              aria-label={t('Show README folder in file manager')}
+              title={t('Show in file manager')}
               disabled={revealing}
               onClick={reveal}
             >
@@ -442,8 +444,8 @@ function MarkdownReaderContent({
               type="button"
               variant="ghost"
               size="icon"
-              aria-label="Delete Markdown document"
-              title="Delete document"
+              aria-label={t('Delete Markdown document')}
+              title={t('Delete document')}
               disabled={deleting}
               onClick={() => {
                 setFocusMode(false);
@@ -459,10 +461,12 @@ function MarkdownReaderContent({
               variant="ghost"
               size="icon"
               aria-label={
-                focusMode ? 'Exit focus reading' : 'Open focus reading'
+                focusMode ? t('Exit focus reading') : t('Open focus reading')
               }
               aria-pressed={focusMode}
-              title={focusMode ? 'Exit focus mode (Esc)' : 'Open focus mode'}
+              title={
+                focusMode ? t('Exit focus mode (Esc)') : t('Open focus mode')
+              }
               onClick={() => setFocusMode((current) => !current)}
             >
               {focusMode ? <Minimize2 /> : <Maximize2 />}
@@ -473,8 +477,8 @@ function MarkdownReaderContent({
               type="button"
               variant="ghost"
               size="icon"
-              aria-label="Close Markdown reader"
-              title="Close"
+              aria-label={t('Close Markdown reader')}
+              title={t('Close')}
               onClick={onClose}
             >
               <X />
@@ -487,7 +491,7 @@ function MarkdownReaderContent({
         <div
           data-feedback-popover
           role="toolbar"
-          aria-label="Selected text feedback"
+          aria-label={t('Selected text feedback')}
           className="absolute z-40 flex h-9 w-[190px] items-center justify-between gap-1 rounded-lg border border-border bg-popover px-1 shadow-lg"
           style={{ left: feedbackPosition.left, top: feedbackPosition.top }}
         >
@@ -497,13 +501,13 @@ function MarkdownReaderContent({
             onPointerDown={(event) => event.preventDefault()}
             onClick={() => addSelectedFeedback()}
           >
-            Add feedback
+            {t('Add feedback')}
           </Button>
           <Button
             type="button"
             variant="ghost"
             size="icon-xs"
-            aria-label="Clear selected feedback text"
+            aria-label={t('Clear selected feedback text')}
             onPointerDown={(event) => event.preventDefault()}
             onClick={() => {
               window.getSelection()?.removeAllRanges();
@@ -556,7 +560,7 @@ function MarkdownReaderContent({
     >
       <button
         type="button"
-        aria-label="Close focus reading"
+        aria-label={t('Close focus reading')}
         className="absolute inset-0 cursor-default"
         onClick={() => setFocusMode(false)}
       />
@@ -611,6 +615,7 @@ function FeedbackButton({
   excerpt: string;
   onAddFeedback: (selection: MarkdownFeedbackSelection) => void;
 }) {
+  const { t } = useUiText();
   const startLine = node?.position?.start.line;
   const endLine = node?.position?.end.line;
   if (!startLine || !endLine || !excerpt.trim()) return null;
@@ -618,8 +623,11 @@ function FeedbackButton({
     <button
       type="button"
       className="absolute top-1 right-0 grid size-7 place-items-center rounded-full text-muted-foreground opacity-60 transition hover:bg-secondary hover:text-foreground focus:opacity-100 sm:opacity-0 sm:group-hover/feedback:opacity-100"
-      aria-label={`Add feedback for lines ${startLine} to ${endLine}`}
-      title="Add feedback"
+      aria-label={t('Add feedback for lines {start} to {end}', {
+        start: startLine,
+        end: endLine,
+      })}
+      title={t('Add feedback')}
       onClick={() =>
         onAddFeedback({
           startLine,

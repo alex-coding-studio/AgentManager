@@ -2,6 +2,8 @@ import { notFound } from 'next/navigation';
 import { ArrowRight, Boxes, GitFork, Library } from 'lucide-react';
 import { ProjectShell } from '@/components/project-shell';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { readAppSettings } from '@/lib/app-settings';
+import { translateUi } from '@/lib/ui-language';
 import {
   getGitHubRepositoryUrl,
   getProject,
@@ -16,6 +18,8 @@ export default async function ProjectPage({
   params: Promise<{ projectId: string }>;
 }) {
   const { projectId } = await params;
+  const { language } = await readAppSettings();
+  const t = (text: string) => translateUi(language, text);
   const [project, projects] = await Promise.all([
     getProject(projectId),
     listProjects(),
@@ -33,36 +37,47 @@ export default async function ProjectPage({
       <div className="mx-auto max-w-6xl px-5 py-9 lg:px-8 lg:py-12">
         <div className="max-w-2xl">
           <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-            Project overview
+            {t('Project overview')}
           </p>
           <h1 className="text-3xl font-semibold tracking-[-0.035em] sm:text-4xl">
             {project.name}
           </h1>
           <p className="mt-3 text-sm leading-6 text-muted-foreground">
-            {project.description || 'No project description yet.'}
+            {project.description || t('No project description yet.')}
           </p>
         </div>
 
         <div className="mt-10 grid gap-4 sm:grid-cols-3">
-          <SummaryCard icon={<Library />} label="Product sources" value="0" />
-          <SummaryCard icon={<Boxes />} label="Decomposition nodes" value="0" />
-          <SummaryCard icon={<GitFork />} label="Dependencies" value="0" />
+          <SummaryCard
+            icon={<Library />}
+            label={t('Product sources')}
+            value="0"
+          />
+          <SummaryCard
+            icon={<Boxes />}
+            label={t('Decomposition nodes')}
+            value="0"
+          />
+          <SummaryCard icon={<GitFork />} label={t('Dependencies')} value="0" />
         </div>
 
         <Card className="mt-6 border-0 shadow-[0_1px_0_rgb(15_23_42/5%),0_14px_40px_rgb(15_23_42/5%)]">
           <CardHeader className="border-b">
-            <CardTitle>Workspace ready</CardTitle>
+            <CardTitle>{t('Workspace ready')}</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-5 py-1 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="font-medium">The project boundary is connected.</p>
+              <p className="font-medium">
+                {t('The project boundary is connected.')}
+              </p>
               <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                Product context, decomposition, and dependency sync will be
-                added as focused capabilities.
+                {t(
+                  'Product context, decomposition, and dependency sync will be added as focused capabilities.',
+                )}
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-2 text-sm font-medium text-muted-foreground">
-              Next: product context <ArrowRight className="size-4" />
+              {t('Next: product context')} <ArrowRight className="size-4" />
             </div>
           </CardContent>
         </Card>

@@ -1,4 +1,5 @@
 'use client';
+import { useUiText } from '@/components/ui-language-provider';
 
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import {
@@ -78,6 +79,7 @@ export function WhatsNextWorkspace({
   developmentTransitionRun?: WhatsNextRunRecord;
   developmentCompletionRun?: WhatsNextRunRecord;
 }) {
+  const { t } = useUiText();
   const [nodes, setNodes] = useState(initialNodes);
   const [previews, setPreviews] = useState<TaskGraphPreview[]>(
     mergePreviews([], initialRuns.flatMap(runToPreviews)),
@@ -685,26 +687,31 @@ export function WhatsNextWorkspace({
         <div className="w-full max-w-3xl">
           <div className="mb-6 flex items-center gap-2 text-sm text-muted-foreground">
             <Sparkles className="size-4" />
-            What&apos;s next
+            {t("What's next")}
           </div>
           <h1 className="text-2xl font-semibold tracking-tight">
-            What do you want to build?
+            {t('What do you want to build?')}
           </h1>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            Write the idea in your own words. It becomes the Start of this
-            Canvas, and {AGENT_LABELS[selectedAgent]} answers it straight away.
+            {t(
+              'Write the idea in your own words. It becomes the Start of this Canvas, and',
+            )}
+            {AGENT_LABELS[selectedAgent]} {t('answers it straight away.')}
           </p>
           <Textarea
             value={idea}
             onChange={(event) => setIdea(event.target.value)}
             rows={4}
-            placeholder="A manager that helps one developer grow and decompose product intent…"
+            placeholder={t(
+              'A manager that helps one developer grow and decompose product intent…',
+            )}
             maxLength={4_000}
             className="mt-5 resize-none text-sm"
-            aria-label="Your idea"
+            aria-label={t('Your idea')}
           />
           <p className="mt-2 text-right text-[11px] text-muted-foreground">
-            {idea.trim().length}/4,000 characters
+            {idea.trim().length}
+            {t('/4,000 characters')}
           </p>
           <div className="mt-4">
             <SourcePicker
@@ -724,7 +731,7 @@ export function WhatsNextWorkspace({
                   current.filter((_, value) => value !== index),
                 )
               }
-              label="Optional sources"
+              label={t('Optional sources')}
             />
           </div>
           <div className="mt-4 flex items-center justify-between gap-3">
@@ -738,7 +745,7 @@ export function WhatsNextWorkspace({
               ) : (
                 <Sparkles className="size-4" />
               )}
-              Start and ask
+              {t('Start and ask')}
             </Button>
           </div>
           {error ? (
@@ -783,10 +790,12 @@ export function WhatsNextWorkspace({
         >
           <span className="flex items-center gap-2 text-xs font-semibold">
             <MessageSquareText className="size-3.5" />
-            Latest Response
+            {t('Latest Response')}
             <span className="ml-auto rounded-full bg-secondary px-2 py-0.5 text-[9px] font-medium text-muted-foreground">
-              {continuationLabel(
-                latestResponse.result.reflection.continuationAdvice.action,
+              {t(
+                continuationLabel(
+                  latestResponse.result.reflection.continuationAdvice.action,
+                ),
               )}
             </span>
           </span>
@@ -809,16 +818,17 @@ export function WhatsNextWorkspace({
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-xs font-semibold">
-                Combine {combineIds.length} cards
+                {t('Combine')}
+                {combineIds.length} {t('cards')}
               </p>
               <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
-                Their output becomes the input for one question.
+                {t('Their output becomes the input for one question.')}
               </p>
             </div>
             <button
               type="button"
               className="text-muted-foreground transition hover:text-foreground"
-              aria-label="Clear the selection"
+              aria-label={t('Clear the selection')}
               onClick={() => {
                 setCombineIds([]);
                 setCombineInstruction('');
@@ -855,9 +865,9 @@ export function WhatsNextWorkspace({
             onChange={(event) => setCombineInstruction(event.target.value)}
             rows={3}
             maxLength={1_000}
-            placeholder="What do you want to do with these together?"
+            placeholder={t('What do you want to do with these together?')}
             className="mt-3 resize-none text-sm"
-            aria-label="What to do with the selected cards"
+            aria-label={t('What to do with the selected cards')}
           />
 
           <div className="mt-3 flex items-center justify-between gap-3">
@@ -868,7 +878,7 @@ export function WhatsNextWorkspace({
               onClick={() => void submitCombine()}
             >
               <Sparkles className="size-3.5" />
-              Ask
+              {t('Ask')}
             </Button>
           </div>
         </div>
@@ -892,20 +902,29 @@ export function WhatsNextWorkspace({
               <div>
                 <h2 className="text-sm font-semibold">
                   {redoProposal
-                    ? 'Redo proposal from'
+                    ? t('Redo proposal from')
                     : continuingGrow
-                      ? 'Continue from'
-                      : 'Explore from'}{' '}
+                      ? t('Continue from')
+                      : t('Explore from')}{' '}
                   {growSource.id}
                 </h2>
                 <p className="mt-2 text-xs leading-5 text-muted-foreground">
                   {redoProposal
-                    ? 'Re-propose discards the current directions to system Trash and immediately generates a new proposal. Cancellation or failure does not restore discarded directions.'
+                    ? t(
+                        'Re-propose discards the current directions to system Trash and immediately generates a new proposal. Cancellation or failure does not restore discarded directions.',
+                      )
                     : continuingGrow
-                      ? `${AGENT_LABELS[selectedAgent]} continues the same line of inquiry with only this round’s changes.`
-                      : `${AGENT_LABELS[selectedAgent]} responds with a Reflection and supported next directions.`}{' '}
-                  Inherited Resources stay on the source Node; additions apply
-                  only to this request.
+                      ? t(
+                          '{agent} continues the same line of inquiry with only this round’s changes.',
+                          { agent: AGENT_LABELS[selectedAgent] },
+                        )
+                      : t(
+                          '{agent} responds with a Reflection and supported next directions.',
+                          { agent: AGENT_LABELS[selectedAgent] },
+                        )}{' '}
+                  {t(
+                    'Inherited Resources stay on the source Node; additions apply only to this request.',
+                  )}
                 </p>
               </div>
 
@@ -917,7 +936,7 @@ export function WhatsNextWorkspace({
                     variant={!redoProposal ? 'default' : 'outline'}
                     onClick={() => setRedoProposal(false)}
                   >
-                    Explore more
+                    {t('Explore more')}
                   </Button>
                   <Button
                     type="button"
@@ -927,18 +946,23 @@ export function WhatsNextWorkspace({
                     disabled={Boolean(redoBoundary.reason)}
                     title={
                       redoBoundary.reason ||
-                      'Redo all unaccepted directions from this parent'
+                      t('Redo all unaccepted directions from this parent')
                     }
                   >
                     <RotateCcw className="size-3.5" />
-                    Redo proposal
+                    {t('Redo proposal')}
                   </Button>
                 </div>
                 <p className="mt-2 text-xs text-muted-foreground">
                   {redoBoundary.reason ||
                     (redoProposal
-                      ? `${redoBoundary.count} directions will be reconsidered together. No Formal Nodes will be changed.`
-                      : 'Explore more adds directions without replacing the current proposal.')}
+                      ? t(
+                          '{count} directions will be reconsidered together. No Formal Nodes will be changed.',
+                          { count: redoBoundary.count },
+                        )
+                      : t(
+                          'Explore more adds directions without replacing the current proposal.',
+                        ))}
                 </p>
               </div>
 
@@ -950,27 +974,30 @@ export function WhatsNextWorkspace({
 
               {redoProposal && redoBoundary.context ? (
                 <section
-                  aria-label="Previous proposal context"
+                  aria-label={t('Previous proposal context')}
                   className="space-y-3 rounded-xl border border-border p-3"
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <h3 className="text-xs font-medium">Previous proposal</h3>
+                    <h3 className="text-xs font-medium">
+                      {t('Previous proposal')}
+                    </h3>
                     <span className="text-[10px] text-muted-foreground">
-                      Included automatically
+                      {t('Included automatically')}
                     </span>
                   </div>
                   <div>
                     <p className="text-[11px] font-medium text-muted-foreground">
-                      Previous instruction
+                      {t('Previous instruction')}
                     </p>
                     <p className="mt-1 max-h-40 overflow-y-auto whitespace-pre-wrap break-words text-xs leading-5">
                       {redoBoundary.context.instruction ||
-                        'No instruction was recorded for this proposal.'}
+                        t('No instruction was recorded for this proposal.')}
                     </p>
                   </div>
                   <div className="space-y-1">
                     <p className="text-[11px] font-medium text-muted-foreground">
-                      Previous outputs · {redoBoundary.context.outputs.length}
+                      {t('Previous outputs ·')}
+                      {redoBoundary.context.outputs.length}
                     </p>
                     {redoBoundary.context.outputs.map((output) => (
                       <button
@@ -978,14 +1005,17 @@ export function WhatsNextWorkspace({
                         type="button"
                         onClick={() => setPreview(output)}
                         className="flex w-full items-center gap-2 rounded-lg bg-secondary px-3 py-2 text-left text-xs hover:bg-secondary/70"
-                        aria-label={`Read previous output: ${output.title}`}
+                        aria-label={t('Read previous output: {title}', {
+                          title: output.title,
+                        })}
                       >
                         <FileText className="size-3.5 shrink-0" />
                         <span className="min-w-0 flex-1 truncate">
                           {output.title}
                         </span>
                         <span className="shrink-0 text-[10px] text-muted-foreground">
-                          Revision {output.revision}
+                          {t('Revision')}
+                          {output.revision}
                         </span>
                       </button>
                     ))}
@@ -1002,7 +1032,7 @@ export function WhatsNextWorkspace({
                       })
                     }
                   >
-                    Read full last response
+                    {t('Read full last response')}
                   </Button>
                 </section>
               ) : null}
@@ -1012,9 +1042,9 @@ export function WhatsNextWorkspace({
                   htmlFor="whats-next-instruction"
                   className="text-xs font-medium"
                 >
-                  {redoProposal ? 'Correction' : 'Instruction'}{' '}
+                  {redoProposal ? t('Correction') : t('Instruction')}{' '}
                   <span className="font-normal text-muted-foreground">
-                    {redoProposal ? 'required' : 'optional'}
+                    {redoProposal ? t('required') : t('optional')}
                   </span>
                 </label>
                 <Textarea
@@ -1023,8 +1053,12 @@ export function WhatsNextWorkspace({
                   maxLength={1_000}
                   placeholder={
                     redoProposal
-                      ? 'What did this proposal misunderstand, and what do you want instead?'
-                      : 'Steer this round, or let the Agent respond from the current Node.'
+                      ? t(
+                          'What did this proposal misunderstand, and what do you want instead?',
+                        )
+                      : t(
+                          'Steer this round, or let the Agent respond from the current Node.',
+                        )
                   }
                   className="min-h-28"
                   onChange={(event) => setGrowInstruction(event.target.value)}
@@ -1034,10 +1068,11 @@ export function WhatsNextWorkspace({
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-xs font-medium">
-                    Input from {growSource.id}
+                    {t('Input from')}
+                    {growSource.id}
                   </p>
                   <span className="text-[10px] text-muted-foreground">
-                    always included
+                    {t('always included')}
                   </span>
                 </div>
                 <div className="max-h-40 divide-y divide-border overflow-y-auto rounded-xl border border-border bg-muted/30">
@@ -1049,7 +1084,9 @@ export function WhatsNextWorkspace({
                       <Checkbox
                         checked
                         disabled
-                        aria-label={`${resourceName(resource.path)} is always included`}
+                        aria-label={t('{name} is always included', {
+                          name: resourceName(resource.path),
+                        })}
                       />
                       <FileText className="size-3.5 shrink-0 text-muted-foreground" />
                       <span className="min-w-0 flex-1 truncate text-[11px]">
@@ -1062,7 +1099,7 @@ export function WhatsNextWorkspace({
                   ))}
                   {growSource.resources.length === 0 ? (
                     <p className="px-3 py-2.5 text-[11px] text-muted-foreground">
-                      This Node carries no Resources yet.
+                      {t('This Node carries no Resources yet.')}
                     </p>
                   ) : null}
                 </div>
@@ -1085,7 +1122,7 @@ export function WhatsNextWorkspace({
                     current.filter((_, value) => value !== index),
                   )
                 }
-                label="Run-only context"
+                label={t('Run-only context')}
               />
 
               <div className="sticky bottom-0 -mx-4 border-t border-border bg-popover px-4 py-4">
@@ -1101,12 +1138,12 @@ export function WhatsNextWorkspace({
                 >
                   <Sparkles className="size-4" />
                   {submittingGrow
-                    ? 'Starting…'
+                    ? t('Starting…')
                     : redoProposal
-                      ? 'Re-propose'
+                      ? t('Re-propose')
                       : continuingGrow
-                        ? 'Continue exploration'
-                        : 'Start exploration'}
+                        ? t('Continue exploration')
+                        : t('Start exploration')}
                 </Button>
                 {error ? (
                   <p className="mt-2 text-xs text-destructive">{error}</p>
@@ -1136,10 +1173,13 @@ export function WhatsNextWorkspace({
               className="space-y-5"
             >
               <div>
-                <h2 className="text-sm font-semibold">Edit source</h2>
+                <h2 className="text-sm font-semibold">{t('Edit source')}</h2>
                 <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                  This rewrites the Markdown carried by {editStart.id}. Existing
-                  directions and dependencies remain unchanged.
+                  {t('This rewrites the Markdown carried by')}
+                  {editStart.id}
+                  {t(
+                    '. Existing directions and dependencies remain unchanged.',
+                  )}
                 </p>
               </div>
               <Textarea
@@ -1148,11 +1188,12 @@ export function WhatsNextWorkspace({
                 rows={10}
                 maxLength={4_000}
                 className="text-sm"
-                aria-label="Source Markdown"
+                aria-label={t('Source Markdown')}
               />
               <div className="flex items-center justify-between gap-3">
                 <span className="text-[11px] text-muted-foreground">
-                  {editText.trim().length}/4,000 characters
+                  {editText.trim().length}
+                  {t('/4,000 characters')}
                 </span>
                 <Button
                   type="submit"
@@ -1161,7 +1202,7 @@ export function WhatsNextWorkspace({
                   {savingStart ? (
                     <LoaderCircle className="size-4 animate-spin" />
                   ) : null}
-                  Save
+                  {t('Save')}
                 </Button>
               </div>
               {error ? (
@@ -1190,8 +1231,8 @@ export function WhatsNextWorkspace({
               <SheetHeader>
                 <SheetTitle>{selectedCandidate.title}</SheetTitle>
                 <SheetDescription>
-                  {selectedCandidate.candidateId} · revision{' '}
-                  {selectedCandidate.revision} · unaccepted direction
+                  {selectedCandidate.candidateId} {t('· revision')}{' '}
+                  {selectedCandidate.revision} {t('· unaccepted direction')}
                 </SheetDescription>
               </SheetHeader>
               <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 pb-4 text-sm">
@@ -1229,21 +1270,21 @@ export function WhatsNextWorkspace({
                       )
                     }
                   >
-                    Compare with previous revision
+                    {t('Compare with previous revision')}
                   </Button>
                 ) : null}
 
                 <details className="rounded-xl border border-border p-3">
                   <summary className="cursor-pointer text-xs font-medium">
-                    Graph details
+                    {t('Graph details')}
                   </summary>
                   <div className="mt-3 grid gap-4 sm:grid-cols-2">
                     <Fact
-                      label="Grew from"
+                      label={t('Grew from')}
                       value={selectedCandidate.derivedFrom.join(', ')}
                     />
                     <Fact
-                      label="Depends on"
+                      label={t('Depends on')}
                       value={
                         selectedCandidate.dependsOn.join(', ') || 'Nothing'
                       }
@@ -1261,7 +1302,8 @@ export function WhatsNextWorkspace({
                     {feedbackDraft ? (
                       <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 p-3">
                         <p className="text-[11px] font-medium">
-                          Lines {feedbackDraft.selection.startLine}–
+                          {t('Lines')}
+                          {feedbackDraft.selection.startLine}–
                           {feedbackDraft.selection.endLine}
                         </p>
                         <p className="mt-1 line-clamp-3 text-[11px] leading-5 text-muted-foreground">
@@ -1280,9 +1322,11 @@ export function WhatsNextWorkspace({
                             )
                           }
                           rows={3}
-                          placeholder="What should the Agent reconsider here?"
+                          placeholder={t(
+                            'What should the Agent reconsider here?',
+                          )}
                           className="mt-3 resize-none text-sm"
-                          aria-label="Inline feedback"
+                          aria-label={t('Inline feedback')}
                         />
                         <div className="mt-2 flex justify-end gap-2">
                           <Button
@@ -1291,7 +1335,7 @@ export function WhatsNextWorkspace({
                             size="sm"
                             onClick={() => setFeedbackDraft(null)}
                           >
-                            Cancel
+                            {t('Cancel')}
                           </Button>
                           <Button
                             type="button"
@@ -1299,7 +1343,7 @@ export function WhatsNextWorkspace({
                             disabled={!feedbackDraft.instruction.trim()}
                             onClick={() => void addPendingFeedback()}
                           >
-                            Add feedback
+                            {t('Add feedback')}
                           </Button>
                         </div>
                       </div>
@@ -1310,7 +1354,7 @@ export function WhatsNextWorkspace({
                 {pendingFeedback.length > 0 ? (
                   <div className="space-y-2">
                     <p className="text-[11px] font-medium text-muted-foreground">
-                      Feedback for this Refine
+                      {t('Feedback for this Refine')}
                     </p>
                     {pendingFeedback.map((feedback) => (
                       <div
@@ -1319,7 +1363,8 @@ export function WhatsNextWorkspace({
                       >
                         <div className="min-w-0 flex-1">
                           <p className="text-[10px] text-muted-foreground">
-                            Lines {feedback.startLine}–{feedback.endLine}
+                            {t('Lines')}
+                            {feedback.startLine}–{feedback.endLine}
                           </p>
                           <p className="mt-1 text-xs leading-5">
                             {feedback.instruction}
@@ -1328,7 +1373,7 @@ export function WhatsNextWorkspace({
                         <button
                           type="button"
                           className="text-muted-foreground hover:text-foreground"
-                          aria-label="Remove inline feedback"
+                          aria-label={t('Remove inline feedback')}
                           onClick={() =>
                             setPendingFeedback((current) =>
                               current.filter(
@@ -1349,15 +1394,15 @@ export function WhatsNextWorkspace({
                 {revisionTarget ? (
                   <div className="w-full">
                     <p className="text-[11px] font-medium">
-                      Refine this Markdown
+                      {t('Refine this Markdown')}
                     </p>
                     <Textarea
                       value={reviseNote}
                       onChange={(event) => setReviseNote(event.target.value)}
                       rows={3}
-                      placeholder="Describe what should change…"
+                      placeholder={t('Describe what should change…')}
                       className="mt-2 resize-none text-sm"
-                      aria-label="Revision note"
+                      aria-label={t('Revision note')}
                     />
                     <div className="mt-2 flex justify-end gap-2">
                       <Button
@@ -1368,7 +1413,7 @@ export function WhatsNextWorkspace({
                           setReviseNote('');
                         }}
                       >
-                        Cancel
+                        {t('Cancel')}
                       </Button>
                       <Button
                         size="sm"
@@ -1378,7 +1423,9 @@ export function WhatsNextWorkspace({
                         }
                         onClick={() => void reviseCandidate()}
                       >
-                        {developmentPreview ? 'Preview only' : 'Send Refine'}
+                        {developmentPreview
+                          ? t('Preview only')
+                          : t('Send Refine')}
                       </Button>
                     </div>
                   </div>
@@ -1389,8 +1436,8 @@ export function WhatsNextWorkspace({
                       variant="destructive"
                       size="icon"
                       disabled={accepting || discarding || developmentPreview}
-                      aria-label="Discard this direction"
-                      title="Discard this direction"
+                      aria-label={t('Discard this direction')}
+                      title={t('Discard this direction')}
                       onClick={() => void updateCandidate('discard')}
                     >
                       {discarding ? (
@@ -1413,7 +1460,7 @@ export function WhatsNextWorkspace({
                         })
                       }
                     >
-                      <Pencil /> Refine
+                      <Pencil /> {t('Refine')}
                     </Button>
                     <Button
                       type="button"
@@ -1421,7 +1468,7 @@ export function WhatsNextWorkspace({
                       disabled={accepting || discarding || developmentPreview}
                       onClick={() => void updateCandidate('accept')}
                     >
-                      {accepting ? 'Accepting…' : 'Accept'}
+                      {accepting ? t('Accepting…') : t('Accept')}
                     </Button>
                   </div>
                 )}
@@ -1442,7 +1489,7 @@ export function WhatsNextWorkspace({
                   </p>
                 ) : null}
                 <Fact
-                  label="Grew from"
+                  label={t('Grew from')}
                   value={selectedNode.derivedFrom?.join(', ') || 'Nothing'}
                 />
                 <NodeResourceSections
@@ -1461,11 +1508,11 @@ export function WhatsNextWorkspace({
                       deletionBlockers.length > 0 ||
                       deletingNodeId === selectedNode.id
                     }
-                    aria-label="Delete this card"
+                    aria-label={t('Delete this card')}
                     title={
                       deletionBlockers.length > 0
-                        ? 'Delete the referencing cards first'
-                        : 'Move this card to Trash'
+                        ? t('Delete the referencing cards first')
+                        : t('Move this card to Trash')
                     }
                     onClick={() => void deleteNode(selectedNode.id)}
                   >
@@ -1492,8 +1539,8 @@ export function WhatsNextWorkspace({
                     }}
                   >
                     {combineIds.includes(selectedNode.id)
-                      ? 'Unselect'
-                      : 'Add to selection'}
+                      ? t('Unselect')
+                      : t('Add to selection')}
                   </Button>
                   {selectedNode.role === 'start' ? (
                     <Button
@@ -1503,15 +1550,16 @@ export function WhatsNextWorkspace({
                         void beginEditSource(selectedNode);
                       }}
                     >
-                      <Pencil /> Edit source
+                      <Pencil /> {t('Edit source')}
                     </Button>
                   ) : null}
                 </div>
                 {deletionBlockers.length > 0 ? (
                   <p className="text-[10px] leading-4 text-muted-foreground">
-                    Referenced by {deletionBlockers.length}{' '}
-                    {deletionBlockers.length === 1 ? 'card' : 'cards'}. Delete
-                    those first.
+                    {t('Referenced by')}
+                    {deletionBlockers.length}{' '}
+                    {deletionBlockers.length === 1 ? 'card' : t('cards')}
+                    {t('. Delete those first.')}
                   </p>
                 ) : null}
               </SheetFooter>
@@ -1553,10 +1601,13 @@ export function WhatsNextWorkspace({
             <>
               <div>
                 <h2 className="text-sm font-semibold">
-                  Review {comparison.title}
+                  {t('Review')}
+                  {comparison.title}
                 </h2>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Every changed line is shown before this revision is accepted.
+                  {t(
+                    'Every changed line is shown before this revision is accepted.',
+                  )}
                 </p>
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-border font-mono text-[11px] leading-5">

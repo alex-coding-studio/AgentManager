@@ -1,4 +1,5 @@
 'use client';
+import { useUiText } from '@/components/ui-language-provider';
 
 import { useRef, useState, type DragEvent } from 'react';
 import { ChevronDown, FileText, Upload, X } from 'lucide-react';
@@ -27,6 +28,7 @@ export function ContextAttachmentPicker({
   onRemoveFile: (index: number) => void;
   label: string;
 }) {
+  const { t } = useUiText();
   const [open, setOpen] = useState(false);
   const [dragging, setDragging] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -47,7 +49,7 @@ export function ContextAttachmentPicker({
         {label}
         {refs.length + files.length > 0 ? (
           <span className="ml-auto rounded-full bg-secondary px-2 py-0.5 text-[10px] text-secondary-foreground">
-            {refs.length + files.length} attached
+            {refs.length + files.length} {t('attached')}
           </span>
         ) : null}
       </button>
@@ -58,7 +60,7 @@ export function ContextAttachmentPicker({
               <div className="flex flex-col">
                 <div className="relative">
                   <select
-                    aria-label="Context Library folder"
+                    aria-label={t('Context Library folder')}
                     value={folderPath}
                     onChange={(event) => onFolderPath(event.target.value)}
                     className="h-9 w-full appearance-none rounded-lg border border-border bg-background px-2.5 pr-8 text-xs outline-none focus:border-ring"
@@ -92,7 +94,7 @@ export function ContextAttachmentPicker({
                     (entry) => entry.kind === 'file',
                   ).length === 0 ? (
                     <p className="px-2 py-1.5 text-[11px] text-muted-foreground">
-                      This folder has no Markdown documents.
+                      {t('This folder has no Markdown documents.')}
                     </p>
                   ) : null}
                 </div>
@@ -100,7 +102,7 @@ export function ContextAttachmentPicker({
             ) : (
               <div className="grid min-h-[8.5rem] place-items-center rounded-lg border border-border px-4 text-center">
                 <p className="text-[11px] leading-5 text-muted-foreground">
-                  This project has no Product Context library yet.
+                  {t('This project has no Product Context library yet.')}
                 </p>
               </div>
             )}
@@ -142,7 +144,7 @@ export function ContextAttachmentPicker({
                 onClick={() => fileInput.current?.click()}
               >
                 <Upload className="size-3.5" />
-                Drop Markdown files here, or browse
+                {t('Drop Markdown files here, or browse')}
               </button>
             </div>
           </div>
