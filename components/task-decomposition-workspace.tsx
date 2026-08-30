@@ -1012,10 +1012,10 @@ export function TaskDecompositionWorkspace({
       <header className="flex shrink-0 items-end justify-between gap-6 border-b border-border px-5 py-5 lg:px-8">
         <div>
           <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-            {t('Decomposition')}
+            {t('Break It Down')}
           </p>
           <h1 className="text-2xl font-semibold tracking-[-0.03em]">
-            {t('Decomposition canvas')}
+            {t('Break It Down canvas')}
           </h1>
           <p className="mt-2 max-w-xl text-sm text-muted-foreground">
             {t('Break one scope into coherent, human-manageable nodes.')}
@@ -1101,7 +1101,7 @@ export function TaskDecompositionWorkspace({
                   id="task-title"
                   value={title}
                   maxLength={160}
-                  placeholder={t('Decomposition workspace')}
+                  placeholder={t('Break It Down workspace')}
                   onChange={(event) => setTitle(event.target.value)}
                 />
               </div>

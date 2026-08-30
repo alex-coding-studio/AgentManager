@@ -47,7 +47,7 @@ export function NodeProvenanceFacts({ node }: { node: TaskGraphNode }) {
           node.provenance?.feature === 'whats-next'
             ? t("What's Next")
             : node.provenance
-              ? t('Decomposition')
+              ? t('Break It Down')
               : t('Manual creation')
         }
       />

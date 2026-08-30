@@ -13,6 +13,18 @@ import { resolveUiTheme, THEME_BOOTSTRAP } from '../lib/ui-theme.ts';
 import { runInNewContext } from 'node:vm';
 import { chineseUi, isUiLanguage, translateUi } from '../lib/ui-language.ts';
 
+void test('module names translate without renaming dependency terminology', () => {
+  for (const [english, chinese] of [
+    ["What's Next", '下一步'],
+    ['Break It Down', '拆开看'],
+    ['Just Do It', '动手做'],
+    ['Dependencies', '依赖关系'],
+  ]) {
+    assert.equal(translateUi('en', english), english);
+    assert.equal(translateUi('zh-CN', english), chinese);
+  }
+});
+
 void test('running status supports named agents and the generic Agent label', () => {
   assert.equal(
     translateUi('zh-CN', '{agent} is running', { agent: 'Codex' }),

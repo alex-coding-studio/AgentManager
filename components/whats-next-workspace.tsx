@@ -687,7 +687,7 @@ export function WhatsNextWorkspace({
         <div className="w-full max-w-3xl">
           <div className="mb-6 flex items-center gap-2 text-sm text-muted-foreground">
             <Sparkles className="size-4" />
-            {t("What's next")}
+            {t("What's Next")}
           </div>
           <h1 className="text-2xl font-semibold tracking-tight">
             {t('What do you want to build?')}

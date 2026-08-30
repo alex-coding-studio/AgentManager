@@ -10,6 +10,17 @@ existing navigation, Harnesses, and storage models are generalized.
 It does not define an implementation plan or require an immediate migration of
 the current workspaces.
 
+## Workspace display names
+
+The user-facing workspaces are What's Next (下一步), Break It Down (拆开看),
+and Just Do It (动手做). They expose growth, decomposition, and implementation
+as independent choices, not a required sequence. Internal decomposition routes,
+storage identifiers, and Harness contracts retain their existing names.
+
+Just Do It currently replaces the disabled Dependencies navigation placeholder;
+its execution workflow is not implemented. Dependencies remain relationships
+within the workspaces, not a separate product module.
+
 ## Relative atomicity
 
 Atomicity is relative to the decision being made. A Card is not required to be
