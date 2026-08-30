@@ -71,7 +71,10 @@ export async function listTaskGraphNodes(
     () => [],
   );
   const fileNames = entries
-    .filter((entry) => entry.isDirectory() && /^NODE-\d{4,}$/.test(entry.name))
+    .filter(
+      (entry) =>
+        entry.isDirectory() && /^NODE-[0-9a-f]{8,32}$/.test(entry.name),
+    )
     .map((entry) => entry.name)
     .sort((left, right) => right.localeCompare(left));
 
@@ -224,7 +227,7 @@ export async function updateStartNode(
   },
   graphRoot: GraphRoot = 'task-graph',
 ) {
-  if (!/^NODE-\d{4,}$/.test(input.id)) {
+  if (!/^NODE-[0-9a-f]{8,32}$/.test(input.id)) {
     throw new Error('The start node is invalid.');
   }
   const title = input.title.trim();
@@ -368,7 +371,7 @@ export async function deleteTaskGraphNode(
   nodeId: string,
   graphRoot: GraphRoot = 'task-graph',
 ) {
-  if (!/^NODE-\d{4,}$/.test(nodeId)) {
+  if (!/^NODE-[0-9a-f]{8,32}$/.test(nodeId)) {
     throw new Error('The node is invalid.');
   }
 
@@ -391,13 +394,13 @@ export async function readTaskGraphMarkdownResource(
     !/^context(?:\/[a-z0-9][a-z0-9-]*)+\/[a-zA-Z0-9][a-zA-Z0-9._-]*\.(md|markdown)$/i.test(
       resourcePath,
     ) &&
-    !/^(?:task-graph|whats-next)\/nodes\/NODE-\d{4,}\/resources\/[a-zA-Z0-9][a-zA-Z0-9._-]*\.(md|markdown)$/i.test(
+    !/^(?:task-graph|whats-next)\/nodes\/NODE-[0-9a-f]{8,32}\/resources\/[a-zA-Z0-9][a-zA-Z0-9._-]*\.(md|markdown)$/i.test(
       resourcePath,
     ) &&
-    !/^task-decomposition\/runs\/RUN-[0-9a-f-]{36}\/candidates\/CANDIDATE-\d{4,}\/output\.md$/i.test(
+    !/^task-decomposition\/runs\/RUN-[0-9a-f-]{36}\/candidates\/CANDIDATE-(?:[0-9]{4,}|[0-9a-f]{8,32})\/output\.md$/i.test(
       resourcePath,
     ) &&
-    !/^whats-next\/runs\/RUN-[0-9a-f-]{36}\/candidates\/CANDIDATE-\d{4,}\/output\.md$/i.test(
+    !/^whats-next\/runs\/RUN-[0-9a-f-]{36}\/candidates\/CANDIDATE-(?:[0-9]{4,}|[0-9a-f]{8,32})\/output\.md$/i.test(
       resourcePath,
     ) &&
     !/^whats-next\/runs\/RUN-[0-9a-f-]{36}\/reflection\.md$/i.test(
@@ -406,7 +409,7 @@ export async function readTaskGraphMarkdownResource(
     !/^whats-next\/runs\/RUN-[0-9a-f-]{36}\/response\.md$/i.test(
       resourcePath,
     ) &&
-    !/^(?:task-graph|whats-next)\/nodes\/NODE-\d{4,}\/output\.md$/i.test(
+    !/^(?:task-graph|whats-next)\/nodes\/NODE-[0-9a-f]{8,32}\/output\.md$/i.test(
       resourcePath,
     )
   ) {

@@ -23,36 +23,38 @@ function node(id: string, derivedFrom: string[] = []): TaskGraphNode {
 
 void test('builds formal lineage edges from derivedFrom', () => {
   const graph = buildTaskGraphLayout(
-    [node('NODE-0001'), node('NODE-0002', ['NODE-0001'])],
+    [node('NODE-00000001'), node('NODE-00000002', ['NODE-00000001'])],
     [],
   );
 
   assert.deepEqual(graph.edges, [
     {
-      id: 'derived:NODE-0001:NODE-0002',
-      source: 'NODE-0001',
-      target: 'NODE-0002',
+      id: 'derived:NODE-00000001:NODE-00000002',
+      source: 'NODE-00000001',
+      target: 'NODE-00000002',
       relation: 'lineage',
     },
   ]);
-  assert.ok(position(graph, 'NODE-0002').x > position(graph, 'NODE-0001').x);
+  assert.ok(
+    position(graph, 'NODE-00000002').x > position(graph, 'NODE-00000001').x,
+  );
 });
 
 void test('places each lineage generation in its own column', () => {
   const graph = buildTaskGraphLayout(
     [
-      node('NODE-0001'),
-      node('NODE-0002', ['NODE-0001']),
-      node('NODE-0003', ['NODE-0001']),
-      node('NODE-0004', ['NODE-0002']),
+      node('NODE-00000001'),
+      node('NODE-00000002', ['NODE-00000001']),
+      node('NODE-00000003', ['NODE-00000001']),
+      node('NODE-00000004', ['NODE-00000002']),
     ],
     [],
   );
 
-  const root = position(graph, 'NODE-0001');
-  const firstChild = position(graph, 'NODE-0002');
-  const secondChild = position(graph, 'NODE-0003');
-  const grandchild = position(graph, 'NODE-0004');
+  const root = position(graph, 'NODE-00000001');
+  const firstChild = position(graph, 'NODE-00000002');
+  const secondChild = position(graph, 'NODE-00000003');
+  const grandchild = position(graph, 'NODE-00000004');
   assert.ok(root.x < firstChild.x);
   assert.ok(root.x < secondChild.x);
   assert.ok(firstChild.x < grandchild.x);
@@ -65,11 +67,11 @@ void test('places each lineage generation in its own column', () => {
 
 void test('places a preview beside its source with a temporary edge', () => {
   const graph = buildTaskGraphLayout(
-    [node('NODE-0001')],
+    [node('NODE-00000001')],
     [
       {
-        id: 'REQUEST-PREVIEW-NODE-0001',
-        sourceNodeId: 'NODE-0001',
+        id: 'REQUEST-PREVIEW-NODE-00000001',
+        sourceNodeId: 'NODE-00000001',
         instruction: 'Split into modules',
         inheritedResourceCount: 1,
         additionalResourceCount: 2,
@@ -77,78 +79,81 @@ void test('places a preview beside its source with a temporary edge', () => {
     ],
   );
 
-  const source = position(graph, 'NODE-0001');
-  const preview = position(graph, 'REQUEST-PREVIEW-NODE-0001');
+  const source = position(graph, 'NODE-00000001');
+  const preview = position(graph, 'REQUEST-PREVIEW-NODE-00000001');
   assert.equal(preview.kind, 'preview');
-  assert.deepEqual(preview.derivedFrom, ['NODE-0001']);
+  assert.deepEqual(preview.derivedFrom, ['NODE-00000001']);
   assert.ok(preview.x > source.x);
   assert.equal(graph.edges[0]?.relation, 'request');
 });
 
 void test('keeps every sibling lineage edge while one Candidate is refining', () => {
   const graph = buildTaskGraphLayout(
-    [node('NODE-0001')],
+    [node('NODE-00000001')],
     [
       {
         id: 'CANDIDATE-0001',
-        sourceNodeId: 'NODE-0001',
+        sourceNodeId: 'NODE-00000001',
         instruction: 'Refine this direction',
         inheritedResourceCount: 1,
         additionalResourceCount: 0,
         kind: 'run',
         status: 'running',
         revisionOf: 'CANDIDATE-0001',
-        derivedFrom: ['NODE-0001'],
+        derivedFrom: ['NODE-00000001'],
       },
       {
         id: 'CANDIDATE-0002',
-        sourceNodeId: 'NODE-0001',
+        sourceNodeId: 'NODE-00000001',
         instruction: '',
         inheritedResourceCount: 1,
         additionalResourceCount: 0,
         kind: 'candidate',
-        derivedFrom: ['NODE-0001'],
+        derivedFrom: ['NODE-00000001'],
       },
     ],
   );
 
   assert.deepEqual(graph.edges.map((edge) => edge.id).sort(), [
-    'derived:NODE-0001:CANDIDATE-0001',
-    'derived:NODE-0001:CANDIDATE-0002',
+    'derived:NODE-00000001:CANDIDATE-0001',
+    'derived:NODE-00000001:CANDIDATE-0002',
   ]);
 });
 
 void test('drops lineage edges whose source is not present', () => {
-  const graph = buildTaskGraphLayout([node('NODE-0002', ['NODE-9999'])], []);
+  const graph = buildTaskGraphLayout(
+    [node('NODE-00000002', ['NODE-00009999'])],
+    [],
+  );
 
   assert.deepEqual(graph.edges, []);
 });
 
 void test('renders execution dependencies separately from lineage', () => {
-  const prerequisite = node('NODE-0002', ['NODE-0001']);
-  const dependent = node('NODE-0003', ['NODE-0001']);
-  dependent.dependsOn = ['NODE-0002'];
+  const prerequisite = node('NODE-00000002', ['NODE-00000001']);
+  const dependent = node('NODE-00000003', ['NODE-00000001']);
+  dependent.dependsOn = ['NODE-00000002'];
 
   const graph = buildTaskGraphLayout(
-    [node('NODE-0001'), prerequisite, dependent],
+    [node('NODE-00000001'), prerequisite, dependent],
     [],
   );
 
   assert.deepEqual(graph.edges.at(-1), {
-    id: 'depends:NODE-0003:NODE-0002',
-    source: 'NODE-0003',
-    target: 'NODE-0002',
+    id: 'depends:NODE-00000003:NODE-00000002',
+    source: 'NODE-00000003',
+    target: 'NODE-00000002',
     relation: 'dependency',
   });
 });
 
 void test('renders a dependency between Candidates in one proposal', () => {
   const graph = buildTaskGraphLayout(
-    [node('NODE-0001')],
+    [node('NODE-00000001')],
     [
       {
         id: 'CANDIDATE-0001',
-        sourceNodeId: 'NODE-0001',
+        sourceNodeId: 'NODE-00000001',
         instruction: '',
         inheritedResourceCount: 1,
         additionalResourceCount: 0,
@@ -157,7 +162,7 @@ void test('renders a dependency between Candidates in one proposal', () => {
       },
       {
         id: 'CANDIDATE-0002',
-        sourceNodeId: 'NODE-0001',
+        sourceNodeId: 'NODE-00000001',
         instruction: '',
         inheritedResourceCount: 1,
         additionalResourceCount: 0,
@@ -179,14 +184,14 @@ void test('renders a dependency between Candidates in one proposal', () => {
 void test('places a request preview without colliding in the target rank', () => {
   const graph = buildTaskGraphLayout(
     [
-      node('NODE-0001'),
-      node('NODE-0002', ['NODE-0001']),
-      node('NODE-0003', ['NODE-0001']),
+      node('NODE-00000001'),
+      node('NODE-00000002', ['NODE-00000001']),
+      node('NODE-00000003', ['NODE-00000001']),
     ],
     [
       {
-        id: 'REQUEST-PREVIEW-NODE-0001',
-        sourceNodeId: 'NODE-0001',
+        id: 'REQUEST-PREVIEW-NODE-00000001',
+        sourceNodeId: 'NODE-00000001',
         instruction: 'Split into modules',
         inheritedResourceCount: 1,
         additionalResourceCount: 0,
@@ -194,9 +199,9 @@ void test('places a request preview without colliding in the target rank', () =>
     ],
   );
 
-  const preview = position(graph, 'REQUEST-PREVIEW-NODE-0001');
-  const firstChild = position(graph, 'NODE-0002');
-  const secondChild = position(graph, 'NODE-0003');
+  const preview = position(graph, 'REQUEST-PREVIEW-NODE-00000001');
+  const firstChild = position(graph, 'NODE-00000002');
+  const secondChild = position(graph, 'NODE-00000003');
   assert.ok(Math.abs(preview.x - firstChild.x) < 60);
   assert.ok(Math.abs(preview.x - secondChild.x) < 60);
   assert.notEqual(preview.y, firstChild.y);
@@ -205,7 +210,7 @@ void test('places a request preview without colliding in the target rank', () =>
 
 for (const feature of ['whats-next', 'task-decomposition'] as const) {
   void test(`${feature} acceptance preserves all coordinates across promotion and reload`, () => {
-    const root = node('NODE-0001');
+    const root = node('NODE-00000001');
     let previews = Array.from({ length: 5 }, (_, index) => ({
       id: `CANDIDATE-000${index + 1}`,
       sourceNodeId: root.id,

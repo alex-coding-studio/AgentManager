@@ -10,18 +10,18 @@ import {
 } from '../lib/task-graph-rules.ts';
 
 const relationshipNodes = [
-  { id: 'NODE-0001', role: 'start', derivedFrom: [], dependsOn: [] },
+  { id: 'NODE-00000001', role: 'start', derivedFrom: [], dependsOn: [] },
   {
-    id: 'NODE-0002',
+    id: 'NODE-00000002',
     role: 'node',
-    derivedFrom: ['NODE-0001'],
+    derivedFrom: ['NODE-00000001'],
     dependsOn: [],
   },
   {
-    id: 'NODE-0003',
+    id: 'NODE-00000003',
     role: 'node',
-    derivedFrom: ['NODE-0001'],
-    dependsOn: ['NODE-0002'],
+    derivedFrom: ['NODE-00000001'],
+    dependsOn: ['NODE-00000002'],
   },
 ];
 
@@ -39,47 +39,47 @@ void test('rejects a second Start node in the same Canvas', () => {
 void test('lists graph relationships in both directions', () => {
   const relationships = getTaskGraphRelationships(
     relationshipNodes,
-    'NODE-0002',
+    'NODE-00000002',
   );
 
   assert.deepEqual(
     relationships.derivedFrom.map((node) => node.id),
-    ['NODE-0001'],
+    ['NODE-00000001'],
   );
   assert.deepEqual(
     relationships.dependents.map((node) => node.id),
-    ['NODE-0003'],
+    ['NODE-00000003'],
   );
   assert.deepEqual(relationships.derivedNodes, []);
 });
 
 void test('allows deleting a node that only references upstream nodes', () => {
   assert.doesNotThrow(() =>
-    assertTaskGraphNodeCanBeDeleted(relationshipNodes, 'NODE-0003'),
+    assertTaskGraphNodeCanBeDeleted(relationshipNodes, 'NODE-00000003'),
   );
 });
 
 void test('rejects deleting a node referenced through lineage or dependency', () => {
   assert.throws(
-    () => assertTaskGraphNodeCanBeDeleted(relationshipNodes, 'NODE-0001'),
+    () => assertTaskGraphNodeCanBeDeleted(relationshipNodes, 'NODE-00000001'),
     NodeReferencedError,
   );
   assert.throws(
-    () => assertTaskGraphNodeCanBeDeleted(relationshipNodes, 'NODE-0002'),
+    () => assertTaskGraphNodeCanBeDeleted(relationshipNodes, 'NODE-00000002'),
     (error: unknown) =>
       error instanceof NodeReferencedError &&
-      error.blockerNodeIds.includes('NODE-0003'),
+      error.blockerNodeIds.includes('NODE-00000003'),
   );
 });
 void test('separates a Node output from inherited input Resources', () => {
   const resources = [
     {
       kind: 'output',
-      path: 'whats-next/nodes/NODE-0001/output.md',
+      path: 'whats-next/nodes/NODE-00000001/output.md',
     },
     {
       kind: 'output',
-      path: 'whats-next/nodes/NODE-0002/output.md',
+      path: 'whats-next/nodes/NODE-00000002/output.md',
     },
     {
       kind: 'context',
@@ -87,7 +87,7 @@ void test('separates a Node output from inherited input Resources', () => {
     },
   ];
 
-  assert.deepEqual(partitionNodeResources('NODE-0002', resources), {
+  assert.deepEqual(partitionNodeResources('NODE-00000002', resources), {
     inputs: [resources[0], resources[2]],
     outputs: [resources[1]],
   });

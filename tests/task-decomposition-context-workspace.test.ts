@@ -12,7 +12,7 @@ import {
 void test('uses Start Resources as primary and narrows descendants to output.md', () => {
   const resources = [
     { kind: 'context', path: 'context/product/project.md' },
-    { kind: 'output', path: 'task-graph/nodes/NODE-0002/output.md' },
+    { kind: 'output', path: 'task-graph/nodes/NODE-00000002/output.md' },
   ];
 
   assert.deepEqual(
@@ -21,53 +21,53 @@ void test('uses Start Resources as primary and narrows descendants to output.md'
   );
   assert.deepEqual(
     [...primarySourceResourcePaths('node', resources)],
-    ['task-graph/nodes/NODE-0002/output.md'],
+    ['task-graph/nodes/NODE-00000002/output.md'],
   );
 });
 
 void test('limits related Context to the selected Node neighborhood', () => {
   const source = {
-    id: 'NODE-0002',
-    derivedFrom: ['NODE-0001'],
-    dependsOn: ['NODE-0003'],
-    resources: [{ path: 'task-graph/nodes/NODE-0002/output.md' }],
+    id: 'NODE-00000002',
+    derivedFrom: ['NODE-00000001'],
+    dependsOn: ['NODE-00000003'],
+    resources: [{ path: 'task-graph/nodes/NODE-00000002/output.md' }],
   };
   const nodes = [
     source,
     {
-      id: 'NODE-0001',
+      id: 'NODE-00000001',
       dependsOn: [],
-      resources: [{ path: 'task-graph/nodes/NODE-0001/output.md' }],
+      resources: [{ path: 'task-graph/nodes/NODE-00000001/output.md' }],
     },
     {
-      id: 'NODE-0003',
+      id: 'NODE-00000003',
       dependsOn: [],
-      resources: [{ path: 'task-graph/nodes/NODE-0003/output.md' }],
+      resources: [{ path: 'task-graph/nodes/NODE-00000003/output.md' }],
     },
     {
-      id: 'NODE-0004',
-      derivedFrom: ['NODE-0001'],
+      id: 'NODE-00000004',
+      derivedFrom: ['NODE-00000001'],
       dependsOn: [],
-      resources: [{ path: 'task-graph/nodes/NODE-0004/output.md' }],
+      resources: [{ path: 'task-graph/nodes/NODE-00000004/output.md' }],
     },
     {
-      id: 'NODE-0005',
-      derivedFrom: ['NODE-0002'],
+      id: 'NODE-00000005',
+      derivedFrom: ['NODE-00000002'],
       dependsOn: [],
-      resources: [{ path: 'task-graph/nodes/NODE-0005/output.md' }],
+      resources: [{ path: 'task-graph/nodes/NODE-00000005/output.md' }],
     },
     {
-      id: 'NODE-9999',
+      id: 'NODE-00009999',
       dependsOn: [],
-      resources: [{ path: 'task-graph/nodes/NODE-9999/output.md' }],
+      resources: [{ path: 'task-graph/nodes/NODE-00009999/output.md' }],
     },
   ];
 
   assert.deepEqual([...relatedContextNodeIds(source, nodes)].sort(), [
-    'NODE-0001',
-    'NODE-0003',
-    'NODE-0004',
-    'NODE-0005',
+    'NODE-00000001',
+    'NODE-00000003',
+    'NODE-00000004',
+    'NODE-00000005',
   ]);
 });
 
@@ -83,15 +83,15 @@ void test('writes primary and related Context without embedding content in the m
     {
       role: 'primary',
       kind: 'output',
-      logicalPath: 'task-graph/nodes/NODE-0002/output.md',
+      logicalPath: 'task-graph/nodes/NODE-00000002/output.md',
       content: 'current node boundary',
-      nodeId: 'NODE-0002',
+      nodeId: 'NODE-00000002',
     },
   ]);
 
   assert.equal(workspace.manifest.primary.length, 1);
   assert.equal(workspace.manifest.related.length, 1);
-  assert.equal(workspace.manifest.primary[0]?.nodeId, 'NODE-0002');
+  assert.equal(workspace.manifest.primary[0]?.nodeId, 'NODE-00000002');
   assert.equal(
     await readFile(
       path.join(

@@ -6,9 +6,9 @@ import {
 } from '../lib/task-decomposition-dependencies.ts';
 
 const nodes = [
-  { id: 'NODE-0001' },
+  { id: 'NODE-00000001' },
   {
-    id: 'NODE-0002',
+    id: 'NODE-00000002',
     provenance: { candidateId: 'CANDIDATE-0001' },
   },
 ];
@@ -17,10 +17,10 @@ void test('maps accepted Candidate dependencies to formal Node identifiers', () 
   assert.deepEqual(
     resolveCandidateDependencies(
       'CANDIDATE-0002',
-      ['NODE-0001', 'CANDIDATE-0001'],
+      ['NODE-00000001', 'CANDIDATE-0001'],
       nodes,
     ),
-    ['NODE-0001', 'NODE-0002'],
+    ['NODE-00000001', 'NODE-00000002'],
   );
 });
 
@@ -37,7 +37,7 @@ void test('finds unaccepted Candidates that block a discard', () => {
     candidateDependencyBlockers('CANDIDATE-0001', [
       { candidateId: 'CANDIDATE-0001', dependsOn: [] },
       { candidateId: 'CANDIDATE-0002', dependsOn: ['CANDIDATE-0001'] },
-      { candidateId: 'CANDIDATE-0003', dependsOn: ['NODE-0001'] },
+      { candidateId: 'CANDIDATE-0003', dependsOn: ['NODE-00000001'] },
     ]),
     ['CANDIDATE-0002'],
   );

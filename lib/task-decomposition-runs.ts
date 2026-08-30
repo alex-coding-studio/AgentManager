@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { candidatePromptView } from './graph-identity.ts';
 import {
   ensureGraphIdentities,
-  identifyCandidates,
+  parseIdentifiedResult,
   readIdentifiedEntities,
   reserveNodeIdentity,
   reservedCandidateAliases,
@@ -228,6 +228,7 @@ export async function startTaskDecompositionRun(
     reservedCandidateIds: reservedCandidateIds.filter(
       (candidateId) => candidateId !== revisionTarget?.candidate.candidateId,
     ),
+    previousProposalAliases: coordinatorRun?.result?.candidateAliases ?? {},
     existingChildren:
       operation === 'append-candidates'
         ? continuesExistingSession
@@ -613,7 +614,9 @@ async function finishTaskDecompositionRun(
     await writeRunRecord(project, record);
     if (isRunCanceled(record)) return;
 
-    const result = parseTaskDecompositionHarnessResult(
+    const result = await parseIdentifiedResult(
+      project.planningPath,
+      'task-graph',
       agentResult.finalOutput,
       {
         request: {
@@ -638,6 +641,8 @@ async function finishTaskDecompositionRun(
         reservedCandidateIds,
         knownCandidates,
       },
+      parseTaskDecompositionHarnessResult,
+      revisionTarget,
     );
     if (
       revisionTarget &&
@@ -651,14 +656,6 @@ async function finishTaskDecompositionRun(
     }
     const endedAt = new Date().toISOString();
     record.status = result.outcome;
-    if (result.outcome === 'proposal') {
-      result.candidates = await identifyCandidates(
-        project.planningPath,
-        'task-graph',
-        result.candidates,
-        revisionTarget,
-      );
-    }
     record.result = result;
     await ensureCandidateArtifacts(project, record);
     record.updatedAt = endedAt;
@@ -839,7 +836,7 @@ async function writeRunRecord(
 }
 
 function validateRunRequest(input: RunRequest) {
-  if (!/^NODE-\d{4,}$/.test(input.sourceNodeId)) {
+  if (!/^NODE-[0-9a-f]{8,32}$/.test(input.sourceNodeId)) {
     throw new Error('The source Node is invalid.');
   }
   const instruction = input.instruction.trim();

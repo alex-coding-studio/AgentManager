@@ -8,8 +8,14 @@ and revision, not identity. Acceptance preserves the Candidate UUID in the
 Formal Node. A new descendant receives a new UUID.
 
 `id` (`NODE-*`) and `candidateId` (`CANDIDATE-*`) remain human-readable aliases.
-Existing API parameters, resource paths, and directory names retain these
-aliases for compatibility. They are not the canonical identity. Run and Session
+Aliases use the last eight hexadecimal characters of the UUID, extending by four
+characters if a suffix is already owned by another UUID. Candidate and Formal
+Node aliases retain the same suffix. API parameters, resource paths, and directory
+names use these aliases. There is no numeric sequence or high-water counter.
+Canvas headers show only the first eight characters of the suffix, without the
+prefix, on one line. Tooltips and inspectors retain the full alias; shortening
+the header never changes identity, storage paths, or relationships.
+Aliases are not the canonical identity. Run and Session
 IDs identify execution and conversation, not product objects.
 
 ## Stable relationships
@@ -44,17 +50,37 @@ alone does not.
 | Delete and recreate | A new object gets a new UUID and a new, non-recycled alias.                                   |
 | Restore             | A restored object's saved UUID remains its identity.                                          |
 
-The identity index retains only alias-to-UUID bindings and the Node-number
-high-water mark. It does not retain discarded Markdown or conversation content.
-An abandoned allocation may leave a numbering gap; it must never cause identity
-reuse. Candidate aliases are also reserved after discard so stale references
+The identity index retains only alias-to-UUID bindings and active Formal aliases.
+It does not retain discarded Markdown or conversation content.
+Candidate aliases are reserved after discard so stale references
 cannot attach to unrelated new content.
+
+For new proposals, Agent-emitted Candidate identifiers are local to that response.
+The application allocates UUID-based aliases, rewrites structured intra-proposal
+dependencies, validates the complete result, and persists identities under one
+allocation lock. Duplicate local declarations, invented references, invalid
+schemas, and cycles still fail validation without consuming aliases. A local
+declaration takes precedence over an identically named older Candidate; it never
+replaces that older object. Refine remains strictly one-to-one and retains its
+target identity. Persisted `candidateAliases` maps local labels to permanent
+aliases; continuation packets provide the preceding proposal's reconciliation.
 
 ## Compatibility migration
 
 Each project graph owns an `identities.json` beside its `nodes` directory.
-Graph-scoped aliases prevent the same display number in two workspaces from
-colliding, while UUID values are globally unique and portable with the object.
+UUID values are globally unique and portable with the object.
+
+Existing numeric names are converted once with
+`node --experimental-strip-types scripts/migrate-uuid-aliases.mjs <planning-path> <new-backup-path> --apply`
+while the application is stopped. Without `--apply` the command prints a dry run.
+The backup must be outside the planning directory and on the same filesystem.
+The migration stages renamed directories and updated JSON/Markdown references,
+keeps UUIDs and canonical relationships unchanged, and removes the numeric counter.
+Original data is preserved in the explicit backup. Historical request snapshots
+remain unchanged as execution evidence, not live graph references. Existing
+provider Sessions are not resumed after migration; the next request receives a
+fresh Workspace containing current aliases. The live graph has only one naming
+scheme; it does not retain a legacy-name adapter.
 
 On first access, migration reads existing Node JSON and proposal Run JSON,
 unifies all revisions and accepted Nodes through Candidate provenance, then

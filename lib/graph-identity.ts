@@ -19,9 +19,39 @@ export type IdentityEntity = GraphIdentityFields & {
 export type GraphIdentityIndex = {
   schemaVersion: 1;
   aliases: Record<string, string>;
-  nextNodeNumber: number;
   formalAliases: string[];
 };
+
+export const GRAPH_ALIAS_SUFFIX = '[0-9a-f]{8,32}';
+export const NODE_ALIAS_PATTERN = `^NODE-${GRAPH_ALIAS_SUFFIX}$`;
+export const CANDIDATE_ALIAS_PATTERN = `^CANDIDATE-(?:[0-9]{4,}|${GRAPH_ALIAS_SUFFIX})$`;
+
+export function graphCardLabel(alias: string) {
+  return (alias.split('-').at(-1) ?? alias).slice(0, 8);
+}
+
+export const GRAPH_IDENTITY_PROMPT = `AgentManager owns UUIDs and permanent aliases. For new Candidates, candidateId is only a unique reference within this response; you may reuse CANDIDATE-0001 in another response. A reference to a Candidate declared in this response means that new Candidate, not an existing object with the same label. Use the current packet's aliases for external references. AgentManager assigns CANDIDATE-<UUID suffix> aliases and remaps structured sibling dependencies. previousProposalAliases reports how your preceding response was renamed; use those permanent aliases in later references. Refine/revise must echo the existing target alias exactly, never allocate a new identity. Permanent NODE and CANDIDATE suffixes are 8-32 lowercase hexadecimal characters. Never invent a global sequence, UUID, or permanent alias. Keep identifiers in structured fields rather than embedding local labels in Markdown.`;
+
+export function uuidAlias(
+  index: GraphIdentityIndex,
+  prefix: 'NODE' | 'CANDIDATE',
+  uid: string,
+) {
+  const compact = uid.replaceAll('-', '');
+  for (let length = 8; length <= compact.length; length += 4) {
+    const suffix = compact.slice(-length);
+    if (
+      ['NODE', 'CANDIDATE'].every(
+        (kind) =>
+          !index.aliases[`${kind}-${suffix}`] ||
+          index.aliases[`${kind}-${suffix}`] === uid,
+      )
+    ) {
+      return `${prefix}-${suffix}`;
+    }
+  }
+  throw new Error('Cannot allocate a unique graph alias.');
+}
 
 export function candidatePromptView<T extends GraphIdentityFields>(
   candidate: T,
@@ -37,7 +67,7 @@ export function bindIdentity(
   alias: string,
   uid: string,
 ) {
-  if (!/^(NODE|CANDIDATE)-\d{4,}$/.test(alias)) {
+  if (!new RegExp(`^(NODE|CANDIDATE)-${GRAPH_ALIAS_SUFFIX}$`).test(alias)) {
     throw new Error(`Invalid graph alias: ${alias}.`);
   }
   if (
@@ -52,12 +82,6 @@ export function bindIdentity(
     throw new Error(`Graph identity cannot change for ${alias}.`);
   }
   index.aliases[alias] = uid;
-  if (alias.startsWith('NODE-')) {
-    index.nextNodeNumber = Math.max(
-      index.nextNodeNumber,
-      Number(alias.slice(5)) + 1,
-    );
-  }
 }
 
 export function identifyEntity<T extends IdentityEntity>(
