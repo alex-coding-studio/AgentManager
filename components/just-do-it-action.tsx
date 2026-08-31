@@ -56,6 +56,7 @@ export function JustDoItAction({
       card.run?.profile ?? { agent: 'codex', model: '', effort: '' },
   );
   const [pending, setPending] = useState(false);
+  const [preparingAcceptance, setPreparingAcceptance] = useState(false);
   const [error, setError] = useState('');
   const [acceptancePreview, setAcceptancePreview] = useState<{
     runId: string;
@@ -127,10 +128,27 @@ export function JustDoItAction({
       }
       if (operation === 'accept') setAcceptancePreview(null);
       if (operation === 'cancel') setStopPreview(null);
+      return data.card as PlanningCard;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Execution failed.');
     } finally {
       setPending(false);
+    }
+  }
+
+  async function prepareAcceptance() {
+    if (!latest || pending || preparingAcceptance) return;
+    setPreparingAcceptance(true);
+    try {
+      const updated = latest.github
+        ? await send('refresh-github', latest.id)
+        : card;
+      if (updated) {
+        setError('');
+        setAcceptancePreview({ runId: latest.id, revision: updated.revision });
+      }
+    } finally {
+      setPreparingAcceptance(false);
     }
   }
 
@@ -828,16 +846,14 @@ export function JustDoItAction({
                           ? 'default'
                           : 'outline'
                       }
-                      disabled={!enabled}
-                      onClick={() => {
-                        setError('');
-                        setAcceptancePreview({
-                          runId: latest.id,
-                          revision: card.revision,
-                        });
-                      }}
+                      disabled={!enabled || preparingAcceptance}
+                      onClick={() => void prepareAcceptance()}
                     >
-                      <Check />
+                      {preparingAcceptance ? (
+                        <LoaderCircle className="animate-spin" />
+                      ) : (
+                        <Check />
+                      )}
                       {t('Accept this output')}
                     </Button>
                   )}

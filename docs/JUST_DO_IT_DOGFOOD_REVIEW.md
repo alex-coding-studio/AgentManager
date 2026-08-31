@@ -535,3 +535,13 @@ the page. Browser geometry checks confirmed each panel begins at the toolbar's
 bottom edge; native selects and textarea text retain contrast. Toolbar height stays
 64px while the dock expands to accommodate the lower panel. Typecheck/lint passed;
 no execution or acceptance was triggered by the layout verification.
+
+PR refresh is now tied to opening acceptance, as requested by the user, rather
+than new polling. When a captured GitHub delivery exists, the acceptance entry
+refreshes it once and opens confirmation against the returned Card revision.
+No captured delivery requires no remote query. The button shows a loading indicator
+while refreshing; stale/error information remains visible in confirmation without
+adding an artifact-verification acceptance gate. Browser request observation found
+one refresh-github request and no accept/start request; the dialog displayed PR #2
+as merged with a fresh query time and an enabled explicit confirmation. The test
+closed the dialog without accepting. Typecheck and lint passed.
