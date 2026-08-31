@@ -359,3 +359,8 @@ additional row collapsed by default, successful expansion of both types, an ambe
 minus for the additional failed attempt, and current stage “Ready to verify”.
 Typecheck and lint passed. This verifies presentation, not independent acceptance
 of Action 2 implementation or authorization to merge its PR.
+
+The pre-execution checklist above the current-status indicator now has an outer
+collapsed group labeled with its item count, avoiding duplication of the results
+below. Browser verification confirmed the eight-item group starts closed, opens
+and closes normally, and leaves all nine result rows unchanged.
