@@ -32,6 +32,7 @@ import { useUiText } from '@/components/ui-language-provider';
 import type { PlanningCard } from '@/lib/just-do-it-planning-service';
 import type { ActionContract } from '@/lib/just-do-it-harness';
 import type { AgentProfile } from '@/lib/agent-profile';
+import type { GitHubPullRequest } from '@/lib/github-delivery';
 
 export function JustDoItAction({
   projectId,
@@ -342,27 +343,11 @@ export function JustDoItAction({
                 {run.status !== 'running' && (
                   <span className="flex flex-wrap items-center gap-1.5 text-xs">
                     {run.github?.pullRequests.map((pr) => (
-                      <a
+                      <PullRequestChip
                         key={pr.url}
-                        href={pr.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        onClick={(event) => event.stopPropagation()}
-                        title={`${pr.title} · ${t('Last attempted check')}: ${run.github?.checkedAt}`}
-                        className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring ${run.github?.error ? 'border-amber-500/40 text-amber-500' : pr.state === 'MERGED' ? 'border-purple-500/30 text-purple-500' : pr.isDraft || pr.state === 'CLOSED' ? 'border-border text-muted-foreground' : 'border-blue-500/30 text-blue-500'}`}
-                      >
-                        <GitPullRequest
-                          aria-hidden="true"
-                          className="size-3.5"
-                        />
-                        #{pr.number} ·{' '}
-                        {t(
-                          pr.isDraft && pr.state === 'OPEN'
-                            ? 'Draft'
-                            : pr.state,
-                        )}
-                        {run.github?.error && ` · ${t('Stale status')}`}
-                      </a>
+                        pr={pr}
+                        stale={Boolean(run.github?.error)}
+                      />
                     ))}
                     {!run.github?.pullRequests.length && (
                       <span className="text-muted-foreground">
@@ -1055,24 +1040,14 @@ export function JustDoItAction({
               <h4 className="font-medium">PR</h4>
               {latest?.github?.pullRequests.length ? (
                 latest.github.pullRequests.map((pr) => (
-                  <a
+                  <PullRequestChip
                     key={pr.url}
-                    className="block underline underline-offset-4"
-                    href={pr.url}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    #{pr.number} · {pr.title} ·{' '}
-                    {t(pr.isDraft && pr.state === 'OPEN' ? 'Draft' : pr.state)}
-                  </a>
+                    pr={pr}
+                    stale={Boolean(latest.github?.error)}
+                  />
                 ))
               ) : (
                 <p className="text-muted-foreground">{t('No PR')}</p>
-              )}
-              {latest?.github && (
-                <p className="text-xs text-muted-foreground">
-                  {t('Last attempted check')}: {latest.github.checkedAt}
-                </p>
               )}
               {latest?.github?.error && (
                 <p className="text-amber-600 dark:text-amber-400">
@@ -1215,5 +1190,29 @@ export function JustDoItAction({
         </p>
       )}
     </section>
+  );
+}
+
+function PullRequestChip({
+  pr,
+  stale,
+}: {
+  pr: GitHubPullRequest;
+  stale: boolean;
+}) {
+  const { t } = useUiText();
+  return (
+    <a
+      href={pr.url}
+      target="_blank"
+      rel="noreferrer"
+      onClick={(event) => event.stopPropagation()}
+      title={pr.title}
+      className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring ${stale ? 'border-amber-500/40 text-amber-500' : pr.state === 'MERGED' ? 'border-purple-500/30 text-purple-500' : pr.isDraft || pr.state === 'CLOSED' ? 'border-border text-muted-foreground' : 'border-blue-500/30 text-blue-500'}`}
+    >
+      <GitPullRequest aria-hidden="true" className="size-3.5" />#{pr.number} ·{' '}
+      {t(pr.isDraft && pr.state === 'OPEN' ? 'Draft' : pr.state)}
+      {stale && ` · ${t('Stale status')}`}
+    </a>
   );
 }

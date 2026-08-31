@@ -545,3 +545,9 @@ adding an artifact-verification acceptance gate. Browser request observation fou
 one refresh-github request and no accept/start request; the dialog displayed PR #2
 as merged with a fresh query time and an enabled explicit confirmation. The test
 closed the dialog without accepting. Typecheck and lint passed.
+
+PR state now uses the same compact icon/status chip in Round headers and acceptance
+confirmation, including purple for merged. The user removed query timestamps from
+both visible content and hover text; refresh still occurs before confirmation and
+stale/error signals remain. Browser inspection confirmed matching merged-chip color,
+icon and text in both locations and no query-time line in the dialog.
