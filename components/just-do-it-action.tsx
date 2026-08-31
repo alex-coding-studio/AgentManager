@@ -466,9 +466,11 @@ export function JustDoItAction({
                   <div className="mt-4 space-y-3">
                     <h4 className="text-sm font-medium">
                       {t(
-                        run.coordination
-                          ? 'Coordinator report'
-                          : 'Agent-reported checks',
+                        run.coordination?.attempts.at(-1)?.role === 'worker'
+                          ? 'Agent self-check'
+                          : run.coordination
+                            ? 'Coordinator report'
+                            : 'Agent-reported checks',
                       )}
                     </h4>
                     <h5 className="text-xs font-semibold">

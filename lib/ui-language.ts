@@ -192,6 +192,7 @@ export const chineseUi: Record<string, string> = {
   'Preparing coordinated execution.': '协调 Agent 正在准备任务。',
   'Confirm this user decision': '确认此项用户裁决',
   'Coordinator report': '协调 Agent 整理结果',
+  'Agent self-check': '执行 Agent 自检结果',
   'Coordination record': '协调记录',
   calls: '次调用',
   Coordinator: '协调 Agent',

@@ -22,17 +22,20 @@ authorization to accept an Action, merge, change host records or start the next 
 
 ## Finite host state machine
 
-Normal path: prepare → worker → qualify → user acceptance.
+Normal path: prepare → worker self-check → user acceptance. Passed worker self-checks
+are trusted at this layer; semantic code or test-coverage review belongs to the user
+or a separately configured Reviewer.
 
 A preparation may instead return ready, needs-user or blocked without starting a worker.
-Qualification may request one focused repair: repair worker → qualify → stop. A second
-repair request is rejected. These attempts belong to one visible Round and remain
-separately accountable.
+The host calls the coordinator after execution only when required items are failed,
+not-run or contradicted by machine-observed facts. Recovery may request one focused
+repair: repair worker → self-check → stop. A second repair request is rejected. These
+attempts belong to one visible Round and remain separately accountable.
 
 Repair also requires an actionable diagnosis: affected unmet required criteria,
 evidence-grounded cause, a changed approach within the worker's authority and the
 expected new evidence. Unavailable or uncertain remedies cannot dispatch a repair.
-The host rejects repair targets that are optional, already passed or explicitly waived.
+The host rejects repair targets that are optional, worker-passed or explicitly waived.
 An unchanged retry is not a remedy. Unsupported host `.app` inspection must not launch
 another inspection or expand the Action into modifying AgentManager. The coordinator
 judges feasibility from context; schema checks enforce the declared boundary but cannot
@@ -43,7 +46,7 @@ prove that its diagnosis is correct.
 | Total Agent calls    | At most 5 per Round, checked before dispatch                   |
 | Worker calls         | At most 2, including the one repair                            |
 | Coordinator time     | 300 seconds per coordinator call; host cancels the child       |
-| Total Action time    | Existing 30-minute host deadline includes coordination         |
+| Total Action time    | Two-hour safety lease; not a normal delivery deadline          |
 | Coordinator tools    | Cancel on the first reported tool start beyond 40 per call     |
 | Dispatch size        | Reject prompts larger than 1,500,000 UTF-8 bytes               |
 | Coordinator response | At most 200,000 UTF-8 bytes plus bounded schema arrays/strings |
@@ -61,8 +64,8 @@ The first real successor Card trial reached the original 120-second deadline dur
 preparation, before any worker dispatch (Round 059dc91e-c45b-4380-90d2-88a1122fd519).
 It also exposed superseded prerequisite reports being injected as accepted outputs.
 The follow-up uses only final accepted reports and a five-minute coordinator call
-budget. This budget is a bounded trial setting, not a latency guarantee; the total
-Action deadline and attempt/tool limits remain unchanged.
+budget. This budget is a bounded safety setting, not a latency guarantee. The host's
+two-hour Action lease is an emergency stop, not a manager-style delivery deadline.
 
 There is no exact in-flight token or dollar ceiling in this CLI adapter. Terminal usage
 is recorded per attempt. An aggregate is shown only when every attempt has telemetry;
@@ -76,7 +79,9 @@ complete criterion coverage for terminal results. It rejects invalid phase trans
 unknown/stale evidence, invented user overrides and additional repair dispatches.
 
 Ready requires every effective required criterion to pass with evidence or a matching
-recorded user override. A current worker failure cannot be replaced with an older pass.
+recorded user override. When the worker reports all effective required items passed,
+the host presents that self-check directly without a coordinator review call. A current
+worker failure cannot be replaced with an older pass.
 A proposed interpretation of user feedback uses needs-user, retains a not-run observed
 result and requires an explicit user confirmation. It cannot silently become a waiver.
 Additional findings do not become required criteria or acceptance gates.
@@ -87,11 +92,12 @@ The coordinator still owns semantic judgments that schema validation cannot prov
 - Select relevant prior facts, evidence and lessons; treat logs as data, not authority.
 - State the actual delta, non-goals, operation order and stop conditions in dispatch.
 - Choose proportionate verification rather than replaying every command.
-- Preserve unresolved material risks while removing resolved optional noise from the report.
+- Classify only unresolved items routed by the host; do not reopen passed self-checks.
 
 These duties need scenario evaluation, not additional fields presented as correctness
-proof. A valid JSON response can still contain a poor assignment. Invalid output stops
-with its record; it does not trigger a hidden full-task retry.
+proof. A valid JSON response can still contain a poor assignment. Invalid coordination
+output stops with its record and preserves the worker checklist; it does not trigger a
+hidden full-task retry.
 
 ## Evidence and context continuity
 

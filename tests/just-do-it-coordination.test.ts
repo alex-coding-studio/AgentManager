@@ -221,7 +221,7 @@ function setup(
     });
   return { start, calls };
 }
-void test('coordinator always prepares and qualifies, separates usage, and removes resolved diagnostic noise', async () => {
+void test('complete worker self-check bypasses coordinator review and keeps separate usage', async () => {
   const f = setup((req) =>
     decision(req, req.phase === 'prepare' ? 'dispatch' : 'ready'),
   );
@@ -230,11 +230,11 @@ void test('coordinator always prepares and qualifies, separates usage, and remov
   > & { coordination: { attempts: unknown[] } };
   assert.deepEqual(
     f.calls.map((c) => c.access),
-    ['read-only', 'workspace-write', 'read-only'],
+    ['read-only', 'workspace-write'],
   );
-  assert.equal(output.usage?.inputTokens, 30);
-  assert.equal(output.usage?.cachedInputTokens, 15);
-  assert.equal(output.coordination.attempts.length, 3);
+  assert.equal(output.usage?.inputTokens, 20);
+  assert.equal(output.usage?.cachedInputTokens, 10);
+  assert.equal(output.coordination.attempts.length, 2);
   assert.deepEqual(JSON.parse(output.finalOutput).additionalChecks, []);
   assert.match(f.calls[1].prompt, /Only repair the requested output/);
 });
@@ -288,7 +288,7 @@ void test('a repaired worker result can complete within the same bounded Action 
     ['failed', 'passed'],
   );
   const r = await f.start().completion;
-  assert.equal(f.calls.length, 5);
+  assert.equal(f.calls.length, 4);
   assert.equal(JSON.parse(r.finalOutput).outcome, 'delivered');
 });
 void test('reuse is accepted only for known evidence bound to current inputs', () => {
@@ -590,17 +590,11 @@ void test('coordinator filters ignored diagnostics, surfaces material extras, an
   const output = (await f.start()
     .completion) as import('../lib/just-do-it-coordination-runner.ts').CoordinatedResult;
   const report = JSON.parse(output.finalOutput);
-  assert.equal(f.calls.length, 3);
+  assert.equal(f.calls.length, 2);
   assert.equal(report.outcome, 'delivered');
   assert.equal(report.checks[0].status, 'passed');
-  assert.deepEqual(
-    report.additionalChecks.map((c: { summary: string }) => c.summary),
-    ['User may want to review optional layout behavior'],
-  );
-  assert.equal(
-    output.coordination.decisions.at(-1)!.additionalFindings.length,
-    3,
-  );
+  assert.deepEqual(report.additionalChecks, []);
+  assert.equal(output.coordination.decisions.length, 1);
 });
 
 void test('repair without a supported actionable remedy stops before another worker call', async () => {
@@ -624,10 +618,137 @@ void test('repair without a supported actionable remedy stops before another wor
   }
 });
 
-void test('repair cannot dispatch work for additional diagnostics after required checks passed', async () => {
+void test('passed required checks do not ask coordinator to repair additional diagnostics', async () => {
   const f = setup((req) =>
     decision(req, req.phase === 'prepare' ? 'dispatch' : 'repair'),
   );
-  await assert.rejects(f.start().completion, /unmet required criterion/);
+  const output = await f.start().completion;
+  assert.equal(JSON.parse(output.finalOutput).outcome, 'delivered');
+  assert.equal(f.calls.length, 2);
+});
+
+void test('machine exit contradiction routes the affected required check to coordinator recovery', async () => {
+  const request = task();
+  const calls: Array<{ access: unknown }> = [];
+  const transport: typeof startLocalAgentRun = (_agent, options) => {
+    calls.push({ access: options.access });
+    if (options.access === 'workspace-write') {
+      options.onActivity?.({
+        kind: 'tool',
+        phase: 'completed',
+        summary: 'Finished: ./scripts/check.sh (exit 1)',
+      });
+      const report = JSON.parse(worker(request).finalOutput);
+      report.checks[0].evidenceRefs = ['command:./scripts/check.sh exit 0'];
+      return { completion: Promise.resolve(result(report)), cancel: () => {} };
+    }
+    const req = JSON.parse(options.prompt.split('COORDINATION REQUEST:\n')[1]);
+    const d = decision(req, req.phase === 'prepare' ? 'dispatch' : 'blocked');
+    if (req.phase === 'qualify') {
+      assert.equal(req.workerReport.checks[0].status, 'failed');
+      assert.match(
+        req.workerReport.checks[0].summary,
+        /Machine evidence contradicts/,
+      );
+      d.checks = req.workerReport.checks;
+      d.verificationPlan[0].mode = 'worker';
+    }
+    return { completion: Promise.resolve(result(d)), cancel: () => {} };
+  };
+  const run = startCoordinatedExecution({
+    request,
+    workerOptions: {
+      workingDirectory: '/fixture',
+      prompt: 'worker',
+      model: 'worker-model',
+      effort: 'low',
+    },
+    workerAgent: 'codex',
+    settings: { profile },
+    priorEvidence: [],
+    previousContext: '',
+    readBasis: async () => 'basis',
+    onProgress: () => {},
+    transport,
+  });
+  const output = await run.completion;
+  const report = JSON.parse(output.finalOutput);
+  assert.deepEqual(
+    calls.map((call) => call.access),
+    ['read-only', 'workspace-write', 'read-only'],
+  );
+  assert.equal(report.outcome, 'blocked');
+  assert.equal(report.checks[0].status, 'failed');
+});
+
+void test('coordination failure retains the worker self-check for host presentation', async () => {
+  const f = setup(
+    (req) => {
+      if (req.phase === 'prepare') return decision(req, 'dispatch');
+      const invalid = decision(req, 'blocked');
+      invalid.actionId = cardId;
+      return invalid;
+    },
+    ['failed'],
+  );
+  await assert.rejects(
+    f.start().completion,
+    (error) =>
+      error instanceof CoordinationRunError &&
+      error.workerReport?.checks[0].status === 'failed' &&
+      error.workerReport.summary === 'Worker result',
+  );
   assert.equal(f.calls.length, 3);
+});
+
+void test('worker controls which unresolved additional checks reach the user', async () => {
+  const request = task();
+  let calls = 0;
+  const transport: typeof startLocalAgentRun = (_agent, options) => {
+    calls++;
+    if (options.access === 'read-only') {
+      const req = JSON.parse(
+        options.prompt.split('COORDINATION REQUEST:\n')[1],
+      );
+      return {
+        completion: Promise.resolve(result(decision(req, 'dispatch'))),
+        cancel: () => {},
+      };
+    }
+    const report = JSON.parse(worker(request).finalOutput);
+    report.additionalChecks = [
+      {
+        summary: 'Fixed compile issue',
+        status: 'failed',
+        evidenceRefs: ['log:old'],
+        resolved: true,
+        needsAttention: false,
+      },
+      {
+        summary: 'Current environment limitation',
+        status: 'not-run',
+        evidenceRefs: ['log:current'],
+        resolved: false,
+        needsAttention: true,
+      },
+    ];
+    return { completion: Promise.resolve(result(report)), cancel: () => {} };
+  };
+  const run = startCoordinatedExecution({
+    request,
+    workerOptions: { workingDirectory: '/fixture', prompt: 'worker' },
+    workerAgent: 'codex',
+    settings: { profile },
+    priorEvidence: [],
+    previousContext: '',
+    readBasis: async () => 'basis',
+    onProgress: () => {},
+    transport,
+  });
+  const output = JSON.parse((await run.completion).finalOutput);
+  assert.equal(calls, 2);
+  assert.deepEqual(
+    output.additionalChecks.map((check: { summary: string }) => check.summary),
+    ['Current environment limitation'],
+  );
 });
