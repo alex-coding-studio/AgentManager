@@ -348,7 +348,10 @@ void test('review is bound to the selected Action and exact output version', () 
 
 void test('artifact claims require observed references and do not grant acceptance', () => {
   const req = request('execution');
-  assert.throws(() => parse(response(req), req), /Unobserved/);
+  assert.throws(
+    () => parse(response(req), req),
+    /Delivery references could not be verified/,
+  );
   const result = parse(response(req), req, 0, [artifact]);
   assert.equal(result.stage, 'execution');
   assert.equal('accepted' in result, false);

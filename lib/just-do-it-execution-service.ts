@@ -1,3 +1,7 @@
+import {
+  hasUnsupportedAppArtifact,
+  hasReviewableReport,
+} from './just-do-it-result-display.ts';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import {
@@ -706,13 +710,10 @@ export function createExecutionService(
           active.delete(project.rootPath);
       }
     }
-    if (
-      action !== 'accept' ||
-      run.status !== 'succeeded' ||
-      !run.result ||
-      !run.observedRefs.length
-    )
-      throw new Error('An observed output is required for acceptance.');
+    if (action !== 'accept' || !hasReviewableReport(run) || !run.result)
+      throw new Error(
+        'A valid current Action report is required for acceptance.',
+      );
     if (
       !assessRequiredChecks(
         run.acceptanceChecklist,
@@ -958,6 +959,10 @@ export function createExecutionService(
       )
         throw new Error(
           'Only the latest unaccepted report rejected for evidence can be rechecked.',
+        );
+      if (hasUnsupportedAppArtifact(run))
+        throw new Error(
+          'App bundle verification is unsupported. Retrying cannot resolve this until support is added.',
         );
       if (card.execution?.workspace)
         await verifyCardWorkspace(card.execution.workspace);

@@ -28,6 +28,7 @@ export type ActionRun = {
   outputRef: string | null;
   acceptanceChecklist?: AcceptanceChecklist;
   evidenceErrors?: string[];
+  remainingScopeNotes?: string[];
   unverifiedCheckRefs?: string[];
   verifiedExternalRefs?: string[];
   verifiedVersionRefs?: string[];

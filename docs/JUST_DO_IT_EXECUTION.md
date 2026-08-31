@@ -159,8 +159,9 @@ the round's baseline, bounded to 1,000 commits. This includes intermediate commi
 without claiming authorship of every observed change. Execution check references
 that are not independently known are retained and labeled unverified; command text
 is never executed merely because it appears in a report. Review evidence stays strict.
-Invalid delivery references still fail validation and disable acceptance, but their
-schema- and identity-valid report remains visible. GitHub discovery also runs on
+Invalid delivery references remain unverified, but their schema- and identity-valid
+report remains visible. Under the latest user ruling, these verification findings
+are advisory and do not block manual acceptance when all required criteria pass. GitHub discovery also runs on
 failed result validation when a workspace snapshot is available.
 
 ## Simulator access validation
@@ -231,3 +232,8 @@ and SHA-256 in `local-artifacts.json` in the append-only output record, rather t
 committing build artifacts into the project. Capture during saved-report recovery
 is explicitly timestamped as recovery-time verification, not an original snapshot.
 Missing, excluded or oversized attachments remain unverified claims.
+
+The acceptance control remains available for a retained valid report. Its final
+confirmation depends on required-check coverage and current output/revision identity,
+not on artifact-verifier capability. Accepting never relabels the original verifier
+findings or starts the next Action automatically.

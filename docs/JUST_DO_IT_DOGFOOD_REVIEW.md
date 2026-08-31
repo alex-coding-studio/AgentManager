@@ -489,3 +489,41 @@ After all six Actions complete, decide together:
 The user requested recording this issue and continuing the trial. This section
 changes no verification policy, grants no automatic waiver, and does not start,
 accept or merge another Action. Resolve the architecture after the complete trial.
+
+## Required checks remain the only acceptance gate
+
+The user corrected the attempted addition of a separate system-verification gate.
+A schema/identity-valid report with all required criteria passed is now eligible
+for explicit user acceptance even when artifact verification produced warnings.
+The acceptance endpoint preserves the original evidence errors and does not mark
+those references verified. Regression coverage checks this behavior; missing/failed
+required criteria and invalid reports still cannot pass through the same route.
+Action 3's real confirmation dialog now allows confirmation with BOX 7/7 while
+retaining the unsupported app-bundle note. The test only opened/closed the dialog;
+it did not accept the Action.
+
+Independent Remaining work rendering was removed from results and confirmation.
+The original report and the earlier scope-note classification record remain in
+history. Future reports are instructed to put actual gaps in failed/not-run
+required checks rather than a parallel free-text acceptance list. Additional
+checks remain advisory. Unsupported app bundles no longer offer a retry; the
+server refuses that retry before workspace/remote verification, without an Agent
+call or new Card revision.
+
+The UI now separates Round information, output/checks and collapsed diagnostics
+from a dark sticky Action control bar. Its visible Agent summary includes provider,
+model and reasoning effort. Continue enters an explicit change-input mode, hides
+acceptance, and requires nonempty feedback plus confirmation to start execution.
+Cancel returns to result review. Settings/input open in an independent panel above
+the bar; measured bar geometry remained 64px high at the same viewport position
+across the tested modes. No execution was started in these UI checks.
+
+Stop execution uses a short confirmation instead of a permanent disclaimer. An
+isolated browser fixture verified that opening/canceling sends no stop request and
+confirming sends exactly one intercepted request, without stopping real work.
+
+A regression run also exposed a timestamp-precision defect in attachment capture:
+filesystem mtimes can have sub-millisecond precision while stored Round timestamps
+have milliseconds. Comparing at the recorded precision prevents same-millisecond
+false rejection; a deterministic test still rejects a file modified in a later
+millisecond. This change does not add app-bundle support.

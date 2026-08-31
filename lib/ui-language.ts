@@ -131,11 +131,48 @@ export const chineseUi: Record<string, string> = {
   'Workspace path': '路径',
   'Shared by this Card’s Actions. Main receives changes through PR merges.':
     '所有步骤共用此工作区；通过 PR 合并到 main。',
+  'App bundle verification is not supported yet.':
+    '系统暂不支持 .app 构建目录核验；需补齐支持后处理，重复核验无法解决。',
+  'Acceptance is unavailable until the system artifact verification is resolved.':
+    '系统产物核验尚未解决，暂不能确认验收。',
+  'This run has not produced a verified output for acceptance.':
+    '本轮尚无可确认验收的已核验产出。',
+  'Required checks are incomplete. Review them before confirming acceptance.':
+    '必查项尚未全部通过，请先查看具体结果。',
+  'System artifact verification note': '系统产物核验提示',
+  'Artifact verification notes do not block acceptance when required checks pass.':
+    '此项为系统核验提示；必查项通过即可验收。',
+  Feedback: '反馈',
+  'Cancel changes': '取消修改',
+  'Confirm changes': '确认修改',
+  'Enter change instructions': '填写修改意见',
+  'Run information': '运行信息',
+  'Run started': '开始时间',
+  'System diagnostics': '系统诊断',
+  'Verification note': '有核验提示',
+  'Execution settings': '执行设置',
+  'Applies to the next execution, not the recorded round.':
+    '用于后续执行，不影响已记录的轮次。',
+  'Retry verification': '重试核验',
+  'System artifact verification pending': '系统产物待核验',
+  'Agent-reported required checks': 'Agent 必查结果',
+  'The system has not verified these delivery references:':
+    '系统尚未核验以下交付物：',
+  'Resolve artifact verification before acceptance. Additional checks do not cause this state.':
+    '处理产物核验后才能验收；此状态并非由附加项造成。',
+  'Current Action gaps': '当前步骤尚未完成',
+  'Stop execution': '停止执行',
+  'Stop execution?': '停止本轮执行？',
+  'Stopping keeps the current code and files. It does not restore an earlier version.':
+    '停止后保留当前代码和文件，不会恢复到之前的版本。',
+  'To restart from the original baseline, use the separate Card restart action when available; it creates a backup first.':
+    '如需从初始版本重新开始，请使用单独的 Card 重开操作（适用时会先备份）。',
+  'Keep running': '继续运行',
   'Execution phase': '执行',
   'Acceptance phase': '验收',
   'Confirm Action acceptance': '确认验收这一步',
-  'Review this output and its limitations before accepting. This records your acceptance, not just the Agent’s self-check.':
-    '请确认本轮产出与未完成事项。这将记录你的验收决定，而不只是 Agent 自检通过。',
+  'Review this output, required checks and any user overrides before confirming.':
+    '请确认本轮产出、必查结果和用户裁决。',
   'Code revision': '代码版本',
   'Not recorded': '未记录',
   'These are Agent-reported results. Passing self-checks does not replace your review.':

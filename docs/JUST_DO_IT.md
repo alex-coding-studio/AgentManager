@@ -787,3 +787,30 @@ testing hook. HereItIs opts in and runs `./scripts/acceptance-tests.sh` after Dr
 publication; that entry never skips scheme tests based on upstream equality and
 rejects no-target and zero-test results. This is not remote branch protection or
 a host-enforced Ready transition: the executing Agent still owns the Ready write.
+
+## Acceptance authority and control-bar refinement
+
+The user explicitly reaffirmed that a valid current Action report whose required
+checks pass (including separately recorded user decisions) is eligible for manual
+acceptance. Host artifact-verification findings and additional checks are advisory;
+they do not introduce a second acceptance gate. Preserve unverified references as
+unverified after acceptance. Schema/identity-invalid responses and missing or failed
+required checks still do not establish an acceptable report.
+
+There is no separate Remaining work section in the results or confirmation dialog.
+Current Action gaps belong to failed/not-run required criteria. PR lifecycle,
+future Actions and later user trials must not become extra execution requirements.
+Historical report fields remain stored; the execution prompt requests empty
+`remaining` and permits necessary non-gating context in `scopeNotes`.
+
+Use a separate sticky control bar for Action-level operations, with a visible
+Agent/model/effort summary. Current-result acceptance is primary when eligible.
+Continue opens a change-input mode with Cancel changes and Confirm changes, hiding
+acceptance until that mode is canceled or submitted. Submission starts the next
+Round only after explicit confirmation. Settings and input panels open above a
+stationary bar, separate from read-only Round information and diagnostics.
+
+Stop execution has its own confirmation explaining that current files remain.
+Do not repeat cancellation/acceptance disclaimers below every completed report.
+Unsupported artifact types must not offer a retry that cannot change the result;
+recheck does not call a model but still consumes local work and remote requests.

@@ -212,7 +212,7 @@ export async function captureLocalAcceptanceArtifacts(
     if (
       !stat.isFile() ||
       stat.size > 1_400_000 ||
-      stat.mtimeMs > Date.parse(completedAt)
+      Math.floor(stat.mtimeMs) > Date.parse(completedAt)
     )
       continue;
     const resolved = await realpath(current);
@@ -229,7 +229,7 @@ export async function captureLocalAcceptanceArtifacts(
       if (
         before.mtimeMs !== after.mtimeMs ||
         before.size !== after.size ||
-        after.mtimeMs > Date.parse(completedAt)
+        Math.floor(after.mtimeMs) > Date.parse(completedAt)
       )
         continue;
       total += data.length;

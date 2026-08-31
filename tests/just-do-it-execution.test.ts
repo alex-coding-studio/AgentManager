@@ -887,7 +887,7 @@ void test('blocked reports retain intermediate commits and unverified check refe
   assert.deepEqual(card.execution!.acceptedActionIds, []);
 });
 
-void test('invalid delivery references preserve a rejected report and cannot be accepted', async (t) => {
+void test('artifact verification warnings preserve the report and do not add an acceptance gate', async (t) => {
   const { project, service, store, calls, input } = await fixture(t);
   await service.start(project, input);
   await writeFile(path.join(project.rootPath, 'module.txt'), 'real change');
@@ -899,10 +899,19 @@ void test('invalid delivery references preserve a rejected report and cannot be 
   assert.ok(run.result?.summary);
   assert.match(run.evidenceErrors![0], /invented.txt/);
   assert.ok(run.observedRefs.includes('file:module.txt'));
-  await assert.rejects(
-    () => service.update(project, id, card.revision, 'accept', run.id),
-    /observed output/,
+  const accepted = await service.update(
+    project,
+    id,
+    card.revision,
+    'accept',
+    run.id,
   );
+  assert.deepEqual(accepted.execution!.acceptedActionIds, [one]);
+  assert.deepEqual(
+    accepted.execution!.runs[0].evidenceErrors,
+    run.evidenceErrors,
+  );
+  assert.equal(accepted.execution!.runs[0].status, 'failed');
 });
 
 void test('a verified repository-only blocked output is retained without pretending it is a changed file or acceptance', async (t) => {
@@ -1329,4 +1338,61 @@ void test('an ignored screenshot does not reject otherwise valid delivery and is
     archived.artifacts[0].base64,
     Buffer.from('image').toString('base64'),
   );
+});
+
+void test('attachment timestamps compare at the recorded Round millisecond precision', async (t) => {
+  const { project } = await fixture(t);
+  await mkdir(path.join(project.rootPath, 'build/acceptance'), {
+    recursive: true,
+  });
+  const file = path.join(project.rootPath, 'build/acceptance/home.png');
+  await writeFile(file, 'image');
+  await utimes(file, 1700000000.0005, 1700000000.0005);
+  const snapshot = await snapshotWorkspace(project);
+  const completedAt = new Date(1700000000000).toISOString();
+  assert.equal(
+    (
+      await captureLocalAcceptanceArtifacts(
+        snapshot,
+        ['file:build/acceptance/home.png'],
+        completedAt,
+      )
+    ).length,
+    1,
+  );
+  await utimes(file, 1700000000.002, 1700000000.002);
+  assert.equal(
+    (
+      await captureLocalAcceptanceArtifacts(
+        snapshot,
+        ['file:build/acceptance/home.png'],
+        completedAt,
+      )
+    ).length,
+    0,
+  );
+});
+
+void test('unsupported app bundle retries stop before workspace and remote verification', async (t) => {
+  const { project, store, service, calls, input } = await fixture(t);
+  await service.start(project, input);
+  await mkdir(path.join(project.rootPath, 'build/App.app'), {
+    recursive: true,
+  });
+  calls[0].resolve(delivered(calls[0].request, ['file:build/App.app']));
+  const card = await settled(store, project);
+  assert.equal(card.execution!.runs[0].status, 'failed');
+  await rm(project.rootPath + '/build', { recursive: true });
+  await assert.rejects(
+    () =>
+      service.recheckOutput(
+        project,
+        id,
+        card.revision,
+        card.execution!.runs[0].id,
+      ),
+    /unsupported.*Retrying cannot/,
+  );
+  assert.equal((await store.read(project, id)).revision, card.revision);
+  assert.equal(calls.length, 1);
 });

@@ -1,6 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type CSSProperties } from 'react';
+import {
+  unverifiedDeliveryRefs,
+  hasUnsupportedAppArtifact,
+  hasReviewableReport,
+} from '@/lib/just-do-it-result-display';
 import { CheckDetails } from '@/components/check-details';
 import { assessRequiredChecks, splitChecks } from '@/lib/just-do-it-checklist';
 import {
@@ -11,6 +16,7 @@ import {
   RefreshCw,
   FolderOpen,
   GitBranch,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { AgentProfileSelector } from '@/components/agent-profile-selector';
 import {
@@ -40,6 +46,10 @@ export function JustDoItAction({
 }) {
   const { t } = useUiText();
   const [instruction, setInstruction] = useState('');
+  const [editingFeedback, setEditingFeedback] = useState(false);
+  const [controlPanel, setControlPanel] = useState<
+    'feedback' | 'settings' | null
+  >(null);
   const [profile, setProfile] = useState<AgentProfile>(
     card.execution?.profile ??
       card.execution?.runs.at(-1)?.profile ??
@@ -48,6 +58,10 @@ export function JustDoItAction({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
   const [acceptancePreview, setAcceptancePreview] = useState<{
+    runId: string;
+    revision: number;
+  } | null>(null);
+  const [stopPreview, setStopPreview] = useState<{
     runId: string;
     revision: number;
   } | null>(null);
@@ -106,8 +120,13 @@ export function JustDoItAction({
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
       onChange(data.card);
-      if (operation === 'start') setInstruction('');
+      if (operation === 'start') {
+        setEditingFeedback(false);
+        setInstruction('');
+        setControlPanel(null);
+      }
       if (operation === 'accept') setAcceptancePreview(null);
+      if (operation === 'cancel') setStopPreview(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Execution failed.');
     } finally {
@@ -169,17 +188,19 @@ export function JustDoItAction({
     card.actions[card.actions.findIndex((item) => item.id === action.id) + 1];
   const stage = accepted
     ? 1
-    : latest?.status === 'succeeded' && requiredPassed
+    : hasReviewableReport(latest) && requiredPassed
       ? 1
       : 0;
   const currentStatus = accepted
     ? 'Verified'
     : latest?.status === 'running'
       ? 'Agent running'
-      : latest?.status === 'failed'
-        ? 'Execution failed'
-        : stage === 1
+      : hasReviewableReport(latest)
+        ? requiredPassed
           ? 'Ready to verify'
+          : 'Needs your input'
+        : latest?.status === 'failed'
+          ? 'Execution failed'
           : latest
             ? 'Needs your input'
             : 'Ready to start';
@@ -283,19 +304,20 @@ export function JustDoItAction({
                         ? 'Agent running'
                         : run.status === 'canceled'
                           ? 'Canceled'
-                          : run.status === 'failed'
-                            ? 'Execution failed'
-                            : run.result &&
-                                assessRequiredChecks(
-                                  run.acceptanceChecklist,
-                                  run.result.checks,
-                                  run.id === latest?.id
-                                    ? card.execution?.acceptanceOverrides?.[
-                                        action.id
-                                      ]
-                                    : undefined,
-                                ).passed
+                          : hasReviewableReport(run)
+                            ? assessRequiredChecks(
+                                run.acceptanceChecklist,
+                                run.result?.checks ?? [],
+                                run.id === latest?.id
+                                  ? card.execution?.acceptanceOverrides?.[
+                                      action.id
+                                    ]
+                                  : undefined,
+                              ).passed
                               ? 'Ready to verify'
+                              : 'Needs your input'
+                            : run.status === 'failed'
+                              ? 'Execution failed'
                               : 'Needs your input',
                   )}
                 </span>
@@ -352,36 +374,55 @@ export function JustDoItAction({
                   </span>
                 )}
               </summary>
-              {run.executionAccess && (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  {t('Execution permissions')}: {t(run.executionAccess)}
-                </p>
-              )}
-              {run.commit && (
-                <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
-                  <span>
-                    {t('Local version')} · <code>{run.commit.slice(0, 8)}</code>
-                  </span>
-                  <a
-                    className="underline underline-offset-4"
-                    href={`/api/projects/${projectId}/execution-history?cardId=${card.id}&runId=${run.id}`}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {t('View version diff')}
-                  </a>
-                </div>
-              )}
-              {run.github?.error && (
-                <p className="mt-2 text-xs text-amber-500">
-                  {t(run.github.error)}
-                </p>
-              )}
-              {run.input && (
-                <p className="mt-3 whitespace-pre-wrap text-xs text-muted-foreground">
-                  {t('Your input')}: {run.input}
-                </p>
-              )}
+              <details className="mt-3 rounded-lg bg-muted/40 px-3 py-2 text-xs">
+                <summary className="cursor-pointer font-medium text-muted-foreground">
+                  {t('Run information')}
+                </summary>
+                <dl className="mt-3 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2">
+                  <dt className="text-muted-foreground">Agent</dt>
+                  <dd>
+                    {run.profile.agent} ·{' '}
+                    {run.profile.model || t('Agent default')} ·{' '}
+                    {run.profile.effort || t('Agent default')}
+                  </dd>
+                  <dt className="text-muted-foreground">
+                    {t('Execution permissions')}
+                  </dt>
+                  <dd>
+                    {run.executionAccess
+                      ? t(run.executionAccess)
+                      : t('Not recorded')}
+                  </dd>
+                  <dt className="text-muted-foreground">{t('Run started')}</dt>
+                  <dd>{run.startedAt}</dd>
+                  {run.commit && (
+                    <>
+                      <dt className="text-muted-foreground">
+                        {t('Local version')}
+                      </dt>
+                      <dd className="flex flex-wrap gap-2">
+                        <code>{run.commit.slice(0, 8)}</code>
+                        <a
+                          className="underline underline-offset-4"
+                          href={`/api/projects/${projectId}/execution-history?cardId=${card.id}&runId=${run.id}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {t('View version diff')}
+                        </a>
+                      </dd>
+                    </>
+                  )}
+                </dl>
+                {run.input && (
+                  <div className="mt-3 border-t border-border pt-3">
+                    <p className="mb-1 font-medium">{t('Your input')}</p>
+                    <p className="whitespace-pre-wrap text-muted-foreground">
+                      {run.input}
+                    </p>
+                  </div>
+                )}
+              </details>
               {run.status === 'running' && (
                 <div className="mt-4 flex items-center gap-3">
                   <LoaderCircle className="size-4 animate-spin text-blue-500" />
@@ -393,57 +434,20 @@ export function JustDoItAction({
                     variant="outline"
                     size="sm"
                     disabled={pending}
-                    onClick={() => void send('cancel')}
+                    onClick={() => {
+                      setError('');
+                      setStopPreview({
+                        runId: run.id,
+                        revision: card.revision,
+                      });
+                    }}
                   >
-                    {t('Cancel')}
+                    {t('Stop execution')}
                   </Button>
                 </div>
               )}
-              {run.error && (
-                <p className="mt-3 whitespace-pre-wrap text-sm text-destructive">
-                  {run.evidenceErrors
-                    ? t(
-                        'Output evidence could not be verified. The Agent report is retained below.',
-                      )
-                    : run.error}
-                </p>
-              )}
-              {run.evidenceErrors &&
-                run.id === card.execution?.runs.at(-1)?.id &&
-                run.status === 'failed' && (
-                  <Button
-                    className="mt-3"
-                    variant="outline"
-                    disabled={pending || running}
-                    onClick={() => void send('recheck-output', run.id)}
-                  >
-                    {t('Recheck saved report without rerunning Agent')}
-                  </Button>
-                )}
-              {run.evidenceErrors && (
-                <details className="mt-3 text-xs">
-                  <summary>{t('Evidence validation details')}</summary>
-                  <ul className="mt-2 space-y-1 break-all">
-                    {run.evidenceErrors.map((message) => (
-                      <li key={message}>{message}</li>
-                    ))}
-                  </ul>
-                </details>
-              )}
-              {Boolean(run.unverifiedCheckRefs?.length) && (
-                <details className="mt-3 text-xs text-muted-foreground">
-                  <summary>{t('Unverified check references')}</summary>
-                  <p className="mt-2">
-                    {t(
-                      'These references were reported by the Agent; the host has not verified the commands or external results.',
-                    )}
-                  </p>
-                  <ul className="mt-2 space-y-1 break-all">
-                    {run.unverifiedCheckRefs!.map((ref) => (
-                      <li key={ref}>{ref}</li>
-                    ))}
-                  </ul>
-                </details>
+              {run.error && !run.evidenceErrors && (
+                <p className="mt-3 text-sm text-destructive">{run.error}</p>
               )}
               {run.result && (
                 <>
@@ -566,20 +570,122 @@ export function JustDoItAction({
                       </CheckDetails>
                     ))}
                   </div>
-                  {run.result.remaining.length > 0 && (
-                    <div className="mt-4">
-                      <h4 className="text-xs text-muted-foreground">
-                        {t('Remaining work')}
-                      </h4>
-                      <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
-                        {run.result.remaining.map((item) => (
-                          <li key={item}>{item}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
                 </>
               )}
+              {run.evidenceErrors?.length ||
+              run.unverifiedCheckRefs?.length ||
+              run.github?.error ? (
+                <details className="mt-4 border-t border-border pt-3 text-xs">
+                  <summary className="cursor-pointer text-muted-foreground">
+                    {t('System diagnostics')}
+                    {run.evidenceErrors?.length
+                      ? ` · ${t('Verification note')}`
+                      : ''}
+                  </summary>
+                  <div className="mt-2">
+                    {run.github?.error && (
+                      <p className="text-amber-700 dark:text-amber-400">
+                        {t(run.github.error)}
+                      </p>
+                    )}
+                    {run.evidenceErrors ? (
+                      <section className="mt-3 space-y-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <h4 className="font-medium text-amber-600 dark:text-amber-400">
+                            {t('System artifact verification note')}
+                          </h4>
+                          {run.id === card.execution?.runs.at(-1)?.id &&
+                            run.status === 'failed' &&
+                            !accepted &&
+                            !hasUnsupportedAppArtifact(run) && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 gap-1.5 border-amber-500/30 bg-transparent px-2 text-xs text-amber-700 hover:bg-amber-500/10 dark:text-amber-400"
+                                disabled={pending || running}
+                                title={t(
+                                  'Recheck saved report without rerunning Agent',
+                                )}
+                                onClick={() =>
+                                  void send('recheck-output', run.id)
+                                }
+                              >
+                                <RefreshCw
+                                  aria-hidden="true"
+                                  className="size-3"
+                                />
+                                {t('Retry verification')}
+                              </Button>
+                            )}
+                        </div>
+                        <p>
+                          {t('Agent-reported required checks')}:{' '}
+                          {
+                            assessRequiredChecks(
+                              run.acceptanceChecklist,
+                              run.result?.checks ?? [],
+                              card.execution?.acceptanceOverrides?.[action.id],
+                            ).items.filter((item) => item.status === 'passed')
+                              .length
+                          }
+                          /{run.acceptanceChecklist?.items.length ?? 0}
+                        </p>
+                        <p className="text-muted-foreground">
+                          {t(
+                            'The system has not verified these delivery references:',
+                          )}
+                        </p>
+                        {hasUnsupportedAppArtifact(run) && (
+                          <p className="text-xs text-amber-700 dark:text-amber-400">
+                            {t('App bundle verification is not supported yet.')}
+                          </p>
+                        )}
+                        <ul className="space-y-1 break-all font-mono text-xs">
+                          {unverifiedDeliveryRefs(run).map((ref) => (
+                            <li key={ref}>{ref}</li>
+                          ))}
+                        </ul>
+                        <p className="text-xs text-muted-foreground">
+                          {t(
+                            'Artifact verification notes do not block acceptance when required checks pass.',
+                          )}
+                        </p>
+                      </section>
+                    ) : (
+                      run.error && (
+                        <p className="mt-3 whitespace-pre-wrap text-sm text-destructive">
+                          {run.error}
+                        </p>
+                      )
+                    )}
+                    {run.evidenceErrors && (
+                      <details className="mt-3 text-xs">
+                        <summary>{t('Evidence validation details')}</summary>
+                        <ul className="mt-2 space-y-1 break-all">
+                          {run.evidenceErrors.map((message) => (
+                            <li key={message}>{message}</li>
+                          ))}
+                        </ul>
+                      </details>
+                    )}
+                    {Boolean(run.unverifiedCheckRefs?.length) && (
+                      <details className="mt-3 text-xs text-muted-foreground">
+                        <summary>{t('Unverified check references')}</summary>
+                        <p className="mt-2">
+                          {t(
+                            'These references were reported by the Agent; the host has not verified the commands or external results.',
+                          )}
+                        </p>
+                        <ul className="mt-2 space-y-1 break-all">
+                          {run.unverifiedCheckRefs!.map((ref) => (
+                            <li key={ref}>{ref}</li>
+                          ))}
+                        </ul>
+                      </details>
+                    )}
+                  </div>
+                </details>
+              ) : null}
               {run.observedRefs.some(
                 (ref) => !ref.startsWith('checkpoint:'),
               ) && (
@@ -601,86 +707,202 @@ export function JustDoItAction({
                   </ul>
                 </details>
               )}
-              {run.status !== 'running' && (
-                <p className="mt-3 text-xs text-muted-foreground">
-                  {t(
-                    'Self-checks are not acceptance. Canceling does not revert changes.',
-                  )}
-                </p>
-              )}
             </details>
           ))}
         </div>
       )}
       {!accepted && current?.id === action.id && (
-        <>
-          <label className="block space-y-2 text-sm">
-            <span>
-              {t(
-                history.length
-                  ? 'Feedback for this Action'
-                  : 'Additional Action instructions',
+        <div data-action-controls className="sticky bottom-3 z-20">
+          {controlPanel && (
+            <div
+              id={`controls-${action.id}`}
+              className="absolute bottom-full left-0 right-0 mb-2 max-h-[45dvh] space-y-3 overflow-y-auto rounded-xl border border-border bg-background p-4 shadow-xl"
+            >
+              {controlPanel === 'feedback' ? (
+                <label className="block space-y-2 text-sm">
+                  <span className="font-medium">
+                    {t(
+                      history.length
+                        ? 'Feedback for this Action'
+                        : 'Additional Action instructions',
+                    )}
+                  </span>
+                  <Textarea
+                    value={instruction}
+                    onChange={(event) => setInstruction(event.target.value)}
+                    maxLength={20000}
+                    disabled={pending || running}
+                    placeholder={t(
+                      'Add requirements for this step, or leave empty to follow the confirmed Plan.',
+                    )}
+                  />
+                </label>
+              ) : (
+                <>
+                  <div>
+                    <h4 className="text-sm font-medium">
+                      {t('Execution settings')}
+                    </h4>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {t(
+                        'Applies to the next execution, not the recorded round.',
+                      )}
+                    </p>
+                  </div>
+                  <AgentProfileSelector
+                    value={profile}
+                    onChange={setProfile}
+                    disabled={pending || running}
+                    label="Execution profile"
+                  />
+                  {profile.agent === 'codex' && (
+                    <p className="text-xs text-muted-foreground">
+                      {t(
+                        'Codex execution follows your local Full Access or read-only choice. Full Access relies on worktree and PR discipline, not an OS write barrier around main.',
+                      )}
+                    </p>
+                  )}
+                  {profile.agent === 'claude' && (
+                    <p className="text-xs text-muted-foreground">
+                      {t(
+                        'Claude can edit project files; commands requiring approval may return blocked in this non-interactive run.',
+                      )}
+                    </p>
+                  )}
+                </>
               )}
-            </span>
-            <Textarea
-              value={instruction}
-              onChange={(event) => setInstruction(event.target.value)}
-              maxLength={20000}
-              disabled={pending || running}
-              placeholder={t(
-                'Add requirements for this step, or leave empty to follow the confirmed Plan.',
-              )}
-            />
-          </label>
-          <AgentProfileSelector
-            value={profile}
-            onChange={setProfile}
-            disabled={pending || running}
-            label="Execution profile"
-          />
-          <p className="text-xs leading-5 text-muted-foreground">
-            {t(
-              'Starting runs the Agent with project write access. Only this Action runs; you decide acceptance. GitHub status never starts the next Action.',
-            )}
-          </p>
-          {profile.agent === 'codex' && (
-            <p className="text-xs text-muted-foreground">
-              {t(
-                'Codex execution follows your local Full Access or read-only choice. Full Access relies on worktree and PR discipline, not an OS write barrier around main.',
-              )}
-            </p>
+            </div>
           )}
-          {profile.agent === 'claude' && (
-            <p className="text-xs text-muted-foreground">
-              {t(
-                'Claude can edit project files; commands requiring approval may return blocked in this non-interactive run.',
+          <div
+            data-control-bar
+            style={
+              {
+                colorScheme: 'dark',
+                '--background': '#18181b',
+                '--foreground': '#fafafa',
+                '--primary': '#fafafa',
+                '--primary-foreground': '#18181b',
+                '--secondary': '#3f3f46',
+                '--secondary-foreground': '#fafafa',
+                '--muted': '#27272a',
+                '--muted-foreground': '#a1a1aa',
+                '--border': '#52525b',
+                '--input': '#52525b',
+                '--ring': '#a1a1aa',
+              } as CSSProperties
+            }
+            className="flex min-h-16 flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-background p-3 text-foreground shadow-xl"
+          >
+            <div className="min-w-0 text-sm">
+              <p className="font-medium">
+                {t(
+                  editingFeedback ? 'Enter change instructions' : currentStatus,
+                )}
+              </p>
+              {!editingFeedback && latest?.acceptanceChecklist && (
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {t('Required checks')} ·{' '}
+                  {
+                    requiredAssessment.items.filter(
+                      (item) => item.status === 'passed',
+                    ).length
+                  }
+                  /{requiredAssessment.items.length}
+                </p>
               )}
-            </p>
-          )}
-          <div className="flex flex-wrap gap-2">
-            <Button disabled={!enabled} onClick={() => void send('start')}>
-              {t(history.length ? 'Continue this Action' : 'Start this Action')}
-            </Button>
-            {latest?.status === 'succeeded' &&
-              latest.result &&
-              latest.observedRefs.length > 0 && (
-                <Button
-                  variant="outline"
-                  disabled={!enabled || !requiredPassed}
-                  onClick={() => {
-                    setError('');
-                    setAcceptancePreview({
-                      runId: latest.id,
-                      revision: card.revision,
-                    });
-                  }}
-                >
-                  <Check />
-                  {t('Accept this output')}
-                </Button>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                variant={controlPanel === 'settings' ? 'secondary' : 'ghost'}
+                aria-expanded={controlPanel === 'settings'}
+                aria-controls={`controls-${action.id}`}
+                onClick={() =>
+                  setControlPanel(
+                    controlPanel === 'settings'
+                      ? editingFeedback
+                        ? 'feedback'
+                        : null
+                      : 'settings',
+                  )
+                }
+              >
+                <SlidersHorizontal className="size-4" />
+                {profile.agent === 'codex' ? 'Codex' : 'Claude'} ·{' '}
+                {profile.model || t('Agent default')} ·{' '}
+                {profile.effort || t('Agent default')}
+              </Button>
+              {editingFeedback ? (
+                <>
+                  <Button
+                    variant="outline"
+                    disabled={pending}
+                    onClick={() => {
+                      setEditingFeedback(false);
+                      setControlPanel(null);
+                      setInstruction('');
+                      setError('');
+                    }}
+                  >
+                    {t('Cancel changes')}
+                  </Button>
+                  <Button
+                    disabled={!enabled || !instruction.trim()}
+                    onClick={() => void send('start')}
+                  >
+                    {t('Confirm changes')}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button
+                    variant={
+                      hasReviewableReport(latest) && requiredPassed
+                        ? 'outline'
+                        : 'default'
+                    }
+                    disabled={!enabled}
+                    onClick={() => {
+                      if (history.length) {
+                        setError('');
+                        setEditingFeedback(true);
+                        setControlPanel('feedback');
+                      } else {
+                        void send('start');
+                      }
+                    }}
+                  >
+                    {t(
+                      history.length
+                        ? 'Continue this Action'
+                        : 'Start this Action',
+                    )}
+                  </Button>
+                  {latest && latest.status !== 'running' && latest.result && (
+                    <Button
+                      variant={
+                        hasReviewableReport(latest) && requiredPassed
+                          ? 'default'
+                          : 'outline'
+                      }
+                      disabled={!enabled}
+                      onClick={() => {
+                        setError('');
+                        setAcceptancePreview({
+                          runId: latest.id,
+                          revision: card.revision,
+                        });
+                      }}
+                    >
+                      <Check />
+                      {t('Accept this output')}
+                    </Button>
+                  )}
+                </>
               )}
+            </div>
           </div>
-        </>
+        </div>
       )}
       {card.execution?.workspace &&
         !card.execution.acceptedActionIds.length &&
@@ -700,6 +922,48 @@ export function JustDoItAction({
           </Button>
         )}
       <Dialog
+        open={Boolean(stopPreview)}
+        onOpenChange={(open) => {
+          if (!open && !pending) setStopPreview(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t('Stop execution?')}</DialogTitle>
+            <DialogDescription>
+              {t(
+                'Stopping keeps the current code and files. It does not restore an earlier version.',
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          {error && (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              disabled={pending}
+              onClick={() => setStopPreview(null)}
+            >
+              {t('Keep running')}
+            </Button>
+            <Button
+              disabled={
+                pending ||
+                !running ||
+                stopPreview?.runId !== latest?.id ||
+                stopPreview?.revision !== card.revision
+              }
+              onClick={() => void send('cancel', stopPreview?.runId)}
+            >
+              {t('Stop execution')}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
         open={Boolean(acceptancePreview)}
         onOpenChange={(open) => {
           if (!open && !pending) setAcceptancePreview(null);
@@ -710,7 +974,7 @@ export function JustDoItAction({
             <DialogTitle>{t('Confirm Action acceptance')}</DialogTitle>
             <DialogDescription>
               {t(
-                'Review this output and its limitations before accepting. This records your acceptance, not just the Agent’s self-check.',
+                'Review this output, required checks and any user overrides before confirming.',
               )}
             </DialogDescription>
           </DialogHeader>
@@ -753,11 +1017,6 @@ export function JustDoItAction({
                     {t(item.observed?.status ?? 'not-run')})
                   </p>
                 ))}
-              <p className="text-xs text-muted-foreground">
-                {t(
-                  'These are Agent-reported results. Passing self-checks does not replace your review.',
-                )}
-              </p>
             </section>
             {additionalChecks.some((check) => check.status !== 'passed') && (
               <section className="space-y-2">
@@ -770,16 +1029,6 @@ export function JustDoItAction({
                     .map((check, index) => (
                       <li key={index}>{check.summary}</li>
                     ))}
-                </ul>
-              </section>
-            )}
-            {Boolean(latest?.result?.remaining.length) && (
-              <section className="space-y-2">
-                <h4 className="font-medium">{t('Remaining work')}</h4>
-                <ul className="list-disc space-y-1 pl-5">
-                  {latest!.result!.remaining.map((item, index) => (
-                    <li key={index}>{item}</li>
-                  ))}
                 </ul>
               </section>
             )}
@@ -820,6 +1069,20 @@ export function JustDoItAction({
                 'Nothing starts automatically. Acceptance does not merge a PR.',
               )}
             </p>
+            {latest?.evidenceErrors && (
+              <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-amber-700 dark:text-amber-400">
+                {t(
+                  'Artifact verification notes do not block acceptance when required checks pass.',
+                )}
+              </p>
+            )}
+            {!requiredPassed && (
+              <p className="text-amber-700 dark:text-amber-400">
+                {t(
+                  'Required checks are incomplete. Review them before confirming acceptance.',
+                )}
+              </p>
+            )}
             {previewChanged && (
               <p className="text-destructive">
                 {t(
@@ -842,7 +1105,12 @@ export function JustDoItAction({
               {t('Back to review')}
             </Button>
             <Button
-              disabled={!enabled || !requiredPassed || Boolean(previewChanged)}
+              disabled={
+                !enabled ||
+                !requiredPassed ||
+                !hasReviewableReport(latest) ||
+                Boolean(previewChanged)
+              }
               onClick={() => void send('accept', acceptancePreview?.runId)}
             >
               {t('Confirm acceptance')}
