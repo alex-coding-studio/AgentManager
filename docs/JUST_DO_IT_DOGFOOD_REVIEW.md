@@ -321,3 +321,25 @@ The remaining legacy Actions still need detailed standards before they can execu
 Host-level command interception for bounded repair and remote Ready/merge gates
 remain distinct future mechanisms; this trial did not encounter a required-check
 failure after the new instructions, so it does not prove fail-fast behavior.
+
+## User acceptance, merge and Action 2 launch
+
+The user explicitly accepted Action 1 and requested PR #1 merge followed by Action
+2 execution. Acceptance was recorded at Card revision 26. Independent exact-head
+review approved `e51b451` with no findings; primary-account approval and merge
+produced `e7fe51c`. The primary checkout and the persistent Card branch were
+fast-forwarded to the merged baseline. The Card worktree was retained because
+later Actions still use it; no new worktree or repository was created.
+
+Action 2's legacy validation was expanded into DATA-01 through DATA-08 before
+execution and bound at revision 27. `docs/acceptance/RECORDS.md` records shared
+fields, real disk reload, isolated corrections, honest write-failure behavior,
+detail UI, project gates and new-PR handoff. The contract commit is `678dfd8`.
+Draft PR #2 was created before implementation, so the user has a takeover artifact
+from the beginning. It does not reuse the merged PR as the next delivery.
+
+Action 2 Round 1 (`1c251ca4-5227-4e5b-9475-2c98ca8f43eb`) started at
+05:32:34 UTC with eight frozen criteria and one accepted predecessor. Browser
+inspection confirmed running state and an empty post-submit input. Implementation
+results are not yet claimed by this launch record. Full registration flows remain
+Actions 3 and 4; Action 2 must not auto-accept, merge or start Action 3.
