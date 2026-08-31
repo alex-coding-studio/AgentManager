@@ -1,4 +1,5 @@
 import { getProject } from '@/lib/project-registry';
+import { readAgentProfile } from '@/lib/agent-profile';
 import {
   acceptWhatsNextCandidate,
   cancelWhatsNextRun,
@@ -50,9 +51,12 @@ export async function POST(
       .getAll('files')
       .filter((entry): entry is File => entry instanceof File);
     const feedback = parseFeedback(feedbackValue);
+    const profile = readAgentProfile(formData);
     const run = await startWhatsNextRun(project, {
       sourceNodeIds,
       agent,
+      model: profile.model,
+      effort: profile.effort,
       instruction,
       contextRefs,
       files,

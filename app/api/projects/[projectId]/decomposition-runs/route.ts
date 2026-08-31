@@ -1,4 +1,5 @@
 import { getProject } from '@/lib/project-registry';
+import { readAgentProfile } from '@/lib/agent-profile';
 import {
   acceptTaskDecompositionCandidate,
   cancelTaskDecompositionRun,
@@ -45,9 +46,12 @@ export async function POST(
     const files = formData
       .getAll('files')
       .filter((entry): entry is File => entry instanceof File);
+    const profile = readAgentProfile(formData);
     const run = await startTaskDecompositionRun(project, {
       sourceNodeId,
       agent,
+      model: profile.model,
+      effort: profile.effort,
       instruction,
       contextRefs,
       files,

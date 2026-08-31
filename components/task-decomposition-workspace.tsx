@@ -21,7 +21,8 @@ import {
   Upload,
   X,
 } from 'lucide-react';
-import { AgentSelectField } from '@/components/agent-selector';
+import { AgentProfileSelector } from '@/components/agent-profile-selector';
+import type { AgentProfile } from '@/lib/agent-profile';
 import { MarkdownReader } from '@/components/markdown-reader';
 import {
   NodeProvenanceFacts,
@@ -134,7 +135,12 @@ export function TaskDecompositionWorkspace({
   );
   const [decomposeSourceId, setDecomposeSourceId] = useState('');
   const [decompositionGoal, setDecompositionGoal] = useState('');
-  const [selectedAgent, setSelectedAgent] = useState<LocalAgentKind>('codex');
+  const [agentProfile, setAgentProfile] = useState<AgentProfile>({
+    agent: 'codex',
+    model: '',
+    effort: '',
+  });
+  const selectedAgent = agentProfile.agent;
   const [revisionTarget, setRevisionTarget] = useState<{
     runId: string;
     candidateId: string;
@@ -426,6 +432,8 @@ export function TaskDecompositionWorkspace({
       formData.set('sourceNodeId', decomposeSource.id);
       formData.set('instruction', goal);
       formData.set('agent', selectedAgent);
+      formData.set('model', agentProfile.model);
+      formData.set('effort', agentProfile.effort);
       formData.set('operation', runOperation);
       if (revisionTarget) {
         formData.set('revisionRunId', revisionTarget.runId);
@@ -1354,10 +1362,10 @@ export function TaskDecompositionWorkspace({
                   </p>
                 </div>
 
-                <AgentSelectField
-                  id="decomposition-agent"
-                  value={selectedAgent}
-                  onChange={setSelectedAgent}
+                <AgentProfileSelector
+                  value={agentProfile}
+                  onChange={setAgentProfile}
+                  mode={developmentPreview ? 'demo' : 'live'}
                 />
 
                 <div className="space-y-2">

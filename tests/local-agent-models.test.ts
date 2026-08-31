@@ -3,6 +3,7 @@ import { EventEmitter } from 'node:events';
 import { PassThrough, Writable } from 'node:stream';
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import test from 'node:test';
+import { readAgentProfile, sameModelSelection } from '../lib/agent-profile.ts';
 import {
   createModelCatalogCache,
   parseModels,
@@ -21,6 +22,29 @@ type Message = {
   params?: { cursor?: string };
   request?: { subtype?: string };
 };
+
+void test('shared profile form parsing keeps defaults and rejects non-text model settings', () => {
+  const form = new FormData();
+  form.set('agent', 'claude');
+  assert.deepEqual(readAgentProfile(form), {
+    agent: 'claude',
+    model: '',
+    effort: '',
+  });
+  form.set('model', 'opus[1m]');
+  form.set('effort', 'max');
+  assert.equal(readAgentProfile(form).model, 'opus[1m]');
+  form.set('model', new Blob(['bad']), 'model.txt');
+  assert.throws(() => readAgentProfile(form), /configuration/);
+  assert.equal(sameModelSelection(undefined, { model: '', effort: '' }), true);
+  assert.equal(
+    sameModelSelection(
+      { model: 'test', effort: 'high' },
+      { model: '', effort: '' },
+    ),
+    false,
+  );
+});
 
 function fake(
   onMessage: (message: Message, reply: (message: unknown) => void) => void,

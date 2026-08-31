@@ -1,4 +1,9 @@
 import { createHash, randomUUID } from 'node:crypto';
+import {
+  validateAgentProfile,
+  sameModelSelection,
+  type AgentProfile,
+} from './agent-profile.ts';
 import { candidatePromptView } from './graph-identity.ts';
 import {
   ensureGraphIdentities,
@@ -86,6 +91,7 @@ export type TaskDecompositionRunRecord = {
   revisionOf?: string;
   status: TaskDecompositionRunStatus;
   transport: TaskDecompositionRunTransport;
+  profile?: AgentProfile;
   harness: {
     id: typeof TASK_DECOMPOSITION_HARNESS_ID;
     revision: typeof TASK_DECOMPOSITION_HARNESS_REVISION;
@@ -108,6 +114,8 @@ export type TaskDecompositionRunRecord = {
 type RunRequest = {
   sourceNodeId: string;
   agent: LocalAgentKind;
+  model?: AgentProfile['model'];
+  effort?: AgentProfile['effort'];
   instruction: string;
   contextRefs: string[];
   files: File[];
@@ -128,6 +136,12 @@ export async function startTaskDecompositionRun(
   input: RunRequest,
 ) {
   validateRunRequest(input);
+  const profile: AgentProfile = {
+    agent: input.agent,
+    model: input.model ?? '',
+    effort: input.effort ?? '',
+  };
+  validateAgentProfile(profile);
   const nodes = await listTaskGraphNodes(project);
   const sourceNode = nodes.find((node) => node.id === input.sourceNodeId);
   if (!sourceNode) throw new Error('The source Node could not be found.');
@@ -143,7 +157,8 @@ export async function startTaskDecompositionRun(
   const transport = RUN_TRANSPORTS[input.agent];
   const coordinatorRun =
     coordinatorCandidate?.agentSessionMode === 'persistent' &&
-    coordinatorCandidate.transport === transport
+    coordinatorCandidate.transport === transport &&
+    sameModelSelection(coordinatorCandidate.profile, profile)
       ? coordinatorCandidate
       : null;
   const continuesExistingSession = Boolean(coordinatorRun?.agentSessionId);
@@ -265,6 +280,7 @@ export async function startTaskDecompositionRun(
       {
         schemaVersion: 1,
         createdAt: timestamp,
+        profile,
         packet: packetWithoutFingerprint,
         prompt,
       },
@@ -286,6 +302,7 @@ export async function startTaskDecompositionRun(
     revisionOf: revisionTarget?.candidate.candidateId,
     status: 'running',
     transport,
+    profile,
     harness: {
       id: TASK_DECOMPOSITION_HARNESS_ID,
       revision: TASK_DECOMPOSITION_HARNESS_REVISION,
@@ -310,6 +327,8 @@ export async function startTaskDecompositionRun(
     workingDirectory: runPath,
     prompt,
     resumeSessionId: coordinatorRun?.agentSessionId ?? undefined,
+    model: profile.model || undefined,
+    effort: profile.effort || undefined,
   });
   activeRuns.set(runKey(project, runId), { record, agent });
   void finishTaskDecompositionRun(

@@ -294,6 +294,15 @@ child process, and shares a short per-Agent cache. It does not modify local CLI
 configuration. Preview selectors remain fictional demo profiles. Per-role
 defaults, full cost reporting, and continuation behavior remain future work.
 
+All Agent-selection surfaces use the shared `AgentProfileSelector`: What's Next
+initial exploration, combination and refinement; Break It Down requests; and
+Just Do It planning, execution-preview and review-preview forms. The preview
+adapter supplies fictional choices without catalog requests. Real graph-module
+requests forward model and effort to the local CLI and retain the requested
+profile in the Run and request artifact. Matching profiles preserve existing
+continuation rules; changed model/effort selections use a fresh provider Session
+with the normal source context, including when returning to Agent default.
+
 ## Manual execution and validation loop — settled
 
 1. The user agrees the Plan and starts an Action with its prepared Input.

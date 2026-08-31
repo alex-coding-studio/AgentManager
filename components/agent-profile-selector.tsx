@@ -4,25 +4,33 @@ import { useEffect, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useUiText } from '@/components/ui-language-provider';
-import type { PlanningProfile } from '@/lib/just-do-it-planning-service';
-import type { ModelCatalog } from '@/lib/local-agent-model-types';
+import type { AgentProfile } from '@/lib/agent-profile';
+import type { LocalModel, ModelCatalog } from '@/lib/local-agent-model-types';
 
-export function LocalAgentProfile({
+export function AgentProfileSelector({
   value,
   onChange,
-  disabled,
+  disabled = false,
+  mode = 'live',
+  label = 'Agent configuration',
 }: {
-  value: PlanningProfile;
-  onChange: (profile: PlanningProfile) => void;
-  disabled: boolean;
+  value: AgentProfile;
+  onChange: (profile: AgentProfile) => void;
+  disabled?: boolean;
+  mode?: 'live' | 'demo';
+  label?: string;
 }) {
   const { t } = useUiText();
   const [catalog, setCatalog] = useState<ModelCatalog | null>(null);
   const [failed, setFailed] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [resolvedAgent, setResolvedAgent] = useState<
+    AgentProfile['agent'] | null
+  >(null);
   const [manual, setManual] = useState(false);
   const [retry, setRetry] = useState(0);
   useEffect(() => {
+    if (mode === 'demo') return;
     const controller = new AbortController();
     fetch(`/api/agents/models?agent=${value.agent}`, {
       signal: controller.signal,
@@ -40,22 +48,56 @@ export function LocalAgentProfile({
         if (!controller.signal.aborted) setFailed(true);
       })
       .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
+        if (!controller.signal.aborted) {
+          setResolvedAgent(value.agent);
+          setLoading(false);
+        }
       });
     return () => controller.abort();
-  }, [value.agent, retry]);
-  const models = catalog?.agent === value.agent ? catalog.models : [];
+  }, [value.agent, retry, mode]);
+  const demoModels: LocalModel[] = [
+    {
+      id: 'reasoning-demo',
+      name: t('Reasoning model · demo'),
+      description: '',
+      efforts: ['low', 'medium', 'high'],
+    },
+    {
+      id: 'efficient-demo',
+      name: t('Lightweight model · demo'),
+      description: '',
+      efforts: ['low', 'medium', 'high'],
+    },
+  ];
+  const models =
+    mode === 'demo'
+      ? demoModels
+      : catalog?.agent === value.agent
+        ? catalog.models
+        : [];
   const selected = models.find((item) => item.id === value.model);
-  const custom = manual || Boolean(value.model && !selected && !loading);
-  const efforts = selected?.efforts ?? ['low', 'medium', 'high', 'xhigh'];
+  const reading = loading || resolvedAgent !== value.agent;
+  const custom =
+    mode === 'live' &&
+    (manual || Boolean(value.model && !selected && !reading));
+  const efforts =
+    selected?.efforts ??
+    (mode === 'demo'
+      ? ['low', 'medium', 'high']
+      : ['low', 'medium', 'high', 'xhigh']);
   const selectClass =
     'mt-2 h-9 w-full min-w-0 rounded-lg border border-border bg-background px-2';
   return (
-    <div className="space-y-2">
-      <fieldset disabled={disabled} className="grid gap-3 sm:grid-cols-3">
+    <div className="min-w-0 flex-1 space-y-2">
+      <fieldset
+        disabled={disabled}
+        aria-label={t(label)}
+        className="grid gap-3 sm:grid-cols-3"
+      >
         <label className="min-w-0 text-xs">
           Agent
           <select
+            aria-label={`${t(label)} · Agent`}
             className={selectClass}
             value={value.agent}
             onChange={(event) => {
@@ -64,7 +106,7 @@ export function LocalAgentProfile({
               setFailed(false);
               setManual(false);
               onChange({
-                agent: event.target.value as PlanningProfile['agent'],
+                agent: event.target.value as AgentProfile['agent'],
                 model: '',
                 effort: '',
               });
@@ -78,6 +120,7 @@ export function LocalAgentProfile({
           <label>
             {t('Model')}
             <select
+              aria-label={`${t(label)} · ${t('Model')}`}
               className={selectClass}
               value={custom ? '__custom' : value.model}
               onChange={(event) => {
@@ -96,10 +139,12 @@ export function LocalAgentProfile({
                   {model.name}
                 </option>
               ))}
-              {loading && value.model && !selected && (
+              {reading && value.model && !selected && (
                 <option value={value.model}>{value.model}</option>
               )}
-              <option value="__custom">{t('Custom model…')}</option>
+              {mode === 'live' && (
+                <option value="__custom">{t('Custom model…')}</option>
+              )}
             </select>
           </label>
           {custom && (
@@ -117,12 +162,13 @@ export function LocalAgentProfile({
         <label className="min-w-0 text-xs">
           {t('Reasoning effort')}
           <select
+            aria-label={`${t(label)} · ${t('Reasoning effort')}`}
             className={selectClass}
             value={value.effort}
             onChange={(event) =>
               onChange({
                 ...value,
-                effort: event.target.value as PlanningProfile['effort'],
+                effort: event.target.value as AgentProfile['effort'],
               })
             }
           >
@@ -141,7 +187,11 @@ export function LocalAgentProfile({
         </label>
       </fieldset>
       <div className="text-xs text-muted-foreground" aria-live="polite">
-        {loading ? (
+        {mode === 'demo' ? (
+          t(
+            'Demo profiles only, not a live model catalog. Nothing is sent to a provider.',
+          )
+        ) : reading ? (
           t('Loading local models…')
         ) : failed ? (
           <span>
