@@ -181,3 +181,28 @@ Action, keep ad hoc diagnostics separate, stop probing after a condition already
 sufficient evidence, and present a concrete next user action with the actual artifact.
 Simulator automated tests, simulator installation/launch, visible UI inspection and
 PR review remain distinct evidence layers even when physical-device testing is waived.
+
+## Checklist and Draft-first rulings after Round 5
+
+JDI-DF-14: the user inspected the Plan and the Round output and found no generated
+pre-execution self-check list. Code inspection confirmed `ActionContract.validation`
+is a string and each returned `Check` contains only summary/status/evidenceRefs.
+Finalize copies the Plan steps; it does not materialize a frozen checklist. The
+returned checks are chosen by the execution Agent after the work. This explains
+how an unplanned simulator `ps` probe entered the same list as required validation.
+It is not accurate to say the system already checks strictly against a fixed list.
+
+The user explicitly required extra diagnostics to be labeled `non-blocker` and left
+for user judgment. Passing all necessary checks must count as passing; an Agent
+cannot add a new gate during execution. Implement this through a checklist tied to
+the approved Action, not by guessing importance from free-text error messages.
+
+JDI-DF-15: withholding a PR prevented manual takeover. The user replaced the prior
+ordering with Draft PR first, then self-checks, then Ready for review once the
+required checks pass. This does not imply merge or user acceptance. A Draft PR was
+created for the existing Card branch: https://github.com/alex-coding-studio/HereItIs/pull/1,
+base main, head `2df1c807efd64d8c7cf8e15e50e5aa5606ca509b`. It remains Draft;
+no checklist enforcement, Ready transition, acceptance or merge is claimed here.
+
+The latest product ruling lives in [Just Do It](JUST_DO_IT.md). Existing historical
+Plan/report text is not rewritten to pretend the new checklist existed beforehand.

@@ -31,6 +31,39 @@ This document owns the Just Do It workflow. [DECOMPOSITION_MODEL.md](DECOMPOSITI
 owns the shared Formal Node and independent-operation model. [ROADMAP.md](ROADMAP.md)
 owns deferred work, including the exploratory local Git versioning proposal.
 
+## Draft-first delivery and fixed self-checks — latest user ruling
+
+The user changed the delivery order during HereItIsV2 dogfooding: provide a Draft
+PR as the early handoff artifact, perform the agreed self-checks, then mark the PR
+ready for review after every required check passes. A Draft lets the user inspect,
+comment or take over while work remains incomplete. User acceptance and merge are
+separate later decisions; neither is implied by Ready for review. This supersedes
+the earlier requirement to withhold every PR until UI acceptance in this workflow.
+
+The required self-check list must be fixed before evaluating the output and must
+map to the Action's agreed validation requirements and explicit user revisions.
+Each item needs an identity, a pass condition and expected evidence. The list is
+not a demand that the user write commands or implementation details. The Agent may
+choose suitable methods, but cannot silently add mandatory acceptance conditions.
+
+All required items passing means self-checks pass. Additional diagnostic probes
+must be reported separately and explicitly labeled `non-blocker`, including when
+the probe fails or is unsupported. The user decides whether those observations
+need action; promoting one into a required check requires an explicit checklist
+change. Never falsify its result or use it to block the agreed delivery implicitly.
+
+Implementation gap: current Plan Actions contain only a free-text `validation`
+field. Execution responses contain post-hoc `checks` with summary, status and
+references, but no predeclared check IDs or required/non-blocker mapping. The host
+cannot yet enforce complete coverage of a frozen checklist. This ruling is the
+required direction, not a claim that this enforcement already exists.
+
+Early Draft creation also needs a published branch with a real diff. Existing Git
+hooks and required publication gates must be reconciled with the new ordering;
+never implement Draft-first delivery by silently skipping those gates. The system
+must make this prerequisite explicit rather than leaving the user without any
+handoff artifact through repeated full execution Rounds.
+
 ## Purpose and boundary — settled
 
 Just Do It helps a user turn a goal they believe is feasible into concrete,
