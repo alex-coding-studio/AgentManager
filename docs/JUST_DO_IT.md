@@ -17,9 +17,12 @@ adjustment and Finalize while retaining the isolated Preview. The first
 [Action execution integration](JUST_DO_IT_EXECUTION.md) adds project-file coding,
 durable outputs, feedback rounds, and explicit user acceptance. Card-owned local
 Git checkpoints now record a baseline and each execution round without touching
-the delivery repository's staging area. Rollback, GitHub synchronization, Agent
-review, and Todo publication remain unconnected; instructions-driven repository work is not a built-in GitHub
-integration.
+the delivery repository's staging area. GitHub repository discovery, output PR association, and explicit state refresh are
+connected. Each Card now owns a persistent worktree; explicit backup-first restart
+is available for failed unaccepted Cards. Agent review, merged-delivery reversal,
+and Todo publication remain unconnected.
+Repository creation and PR publication remain instructions-driven execution,
+not automatic host operations.
 This document records the
 settled product intent and explicitly separates unresolved mechanics and
 deferred ideas. It does not authorize implementation or data migration.

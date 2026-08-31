@@ -325,10 +325,19 @@ function referenceLink(entry: CardWorkEntry) {
 function renderHandoff(cardId: string, entries: CardWorkEntry[]) {
   const latest = entries.at(-1)!;
   const note = entries.findLast((entry) => entry.record.kind === 'agent-note');
+  const reset = entries.findLast(
+    (entry) =>
+      entry.record.kind === 'system-event' &&
+      entry.record.event === 'rollback-confirmed',
+  );
   const current =
-    note?.record.kind === 'agent-note'
-      ? note.record.currentState
-      : 'No Agent summary yet. Read the relevant references before deciding the next action.';
+    reset &&
+    reset.revision > (note?.revision ?? 0) &&
+    reset.record.kind === 'system-event'
+      ? reset.record.text
+      : note?.record.kind === 'agent-note'
+        ? note.record.currentState
+        : 'No Agent summary yet. Read the relevant references before deciding the next action.';
   const sections = (['planning', 'execution', 'review', 'todo'] as const).map(
     (stage) => {
       const relevant = entries

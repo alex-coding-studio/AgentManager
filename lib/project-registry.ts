@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
+import { realpathSync } from 'node:fs';
 import {
   appendFile,
   mkdir,
@@ -95,14 +96,19 @@ export async function getProject(projectId: string) {
 }
 
 export function getGitHubRepositoryUrl(project: RegisteredProject) {
-  if (!project.codePath) return null;
-
+  const directory = project.codePath ?? project.rootPath;
   let remoteUrl: string;
   try {
+    const top = execFileSync(
+      'git',
+      ['-C', directory, 'rev-parse', '--show-toplevel'],
+      { encoding: 'utf8', timeout: 4000, stdio: ['ignore', 'pipe', 'ignore'] },
+    ).trim();
+    if (realpathSync(top) !== realpathSync(directory)) return null;
     remoteUrl = execFileSync(
       'git',
-      ['-C', project.codePath, 'remote', 'get-url', 'origin'],
-      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
+      ['-C', directory, 'remote', 'get-url', 'origin'],
+      { encoding: 'utf8', timeout: 4000, stdio: ['ignore', 'pipe', 'ignore'] },
     ).trim();
   } catch {
     return null;

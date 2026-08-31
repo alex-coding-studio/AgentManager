@@ -20,11 +20,35 @@ export async function POST(
     if (Buffer.byteLength(text) > 40000)
       throw new Error('Execution request is too large.');
     const input = JSON.parse(text);
+    if (input.action === 'preview-reset' || input.action === 'reset') {
+      if (
+        input.action === 'reset' &&
+        (typeof input.token !== 'string' || !/^[0-9a-f]{64}$/.test(input.token))
+      )
+        throw new Error('Preview and confirm the reset first.');
+      return Response.json(
+        await executionService.resetWorkspace(
+          project,
+          input.cardId,
+          input.expectedRevision,
+          input.action === 'reset' ? input.token : undefined,
+        ),
+      );
+    }
     if (input.action === 'start')
       return Response.json(
         { card: await executionService.start(project, input) },
         { status: 202 },
       );
+    if (input.action === 'refresh-github')
+      return Response.json({
+        card: await executionService.refreshGitHub(
+          project,
+          input.cardId,
+          input.expectedRevision,
+          input.outputId,
+        ),
+      });
     if (input.action === 'cancel' || input.action === 'accept')
       return Response.json({
         card: await executionService.update(

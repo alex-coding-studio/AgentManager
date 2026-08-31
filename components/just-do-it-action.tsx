@@ -3,6 +3,12 @@
 import { useState } from 'react';
 import { LoaderCircle, Check } from 'lucide-react';
 import { AgentProfileSelector } from '@/components/agent-profile-selector';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useUiText } from '@/components/ui-language-provider';
@@ -24,11 +30,21 @@ export function JustDoItAction({
   const { t } = useUiText();
   const [instruction, setInstruction] = useState('');
   const [profile, setProfile] = useState<AgentProfile>(
-    card.execution?.runs.at(-1)?.profile ??
+    card.execution?.profile ??
+      card.execution?.runs.at(-1)?.profile ??
       card.run?.profile ?? { agent: 'codex', model: '', effort: '' },
   );
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetError, setResetError] = useState('');
+  const [resetPreview, setResetPreview] = useState<{
+    token: string;
+    path: string;
+    branch: string;
+    baseCommit: string;
+    repositoryUrl: string | null;
+  } | null>(null);
   const history =
     card.execution?.runs.filter((run) => run.actionId === action.id) ?? [];
   const latest = history.at(-1);
@@ -40,7 +56,11 @@ export function JustDoItAction({
   const running = card.execution?.runs.at(-1)?.status === 'running';
   const enabled = current?.id === action.id && !pending && !running;
 
-  async function send(operation: 'start' | 'cancel' | 'accept') {
+  async function send(
+    operation: 'start' | 'cancel' | 'accept' | 'refresh-github',
+    outputId = latest?.id,
+    initializeRepository = false,
+  ) {
     setPending(true);
     setError('');
     try {
@@ -54,7 +74,8 @@ export function JustDoItAction({
           expectedRevision: card.revision,
           instruction,
           profile,
-          outputId: latest?.id,
+          outputId,
+          initializeRepository,
         }),
       });
       const data = await response.json();
@@ -63,6 +84,38 @@ export function JustDoItAction({
       if (operation === 'start') setInstruction('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Execution failed.');
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function resetCard(token?: string) {
+    setResetOpen(true);
+    setPending(true);
+    setResetError('');
+    try {
+      const response = await fetch(`/api/projects/${projectId}/execution`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: token ? 'reset' : 'preview-reset',
+          cardId: card.id,
+          expectedRevision: card.revision,
+          token,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
+      if (data.preview) setResetPreview(data.preview);
+      if (data.card) {
+        onChange(data.card);
+        setInstruction('');
+        setResetPreview(null);
+        setResetOpen(false);
+      }
+    } catch (err) {
+      setResetPreview(null);
+      setResetError(err instanceof Error ? err.message : 'Reset failed.');
     } finally {
       setPending(false);
     }
@@ -88,6 +141,26 @@ export function JustDoItAction({
           <Check className="size-4" />
           {t('This Action was accepted by you.')}
         </p>
+      )}
+      {card.execution?.workspace && (
+        <div className="space-y-1 rounded-lg border border-border p-3 text-xs">
+          <p className="font-medium">{t('Card workspace')}</p>
+          <p className="break-all">{card.execution.workspace.path}</p>
+          <p className="break-all">
+            {t('Branch')}: {card.execution.workspace.branch}
+          </p>
+          <p className="text-muted-foreground">
+            {t(
+              'All Actions use this worktree. Main changes only through the agreed PR delivery flow.',
+            )}
+          </p>
+          {card.execution.workspaceBackups?.at(-1) && (
+            <p className="break-all">
+              {t('Previous workspace backup')}:{' '}
+              {card.execution.workspaceBackups.at(-1)!.path}
+            </p>
+          )}
+        </div>
       )}
       {card.execution?.git && (
         <p className="text-xs text-muted-foreground">
@@ -140,6 +213,72 @@ export function JustDoItAction({
                   </a>
                 </div>
               )}
+              {run.status !== 'running' && (
+                <div className="mt-4 space-y-2 rounded-lg border border-border p-3 text-xs">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-medium">GitHub</span>
+                    {run.github && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={pending || running}
+                        onClick={() => void send('refresh-github', run.id)}
+                      >
+                        {t('Refresh GitHub status')}
+                      </Button>
+                    )}
+                  </div>
+                  {run.github ? (
+                    <>
+                      <a
+                        className="block break-all underline"
+                        href={run.github.repositoryUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {run.github.repositoryUrl}
+                      </a>
+                      {run.github.error && (
+                        <output className="block text-destructive">
+                          {t(run.github.error)}
+                        </output>
+                      )}
+                      <p className="text-muted-foreground">
+                        {t('Last attempted check')}: {run.github.checkedAt}
+                      </p>
+                      {run.github.pullRequests.map((pr) => (
+                        <a
+                          key={pr.url}
+                          className="block break-words underline underline-offset-4"
+                          href={pr.url}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          #{pr.number} · {pr.title} · {t(pr.state)}
+                          {pr.isDraft ? ` · ${t('Draft')}` : ''}
+                          {run.github?.error ? ` · ${t('Stale status')}` : ''}
+                        </a>
+                      ))}
+                      {!run.github.pullRequests.length && (
+                        <p>
+                          {t('No verified PR association for this output.')}
+                        </p>
+                      )}
+                      <p className="text-muted-foreground">
+                        {t(
+                          'PR state is separate from your acceptance. Refresh to check for remote changes.',
+                        )}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-muted-foreground">
+                      {t(
+                        'No GitHub repository was captured for this round. Future rounds discover it automatically.',
+                      )}
+                    </p>
+                  )}
+                </div>
+              )}
               {run.input && (
                 <p className="mt-3 whitespace-pre-wrap text-xs text-muted-foreground">
                   {t('Your input')}: {run.input}
@@ -164,8 +303,37 @@ export function JustDoItAction({
               )}
               {run.error && (
                 <p className="mt-3 whitespace-pre-wrap text-sm text-destructive">
-                  {run.error}
+                  {run.evidenceErrors
+                    ? t(
+                        'Output evidence could not be verified. The Agent report is retained below.',
+                      )
+                    : run.error}
                 </p>
+              )}
+              {run.evidenceErrors && (
+                <details className="mt-3 text-xs">
+                  <summary>{t('Evidence validation details')}</summary>
+                  <ul className="mt-2 space-y-1 break-all">
+                    {run.evidenceErrors.map((message) => (
+                      <li key={message}>{message}</li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+              {Boolean(run.unverifiedCheckRefs?.length) && (
+                <details className="mt-3 text-xs text-muted-foreground">
+                  <summary>{t('Unverified check references')}</summary>
+                  <p className="mt-2">
+                    {t(
+                      'These references were reported by the Agent; the host has not verified the commands or external results.',
+                    )}
+                  </p>
+                  <ul className="mt-2 space-y-1 break-all">
+                    {run.unverifiedCheckRefs!.map((ref) => (
+                      <li key={ref}>{ref}</li>
+                    ))}
+                  </ul>
+                </details>
               )}
               {run.result && (
                 <>
@@ -261,7 +429,7 @@ export function JustDoItAction({
           />
           <p className="text-xs leading-5 text-muted-foreground">
             {t(
-              'Starting runs the Agent with project write access. Only this Action runs; you decide acceptance. GitHub merge is not monitored yet.',
+              'Starting runs the Agent with project write access. Only this Action runs; you decide acceptance. GitHub status never starts the next Action.',
             )}
           </p>
           {profile.agent === 'claude' && (
@@ -290,7 +458,96 @@ export function JustDoItAction({
           </div>
         </>
       )}
-      {error && (
+      {card.execution?.workspace &&
+        !card.execution.acceptedActionIds.length &&
+        latest &&
+        (['failed', 'canceled'].includes(latest.status) ||
+          (latest.status === 'succeeded' &&
+            latest.result?.outcome !== 'delivered')) && (
+          <Button
+            variant="outline"
+            disabled={pending || running}
+            onClick={() => {
+              setResetPreview(null);
+              void resetCard();
+            }}
+          >
+            {t('Restart this Card from its base')}
+          </Button>
+        )}
+      <Dialog
+        open={resetOpen}
+        onOpenChange={(open) => {
+          if (!pending) setResetOpen(open);
+        }}
+      >
+        <DialogContent className="max-h-[85dvh] overflow-auto sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>{t('Restart this Card from its base')}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm">
+            {t(
+              'Keep the confirmed Plan. Preserve this worktree and branch as a backup, then create a fresh Card worktree at its original base. No Action starts automatically.',
+            )}
+          </p>
+          {resetPreview && (
+            <>
+              <p className="break-all text-xs">
+                {resetPreview.path}
+                <br />
+                {resetPreview.branch}
+                <br />
+                {t('Base commit')}: {resetPreview.baseCommit.slice(0, 8)}
+              </p>
+              <p className="text-sm">
+                {t(
+                  'Main, GitHub repositories, PRs and installed apps are not reverted by this operation.',
+                )}
+              </p>
+              {resetPreview.repositoryUrl && (
+                <p className="break-all text-xs">
+                  {resetPreview.repositoryUrl}
+                </p>
+              )}
+              <Button
+                disabled={pending}
+                onClick={() => void resetCard(resetPreview.token)}
+              >
+                {t('Back up and restart Card workspace')}
+              </Button>
+            </>
+          )}
+          {pending && <p className="text-sm">{t('Working…')}</p>}
+          {resetError && (
+            <p role="alert" className="text-sm text-destructive">
+              {resetError}
+            </p>
+          )}
+          <Button
+            variant="outline"
+            disabled={pending}
+            onClick={() => setResetOpen(false)}
+          >
+            {t('Cancel')}
+          </Button>
+        </DialogContent>
+      </Dialog>
+      {error === 'EMPTY_REPOSITORY_CONFIRMATION_REQUIRED' && (
+        <div className="space-y-2 rounded-lg border border-border p-3 text-sm">
+          <p>
+            {t(
+              'This empty project needs a local Git baseline. Confirm creating an empty commit on local main; no files are committed and nothing is pushed to GitHub.',
+            )}
+          </p>
+          <Button
+            disabled={pending}
+            onClick={() => void send('start', latest?.id, true)}
+          >
+            {t('Create empty local main baseline and start')}
+          </Button>
+        </div>
+      )}
+      {error && error !== 'EMPTY_REPOSITORY_CONFIRMATION_REQUIRED' && (
         <p role="alert" className="text-sm text-destructive">
           {error}
         </p>

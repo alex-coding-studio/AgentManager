@@ -70,6 +70,45 @@ export const chineseUi: Record<string, string> = {
     '执行开始后不可直接修改计划；干净回退功能暂未接入。',
   'Select the current Action to start. Later Actions unlock after acceptance.':
     '选择当前步骤开始执行，验收后解锁下一步。',
+  'Refresh GitHub status': '刷新 GitHub 状态',
+  'Last attempted check': '最近查询时间',
+  'Stale status': '历史状态',
+  OPEN: '未合并',
+  CLOSED: '已关闭',
+  MERGED: '已合并',
+  'No verified PR association for this output.': '尚未核实此产出关联的 PR。',
+  'PR state is separate from your acceptance. Refresh to check for remote changes.':
+    'PR 状态与用户验收分开记录；点击刷新查询远端变化。',
+  'No GitHub repository was captured for this round. Future rounds discover it automatically.':
+    '本轮未记录 GitHub 仓库，后续执行轮次会自动发现。',
+  'Could not refresh GitHub status. Check login and repository access. Previous status is not current verification.':
+    '无法刷新 GitHub 状态，请检查登录和仓库权限。历史状态不代表当前核验结果。',
+  'Could not capture repository output. No GitHub delivery was verified.':
+    '无法记录仓库产出，尚未核实 GitHub 交付。',
+  'Starting runs the Agent with project write access. Only this Action runs; you decide acceptance. GitHub status never starts the next Action.':
+    '开始后 Agent 可以修改项目文件，只执行当前步骤，由你验收。GitHub 状态不会自动启动下一步。',
+  'Output evidence could not be verified. The Agent report is retained below.':
+    '产出证据未通过核验。下方保留了 Agent 的报告。',
+  'Evidence validation details': '证据校验详情',
+  'Unverified check references': '未核实的自检引用',
+  'These references were reported by the Agent; the host has not verified the commands or external results.':
+    '以下引用由 Agent 报告，系统尚未核实命令执行或外部结果。',
+  'Card workspace': 'Card 工作区',
+  Branch: '分支',
+  'Previous workspace backup': '上一次工作区备份',
+  'Base commit': '起点提交',
+  'All Actions use this worktree. Main changes only through the agreed PR delivery flow.':
+    '所有步骤共用这个 worktree，main 只通过约定的 PR 交付流程接收成果。',
+  'Restart this Card from its base': '让这张 Card 从头开始',
+  'Keep the confirmed Plan. Preserve this worktree and branch as a backup, then create a fresh Card worktree at its original base. No Action starts automatically.':
+    '保留已确认计划，将当前 worktree 和分支完整保留为备份，再从最初的起点创建新工作区。不会自动开始执行。',
+  'Main, GitHub repositories, PRs and installed apps are not reverted by this operation.':
+    '此操作不会回退 main、GitHub 仓库、PR 或已安装应用。',
+  'Back up and restart Card workspace': '备份并重建 Card 工作区',
+  'Working…': '处理中…',
+  'This empty project needs a local Git baseline. Confirm creating an empty commit on local main; no files are committed and nothing is pushed to GitHub.':
+    '这个空项目需要本地 Git 起点。请确认在本地 main 创建一个空提交：不提交任何文件，也不会推送到 GitHub。',
+  'Create empty local main baseline and start': '创建本地空 main 基线并开始',
   'This Action was accepted by you.': '你已验收这一步的产出。',
   'Accept earlier Actions before starting this step.':
     '请先验收前面的步骤，再开始这一步。',

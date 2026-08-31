@@ -8,10 +8,11 @@ current output. Acceptance unlocks the next Action but never starts it. The
 existing Preview remains isolated. All execution configuration uses the shared
 Agent/model/effort selector.
 
-Planning stays read-only. Execution starts a fresh provider Session rooted at
-the registered code directory, or the project root when no code directory is
-registered. Codex uses an explicit write-capable permission profile with the
-planning store read-only; project-local Git metadata can be written. Its shell
+Planning stays read-only. Execution starts a fresh provider Session in the Card's
+persistent branch and worktree. All its Actions and Rounds reuse that directory;
+the registered primary checkout stays outside the worker's source-write scope.
+See [Card workspaces](JUST_DO_IT_WORKTREES.md). Codex uses an explicit write-capable permission profile with the
+planning store read-only; only the Card Git metadata paths needed for commits and explicit remote operations can be written; primary HEAD, index and main refs remain read-only. Its shell
 network access is enabled for explicitly requested development operations, and
 it cannot request unrestricted escalation. Claude uses restricted mode with
 file-edit permission; shell commands requiring approval may return blocked.
@@ -47,7 +48,7 @@ Before/after workspace snapshots identify changed files, symlink targets,
 deletions and a changed project-local Git HEAD. Symlinks are never followed. The planning store,
 Git internals and common dependency/build directories are excluded. Snapshots
 are bounded to 20,000 entries and 256 MB. A reported delivery must reference an
-  observed artifact; an unchanged input file cannot stand in for new output.
+observed artifact; an unchanged input file cannot stand in for new output.
 The observer detects changes, not authorship: manual edits during a run can also
 appear. It is not a rollback engine or protection against every external effect.
 
@@ -59,8 +60,8 @@ stored state to bypass that lock is unsupported. Multiple servers managing one
 project, external modifications during execution, and automatic PR validation
 are not validated workflows.
 
-Review-Agent integration, GitHub merge monitoring, Issue creation, restoration
-and downstream invalidation remain future work.
+Review-Agent integration, background GitHub monitoring, Issue creation, general
+merged-delivery reversal and downstream invalidation remain future work.
 
 ## Git checkpoints
 
@@ -94,8 +95,10 @@ version. An Agent can cite it for a no-code-change verification round, but must
 state that no code changed. It is evidence of a snapshot, not proof of feature
 correctness or user acceptance. Agent-reported checks remain separate.
 
-There is no automatic reset, checkout or revert of the project. Restoration and
-the corresponding safe Plan-reopening flow remain deliberately unavailable.
+Failure and cancellation never reset files automatically. A failed, canceled or
+blocked Card without accepted Actions can explicitly archive its worktree and
+restart at its base. Main and remote effects are unchanged. The confirmed Plan
+is preserved; no Action starts automatically.
 
 ## Validation
 
@@ -110,3 +113,48 @@ the corresponding safe Plan-reopening flow remain deliberately unavailable.
   empty. This is file-writing integration evidence, not an iOS build/device pass.
 - Browser rendering and acceptance-state checks used the real smoke output with
   intercepted fixture API responses. No user Plan was finalized or executed.
+
+## GitHub delivery evidence
+
+After a successful execution response, the host discovers `origin` in the registered
+code directory or, for standalone projects, the project root. An enclosing parent
+repository is not adopted. A repository created by an Action is therefore recognized
+without re-registering the project. The host never creates repositories or PRs.
+
+Each round retains its repository URL, observed delivery HEAD, branch eligible for
+fallback discovery, cleanliness, reported PR numbers, remote PR details, and query
+time/error. Same-repository URLs in the structured output are queried through `gh`;
+multiple PRs may be associated even when their heads differ. Association is not proof
+that every PR belongs exclusively to this Action or delivers its complete contract.
+Without explicit URLs, discovery requires a changed HEAD and exactly one PR matching
+the captured branch and commit. Ambiguity leaves the association empty.
+
+The Action exposes Refresh GitHub status, including for older and accepted rounds.
+Refresh queries the recorded repository and references, not the current checkout's
+branch. It persists a worklog event and updated evidence without moving the Card's
+checkpoint, accepting outputs, or starting another Action. The Card summarizes the
+latest recorded status per PR across its rounds. Queries use the existing GitHub CLI
+login; they never switch accounts or perform remote writes. Failed queries retain
+old PR details with an explicit stale marker and a retryable error. At most twenty
+explicit PR references can be queried per output; larger sets remain unverified.
+
+Status refresh is explicit, not background monitoring. The timestamp describes the
+last attempted check, not a promise of current remote state. Existing historical
+outputs without a captured repository are not retroactively mapped from a newer
+checkout; later rounds discover the repository. Planning and the demo remain isolated.
+PR merge state and manual acceptance remain separate even after all linked PRs merge.
+
+`npm run test:implementation-execution` includes repository-discovery and GitHub
+fixtures covering multiple PRs, ambiguity, missing access and recovery, stale states,
+remote identity mismatch, and refresh without acceptance or checkpoint movement.
+
+## Report validation
+
+The observer records all commits newly reachable from the final HEAD relative to
+the round's baseline, bounded to 1,000 commits. This includes intermediate commits
+without claiming authorship of every observed change. Execution check references
+that are not independently known are retained and labeled unverified; command text
+is never executed merely because it appears in a report. Review evidence stays strict.
+Invalid delivery references still fail validation and disable acceptance, but their
+schema- and identity-valid report remains visible. GitHub discovery also runs on
+failed result validation when a workspace snapshot is available.

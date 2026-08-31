@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { summarizeGitHub } from '@/lib/github-delivery-summary';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArrowLeft,
@@ -52,7 +53,7 @@ type Draft = {
 function initialDraft(card: PlanningCard): Draft {
   return {
     requirements: card.requirements,
-    feedback: card.run?.feedback ?? '',
+    feedback: '',
     profile: card.run?.profile ?? { agent: 'codex', model: '', effort: '' },
     files: [],
     retainRefs: card.resources.map((item) => item.ref),
@@ -188,6 +189,7 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
     });
     if (saved) {
       patchDraft(card.id, {
+        feedback: '',
         files: [],
         contextRefs: [],
         retainRefs: saved.resources.map((item) => item.ref),
@@ -409,6 +411,18 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
                       ? `${t('Plan')} · ${item.plan.steps.length}`
                       : t('Not planned yet')}
                   </p>
+                  {Boolean(item.execution?.runs.some((run) => run.github)) && (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      GitHub ·{' '}
+                      {summarizeGitHub(item.execution!.runs)
+                        .map(
+                          ({ pr, stale }) =>
+                            `#${pr.number} ${t(pr.state)}${stale ? ` (${t('Stale status')})` : ''}`,
+                        )
+                        .join(' · ') ||
+                        t('No verified PR association for this output.')}
+                    </p>
+                  )}
                   <div className="mt-3 flex items-center justify-between border-t border-border pt-3 text-[10px] text-muted-foreground">
                     <span>
                       {t('Completed Actions')} ·{' '}

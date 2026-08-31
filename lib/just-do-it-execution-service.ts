@@ -1,4 +1,19 @@
-import { randomUUID } from 'node:crypto';
+import { getGitHubRepositoryUrl } from './project-registry.ts';
+import {
+  ensureCardWorkspace,
+  cardGitWritePaths,
+  verifyCardWorkspace,
+  workspaceProject,
+  restartCardWorkspace,
+  undoWorkspaceRestart,
+  type CardWorkspace,
+} from './just-do-it-worktree.ts';
+import {
+  discoverGitHubDelivery,
+  refreshGitHubDelivery,
+  githubReader,
+} from './github-delivery.ts';
+import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { checkpointWorkspace } from './just-do-it-git.ts';
 import { validateAgentProfile } from './agent-profile.ts';
@@ -13,6 +28,7 @@ import {
   type CardWorkRecord,
 } from './just-do-it-worklog.ts';
 import {
+  ExecutionEvidenceError,
   assertCardUuid,
   buildCardHarnessPrompt,
   createCardHarnessRequest,
@@ -25,6 +41,7 @@ import {
 } from './local-agent-transport.ts';
 import {
   observedChanges,
+  observedGitCommits,
   snapshotWorkspace,
   type WorkspaceSnapshot,
 } from './just-do-it-artifacts.ts';
@@ -55,6 +72,13 @@ export function createExecutionService(
   transport = startLocalAgentRun,
   active = sharedActive,
   timeoutMs = 1800000,
+  reader = githubReader,
+  provisionWorkspace: (
+    project: Project,
+    card: PlanningCard,
+    initializeRepository?: boolean,
+  ) => Promise<CardWorkspace | undefined> = ensureCardWorkspace,
+  writeRecord = appendCardWorkRecord,
 ) {
   async function commit(
     project: Project,
@@ -67,7 +91,7 @@ export function createExecutionService(
       revision: card.revision + 1,
       updatedAt: new Date().toISOString(),
     };
-    await appendCardWorkRecord(root(project), card.id, card.revision, record, {
+    await writeRecord(root(project), card.id, card.revision, record, {
       ...files,
       'planning-state.json': JSON.stringify(next),
     });
@@ -131,6 +155,10 @@ export function createExecutionService(
         card.revision !== request.context.contextRevision
       )
         return;
+      const workingProject = workspaceProject(
+        project,
+        card.execution?.workspace,
+      );
       let refs: string[] = [];
       let snapshot: WorkspaceSnapshot | null = null;
       let nextRun: ActionRun = {
@@ -141,8 +169,10 @@ export function createExecutionService(
         usage: outcome instanceof Error ? null : outcome.usage,
       };
       const files: Record<string, string> = {};
+      if (!(outcome instanceof Error))
+        files['raw-response.txt'] = outcome.finalOutput.slice(0, 1000000);
       try {
-        snapshot = await snapshotWorkspace(project);
+        snapshot = await snapshotWorkspace(workingProject);
         refs = observedChanges(baseline, snapshot);
         files['observed-workspace.json'] = JSON.stringify(snapshot);
         const checkpointHash = await checkpointWorkspace(
@@ -155,8 +185,15 @@ export function createExecutionService(
         );
         nextRun = { ...nextRun, commit: checkpointHash };
         refs.push(`checkpoint:${run.id}`);
+        refs = [
+          ...new Set([
+            ...refs,
+            ...(await observedGitCommits(baseline, snapshot)),
+          ]),
+        ];
+        if (card.execution?.workspace)
+          await verifyCardWorkspace(card.execution.workspace);
         if (outcome instanceof Error) throw outcome;
-        files['raw-response.txt'] = outcome.finalOutput.slice(0, 1000000);
         const result = parseCardHarnessResult(
           outcome.finalOutput,
           request,
@@ -174,6 +211,19 @@ export function createExecutionService(
           observedRefs: refs,
           outputRef,
         };
+        nextRun.github = await discoverGitHubDelivery(
+          workingProject,
+          JSON.stringify(result),
+          baseline.head,
+          reader,
+          snapshot.head,
+        );
+        files['github-delivery.json'] = JSON.stringify(nextRun.github);
+        nextRun.unverifiedCheckRefs = unverifiedCheckRefs(
+          result,
+          request,
+          refs,
+        );
         files['result.json'] = JSON.stringify(result);
         files['output.md'] =
           `# Action output\n\n${result.summary}\n\nOutcome: ${result.outcome}\n\n## Observed changes\n${refs.map((ref) => `- ${ref}`).join('\n')}\n\n## Agent-reported checks\n${result.checks.map((check) => `- ${check.status}: ${check.summary}`).join('\n')}\n\n## Remaining\n${result.remaining.map((item) => `- ${item}`).join('\n')}`;
@@ -202,8 +252,30 @@ export function createExecutionService(
           status: 'failed',
           error: message,
           observedRefs: refs,
-          result: null,
+          result: error instanceof ExecutionEvidenceError ? error.result : null,
+          ...(error instanceof ExecutionEvidenceError
+            ? {
+                evidenceErrors: [error.message],
+                unverifiedCheckRefs: unverifiedCheckRefs(
+                  error.result,
+                  request,
+                  refs,
+                ),
+              }
+            : {}),
         };
+        if (nextRun.result)
+          files['rejected-report.json'] = JSON.stringify(nextRun.result);
+        if (snapshot) {
+          nextRun.github = await discoverGitHubDelivery(
+            workingProject,
+            nextRun.result ? JSON.stringify(nextRun.result) : '',
+            baseline.head,
+            reader,
+            snapshot.head,
+          );
+          files['github-delivery.json'] = JSON.stringify(nextRun.github);
+        }
         await commit(
           project,
           replaceRun(card, nextRun),
@@ -360,7 +432,13 @@ export function createExecutionService(
           'Implement the selected Action and return its output for user validation.',
         input.actionId,
       );
-      const baseline = await snapshotWorkspace(project);
+      const workspace = await provisionWorkspace(
+        project,
+        card,
+        input.initializeRepository === true,
+      );
+      const workingProject = workspaceProject(project, workspace);
+      const baseline = await snapshotWorkspace(workingProject);
       let git = card.execution?.git;
       if (!git) {
         const baselineCommit = await checkpointWorkspace(
@@ -395,12 +473,15 @@ export function createExecutionService(
         outputRef: null,
         parentCommit: git.head,
       };
-      const prompt = `${buildCardHarnessPrompt(request)}\n\nExecution runtime: work only in ${baseline.root}. The planning store ${project.planningPath} is host-owned; do not edit it or call AgentManager mutation APIs. Preserve pre-existing user changes. Repository creation is not a prerequisite; create or publish a repository only if the signed-off Action or current user instruction explicitly requests it. If initializing or publishing a project repository, exclude .agent-manager/ before staging; never publish the host-owned planning store or its private Git history. No automatic merge, rollback, acceptance, or next Action. Use file:relative/path for changed files, deleted:relative/path for removals, or git:full-commit-hash for a new commit in artifactRefs. The host checks these against before/after snapshots. Do not list unchanged input files as new artifacts or invent URLs. Checks are your reported evidence, not user acceptance. The host records a new local Git checkpoint for this round. You may reference checkpoint:${request.requestId} as this round's workspace snapshot when reporting checks without file changes; explicitly state that no code changed and do not invent completed functionality. If permissions prevent an operation, report blocked; never bypass sandbox restrictions. Return the required JSON, not a Markdown envelope.`;
+      const prompt = `${buildCardHarnessPrompt(request)}\n\nExecution runtime: work only in ${baseline.root}. This is the Card-owned worktree on branch ${workspace?.branch ?? 'legacy'}. Keep all Actions and Rounds on this branch. The primary checkout ${project.codePath ?? project.rootPath} is not your editing directory. Never switch this worktree to main, reset the primary checkout, or merge into main. Repository commits and pushes belong on this Card branch; only the agreed PR delivery process may merge to main. The planning store ${project.planningPath} is host-owned; do not edit it or call AgentManager mutation APIs. Preserve pre-existing user changes. The host has prepared the local repository and Card branch. Do not reinitialize Git or create a replacement branch. Creating a GitHub repository or publishing branches still requires the signed-off Action or explicit user instruction. A local empty baseline does not authorize pushing the default branch to GitHub. If initializing or publishing a project repository, exclude .agent-manager/ before staging; never publish the host-owned planning store or its private Git history. No automatic merge, rollback, acceptance, or next Action. Use file:relative/path for changed files, deleted:relative/path for removals, or git:full-commit-hash for a commit newly reachable from the final project HEAD in artifactRefs. Command descriptions and external URLs may be included in check evidenceRefs, but remain unverified Agent-reported references; they are not observed delivery artifacts. The host checks these against before/after snapshots. Do not list unchanged input files as new artifacts or invent URLs. Include actual PR URLs in the output summary when PRs were produced; the host queries GitHub to verify their state. Checks are your reported evidence, not user acceptance. The host records a new local Git checkpoint for this round. You may reference checkpoint:${request.requestId} as this round's workspace snapshot when reporting checks without file changes; explicitly state that no code changed and do not invent completed functionality. If permissions prevent an operation, report blocked; never bypass sandbox restrictions. Return the required JSON, not a Markdown envelope.`;
       const saved = await commit(
         project,
         {
           ...card,
           execution: {
+            ...card.execution,
+            profile: input.profile,
+            workspace,
             runs: [...(card.execution?.runs ?? []), run],
             acceptedActionIds: card.execution?.acceptedActionIds ?? [],
             git,
@@ -426,6 +507,10 @@ export function createExecutionService(
           effort: input.profile.effort || undefined,
           access: 'workspace-write',
           protectedPath: project.planningPath,
+          primaryRepositoryPath: workspace?.repository,
+          gitWritePaths: workspace
+            ? await cardGitWritePaths(workspace)
+            : undefined,
         });
       } catch (error) {
         await finish(
@@ -507,7 +592,9 @@ export function createExecutionService(
       handle.handle?.cancel();
       await handle.handle?.completion.catch(() => undefined);
       try {
-        const snapshot = await snapshotWorkspace(project);
+        const snapshot = await snapshotWorkspace(
+          workspaceProject(project, card.execution?.workspace),
+        );
         const hash = await checkpointWorkspace(
           project,
           card.id,
@@ -582,7 +669,179 @@ export function createExecutionService(
     );
   }
 
-  return { start, update, refresh };
+  async function refreshGitHub(
+    project: Project,
+    cardId: string,
+    expectedRevision: number,
+    outputId: string,
+  ) {
+    assertCardUuid(cardId);
+    assertCardUuid(outputId);
+    const card = await store.read(project, cardId);
+    if (card.revision !== expectedRevision)
+      throw new Error('Card changed. Reload before trying again.');
+    if (card.execution?.runs.at(-1)?.status === 'running')
+      throw new Error('Wait for execution to finish before refreshing GitHub.');
+    const run = card.execution?.runs.find((item) => item.id === outputId);
+    if (!run?.github)
+      throw new Error('No captured GitHub delivery for this output.');
+    const github = await refreshGitHubDelivery(run.github, reader);
+    return commit(
+      project,
+      {
+        ...card,
+        execution: {
+          ...card.execution!,
+          runs: card.execution!.runs.map((item) =>
+            item.id === run.id ? { ...run, github } : item,
+          ),
+        },
+      },
+      {
+        kind: 'system-event',
+        stage: 'execution',
+        actionId: run.actionId,
+        event: 'output-recorded',
+        text:
+          github.error ??
+          `GitHub status refreshed for output ${run.id}. ${github.pullRequests.map((pr) => `${pr.url}: ${pr.state}`).join('; ')} User acceptance is unchanged.`,
+        refs: github.pullRequests.map((pr) => pr.url),
+      },
+      { 'github-delivery.json': JSON.stringify(github) },
+    );
+  }
+
+  async function resetWorkspace(
+    project: Project,
+    cardId: string,
+    expectedRevision: number,
+    confirmation?: string,
+  ) {
+    assertCardUuid(cardId);
+    if (active.has(project.rootPath))
+      throw new Error('Stop project execution before resetting a Card.');
+    const reservation: Active = {
+      id: randomUUID(),
+      cardId,
+      handle: null,
+      timer: null,
+    };
+    active.set(project.rootPath, reservation);
+    try {
+      const card = await store.read(project, cardId);
+      if (card.revision !== expectedRevision)
+        throw new Error('Card changed. Reload before trying again.');
+      const workspace = card.execution?.workspace;
+      const last = card.execution?.runs.at(-1);
+      if (
+        !workspace ||
+        !last ||
+        card.execution!.acceptedActionIds.length ||
+        card.run?.status === 'running' ||
+        !(
+          last.status === 'failed' ||
+          last.status === 'canceled' ||
+          (last.status === 'succeeded' && last.result?.outcome !== 'delivered')
+        )
+      )
+        throw new Error(
+          'Only failed, canceled or blocked Cards without accepted Actions can restart from their base.',
+        );
+      await verifyCardWorkspace(workspace);
+      const snapshot = await snapshotWorkspace(
+        workspaceProject(project, workspace),
+      );
+      const repositoryUrl = getGitHubRepositoryUrl(
+        workspaceProject(project, workspace),
+      );
+      if (repositoryUrl) {
+        const prs = await reader.branchPullRequests(
+          repositoryUrl.slice('https://github.com/'.length),
+          workspace.branch,
+        );
+        if (prs.some((pr) => pr.state === 'MERGED'))
+          throw new Error(
+            'This Card branch has a merged PR. Use a revert PR instead of a local restart.',
+          );
+      }
+      const token = createHash('sha256')
+        .update(
+          JSON.stringify({ revision: card.revision, workspace, snapshot }),
+        )
+        .digest('hex');
+      const preview = {
+        token,
+        path: workspace.path,
+        branch: workspace.branch,
+        baseCommit: workspace.baseCommit,
+        repositoryUrl,
+      };
+      if (confirmation === undefined) return { preview };
+      if (confirmation !== token)
+        throw new Error('Workspace changed. Preview the reset again.');
+      const restarted = await restartCardWorkspace(project, card);
+      try {
+        const saved = await commit(
+          project,
+          {
+            ...card,
+            execution: {
+              runs: [],
+              profile: last.profile,
+              acceptedActionIds: [],
+              workspace: restarted.workspace,
+              workspaceBackups: [
+                ...(card.execution?.workspaceBackups ?? []),
+                restarted.backup,
+              ],
+            },
+          },
+          {
+            kind: 'system-event',
+            stage: 'execution',
+            actionId: null,
+            event: 'rollback-confirmed',
+            text: `User restarted this Card from base ${workspace.baseCommit}. The confirmed Plan is preserved. No Actions are accepted or running. Active worktree: ${restarted.workspace.path}. Previous workspace and branch remain at ${restarted.backup.path}. GitHub and other external effects were not reverted. Next: wait for the user to start the first Action.`,
+            refs: [],
+          },
+        );
+        return { card: saved };
+      } catch (error) {
+        await undoWorkspaceRestart(
+          project,
+          cardId,
+          workspace,
+          restarted.workspace,
+          restarted.backup,
+        );
+        throw error;
+      }
+    } finally {
+      if (active.get(project.rootPath) === reservation)
+        active.delete(project.rootPath);
+    }
+  }
+
+  return { start, update, refresh, refreshGitHub, resetWorkspace };
+}
+
+function unverifiedCheckRefs(
+  result: NonNullable<ActionRun['result']>,
+  request: CardHarnessRequest,
+  refs: string[],
+) {
+  const known = new Set([
+    ...refs,
+    ...request.context.resources.map((item) => item.ref),
+    ...(request.context.currentOutput?.refs ?? []),
+  ]);
+  return [
+    ...new Set(
+      result.checks
+        .flatMap((check) => check.evidenceRefs)
+        .filter((ref) => !known.has(ref)),
+    ),
+  ];
 }
 
 function replaceRun(card: PlanningCard, run: ActionRun): PlanningCard {

@@ -13,6 +13,7 @@ import test from 'node:test';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { randomUUID } from 'node:crypto';
+import { githubReader } from '../lib/github-delivery.ts';
 import {
   checkpointWorkspace,
   includeInGitHistory,
@@ -42,7 +43,10 @@ import type { CardHarnessRequest } from '../lib/just-do-it-harness.ts';
 const id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const one = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const two = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
-async function fixture(t: { after: (fn: () => Promise<void>) => void }) {
+async function fixture(
+  t: { after: (fn: () => Promise<void>) => void },
+  reader = githubReader,
+) {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'jdi-execution-test-'));
   t.after(() => rm(rootPath, { recursive: true, force: true }));
   const project: RegisteredProject = {
@@ -141,7 +145,14 @@ async function fixture(t: { after: (fn: () => Promise<void>) => void }) {
       },
     } as LocalAgentRun;
   };
-  const service = createExecutionService(store, transport, new Map());
+  const service = createExecutionService(
+    store,
+    transport,
+    new Map(),
+    1800000,
+    reader,
+    async () => undefined,
+  );
   const input = {
     cardId: id,
     actionId: one,
@@ -430,7 +441,14 @@ void test('execution permissions do not broaden planning and explicit execution 
 
 void test('timeout ends the Action without acceptance or rolling back partial files', async (t) => {
   const { project, store, transport, calls, input } = await fixture(t);
-  const service = createExecutionService(store, transport, new Map(), 5);
+  const service = createExecutionService(
+    store,
+    transport,
+    new Map(),
+    5,
+    undefined,
+    async () => undefined,
+  );
   await service.start(project, input);
   const card = await settled(store, project);
   assert.equal(card.execution?.runs[0].status, 'failed');
@@ -648,4 +666,230 @@ void test('a no-code-change round can report its real Git checkpoint without rel
   assert.equal(card.execution?.runs[0].status, 'succeeded');
   assert.match(card.execution!.runs[0].commit!, /^[0-9a-f]{40}$/);
   assert.deepEqual(card.execution?.acceptedActionIds, []);
+});
+
+void test('GitHub refresh persists remote state without accepting, starting, or changing checkpoint history', async (t) => {
+  const { project, store, transport, calls } = await fixture(t);
+  const hash = 'a'.repeat(40);
+  const delivery = {
+    repositoryUrl: 'https://github.com/example/fixture',
+    outputHead: hash,
+    outputBranch: 'feature',
+    cleanAtOutput: true,
+    requestedNumbers: [1],
+    defaultBranch: 'main',
+    pullRequests: [],
+    checkedAt: new Date().toISOString(),
+    error: null,
+  };
+  const runId = randomUUID();
+  const laterId = randomUUID();
+  const card = await store.read(project, id);
+  const run = {
+    id: runId,
+    actionId: one,
+    status: 'succeeded' as const,
+    input: '',
+    profile: { agent: 'codex' as const, model: '', effort: '' as const },
+    startedAt: '',
+    endedAt: '',
+    hostPid: process.pid,
+    agentSessionId: null,
+    usage: null,
+    result: null,
+    error: null,
+    observedRefs: [],
+    outputRef: null,
+    commit: hash,
+    github: delivery,
+  };
+  await appendCardWorkRecord(
+    path.join(project.planningPath, 'implementation/cards'),
+    id,
+    1,
+    {
+      kind: 'system-event',
+      stage: 'execution',
+      actionId: one,
+      event: 'output-recorded',
+      text: 'Fixture outputs',
+      refs: [],
+    },
+    {
+      'planning-state.json': JSON.stringify({
+        ...card,
+        revision: 2,
+        execution: {
+          runs: [run, { ...run, id: laterId, commit: 'b'.repeat(40) }],
+          acceptedActionIds: [],
+          git: {
+            baseline: hash,
+            head: 'b'.repeat(40),
+            firstTrackedRunId: runId,
+          },
+        },
+      }),
+    },
+  );
+  const service = createExecutionService(store, transport, new Map(), 1800000, {
+    repository: async () => 'main',
+    branchPullRequests: async () => [],
+    pullRequest: async () => ({
+      number: 1,
+      url: 'https://github.com/example/fixture/pull/1',
+      title: 'Fixture',
+      state: 'MERGED',
+      isDraft: false,
+      headRefOid: hash,
+      headRefName: 'feature',
+      baseRefName: 'main',
+      mergedAt: '2026-08-30T12:00:00Z',
+    }),
+  });
+  const refreshed = await service.refreshGitHub(project, id, 2, runId);
+  assert.equal(
+    refreshed.execution?.runs[0].github?.pullRequests[0].state,
+    'MERGED',
+  );
+  assert.deepEqual(refreshed.execution?.acceptedActionIds, []);
+  assert.equal(refreshed.execution?.git?.head, 'b'.repeat(40));
+  assert.equal(calls.length, 0);
+  assert.equal((await store.read(project, id)).revision, 3);
+  await assert.rejects(
+    () => service.refreshGitHub(project, id, 2, runId),
+    /Card changed/,
+  );
+});
+
+void test('an Action-created repository and reported PR become durable output evidence automatically', async (t) => {
+  const { project, store, service, calls, input } = await fixture(t, {
+    repository: async () => 'main',
+    branchPullRequests: async () => [],
+    pullRequest: async () => ({
+      number: 7,
+      url: 'https://github.com/example/fixture/pull/7',
+      title: 'Created by Action',
+      state: 'OPEN',
+      isDraft: false,
+      headRefOid: 'a'.repeat(40),
+      headRefName: 'feature',
+      baseRefName: 'main',
+      mergedAt: null,
+    }),
+  });
+  await service.start(project, input);
+  const exec = promisify(execFile);
+  await exec('git', ['init', '-b', 'feature'], { cwd: project.rootPath });
+  await writeFile(path.join(project.rootPath, 'module.txt'), 'implemented');
+  await exec(
+    'git',
+    [
+      '-c',
+      'user.name=Fixture',
+      '-c',
+      'user.email=fixture@example.invalid',
+      'commit',
+      '--allow-empty',
+      '-m',
+      'fixture',
+    ],
+    { cwd: project.rootPath },
+  );
+  await exec(
+    'git',
+    ['remote', 'add', 'origin', 'https://github.com/example/fixture.git'],
+    { cwd: project.rootPath },
+  );
+  const result = delivered(calls[0].request);
+  const output = JSON.parse(result.finalOutput);
+  output.summary += ' https://github.com/example/fixture/pull/7';
+  calls[0].resolve({ ...result, finalOutput: JSON.stringify(output) });
+  const card = await settled(store, project);
+  assert.equal(card.execution?.runs[0].status, 'succeeded');
+  assert.equal(card.execution?.runs[0].github?.pullRequests[0].number, 7);
+  assert.equal(card.execution?.runs[0].github?.cleanAtOutput, false);
+  assert.deepEqual(card.execution?.acceptedActionIds, []);
+  assert.equal(calls.length, 1);
+});
+
+void test('blocked reports retain intermediate commits and unverified check references without acceptance', async (t) => {
+  const { project, service, store, calls, input } = await fixture(t);
+  const exec = promisify(execFile);
+  await service.start(project, input);
+  const git = (...args: string[]) =>
+    exec('git', ['-C', project.rootPath, ...args]);
+  await git('init', '-b', 'feature');
+  await writeFile(path.join(project.rootPath, 'module.txt'), 'one');
+  await git('add', 'module.txt');
+  await git(
+    '-c',
+    'user.name=Fixture',
+    '-c',
+    'user.email=fixture@example.invalid',
+    'commit',
+    '-m',
+    'first',
+  );
+  const first = (await git('rev-parse', 'HEAD')).stdout.trim();
+  await writeFile(path.join(project.rootPath, 'module.txt'), 'two');
+  await git('add', 'module.txt');
+  await git(
+    '-c',
+    'user.name=Fixture',
+    '-c',
+    'user.email=fixture@example.invalid',
+    'commit',
+    '-m',
+    'second',
+  );
+  const last = (await git('rev-parse', 'HEAD')).stdout.trim();
+  const response = delivered(calls[0].request, [
+    `git:${first}`,
+    `git:${last}`,
+    'file:module.txt',
+  ]);
+  const report = JSON.parse(response.finalOutput);
+  report.outcome = 'blocked';
+  report.remaining = ['Device is unavailable'];
+  report.checks = [
+    {
+      status: 'failed',
+      summary: 'Device test blocked',
+      evidenceRefs: [
+        'command:device-test',
+        'https://github.com/example/fixture',
+      ],
+    },
+  ];
+  calls[0].resolve({ ...response, finalOutput: JSON.stringify(report) });
+  const card = await settled(store, project);
+  const run = card.execution!.runs[0];
+  assert.equal(run.status, 'succeeded');
+  assert.equal(run.result?.outcome, 'blocked');
+  assert.equal(run.result?.remaining[0], 'Device is unavailable');
+  assert.ok(run.observedRefs.includes(`git:${first}`));
+  assert.ok(run.observedRefs.includes(`git:${last}`));
+  assert.deepEqual(run.unverifiedCheckRefs, [
+    'command:device-test',
+    'https://github.com/example/fixture',
+  ]);
+  assert.deepEqual(card.execution!.acceptedActionIds, []);
+});
+
+void test('invalid delivery references preserve a rejected report and cannot be accepted', async (t) => {
+  const { project, service, store, calls, input } = await fixture(t);
+  await service.start(project, input);
+  await writeFile(path.join(project.rootPath, 'module.txt'), 'real change');
+  const response = delivered(calls[0].request, ['file:invented.txt']);
+  calls[0].resolve(response);
+  const card = await settled(store, project);
+  const run = card.execution!.runs[0];
+  assert.equal(run.status, 'failed');
+  assert.ok(run.result?.summary);
+  assert.match(run.evidenceErrors![0], /invented.txt/);
+  assert.ok(run.observedRefs.includes('file:module.txt'));
+  await assert.rejects(
+    () => service.update(project, id, card.revision, 'accept', run.id),
+    /observed output/,
+  );
 });

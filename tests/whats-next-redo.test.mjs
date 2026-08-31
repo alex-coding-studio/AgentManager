@@ -69,6 +69,17 @@ void test('continued Runs receive current Instructions, clearing is explicit, an
         ),
       );
     assert.equal(first.sessionId, original.sessionId);
+    const actualPrompt = await readFile(
+      path.join(
+        project.planningPath,
+        'whats-next/runs',
+        first.runId,
+        'fixture-prompt.txt',
+      ),
+      'utf8',
+    );
+    assert.match(actualPrompt, /fixture:available/);
+    assert.match(actualPrompt, /not a request to invoke/);
     assert.equal(
       (await readPacket(first)).packet.projectInstructions,
       'Use Chinese.',
@@ -169,7 +180,16 @@ async function fixture(work, initialInstructions) {
       path.join(root, 'bin/codex'),
       `#!${process.execPath}
 const fs=require('node:fs');
+if(process.argv[2]==='app-server'){
+ require('node:readline').createInterface({input:process.stdin}).on('line',line=>{
+  const message=JSON.parse(line);
+  if(message.id===1)console.log(JSON.stringify({id:1,result:{}}));
+  if(message.id===2)console.log(JSON.stringify({id:2,result:{data:[{cwd:message.params.cwds[0],skills:[{name:'fixture:available',description:'Available when relevant.',path:'/fixture/SKILL.md',enabled:true}],errors:[]}]}}));
+ });
+}else{
+let input='';process.stdin.setEncoding('utf8');process.stdin.on('data',chunk=>input+=chunk);
 process.stdin.resume();process.stdin.on('end',()=>setTimeout(()=>{
+ fs.writeFileSync('fixture-prompt.txt',input);
  if(process.env.REDO_TEST_MODE==='fail'){console.log(JSON.stringify({type:'turn.failed',error:{message:'Fixture failure'}}));return;}
  const {packet}=JSON.parse(fs.readFileSync('request.json','utf8'));
  fs.writeFileSync('fixture-argv.json',JSON.stringify(process.argv.slice(2)));
@@ -178,6 +198,7 @@ process.stdin.resume();process.stdin.on('end',()=>setTimeout(()=>{
  const result={schemaVersion:1,harness:{id:'agent-manager.whats-next',revision:3},request:packet.request,outcome:'proposal',reflection:{markdown:'The previous directions misunderstood the user.',continuationAdvice:{action:'continue',recommendedFocus:'compare',reason:'Compare the corrected choices.'}},exploration:{consideredNodeIds:packet.origins.map(n=>n.id),notes:[]},candidates};
  console.log(JSON.stringify({type:'thread.started',thread_id:'fixture-session'}));console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:JSON.stringify(result)}}));console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:0,output_tokens:0}}));
 },process.env.REDO_TEST_MODE==='slow'?10000:80));
+}
 `,
       { mode: 0o755 },
     );

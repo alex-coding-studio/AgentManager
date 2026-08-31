@@ -97,3 +97,25 @@ export function observedChanges(
   if (after.head && after.head !== before.head) refs.push(`git:${after.head}`);
   return refs.sort();
 }
+
+export async function observedGitCommits(
+  before: WorkspaceSnapshot,
+  after: WorkspaceSnapshot,
+) {
+  if (before.root !== after.root)
+    throw new Error('Execution workspace changed.');
+  if (!after.head || after.head === before.head) return [];
+  const args = ['-C', after.root, 'rev-list', '--max-count=1001', after.head];
+  if (before.head) args.push(`^${before.head}`);
+  const hashes = (
+    await exec('git', args, { timeout: 5000, maxBuffer: 1000000 })
+  ).stdout
+    .trim()
+    .split('\n')
+    .filter(Boolean);
+  if (hashes.length > 1000)
+    throw new Error('Git output history exceeds the observation limit.');
+  if (hashes.some((hash) => !/^[0-9a-f]{40,64}$/.test(hash)))
+    throw new Error('Invalid Git history response.');
+  return hashes.map((hash) => `git:${hash}`);
+}
