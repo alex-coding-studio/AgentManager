@@ -4,6 +4,7 @@ import {
   readCodexSkills,
   withSkillCatalog,
   type SkillCatalog,
+  type ExecutionAccess,
 } from './local-agent-skills.ts';
 import type { ReasoningEffort } from './local-agent-model-types.ts';
 
@@ -21,6 +22,7 @@ export type LocalAgentResult = {
   agentSessionId: string | null;
   finalOutput: string;
   usage: LocalAgentUsage | null;
+  executionAccess?: ExecutionAccess;
 };
 
 export type LocalAgentRun = {
@@ -114,11 +116,22 @@ export function startCodexRun(
   }).then((catalog) => {
     if (controller.signal.aborted)
       throw new Error('Execution canceled before Agent startup.');
+    const executionAccess =
+      input.access === 'workspace-write'
+        ? (catalog.executionAccess ?? 'workspace-write')
+        : 'read-only';
+    const permissionContext =
+      executionAccess === 'full-access'
+        ? '\n\nExecution permissions: Full Access, selected in local Codex settings. There is no OS filesystem sandbox protecting the primary checkout or planning store. You must still work only in the Card worktree, preserve host-owned records, and follow the explicit PR and acceptance boundaries. Full Access is not authorization for unrelated actions.'
+        : '';
     run = launch(
-      { ...input, prompt: withSkillCatalog(input.prompt, catalog) },
+      {
+        ...input,
+        prompt: withSkillCatalog(input.prompt, catalog) + permissionContext,
+      },
       catalog,
     );
-    return run.completion;
+    return run.completion.then((result) => ({ ...result, executionAccess }));
   });
   return {
     completion,
@@ -210,16 +223,25 @@ export function buildCodexArguments(
           '--ignore-user-config',
           '--ignore-rules',
           '--skip-git-repo-check',
-          ...(input.access === 'workspace-write'
+          ...(input.access === 'workspace-write' &&
+          catalog?.executionAccess === 'full-access'
             ? [
                 '-c',
                 'approval_policy="never"',
-                '-c',
-                'default_permissions="agent_manager_action"',
-                '-c',
-                `permissions.agent_manager_action={extends=":workspace",filesystem={":root"="read",":workspace_roots"={"."="write",".git"="write"}${input.primaryRepositoryPath ? `,${JSON.stringify(input.primaryRepositoryPath)}="read"` : ''}${(input.gitWritePaths ?? []).map((entry) => `,${JSON.stringify(entry)}="write"`).join('')}${input.protectedPath ? `,${JSON.stringify(input.protectedPath)}="read"` : ''}},network={enabled=true}}`,
+                '--sandbox',
+                'danger-full-access',
               ]
-            : ['--sandbox', 'read-only']),
+            : input.access === 'workspace-write' &&
+                catalog?.executionAccess !== 'read-only'
+              ? [
+                  '-c',
+                  'approval_policy="never"',
+                  '-c',
+                  'default_permissions="agent_manager_action"',
+                  '-c',
+                  `permissions.agent_manager_action={extends=":workspace",filesystem={":root"="read",":workspace_roots"={"."="write",".git"="write"}${input.primaryRepositoryPath ? `,${JSON.stringify(input.primaryRepositoryPath)}="read"` : ''}${(input.gitWritePaths ?? []).map((entry) => `,${JSON.stringify(entry)}="write"`).join('')}${input.protectedPath ? `,${JSON.stringify(input.protectedPath)}="read"` : ''}},network={enabled=true}}`,
+                ]
+              : ['--sandbox', 'read-only']),
           '--json',
           '-C',
           workingDirectory,

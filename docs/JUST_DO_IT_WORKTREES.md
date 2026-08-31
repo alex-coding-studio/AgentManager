@@ -4,7 +4,7 @@
 
 One Just Do It Card owns one active Git branch and worktree. Its Actions and
 feedback Rounds reuse that working directory. Project registration and planning
-remain rooted at the original project; execution writes source files only in the
+remain rooted at the original project; execution is directed to write source files only in the
 Card worktree. Source context and accepted-output records remain available across
 fresh provider Sessions.
 
@@ -29,7 +29,9 @@ are not eligible for this local restart; external effects are never claimed undo
 - A missing, redirected or branch-switched Card worktree blocks further execution.
 - Git metadata access is limited to the worktree admin directory, objects, own branch
   references/logs, remote-tracking metadata and explicit repository configuration in addition
-  to the existing execution root. The planning store stays read-only to the worker.
+  to the existing execution root when the workspace sandbox is selected. Full Access
+  honors the user's broader permission choice; primary/planning-store protection is
+  then a workflow requirement, not an OS guarantee.
 - Existing pre-worktree execution is never silently resumed in a different directory.
 - Reset preserves edited/untracked/ignored files and old branch history, cannot race
   a running Action, and returns a new ready state without automatic execution.
@@ -51,3 +53,8 @@ Recoverable operation errors restore the prior workspace/state. This is not a
 crash-atomic transaction: killing the host between Git moves and persisted state
 can require manual reconciliation, with the prior worktree and branch retained.
 A remote side effect remains external even if the Card has no accepted Actions.
+
+User-selected Full Access is supported for execution because macOS CoreSimulator
+and CoreDevice use Mach/XPC services unavailable in the workspace sandbox. Planning
+stays read-only; selecting broader execution permissions never authorizes automatic
+acceptance, a default-branch push, or a PR merge.

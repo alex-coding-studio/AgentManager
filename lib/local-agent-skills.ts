@@ -1,5 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import path from 'node:path';
+import os from 'node:os';
 
 export type LocalSkill = {
   name: string;
@@ -7,7 +8,44 @@ export type LocalSkill = {
   path: string;
   enabled: boolean;
 };
-export type SkillCatalog = { skills: LocalSkill[] };
+export type ExecutionAccess = 'read-only' | 'workspace-write' | 'full-access';
+export type SkillCatalog = {
+  skills: LocalSkill[];
+  executionAccess?: ExecutionAccess;
+};
+
+export function executionAccessFromConfig(value: unknown): ExecutionAccess {
+  const config = (
+    value as {
+      config?: { default_permissions?: unknown; sandbox_mode?: unknown };
+    } | null
+  )?.config;
+  if (!config || typeof config !== 'object')
+    throw new Error('Could not read local Codex permission settings.');
+  const profile = config.default_permissions;
+  if (
+    profile !== null &&
+    profile !== undefined &&
+    (typeof profile !== 'string' ||
+      ![':danger-full-access', ':read-only', ':workspace'].includes(profile))
+  )
+    throw new Error(
+      'Unsupported custom Codex permission profile. AgentManager will not replace it with broader permissions.',
+    );
+  if (
+    profile === ':danger-full-access' ||
+    ((profile === null || profile === undefined) &&
+      config.sandbox_mode === 'danger-full-access')
+  )
+    return 'full-access';
+  if (
+    profile === ':read-only' ||
+    ((profile === null || profile === undefined) &&
+      config.sandbox_mode === 'read-only')
+  )
+    return 'read-only';
+  return 'workspace-write';
+}
 type Launch = (cwd: string, args: string[]) => ChildProcessWithoutNullStreams;
 
 const launch: Launch = (cwd, args) => {
@@ -67,6 +105,7 @@ export function readCodexSkills(
     let done = false;
     let buffer = '';
     let bytes = 0;
+    let catalog: SkillCatalog | undefined;
     const finish = (error?: Error, result?: SkillCatalog) => {
       if (done) return;
       done = true;
@@ -119,7 +158,7 @@ export function readCodexSkills(
         buffer = buffer.slice(index + 1);
         try {
           const message = JSON.parse(line);
-          if (message.id !== 1 && message.id !== 2) continue;
+          if (![1, 2, 3].includes(message.id)) continue;
           if (message.error)
             throw new Error('Codex could not discover enabled Skills.');
           if (message.id === 1) {
@@ -129,7 +168,21 @@ export function readCodexSkills(
               method: 'skills/list',
               params: { cwds: [cwd], forceReload: true },
             });
-          } else finish(undefined, parseSkillCatalog(message.result, cwd));
+          } else if (message.id === 2) {
+            catalog = parseSkillCatalog(message.result, cwd);
+            send({
+              id: 3,
+              method: 'config/read',
+              params: { cwd: os.homedir(), includeLayers: false },
+            });
+          } else {
+            if (!catalog)
+              throw new Error('Skills discovery response is out of order.');
+            finish(undefined, {
+              ...catalog,
+              executionAccess: executionAccessFromConfig(message.result),
+            });
+          }
         } catch (error) {
           finish(
             error instanceof Error

@@ -109,6 +109,12 @@ export const chineseUi: Record<string, string> = {
   'This empty project needs a local Git baseline. Confirm creating an empty commit on local main; no files are committed and nothing is pushed to GitHub.':
     '这个空项目需要本地 Git 起点。请确认在本地 main 创建一个空提交：不提交任何文件，也不会推送到 GitHub。',
   'Create empty local main baseline and start': '创建本地空 main 基线并开始',
+  'Execution permissions': '执行权限',
+  'full-access': '完全访问',
+  'workspace-write': '工作区写入',
+  'read-only': '只读',
+  'Codex execution follows your local Full Access or read-only choice. Full Access relies on worktree and PR discipline, not an OS write barrier around main.':
+    'Codex 执行会遵循你本地的完全访问或只读选择。完全访问依靠 worktree 和 PR 流程约束，不再由操作系统禁止写入 main。',
   'This Action was accepted by you.': '你已验收这一步的产出。',
   'Accept earlier Actions before starting this step.':
     '请先验收前面的步骤，再开始这一步。',

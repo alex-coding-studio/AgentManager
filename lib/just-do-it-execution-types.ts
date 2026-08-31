@@ -1,6 +1,7 @@
 import type { CardWorkspace } from './just-do-it-worktree.ts';
 import type { AgentProfile } from './agent-profile.ts';
 import type { CardHarnessResult } from './just-do-it-harness.ts';
+import type { ExecutionAccess } from './local-agent-skills.ts';
 import type { LocalAgentUsage } from './local-agent-transport.ts';
 import type { GitHubDelivery } from './github-delivery.ts';
 
@@ -16,6 +17,7 @@ export type ActionRun = {
   hostPid: number;
   agentSessionId: string | null;
   usage: LocalAgentUsage | null;
+  executionAccess?: ExecutionAccess;
   result: ActionOutput | null;
   error: string | null;
   observedRefs: string[];

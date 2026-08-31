@@ -184,6 +184,7 @@ if(process.argv[2]==='app-server'){
  require('node:readline').createInterface({input:process.stdin}).on('line',line=>{
   const message=JSON.parse(line);
   if(message.id===1)console.log(JSON.stringify({id:1,result:{}}));
+  if(message.id===3)console.log(JSON.stringify({id:3,result:{config:{sandbox_mode:'workspace-write'}}}));
   if(message.id===2)console.log(JSON.stringify({id:2,result:{data:[{cwd:message.params.cwds[0],skills:[{name:'fixture:available',description:'Available when relevant.',path:'/fixture/SKILL.md',enabled:true}],errors:[]}]}}));
  });
 }else{

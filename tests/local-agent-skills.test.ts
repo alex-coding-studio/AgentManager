@@ -3,9 +3,11 @@ import { EventEmitter } from 'node:events';
 import { PassThrough, Writable } from 'node:stream';
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import test from 'node:test';
+import os from 'node:os';
 import {
   readCodexSkills,
   parseSkillCatalog,
+  executionAccessFromConfig,
   withSkillCatalog,
   type SkillCatalog,
 } from '../lib/local-agent-skills.ts';
@@ -69,6 +71,8 @@ void test('native Skills discovery reads the project catalog without creating a 
   const f = fake((m, reply) => {
     if (m.id === 1) reply({ id: 1, result: {} });
     if (m.id === 2) reply({ id: 2, result: payload });
+    if (m.id === 3)
+      reply({ id: 3, result: { config: { sandbox_mode: 'workspace-write' } } });
   });
   const result = await readCodexSkills(cwd, {
     start: (directory, args) => {
@@ -77,12 +81,16 @@ void test('native Skills discovery reads the project catalog without creating a 
       return f.child;
     },
   });
-  assert.deepEqual(result, catalog);
+  assert.deepEqual(result, { ...catalog, executionAccess: 'workspace-write' });
   assert.deepEqual(
     f.messages.map((m) => m.method),
-    ['initialize', 'initialized', 'skills/list'],
+    ['initialize', 'initialized', 'skills/list', 'config/read'],
   );
   assert.deepEqual(f.messages[2].params, { cwds: [cwd], forceReload: true });
+  assert.deepEqual(f.messages[3].params, {
+    cwd: os.homedir(),
+    includeLayers: false,
+  });
   assert.equal(f.killed(), true);
 });
 
@@ -235,4 +243,85 @@ void test('failed discovery does not invoke the provider', async () => {
   );
   await assert.rejects(run.completion, /Catalog unavailable/);
   assert.equal(launched, false);
+});
+
+void test('only explicit local Full Access enables unrestricted execution; planning remains read-only', async () => {
+  assert.equal(
+    executionAccessFromConfig({
+      config: { sandbox_mode: 'danger-full-access', default_permissions: null },
+    }),
+    'full-access',
+  );
+  assert.equal(
+    executionAccessFromConfig({
+      config: { default_permissions: ':danger-full-access' },
+    }),
+    'full-access',
+  );
+  assert.equal(
+    executionAccessFromConfig({
+      config: {
+        sandbox_mode: 'danger-full-access',
+        default_permissions: ':workspace',
+      },
+    }),
+    'workspace-write',
+  );
+  assert.throws(
+    () =>
+      executionAccessFromConfig({
+        config: {
+          sandbox_mode: 'danger-full-access',
+          default_permissions: 'custom-restricted',
+        },
+      }),
+    /will not replace/,
+  );
+  assert.equal(
+    executionAccessFromConfig({ config: { sandbox_mode: 'read-only' } }),
+    'read-only',
+  );
+  assert.throws(() => executionAccessFromConfig(null), /permission settings/);
+  const full = { ...catalog, executionAccess: 'full-access' as const };
+  const args = buildCodexArguments(
+    { workingDirectory: cwd, prompt: '', access: 'workspace-write' },
+    full,
+  );
+  assert.ok(args.includes('danger-full-access'));
+  assert.ok(
+    !args.some((arg) => arg.startsWith('permissions.agent_manager_action=')),
+  );
+  const planning = buildCodexArguments(
+    { workingDirectory: cwd, prompt: '', access: 'read-only' },
+    full,
+  );
+  assert.ok(planning.includes('read-only'));
+  assert.ok(!planning.includes('danger-full-access'));
+  const readOnly = buildCodexArguments(
+    { workingDirectory: cwd, prompt: '', access: 'workspace-write' },
+    { ...catalog, executionAccess: 'read-only' },
+  );
+  assert.ok(readOnly.includes('read-only'));
+  let received = '';
+  const run = startCodexRun(
+    {
+      workingDirectory: cwd,
+      prompt: 'Implement only this Action.',
+      access: 'workspace-write',
+    },
+    async () => full,
+    (input) => {
+      received = input.prompt;
+      return {
+        completion: Promise.resolve({
+          agentSessionId: 'fixture',
+          finalOutput: '{}',
+          usage: null,
+        }),
+        cancel: () => {},
+      };
+    },
+  );
+  assert.equal((await run.completion).executionAccess, 'full-access');
+  assert.match(received, /no OS filesystem sandbox/);
 });

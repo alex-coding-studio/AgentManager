@@ -10,11 +10,13 @@ Agent/model/effort selector.
 
 Planning stays read-only. Execution starts a fresh provider Session in the Card's
 persistent branch and worktree. All its Actions and Rounds reuse that directory;
-the registered primary checkout stays outside the worker's source-write scope.
-See [Card workspaces](JUST_DO_IT_WORKTREES.md). Codex uses an explicit write-capable permission profile with the
-planning store read-only; only the Card Git metadata paths needed for commits and explicit remote operations can be written; primary HEAD, index and main refs remain read-only. Its shell
-network access is enabled for explicitly requested development operations, and
-it cannot request unrestricted escalation. Claude uses restricted mode with
+the registered primary checkout is not the Action's source editing directory.
+See [Card workspaces](JUST_DO_IT_WORKTREES.md). Codex honors the local user's explicit Full Access or read-only setting for
+execution. With other built-in defaults it uses the Card workspace sandbox, with
+primary HEAD/index/main and planning-store writes denied. Full Access removes those
+OS write barriers and allows macOS simulator/device services; worktree and PR rules
+remain explicit workflow requirements. Planning remains read-only in all modes.
+Claude uses restricted mode with
 file-edit permission; shell commands requiring approval may return blocked.
 Only Codex has received the live write smoke so far. Neither mode automatically
 creates a delivery repository, commits to an existing project branch, publishes
@@ -158,3 +160,11 @@ is never executed merely because it appears in a report. Review evidence stays s
 Invalid delivery references still fail validation and disable acceptance, but their
 schema- and identity-valid report remains visible. GitHub discovery also runs on
 failed result validation when a workspace snapshot is available.
+
+## Simulator access validation
+
+`npm run test:simulator-access` requires the user to have already selected local
+Full Access. It queries the real simulator service, builds a disposable XCTest
+fixture and runs it on an already booted iPhone simulator. It does not run a model
+turn, build the user's project, boot/reset devices, or change permission settings.
+The restricted-profile isolation smoke remains `npm run test:worktree-sandbox`.

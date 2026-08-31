@@ -198,6 +198,11 @@ export function JustDoItAction({
                             : 'Needs your input',
                 )}
               </summary>
+              {run.executionAccess && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {t('Execution permissions')}: {t(run.executionAccess)}
+                </p>
+              )}
               {run.commit && (
                 <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
                   <span>
@@ -432,6 +437,13 @@ export function JustDoItAction({
               'Starting runs the Agent with project write access. Only this Action runs; you decide acceptance. GitHub status never starts the next Action.',
             )}
           </p>
+          {profile.agent === 'codex' && (
+            <p className="text-xs text-muted-foreground">
+              {t(
+                'Codex execution follows your local Full Access or read-only choice. Full Access relies on worktree and PR discipline, not an OS write barrier around main.',
+              )}
+            </p>
+          )}
           {profile.agent === 'claude' && (
             <p className="text-xs text-muted-foreground">
               {t(

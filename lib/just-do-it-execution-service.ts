@@ -167,6 +167,8 @@ export function createExecutionService(
         agentSessionId:
           outcome instanceof Error ? null : outcome.agentSessionId,
         usage: outcome instanceof Error ? null : outcome.usage,
+        executionAccess:
+          outcome instanceof Error ? undefined : outcome.executionAccess,
       };
       const files: Record<string, string> = {};
       if (!(outcome instanceof Error))

@@ -18,12 +18,21 @@ as project configuration. Disabled entries are also passed as `skills.config`
 overrides to prevent standalone Skills from reappearing in the isolated worker's
 own discovery. The appended input is visible in the normal Codex Session record.
 
-The execution process still ignores broad user configuration and execpolicy rules.
-Its existing read-only or Action write profile, planning-store protection, model
-selection, cancellation behavior and GitHub authorization boundaries remain in
-force. Discovering a plugin's Skills does not load that plugin's tools or hooks
-into the worker. A Skill requiring an unavailable capability must report that
-limitation rather than broaden access.
+The execution process still ignores unrelated user configuration and execpolicy
+rules. Discovery also reads `config/read` at the user's home directory, so an
+Agent-written project config cannot grant itself Full Access on the next Round.
+An explicit user `danger-full-access` selection (including the corresponding
+built-in default permission profile) is honored for execution; explicit read-only
+stays read-only. Other built-in defaults retain the Card workspace sandbox. Unknown
+custom profiles fail rather than being replaced with broader permissions.
+
+Planning stays read-only regardless of the user's execution choice. Full Access
+allows macOS simulator/device services, but provides no OS write barrier protecting
+the primary checkout or planning store: Card worktree, Git/PR, scope and acceptance
+rules remain workflow requirements. The selected mode is included in the execution
+prompt and completed Run record. There is no fallback escalation after a failed
+command, and already running Sessions are never changed. Skill metadata alone still
+does not load plugin tools or hooks.
 
 Discovery failure, malformed/incomplete results or timeout fail the run preparation
 instead of silently presenting an empty catalog. Cancellation during discovery
