@@ -836,3 +836,17 @@ local gates were required and passed.
 This records the agreed distinction; automatic resolution classification and log
 navigation are not implemented by this documentation update. Do not infer that a
 finding is resolved merely because its text contains a reassuring phrase.
+
+## Proposed coordinator boundary after the six-Action trial
+
+The user agreed that the missing execution role is a coordinator retaining the
+whole task context across dispatch and result qualification. The first-slice
+proposal is [Execution Coordination](EXECUTION_COORDINATION.md). Planning has one
+logical user-facing Agent; execution separates coordination from bounded worker
+work. The coordinator selects context, translates user intent, reuses applicable
+evidence, plans necessary checks and filters the final report without changing
+required outcomes or hiding unresolved material issues. The host owns reliable
+records, live activity and stopping. Mid-run steering is explicitly deferred.
+
+This is a documented design direction, not the current runtime. Implementation
+tasks and provider/session choices have not been activated by this record.

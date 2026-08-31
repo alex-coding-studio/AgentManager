@@ -633,3 +633,17 @@ and two planning runs. Counts are deduplicated by run ID across revision history
 The separate report records exact token totals, run durations, acceptance scope and
 verified merged PRs, and distinguishes original host failures from product outcomes.
 No complete primary-assistant, review-session or human-time accounting is claimed.
+
+## Retrospective direction: a coordinator owns continuity
+
+The user identified the missing coordination role rather than attributing the
+entire trial to worker-model capability. The agreed direction now has a dedicated
+[proposal](EXECUTION_COORDINATION.md): retain planning understanding, translate
+input, dynamically select context and reusable evidence, scope the worker's work,
+and qualify/filter its result before presenting it. Raw log retention, bounded
+summaries and evidence provenance support that role; they do not replace it.
+
+First improve reliable stepwise delivery and acceptance, with host-driven live
+status and direct stopping. Do not make live bidirectional Session correction a
+prerequisite; it is deferred. Scope and validation scenarios are recorded, but no
+runtime architecture or model-routing implementation was changed in this step.

@@ -1,10 +1,10 @@
 # Run Logs, Progress and Reusable Context
 
-Status: agreed direction for later design review, not an implemented logging
-architecture. The user requested documentation only while the current HereItIs
-six-Action Card continues. Reassess priorities and implementation boundaries after
-all six Actions and their user acceptance are complete. Do not interrupt that trial
-to replace runtime storage, introduce mandatory phases or start a parallel rebuild.
+Status: agreed direction for design review, not an implemented logging architecture.
+The HereItIs six-Action trial has now been accepted within the user-approved scope.
+The [coordination proposal](EXECUTION_COORDINATION.md) assigns responsibility for
+extracting and using these records. This document owns log, summary and retrieval
+principles; no runtime replacement or mandatory new phase is implemented here.
 
 ## Problem and intended result
 
@@ -148,3 +148,16 @@ Do not infer architectural success from unit-test counts alone.
 Related records: [rolling dogfood review](JUST_DO_IT_DOGFOOD_REVIEW.md),
 [execution boundary](JUST_DO_IT_EXECUTION.md),
 [environment validation and repair proposal](DEVELOPMENT_ENVIRONMENT.md).
+
+## Coordinator use and first-slice boundary
+
+The coordinator maintains current task understanding from bounded summaries and
+expands original evidence on demand. It selects relevant facts, user decisions and
+verified lessons for each worker, then incorporates the result for the next Action.
+Complete historical retention does not imply full-log injection into either Agent.
+Evidence reuse must account for changed code, environment and requirements.
+
+Host progress events directly supply elapsed time, current activity and latest
+update; coordinator interpretation is event-driven at meaningful boundaries. Live
+visibility and direct stopping are first-slice requirements. Mid-run bidirectional
+steering is deferred, as specified in the coordination proposal.
