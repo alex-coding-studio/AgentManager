@@ -1,3 +1,7 @@
+import {
+  publishActivity,
+  type LocalAgentActivity,
+} from './local-agent-activity.ts';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import readline from 'node:readline';
 import {
@@ -30,7 +34,10 @@ export type LocalAgentRun = {
   cancel: () => void;
 };
 
-type LocalAgentRunInput = {
+export type LocalAgentRunInput = {
+  onActivity?: (activity: LocalAgentActivity) => void;
+  isolatedProcessGroup?: boolean;
+  disableDelegation?: boolean;
   workingDirectory: string;
   prompt: string;
   resumeSessionId?: string;
@@ -150,8 +157,8 @@ function launchCodexRun(
   child.stdin.end(input.prompt);
   return trackLocalAgentRun(
     child,
-    consumeCodexRun,
-    input.access === 'workspace-write',
+    (child, canceled) => consumeCodexRun(child, canceled, input.onActivity),
+    Boolean(input.isolatedProcessGroup || input.access === 'workspace-write'),
   );
 }
 
@@ -160,8 +167,8 @@ function startClaudeRun(input: LocalAgentRunInput): LocalAgentRun {
   child.stdin.end(input.prompt);
   return trackLocalAgentRun(
     child,
-    consumeClaudeRun,
-    input.access === 'workspace-write',
+    (child, canceled) => consumeClaudeRun(child, canceled, input.onActivity),
+    Boolean(input.isolatedProcessGroup || input.access === 'workspace-write'),
   );
 }
 
@@ -257,6 +264,9 @@ export function buildCodexArguments(
             .join(',')}]`,
         ]
       : []),
+    ...(input.disableDelegation
+      ? ['--disable', 'multi_agent', '--disable', 'multi_agent_v2']
+      : []),
     ...(input.model ? ['--model', input.model] : []),
     ...(input.effort
       ? ['-c', `model_reasoning_effort=${JSON.stringify(input.effort)}`]
@@ -276,7 +286,8 @@ function spawnCodex(input: LocalAgentRunInput, catalog: SkillCatalog) {
     cwd: workingDirectory,
     env: environment,
     detached:
-      input.access === 'workspace-write' && process.platform !== 'win32',
+      (input.isolatedProcessGroup || input.access === 'workspace-write') &&
+      process.platform !== 'win32',
     stdio: ['pipe', 'pipe', 'pipe'],
   });
 }
@@ -314,7 +325,8 @@ function spawnClaude(input: LocalAgentRunInput) {
     cwd: workingDirectory,
     env: environment,
     detached:
-      input.access === 'workspace-write' && process.platform !== 'win32',
+      (input.isolatedProcessGroup || input.access === 'workspace-write') &&
+      process.platform !== 'win32',
     stdio: ['pipe', 'pipe', 'pipe'],
   });
 }
@@ -322,6 +334,7 @@ function spawnClaude(input: LocalAgentRunInput) {
 async function consumeCodexRun(
   child: ChildProcessWithoutNullStreams,
   wasCanceled: () => boolean,
+  listener?: (activity: LocalAgentActivity) => void,
 ) {
   let agentSessionId: string | null = null;
   let finalOutput = '';
@@ -334,6 +347,7 @@ async function consumeCodexRun(
   for await (const line of lines) {
     const event = parseCodexEvent(line);
     if (!event) continue;
+    publishActivity(event, listener);
     if (event.type === 'thread.started') {
       agentSessionId = event.thread_id;
     } else if (
@@ -365,6 +379,7 @@ async function consumeCodexRun(
 async function consumeClaudeRun(
   child: ChildProcessWithoutNullStreams,
   wasCanceled: () => boolean,
+  listener?: (activity: LocalAgentActivity) => void,
 ) {
   let agentSessionId: string | null = null;
   let finalOutput = '';
@@ -377,6 +392,7 @@ async function consumeClaudeRun(
   for await (const line of lines) {
     const event = parseClaudeEvent(line);
     if (!event) continue;
+    publishActivity(event, listener);
     if (
       event.type === 'system' &&
       'subtype' in event &&

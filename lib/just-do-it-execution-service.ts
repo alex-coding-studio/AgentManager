@@ -1,4 +1,13 @@
 import {
+  startCoordinatedExecution,
+  CoordinationRunError,
+  totalCoordinationUsage,
+  type CoordinatedResult,
+  type CoordinationProgress,
+} from './just-do-it-coordination-runner.ts';
+import type { PriorEvidence } from './just-do-it-coordination.ts';
+import { redactActivity } from './local-agent-activity.ts';
+import {
   hasUnsupportedAppArtifact,
   hasReviewableReport,
 } from './just-do-it-result-display.ts';
@@ -71,6 +80,9 @@ type Active = {
   handle: LocalAgentRun | null;
   timer: ReturnType<typeof setTimeout> | null;
   canceling?: boolean;
+  timeoutError?: Error;
+  progress?: CoordinationProgress;
+  activity?: CoordinationProgress[];
 };
 const runtime = globalThis as typeof globalThis & {
   jdiExecutionActive?: Map<string, Active>;
@@ -94,6 +106,7 @@ export function createExecutionService(
     initializeRepository?: boolean,
   ) => Promise<CardWorkspace | undefined> = ensureCardWorkspace,
   writeRecord = appendCardWorkRecord,
+  coordinate = startCoordinatedExecution,
 ) {
   async function commit(
     project: Project,
@@ -118,6 +131,9 @@ export function createExecutionService(
     card: PlanningCard,
   ): Promise<PlanningCard> {
     const run = card.execution?.runs.at(-1);
+    const live = active.get(project.rootPath);
+    if (run?.status === 'running' && live?.id === run.id && live.progress)
+      return replaceRun(card, { ...run, progress: live.progress });
     if (
       run?.status !== 'running' ||
       active.get(project.rootPath)?.id === run.id
@@ -188,8 +204,33 @@ export function createExecutionService(
       const files: Record<string, string> = {};
       if (!(outcome instanceof Error))
         files['raw-response.txt'] = outcome.finalOutput.slice(0, 1000000);
+      const coordinated =
+        outcome instanceof CoordinationRunError
+          ? outcome
+          : !(outcome instanceof Error) && 'coordination' in outcome
+            ? (outcome as CoordinatedResult)
+            : undefined;
+      if (coordinated) {
+        nextRun.coordination = {
+          ...coordinated.coordination,
+          logRef: reference(card, 'coordination.json'),
+        };
+        nextRun.usage = totalCoordinationUsage(coordinated.coordination);
+        files['coordination.json'] = JSON.stringify(nextRun.coordination);
+        for (const [name, text] of Object.entries(
+          coordinated.coordinationRecords,
+        ))
+          files[`coordination-${name}`] = text;
+      }
+      const activity = active.get(project.rootPath)?.activity ?? [];
+      if (activity.length) {
+        nextRun.activityRef = reference(card, 'activity.json');
+        nextRun.progress = activity.at(-1);
+        files['activity.json'] = JSON.stringify(activity);
+      }
       try {
         snapshot = await snapshotWorkspace(workingProject);
+        nextRun.verificationBasis = verificationBasis(snapshot);
         refs = observedChanges(baseline, snapshot);
         files['observed-workspace.json'] = JSON.stringify(snapshot);
         const checkpointHash = await checkpointWorkspace(
@@ -305,10 +346,18 @@ export function createExecutionService(
       } catch (error) {
         const message =
           error instanceof Error ? error.message : 'Execution failed.';
+        const advisoryOnly =
+          Boolean(coordinated) &&
+          error instanceof ExecutionEvidenceError &&
+          assessRequiredChecks(
+            run.acceptanceChecklist,
+            error.result.checks,
+            card.execution?.acceptanceOverrides?.[run.actionId],
+          ).passed;
         nextRun = {
           ...nextRun,
-          status: 'failed',
-          error: message,
+          status: advisoryOnly ? 'succeeded' : 'failed',
+          error: advisoryOnly ? null : message,
           observedRefs: refs,
           result: error instanceof ExecutionEvidenceError ? error.result : null,
           ...(error instanceof ExecutionEvidenceError
@@ -323,7 +372,8 @@ export function createExecutionService(
             : {}),
         };
         if (nextRun.result)
-          files['rejected-report.json'] = JSON.stringify(nextRun.result);
+          files[advisoryOnly ? 'result.json' : 'rejected-report.json'] =
+            JSON.stringify(nextRun.result);
         if (snapshot) {
           nextRun.github = await discoverGitHubDelivery(
             workingProject,
@@ -342,7 +392,9 @@ export function createExecutionService(
             stage: 'execution',
             actionId: run.actionId,
             event: 'run-ended',
-            text: `${message}\nFiles may have changed; no rollback was performed.`,
+            text: advisoryOnly
+              ? `Required checks passed. Advisory artifact verification finding retained: ${message}`
+              : `${message}\nFiles may have changed; no rollback was performed.`,
             refs,
           },
           files,
@@ -361,6 +413,9 @@ export function createExecutionService(
     assertCardUuid(input.cardId);
     assertCardUuid(input.actionId);
     validateAgentProfile(input.profile);
+    if (input.coordination) {
+      validateAgentProfile(input.coordination.profile);
+    }
     if (
       !Number.isSafeInteger(input.expectedRevision) ||
       input.expectedRevision < 0 ||
@@ -389,6 +444,14 @@ export function createExecutionService(
         throw new Error('Card changed. Reload before trying again.');
       if (card.run?.status === 'running')
         throw new Error('Stop planning before executing.');
+      const coordinationSettings = {
+        profile:
+          input.coordination?.profile ??
+          card.execution?.coordinationSettings?.profile ??
+          card.run?.profile ??
+          input.profile,
+      };
+      validateAgentProfile(coordinationSettings.profile);
       const selectedAction = card.actions.find(
         (action) => action.id === input.actionId,
       );
@@ -556,6 +619,7 @@ export function createExecutionService(
           execution: {
             ...card.execution,
             profile: input.profile,
+            coordinationSettings,
             workspace,
             runs: [...(card.execution?.runs ?? []), run],
             acceptedActionIds: card.execution?.acceptedActionIds ?? [],
@@ -575,7 +639,22 @@ export function createExecutionService(
         },
       );
       try {
-        reservation.handle = transport(input.profile.agent, {
+        const recordProgress = (progress: CoordinationProgress) => {
+          if (
+            active.get(project.rootPath) !== reservation ||
+            reservation.canceling
+          )
+            return;
+          const entry = {
+            ...progress,
+            summary: redactActivity(progress.summary),
+          };
+          reservation.progress = entry;
+          reservation.activity = [...(reservation.activity ?? []), entry].slice(
+            -300,
+          );
+        };
+        const options: Parameters<typeof transport>[1] = {
           workingDirectory: baseline.root,
           prompt,
           model: input.profile.model || undefined,
@@ -586,7 +665,55 @@ export function createExecutionService(
           gitWritePaths: workspace
             ? await cardGitWritePaths(workspace)
             : undefined,
+          onActivity: (activity) =>
+            recordProgress({
+              phase: 'execute',
+              summary: activity.summary,
+              updatedAt: new Date().toISOString(),
+              attempts: 1,
+            }),
+        };
+        recordProgress({
+          phase: 'prepare',
+          summary: 'Preparing coordinated execution.',
+          updatedAt: new Date().toISOString(),
+          attempts: 0,
         });
+        {
+          const evidence: PriorEvidence[] =
+            card.execution?.runs.flatMap((previous) =>
+              previous.verificationBasis && previous.result
+                ? previous.result.checks
+                    .filter(
+                      (check) => check.status === 'passed' && check.criterionId,
+                    )
+                    .map((check) => ({
+                      id: `${previous.id}:${check.criterionId}`,
+                      actionId: previous.actionId,
+                      criterionId: check.criterionId!,
+                      summary: check.summary,
+                      evidenceRefs: check.evidenceRefs,
+                      basis: previous.verificationBasis!,
+                    }))
+                : [],
+            ) ?? [];
+          reservation.handle = coordinate({
+            request,
+            workerOptions: options,
+            workerAgent: input.profile.agent,
+            settings: coordinationSettings,
+            priorEvidence: evidence.slice(-80),
+            previousContext:
+              card.execution?.runs.findLast(
+                (previous) => previous.coordination?.contextSummary,
+              )?.coordination?.contextSummary ??
+              request.context.handoffMarkdown.slice(0, 6000),
+            readBasis: async () =>
+              verificationBasis(await snapshotWorkspace(workingProject)),
+            onProgress: recordProgress,
+            transport,
+          });
+        }
       } catch (error) {
         await finish(
           project,
@@ -602,13 +729,28 @@ export function createExecutionService(
       ) => {
         if (settled) return Promise.resolve();
         settled = true;
-        return finish(project, request, baseline, outcome);
+        const traced =
+          outcome instanceof CoordinationRunError
+            ? outcome
+            : !(outcome instanceof Error) && 'coordination' in outcome
+              ? (outcome as CoordinatedResult)
+              : undefined;
+        const finalOutcome = reservation.timeoutError
+          ? traced
+            ? new CoordinationRunError(
+                reservation.timeoutError.message,
+                traced.coordination,
+                traced.coordinationRecords,
+              )
+            : reservation.timeoutError
+          : outcome;
+        return finish(project, request, baseline, finalOutcome);
       };
       reservation.timer = setTimeout(() => {
+        reservation.timeoutError = new Error(
+          'Execution timed out. Files were not rolled back.',
+        );
         reservation.handle?.cancel();
-        void settle(
-          new Error('Execution timed out. Files were not rolled back.'),
-        ).catch(() => undefined);
       }, timeoutMs);
       void reservation.handle.completion
         .then(settle, (error) =>
@@ -665,7 +807,29 @@ export function createExecutionService(
       if (handle.timer) clearTimeout(handle.timer);
       handle.canceling = true;
       handle.handle?.cancel();
-      await handle.handle?.completion.catch(() => undefined);
+      const termination = await handle.handle?.completion.catch(
+        (error: unknown) => error,
+      );
+      const canceledFiles: Record<string, string> = {};
+      const canceledRun = { ...saved.execution!.runs.at(-1)! };
+      if (termination instanceof CoordinationRunError) {
+        canceledRun.coordination = {
+          ...termination.coordination,
+          logRef: reference(saved, 'coordination.json'),
+        };
+        canceledRun.usage = totalCoordinationUsage(termination.coordination);
+        canceledFiles['coordination.json'] = JSON.stringify(
+          canceledRun.coordination,
+        );
+        for (const [name, text] of Object.entries(
+          termination.coordinationRecords,
+        ))
+          canceledFiles[`coordination-${name}`] = text;
+      }
+      if (handle.activity?.length) {
+        canceledRun.activityRef = reference(saved, 'activity.json');
+        canceledFiles['activity.json'] = JSON.stringify(handle.activity);
+      }
       try {
         const snapshot = await snapshotWorkspace(
           workspaceProject(project, card.execution?.workspace),
@@ -680,7 +844,7 @@ export function createExecutionService(
         );
         return await commit(
           project,
-          replaceRun(saved, { ...saved.execution!.runs.at(-1)!, commit: hash }),
+          replaceRun(saved, { ...canceledRun, commit: hash }),
           {
             kind: 'system-event',
             stage: 'execution',
@@ -689,12 +853,13 @@ export function createExecutionService(
             text: `Recorded canceled-round Git checkpoint ${hash}. No rollback occurred.`,
             refs: [],
           },
+          canceledFiles,
         );
       } catch (error) {
         return await commit(
           project,
           replaceRun(saved, {
-            ...saved.execution!.runs.at(-1)!,
+            ...canceledRun,
             error: `Canceled; changes remain. Git checkpoint failed: ${error instanceof Error ? error.message : 'unknown error'}`,
           }),
           {
@@ -705,6 +870,7 @@ export function createExecutionService(
             text: 'Cancellation completed but its Git checkpoint failed. Inspect the workspace before continuing.',
             refs: [],
           },
+          canceledFiles,
         );
       } finally {
         if (active.get(project.rootPath)?.id === run.id)
@@ -1362,5 +1528,18 @@ function acceptedOutputMarkdown(card: PlanningCard, run: ActionRun) {
       ([id, decision]) => `- ${id}: ${decision.note} (${decision.recordedAt})`,
     )
     .join('\n');
-  return `# Accepted Action output\n\nAction: ${run.actionId}\nRound: ${run.id}\nChecklist: ${run.acceptanceChecklist?.version ?? 'legacy'}\n\n${result.summary}\n\n## Handoff\n${result.handoffSummary}\n\n## Required checks (observed results)\n${checks}\n\n## User decisions\n${overrides || 'None.'}\n\n## Delivery references (Agent-reported)\n${result.artifactRefs.map((ref) => `- ${ref}`).join('\n')}\n\n## System verification findings\n${run.evidenceErrors?.map((error) => `- ${error}`).join('\n') || 'None recorded.'}\n\nUser acceptance does not turn unverified references into verified artifacts.\n\n## Additional checks (non-blocker)\n${(result.additionalChecks ?? []).map((check) => `- ${check.status}: ${check.summary}\n${check.evidenceRefs.map((ref) => `  - ${ref}`).join('\n')}`).join('\n')}\n`;
+  return `# Accepted Action output\n\nAction: ${run.actionId}\nRound: ${run.id}\nChecklist: ${run.acceptanceChecklist?.version ?? 'legacy'}\n\n${result.summary}\n\n## Handoff\n${result.handoffSummary}\n\n${run.coordination ? `Coordination context: ${run.coordination.contextSummary}\nCoordination record: ${run.coordination.logRef ?? 'not available'}\nActivity record: ${run.activityRef ?? 'not available'}\n\n` : ''}## Required checks (observed results)\n${checks}\n\n## User decisions\n${overrides || 'None.'}\n\n## Delivery references (Agent-reported)\n${result.artifactRefs.map((ref) => `- ${ref}`).join('\n')}\n\n## System verification findings\n${run.evidenceErrors?.map((error) => `- ${error}`).join('\n') || 'None recorded.'}\n\nUser acceptance does not turn unverified references into verified artifacts.\n\n## Additional checks (non-blocker)\n${(result.additionalChecks ?? []).map((check) => `- ${check.status}: ${check.summary}\n${check.evidenceRefs.map((ref) => `  - ${ref}`).join('\n')}`).join('\n')}\n`;
+}
+
+function verificationBasis(snapshot: WorkspaceSnapshot) {
+  return createHash('sha256')
+    .update(
+      JSON.stringify({
+        root: snapshot.root,
+        files: Object.entries(snapshot.files).sort(([a], [b]) =>
+          a.localeCompare(b),
+        ),
+      }),
+    )
+    .digest('hex');
 }

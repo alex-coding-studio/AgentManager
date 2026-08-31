@@ -147,6 +147,7 @@ async function fixture(
         throw new Error('Fixture reset persistence failed');
       return appendCardWorkRecord(...args);
     },
+    (input) => input.transport!(input.workerAgent, input.workerOptions),
   );
   const input = {
     cardId: card.id,

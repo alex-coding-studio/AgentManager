@@ -162,6 +162,8 @@ async function fixture(
     1800000,
     reader,
     async () => undefined,
+    undefined,
+    (input) => input.transport!(input.workerAgent, input.workerOptions),
   );
   const input = {
     cardId: id,
@@ -459,6 +461,8 @@ void test('timeout ends the Action without acceptance or rolling back partial fi
     5,
     undefined,
     async () => undefined,
+    undefined,
+    (input) => input.transport!(input.workerAgent, input.workerOptions),
   );
   await service.start(project, input);
   const card = await settled(store, project);
@@ -1504,4 +1508,285 @@ void test('continuation repairs a legacy accepted report without changing histor
   );
   calls[1].reject(new Error('Fixture finished'));
   await settled(store, project);
+});
+
+void test('new executions always coordinate, persist role traces, and carry context into a coordinator-only next Action', async (t) => {
+  const f = await fixture(t);
+  const calls: Array<{ access: unknown; model: unknown }> = [];
+  const requests: Array<
+    import('../lib/just-do-it-coordination.ts').CoordinationRequest
+  > = [];
+  let current!: CardHarnessRequest;
+  const transport: typeof startLocalAgentRun = (_agent, options) => {
+    calls.push({ access: options.access, model: options.model });
+    if (options.access === 'read-only') {
+      const req = JSON.parse(
+        options.prompt.split('COORDINATION REQUEST:\n')[1],
+      );
+      requests.push(req);
+      current = req.task;
+      const dispatch = req.phase === 'prepare' && req.task.actionId === one;
+      const result = {
+        version: 1,
+        requestId: req.requestId,
+        cardId: id,
+        actionId: req.task.actionId,
+        contextRevision: req.task.context.contextRevision,
+        checklistVersion: req.task.context.acceptanceChecklist.version,
+        decision: dispatch ? 'dispatch' : 'ready',
+        summary: 'Verified fixture output',
+        instructions: dispatch ? 'Write module.txt with ready.' : '',
+        verificationPlan: [
+          {
+            criterionId: 'AC-01',
+            mode: dispatch || req.workerReport ? 'worker' : 'coordinator',
+            evidenceIds: [],
+            rationale: 'Verified current fixture inputs.',
+          },
+        ],
+        checks: dispatch
+          ? []
+          : [
+              {
+                criterionId: 'AC-01',
+                summary: 'Read fixture output',
+                status: 'passed',
+                evidenceRefs: ['file:module.txt'],
+              },
+            ],
+        artifactRefs: ['file:module.txt'],
+        additionalFindings: [],
+        scopeNotes: [],
+        contextSummary:
+          'Verified lesson: retain the fixture repository target.',
+      };
+      return {
+        completion: Promise.resolve({
+          agentSessionId: 'coordinator-session',
+          usage: {
+            inputTokens: 10,
+            cachedInputTokens: 5,
+            cacheWriteInputTokens: 0,
+            outputTokens: 2,
+            reasoningOutputTokens: 1,
+          },
+          finalOutput: JSON.stringify(result),
+        }),
+        cancel: () => {},
+      };
+    }
+    options.onActivity?.({
+      kind: 'tool',
+      phase: 'started',
+      summary: 'Writing fixture module',
+    });
+    return {
+      completion: writeFile(
+        path.join(f.project.rootPath, 'module.txt'),
+        'ready',
+      ).then(() => delivered(current)),
+      cancel: () => {},
+    };
+  };
+  const service = createExecutionService(
+    f.store,
+    transport,
+    new Map(),
+    1800000,
+    undefined,
+    async () => undefined,
+  );
+  await service.start(f.project, {
+    ...f.input,
+    coordination: {
+      profile: { agent: 'codex', model: 'coordinator-model', effort: 'medium' },
+    },
+  });
+  let card = await settled(f.store, f.project);
+  const first = card.execution!.runs[0];
+  assert.equal(first.status, 'succeeded', first.error ?? '');
+  assert.deepEqual(
+    calls.map((c) => c.access),
+    ['read-only', 'workspace-write', 'read-only'],
+  );
+  assert.equal(calls[0].model, 'coordinator-model');
+  assert.equal(calls[1].model, 'test-model');
+  assert.equal(first.coordination?.attempts.length, 3);
+  assert.ok(first.coordination?.logRef);
+  assert.ok(first.activityRef);
+  assert.equal(
+    JSON.parse(
+      await readFile(
+        path.join(f.project.planningPath, first.coordination.logRef),
+        'utf8',
+      ),
+    ).attempts.length,
+    3,
+  );
+  assert.ok(
+    (
+      JSON.parse(
+        await readFile(
+          path.join(f.project.planningPath, first.activityRef),
+          'utf8',
+        ),
+      ) as unknown[]
+    ).length > 0,
+  );
+  card = await service.update(f.project, id, card.revision, 'accept', first.id);
+  await service.start(f.project, {
+    ...f.input,
+    actionId: two,
+    expectedRevision: card.revision,
+    instruction: 'Only verify existing evidence.',
+  });
+  card = await settled(f.store, f.project);
+  assert.equal(calls.length, 4);
+  assert.match(
+    requests.at(-1)!.previousContext,
+    /retain the fixture repository target/,
+  );
+  assert.equal(card.execution!.runs.at(-1)!.coordination?.attempts.length, 1);
+  assert.equal(card.execution!.runs.at(-1)!.status, 'succeeded');
+});
+
+void test('canceling coordinator preparation persists its partial record and never starts a worker', async (t) => {
+  const f = await fixture(t);
+  let started!: () => void;
+  const ready = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  let calls = 0;
+  let stops = 0;
+  const transport: typeof startLocalAgentRun = (_agent, options) => {
+    calls++;
+    assert.equal(options.access, 'read-only');
+    let reject!: (error: Error) => void;
+    const completion = new Promise<LocalAgentResult>((_resolve, fail) => {
+      reject = fail;
+    });
+    options.onActivity?.({
+      kind: 'tool',
+      phase: 'started',
+      summary: 'Reading current evidence',
+    });
+    started();
+    return {
+      completion,
+      cancel: () => {
+        stops++;
+        reject(new Error('Stopped fixture coordinator'));
+      },
+    };
+  };
+  const service = createExecutionService(
+    f.store,
+    transport,
+    new Map(),
+    1800000,
+    undefined,
+    async () => undefined,
+  );
+  const running = await service.start(f.project, f.input);
+  await ready;
+  const saved = await service.update(
+    f.project,
+    id,
+    running.revision,
+    'cancel',
+    running.execution!.runs.at(-1)!.id,
+  );
+  const canceled = saved.execution!.runs.at(-1)!;
+  assert.equal(calls, 1);
+  assert.equal(stops, 1);
+  assert.equal(canceled.status, 'canceled');
+  assert.equal(canceled.coordination?.attempts.length, 1);
+  assert.ok(canceled.coordination?.logRef);
+  assert.ok(canceled.activityRef);
+  const record = JSON.parse(
+    await readFile(
+      path.join(f.project.planningPath, canceled.coordination.logRef),
+      'utf8',
+    ),
+  );
+  assert.equal(record.attempts[0].role, 'coordinator');
+  assert.match(record.attempts[0].error, /Stopped fixture/);
+  assert.ok(record.attempts[0].endedAt);
+  const activity = await readFile(
+    path.join(f.project.planningPath, canceled.activityRef),
+    'utf8',
+  );
+  assert.match(activity, /Reading current evidence/);
+});
+
+void test('coordinated app verification limitations retain diagnostics without failing a passed Round or blocking acceptance', async (t) => {
+  const f = await fixture(t);
+  await mkdir(path.join(f.project.rootPath, 'build/App.app'), {
+    recursive: true,
+  });
+  let calls = 0;
+  const transport: typeof startLocalAgentRun = (_agent, options) => {
+    calls++;
+    assert.equal(options.access, 'read-only');
+    const req = JSON.parse(options.prompt.split('COORDINATION REQUEST:\n')[1]);
+    return {
+      completion: Promise.resolve({
+        agentSessionId: 'coordinator',
+        usage: null,
+        finalOutput: JSON.stringify({
+          version: 1,
+          requestId: req.requestId,
+          cardId: id,
+          actionId: one,
+          contextRevision: req.task.context.contextRevision,
+          checklistVersion: req.task.context.acceptanceChecklist.version,
+          decision: 'ready',
+          summary: 'Existing simulator delivery meets required checks',
+          instructions: '',
+          verificationPlan: [
+            {
+              criterionId: 'AC-01',
+              mode: 'coordinator',
+              evidenceIds: [],
+              rationale: 'Reviewed existing fixture test evidence',
+            },
+          ],
+          checks: [
+            {
+              criterionId: 'AC-01',
+              summary: 'Required simulator checks passed',
+              status: 'passed',
+              evidenceRefs: ['file:build/App.app'],
+            },
+          ],
+          artifactRefs: ['file:build/App.app'],
+          additionalFindings: [],
+          scopeNotes: [],
+          contextSummary:
+            'Simulator delivery passed; host bundle inspection is optional.',
+        }),
+      }),
+      cancel: () => {},
+    };
+  };
+  const service = createExecutionService(
+    f.store,
+    transport,
+    new Map(),
+    1800000,
+    undefined,
+    async () => undefined,
+  );
+  await service.start(f.project, f.input);
+  let card = await settled(f.store, f.project);
+  const run = card.execution!.runs[0];
+  assert.equal(calls, 1);
+  assert.equal(run.status, 'succeeded');
+  assert.equal(run.error, null);
+  assert.equal(run.result?.checks[0].status, 'passed');
+  assert.ok(run.evidenceErrors?.length);
+  card = await service.update(f.project, id, card.revision, 'accept', run.id);
+  assert.deepEqual(card.execution!.acceptedActionIds, [one]);
+  assert.deepEqual(card.execution!.runs[0].evidenceErrors, run.evidenceErrors);
+  assert.equal(calls, 1);
 });

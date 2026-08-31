@@ -1,4 +1,9 @@
 import type {
+  CoordinationSettings,
+  CoordinationTrace,
+} from './just-do-it-coordination.ts';
+import type { CoordinationProgress } from './just-do-it-coordination-runner.ts';
+import type {
   AcceptanceChecklist,
   CheckOverride,
 } from './just-do-it-checklist.ts';
@@ -27,6 +32,10 @@ export type ActionRun = {
   observedRefs: string[];
   outputRef: string | null;
   acceptanceChecklist?: AcceptanceChecklist;
+  coordination?: CoordinationTrace;
+  verificationBasis?: string;
+  progress?: CoordinationProgress;
+  activityRef?: string;
   evidenceErrors?: string[];
   remainingScopeNotes?: string[];
   unverifiedCheckRefs?: string[];
@@ -39,6 +48,7 @@ export type ActionRun = {
 export type CardExecution = {
   runs: ActionRun[];
   profile?: AgentProfile;
+  coordinationSettings?: CoordinationSettings;
   workspace?: CardWorkspace;
   workspaceBackups?: CardWorkspace[];
   acceptedActionIds: string[];
@@ -53,4 +63,5 @@ export type ExecuteActionInput = {
   instruction: string;
   profile: AgentProfile;
   initializeRepository?: boolean;
+  coordination?: CoordinationSettings;
 };

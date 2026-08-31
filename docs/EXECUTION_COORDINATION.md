@@ -1,10 +1,10 @@
 # Execution Coordination — First-Slice Proposal
 
-Status: agreed product direction captured after the HereItIs six-Action trial;
-implementation proposal, not a delivered capability. This document settles the
-role boundaries and a first-slice target before implementation tasks are created.
-It does not authorize starting new Agents, changing permissions or rerunning the
-completed Card.
+Status: agreed product direction captured after the HereItIs six-Action trial.
+The first work-branch implementation and validation limits are recorded in
+[Coordinator Harness](COORDINATOR_HARNESS.md). All new executions use coordination;
+there is no optional direct-worker mode. This does not authorize rerunning the
+completed Card or expanding existing permissions.
 
 ## Problem and intended outcome
 
@@ -213,5 +213,5 @@ provider/session behavior, failure recovery and rollout tasks only after this ro
 and flow proposal is reviewed; those technical choices are not settled here.
 
 Protocol refinement and proposed implementation slices are documented separately
-in [the protocol outline](EXECUTION_COORDINATION_PROTOCOL.md). That outline remains
-a proposal and does not activate runtime changes.
+in [the protocol outline](EXECUTION_COORDINATION_PROTOCOL.md). The runtime contract records which parts are implemented; merging design documents
+alone does not deploy the implementation.

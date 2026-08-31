@@ -1,9 +1,9 @@
 # Execution Coordination — Protocol and Implementation Outline
 
-Status: proposal for review. The [role and scope proposal](EXECUTION_COORDINATION.md)
-is merged; the fields and implementation slices below are not runtime behavior or
-a finalized API schema. This document narrows the next design decisions before
-coding. First deployment remains Just Do It; mid-run steering is deferred.
+Status: agreed protocol direction. The first implementation is described in
+[Coordinator Harness](COORDINATOR_HARNESS.md), including actual schema enforcement,
+limits and remaining gaps. New Just Do It executions always coordinate; mid-run
+steering is deferred. The conceptual fields below are not a substitute for the runtime schema.
 
 ## Exchange A: host context to coordinator
 
@@ -127,7 +127,7 @@ there is no automatic rollback or live instruction injection in this first slice
 1. **Record and contract foundation.** Reuse the Card ledger for coordinator
    decisions, attempt relationships, qualification records and bounded context
    references. Add deterministic identity/version/stop tests before live model use.
-2. **One vertical coordination loop.** Opt in one Card to coordinator preparation,
+2. **One vertical coordination loop.** Route every new execution through coordinator preparation,
    one bounded worker call and result qualification using existing transports.
    Support the no-worker and needs-user paths. Surface available activity events
    and retain direct stopping. Do not migrate an active dispatched run in place.
@@ -140,10 +140,10 @@ there is no automatic rollback or live instruction injection in this first slice
    handoff. Compare elapsed time, repeat checks, tokens by role and user interventions
    with the recorded trial.
 
-These are proposed slices, not newly activated work or delegated tasks. A first
-implementation need not solve live steering, parallel workers or a new universal
-logging backend. The opt-in preserves existing direct execution for unaffected
-Cards while the new loop is evaluated.
+These slices define implementation scope. Live steering, parallel workers and a new
+universal logging backend remain deferred. Historical records remain readable, but
+new executions have no direct-worker mode or silent fallback. Active dispatched runs
+are not migrated in place. See the runtime contract for implemented scope and evidence.
 
 ## Minimum scenario set
 
