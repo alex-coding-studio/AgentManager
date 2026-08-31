@@ -439,3 +439,53 @@ This update is documentation only. It does not rebuild storage, add mandatory ga
 or inject full transcripts into execution. Finish the existing six-Action trial,
 then use its evidence to review repeated work, missing context, observability and
 token cost before choosing implementation priorities.
+
+## Artifact verification responsibility and blocking policy — deferred review
+
+JDI-DF-19: Action 3 finished in 24m08s and reported all seven BOX criteria passed,
+with passing simulator tests. The host rejected the claimed generated directory
+`file:build/DerivedData/Build/Products/Debug-iphoneos/HereItIs.app` because its
+artifact verifier does not support that bundle reference. The saved Round at
+revision 34 is failed for evidence verification, not because the optional
+xcresult diagnostic failed. The PR was published; this is not proof that the
+user accepted the implementation.
+
+The intended verifier checks whether claimed files, commits and PRs exist and
+correspond to the current project/output. It does not rerun functional acceptance
+or independently prove that the app works. Three distinct outcomes were conflated:
+
+- A required functional check failed or was not executed.
+- A claimed delivery artifact is missing, wrong or belongs to another project.
+- The host cannot verify the artifact type with its current capabilities.
+
+The last case is a system limitation, not evidence that implementation failed.
+It must not be visually attributed to an optional diagnostic or silently relabeled
+as successful verification. Current required-check results and original reports
+remain evidence even when host verification is unresolved.
+
+Retry also has a cost: saved-report recheck avoids a model run but can still read
+records, scan/check the workspace and query GitHub. Retrying an unsupported bundle
+without a capability change cannot succeed. Such known unsupported cases must not
+invite an unconditional retry; the current local fix hides that retry action and
+rejects it before workspace/remote verification. This does not add bundle support.
+
+The user also clarified that required checks are the single source of current
+Action acceptance gaps. Do not display a second "Remaining work" acceptance list.
+Normal PR lifecycle state, pending human acceptance and future Actions belong to
+their respective surfaces, not a list suggesting current execution is unfinished.
+Retain historical report text without turning it into new acceptance requirements.
+
+After all six Actions complete, decide together:
+
+1. Which delivery references require host verification, declared before execution,
+   and which are supporting evidence rather than independent blockers?
+2. How should unavailable verifier capability, a transient lookup failure and a
+   definitively invalid artifact differ in state, retry behavior and user actions?
+3. When, if ever, may the user proceed with a clearly recorded unverified artifact,
+   without falsifying evidence or weakening identity/security checks?
+4. Can the verifier use existing commit/PR/build evidence coherently, instead of
+   repeatedly adding special support after each newly encountered artifact format?
+
+The user requested recording this issue and continuing the trial. This section
+changes no verification policy, grants no automatic waiver, and does not start,
+accept or merge another Action. Resolve the architecture after the complete trial.
