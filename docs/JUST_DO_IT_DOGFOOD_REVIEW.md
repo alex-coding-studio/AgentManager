@@ -369,3 +369,10 @@ The user refined stage colors to match the Plan: completed stages retain green
 checkmarks, the current stage uses blue text/background and an explicit current
 badge, and future stages stay gray. Real Action 2 DOM inspection confirmed all
 three distinct states without changing acceptance data; lint and typecheck pass.
+
+Round GitHub presentation is reduced to compact PR number/state links and a refresh
+icon on the right of the collapsible Round header. Repository identity remains in
+the global project header; repeated repository URLs and the large GitHub panel are
+removed. Full PR title and query time are available on hover. Stale/error reporting
+is retained. Browser verification confirmed the PR link remains visible while the
+Round is collapsed and refreshing does not expand it. Lint and typecheck pass.

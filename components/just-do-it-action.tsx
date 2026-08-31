@@ -3,7 +3,13 @@
 import { useState } from 'react';
 import { CheckDetails } from '@/components/check-details';
 import { assessRequiredChecks, splitChecks } from '@/lib/just-do-it-checklist';
-import { LoaderCircle, Check } from 'lucide-react';
+import {
+  LoaderCircle,
+  Check,
+  ChevronRight,
+  GitPullRequest,
+  RefreshCw,
+} from 'lucide-react';
 import { AgentProfileSelector } from '@/components/agent-profile-selector';
 import {
   Dialog,
@@ -225,31 +231,89 @@ export function JustDoItAction({
             <details
               key={run.id}
               open={run.id === latest?.id}
-              className="rounded-xl border border-border p-4"
+              className="group/round rounded-xl border border-border p-4"
             >
-              <summary className="cursor-pointer text-sm font-medium">
-                {t('Round')} {index + 1} ·{' '}
-                {t(
-                  accepted && run.id === latest?.id
-                    ? 'Verified'
-                    : run.status === 'running'
-                      ? 'Agent running'
-                      : run.status === 'canceled'
-                        ? 'Canceled'
-                        : run.status === 'failed'
-                          ? 'Execution failed'
-                          : run.result &&
-                              assessRequiredChecks(
-                                run.acceptanceChecklist,
-                                run.result.checks,
-                                run.id === latest?.id
-                                  ? card.execution?.acceptanceOverrides?.[
-                                      action.id
-                                    ]
-                                  : undefined,
-                              ).passed
-                            ? 'Ready to verify'
-                            : 'Needs your input',
+              <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 text-sm font-medium [&::-webkit-details-marker]:hidden">
+                <ChevronRight
+                  aria-hidden="true"
+                  className="size-4 shrink-0 text-muted-foreground transition-transform group-open/round:rotate-90"
+                />
+                <span className="mr-auto">
+                  {t('Round')} {index + 1} ·{' '}
+                  {t(
+                    accepted && run.id === latest?.id
+                      ? 'Verified'
+                      : run.status === 'running'
+                        ? 'Agent running'
+                        : run.status === 'canceled'
+                          ? 'Canceled'
+                          : run.status === 'failed'
+                            ? 'Execution failed'
+                            : run.result &&
+                                assessRequiredChecks(
+                                  run.acceptanceChecklist,
+                                  run.result.checks,
+                                  run.id === latest?.id
+                                    ? card.execution?.acceptanceOverrides?.[
+                                        action.id
+                                      ]
+                                    : undefined,
+                                ).passed
+                              ? 'Ready to verify'
+                              : 'Needs your input',
+                  )}
+                </span>
+                {run.status !== 'running' && (
+                  <span className="flex flex-wrap items-center gap-1.5 text-xs">
+                    {run.github?.pullRequests.map((pr) => (
+                      <a
+                        key={pr.url}
+                        href={pr.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={(event) => event.stopPropagation()}
+                        title={`${pr.title} · ${t('Last attempted check')}: ${run.github?.checkedAt}`}
+                        className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring ${run.github?.error ? 'border-amber-500/40 text-amber-500' : pr.state === 'MERGED' ? 'border-purple-500/30 text-purple-500' : pr.isDraft || pr.state === 'CLOSED' ? 'border-border text-muted-foreground' : 'border-blue-500/30 text-blue-500'}`}
+                      >
+                        <GitPullRequest
+                          aria-hidden="true"
+                          className="size-3.5"
+                        />
+                        #{pr.number} ·{' '}
+                        {t(
+                          pr.isDraft && pr.state === 'OPEN'
+                            ? 'Draft'
+                            : pr.state,
+                        )}
+                        {run.github?.error && ` · ${t('Stale status')}`}
+                      </a>
+                    ))}
+                    {!run.github?.pullRequests.length && (
+                      <span className="text-muted-foreground">
+                        {t('No PR')}
+                      </span>
+                    )}
+                    {run.github && (
+                      <button
+                        type="button"
+                        disabled={pending || running}
+                        aria-label={t('Refresh GitHub status')}
+                        title={
+                          run.github.error
+                            ? t(run.github.error)
+                            : t('Refresh GitHub status')
+                        }
+                        className="rounded-md p-1.5 text-muted-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-50"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          void send('refresh-github', run.id);
+                        }}
+                      >
+                        <RefreshCw aria-hidden="true" className="size-3.5" />
+                      </button>
+                    )}
+                  </span>
                 )}
               </summary>
               {run.executionAccess && (
@@ -272,71 +336,10 @@ export function JustDoItAction({
                   </a>
                 </div>
               )}
-              {run.status !== 'running' && (
-                <div className="mt-4 space-y-2 rounded-lg border border-border p-3 text-xs">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="font-medium">GitHub</span>
-                    {run.github && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={pending || running}
-                        onClick={() => void send('refresh-github', run.id)}
-                      >
-                        {t('Refresh GitHub status')}
-                      </Button>
-                    )}
-                  </div>
-                  {run.github ? (
-                    <>
-                      <a
-                        className="block break-all underline"
-                        href={run.github.repositoryUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        {run.github.repositoryUrl}
-                      </a>
-                      {run.github.error && (
-                        <output className="block text-destructive">
-                          {t(run.github.error)}
-                        </output>
-                      )}
-                      <p className="text-muted-foreground">
-                        {t('Last attempted check')}: {run.github.checkedAt}
-                      </p>
-                      {run.github.pullRequests.map((pr) => (
-                        <a
-                          key={pr.url}
-                          className="block break-words underline underline-offset-4"
-                          href={pr.url}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          #{pr.number} · {pr.title} · {t(pr.state)}
-                          {pr.isDraft ? ` · ${t('Draft')}` : ''}
-                          {run.github?.error ? ` · ${t('Stale status')}` : ''}
-                        </a>
-                      ))}
-                      {!run.github.pullRequests.length && (
-                        <p>
-                          {t('No verified PR association for this output.')}
-                        </p>
-                      )}
-                      <p className="text-muted-foreground">
-                        {t(
-                          'PR state is separate from your acceptance. Refresh to check for remote changes.',
-                        )}
-                      </p>
-                    </>
-                  ) : (
-                    <p className="text-muted-foreground">
-                      {t(
-                        'No GitHub repository was captured for this round. Future rounds discover it automatically.',
-                      )}
-                    </p>
-                  )}
-                </div>
+              {run.github?.error && (
+                <p className="mt-2 text-xs text-amber-500">
+                  {t(run.github.error)}
+                </p>
               )}
               {run.input && (
                 <p className="mt-3 whitespace-pre-wrap text-xs text-muted-foreground">
