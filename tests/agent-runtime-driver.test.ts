@@ -120,7 +120,7 @@ function send(value){process.stdout.write(JSON.stringify(value)+'\\n')}
 rl.on('line',line=>{const message=JSON.parse(line);
 if(message.method==='initialize')send({id:message.id,result:{}});
 else if(message.method==='thread/start')send({id:message.id,result:{thread:{id:'thread-1'}}});
-else if(message.method==='turn/start'){turnStarts++;const turnId='turn-'+turnStarts;send({id:message.id,result:{turn:{id:turnId}}});if(turnStarts===1)send({id:900,method:'item/tool/call',params:{threadId:'thread-1',turnId,callId:'call-1',tool:'run_job',arguments:{label:'wait',executable:process.execPath,arguments:['-e',"setTimeout(()=>console.log('EVENT_DONE'),100)"],workingDirectory:'.'}}});else{send({method:'thread/tokenUsage/updated',params:{threadId:'thread-1',turnId,tokenUsage:{total:{inputTokens:20,cachedInputTokens:8,cacheWriteInputTokens:0,outputTokens:4,reasoningOutputTokens:1,totalTokens:25}}}});send({method:'item/completed',params:{threadId:'thread-1',turnId,item:{type:'agentMessage',text:'EVENT_OK'}}});send({method:'turn/completed',params:{threadId:'thread-1',turn:{id:turnId,status:'completed'}}});}}
+else if(message.method==='turn/start'){turnStarts++;const turnId='turn-'+turnStarts;send({id:message.id,result:{turn:{id:turnId}}});if(turnStarts===1)send({id:900,method:'item/tool/call',params:{threadId:'thread-1',turnId,callId:'call-1',tool:'run_job',arguments:{label:'wait',executable:process.execPath,arguments:['-e',"setTimeout(()=>console.log('EVENT_DONE'),100)"],workingDirectory:${JSON.stringify(root)}}}});else{send({method:'thread/tokenUsage/updated',params:{threadId:'thread-1',turnId,tokenUsage:{total:{inputTokens:20,cachedInputTokens:8,cacheWriteInputTokens:0,outputTokens:4,reasoningOutputTokens:1,totalTokens:25}}}});send({method:'item/completed',params:{threadId:'thread-1',turnId,item:{type:'agentMessage',text:'EVENT_OK'}}});send({method:'turn/completed',params:{threadId:'thread-1',turn:{id:turnId,status:'completed'}}});}}
 else if(message.method==='turn/interrupt'){send({id:message.id,result:{}});send({method:'turn/completed',params:{threadId:'thread-1',turn:{id:message.params.turnId,status:'interrupted'}}});}
 });`,
   );
@@ -205,6 +205,43 @@ else if(message.method==='turn/start'){send({id:message.id,result:{turn:{id:'tur
   const result = await driver.startTurn(thread, { prompt: 'finish now' })
     .completion;
   assert.equal(result.finalOutput, 'FAST_OK');
+});
+
+void test('Codex App Server driver answers a rejected job path instead of leaving the tool pending', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'app-server-path-'));
+  const outside = await mkdtemp(path.join(os.tmpdir(), 'app-server-outside-'));
+  t.after(async () => {
+    await rm(root, { recursive: true, force: true });
+    await rm(outside, { recursive: true, force: true });
+  });
+  const server = path.join(root, 'fake-server.mjs');
+  await writeFile(
+    server,
+    `import readline from 'node:readline';
+const rl=readline.createInterface({input:process.stdin});
+function send(value){process.stdout.write(JSON.stringify(value)+'\\n')}
+rl.on('line',line=>{const message=JSON.parse(line);
+if(message.method==='initialize')send({id:message.id,result:{}});
+else if(message.method==='thread/start')send({id:message.id,result:{thread:{id:'thread-path'}}});
+else if(message.method==='turn/start'){send({id:message.id,result:{turn:{id:'turn-path'}}});send({id:901,method:'item/tool/call',params:{threadId:'thread-path',turnId:'turn-path',tool:'run_job',arguments:{label:'escape',executable:process.execPath,arguments:['-e',''],workingDirectory:${JSON.stringify(outside)}}}});}
+else if(message.id===901){if(message.result?.success!==false)process.exit(2);send({method:'item/completed',params:{threadId:'thread-path',turnId:'turn-path',item:{type:'agentMessage',text:'PATH_REJECTED'}}});send({method:'turn/completed',params:{threadId:'thread-path',turn:{id:'turn-path',status:'completed'}}});}
+});`,
+  );
+  const driver = new CodexAppServerDriver({
+    command: process.execPath,
+    arguments: [server],
+    brokerFactory: (input) =>
+      new HostJobBroker(input.workingDirectory, path.join(root, 'jobs')),
+  });
+  t.after(() => driver.close());
+  const thread = await driver.startThread({
+    profile: { agent: 'codex', model: 'fixture', effort: 'low' },
+    workingDirectory: root,
+    access: 'workspace-write',
+  });
+  const result = await driver.startTurn(thread, { prompt: 'reject escape' })
+    .completion;
+  assert.equal(result.finalOutput, 'PATH_REJECTED');
 });
 
 async function readdirOne(directory: string) {

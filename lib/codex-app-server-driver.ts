@@ -1,4 +1,5 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import path from 'node:path';
 import readline from 'node:readline';
 import type {
   AgentRuntimeCapabilities,
@@ -407,14 +408,14 @@ export class CodexAppServerDriver implements AgentSessionDriver {
       });
       return;
     }
-    const arguments_ = params.arguments as Partial<HostJobRequest> & {
-      workingDirectory?: string;
-    };
-    const workingDirectory = pathWithin(
-      thread.workingDirectory,
-      arguments_.workingDirectory ?? '.',
-    );
     try {
+      const arguments_ = params.arguments as Partial<HostJobRequest> & {
+        workingDirectory?: string;
+      };
+      const workingDirectory = path.resolve(
+        thread.workingDirectory,
+        arguments_.workingDirectory ?? '.',
+      );
       const job = await broker.run({
         label: String(arguments_.label ?? ''),
         executable: String(arguments_.executable ?? ''),
@@ -509,14 +510,6 @@ export class CodexAppServerDriver implements AgentSessionDriver {
     this.turns.clear();
     this.bufferedTurnMessages.clear();
   }
-}
-
-function pathWithin(root: string, relative: string) {
-  if (relative.startsWith('/') || relative.split('/').includes('..'))
-    throw new Error(
-      'Job working directory must stay inside the Card workspace.',
-    );
-  return `${root}/${relative}`;
 }
 
 function stringValue(value: unknown) {
