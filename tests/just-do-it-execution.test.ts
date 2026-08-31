@@ -1718,3 +1718,75 @@ void test('canceling coordinator preparation persists its partial record and nev
   );
   assert.match(activity, /Reading current evidence/);
 });
+
+void test('coordinated app verification limitations retain diagnostics without failing a passed Round or blocking acceptance', async (t) => {
+  const f = await fixture(t);
+  await mkdir(path.join(f.project.rootPath, 'build/App.app'), {
+    recursive: true,
+  });
+  let calls = 0;
+  const transport: typeof startLocalAgentRun = (_agent, options) => {
+    calls++;
+    assert.equal(options.access, 'read-only');
+    const req = JSON.parse(options.prompt.split('COORDINATION REQUEST:\n')[1]);
+    return {
+      completion: Promise.resolve({
+        agentSessionId: 'coordinator',
+        usage: null,
+        finalOutput: JSON.stringify({
+          version: 1,
+          requestId: req.requestId,
+          cardId: id,
+          actionId: one,
+          contextRevision: req.task.context.contextRevision,
+          checklistVersion: req.task.context.acceptanceChecklist.version,
+          decision: 'ready',
+          summary: 'Existing simulator delivery meets required checks',
+          instructions: '',
+          verificationPlan: [
+            {
+              criterionId: 'AC-01',
+              mode: 'coordinator',
+              evidenceIds: [],
+              rationale: 'Reviewed existing fixture test evidence',
+            },
+          ],
+          checks: [
+            {
+              criterionId: 'AC-01',
+              summary: 'Required simulator checks passed',
+              status: 'passed',
+              evidenceRefs: ['file:build/App.app'],
+            },
+          ],
+          artifactRefs: ['file:build/App.app'],
+          additionalFindings: [],
+          scopeNotes: [],
+          contextSummary:
+            'Simulator delivery passed; host bundle inspection is optional.',
+        }),
+      }),
+      cancel: () => {},
+    };
+  };
+  const service = createExecutionService(
+    f.store,
+    transport,
+    new Map(),
+    1800000,
+    undefined,
+    async () => undefined,
+  );
+  await service.start(f.project, f.input);
+  let card = await settled(f.store, f.project);
+  const run = card.execution!.runs[0];
+  assert.equal(calls, 1);
+  assert.equal(run.status, 'succeeded');
+  assert.equal(run.error, null);
+  assert.equal(run.result?.checks[0].status, 'passed');
+  assert.ok(run.evidenceErrors?.length);
+  card = await service.update(f.project, id, card.revision, 'accept', run.id);
+  assert.deepEqual(card.execution!.acceptedActionIds, [one]);
+  assert.deepEqual(card.execution!.runs[0].evidenceErrors, run.evidenceErrors);
+  assert.equal(calls, 1);
+});

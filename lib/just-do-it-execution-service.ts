@@ -346,10 +346,18 @@ export function createExecutionService(
       } catch (error) {
         const message =
           error instanceof Error ? error.message : 'Execution failed.';
+        const advisoryOnly =
+          Boolean(coordinated) &&
+          error instanceof ExecutionEvidenceError &&
+          assessRequiredChecks(
+            run.acceptanceChecklist,
+            error.result.checks,
+            card.execution?.acceptanceOverrides?.[run.actionId],
+          ).passed;
         nextRun = {
           ...nextRun,
-          status: 'failed',
-          error: message,
+          status: advisoryOnly ? 'succeeded' : 'failed',
+          error: advisoryOnly ? null : message,
           observedRefs: refs,
           result: error instanceof ExecutionEvidenceError ? error.result : null,
           ...(error instanceof ExecutionEvidenceError
@@ -364,7 +372,8 @@ export function createExecutionService(
             : {}),
         };
         if (nextRun.result)
-          files['rejected-report.json'] = JSON.stringify(nextRun.result);
+          files[advisoryOnly ? 'result.json' : 'rejected-report.json'] =
+            JSON.stringify(nextRun.result);
         if (snapshot) {
           nextRun.github = await discoverGitHubDelivery(
             workingProject,
@@ -383,7 +392,9 @@ export function createExecutionService(
             stage: 'execution',
             actionId: run.actionId,
             event: 'run-ended',
-            text: `${message}\nFiles may have changed; no rollback was performed.`,
+            text: advisoryOnly
+              ? `Required checks passed. Advisory artifact verification finding retained: ${message}`
+              : `${message}\nFiles may have changed; no rollback was performed.`,
             refs,
           },
           files,

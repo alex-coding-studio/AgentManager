@@ -240,7 +240,7 @@ export function startCoordinatedExecution(input: {
             throw new Error('Coordinator repair budget exhausted.');
           repairs--;
         }
-        const workerPrompt = `${input.workerOptions.prompt}\n\nCOORDINATOR ASSIGNMENT (current Action only):\n${JSON.stringify({ instructions: decision.instructions, verificationPlan: decision.verificationPlan, priorEvidence: input.priorEvidence.filter((item) => decision.verificationPlan.some((plan) => plan.evidenceIds.includes(item.id))) })}\nPerform only this delta. Do not spawn or launch other Agents, including through shell commands. Return additional work to the host coordinator. Reuse only the referenced applicable evidence, label it as reused, and do not claim its commands ran again. Report all frozen criteria honestly. Keep fixed user/permission/PR boundaries. Return the original required execution JSON.`;
+        const workerPrompt = `${input.workerOptions.prompt}\n\nCOORDINATOR ASSIGNMENT (current Action only):\n${JSON.stringify({ instructions: decision.instructions, repairAssessment: decision.repairAssessment, verificationPlan: decision.verificationPlan, priorEvidence: input.priorEvidence.filter((item) => decision.verificationPlan.some((plan) => plan.evidenceIds.includes(item.id))) })}\nPerform only this delta. Do not spawn or launch other Agents, including through shell commands. Return additional work to the host coordinator. Reuse only the referenced applicable evidence, label it as reused, and do not claim its commands ran again. Report all frozen criteria honestly. Keep fixed user/permission/PR boundaries. Return the original required execution JSON.`;
         lastWorker = await call('worker', phase, workerPrompt);
         let candidate: unknown;
         try {

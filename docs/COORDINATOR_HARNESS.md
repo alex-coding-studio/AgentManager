@@ -29,6 +29,15 @@ Qualification may request one focused repair: repair worker → qualify → stop
 repair request is rejected. These attempts belong to one visible Round and remain
 separately accountable.
 
+Repair also requires an actionable diagnosis: affected unmet required criteria,
+evidence-grounded cause, a changed approach within the worker's authority and the
+expected new evidence. Unavailable or uncertain remedies cannot dispatch a repair.
+The host rejects repair targets that are optional, already passed or explicitly waived.
+An unchanged retry is not a remedy. Unsupported host `.app` inspection must not launch
+another inspection or expand the Action into modifying AgentManager. The coordinator
+judges feasibility from context; schema checks enforce the declared boundary but cannot
+prove that its diagnosis is correct.
+
 | Boundary             | Enforcement in this slice                                      |
 | -------------------- | -------------------------------------------------------------- |
 | Total Agent calls    | At most 5 per Round, checked before dispatch                   |
@@ -91,6 +100,15 @@ references for later Actions. Request/response records retain the worker evidenc
 separate coordinator decisions. Presentation includes only unresolved additional findings
 marked as needing attention; the underlying reports remain inspectable. Required checks
 and explicit user overrides remain distinct from advisory artifact verification.
+
+The coordinator decides which additional findings warrant user attention: material
+acceptance implications, a needed user action or substantive unresolved risk. Routine
+optional successes, resolved issues and irrelevant verifier limitations stay in records.
+For example, an unsupported `.app` inspection is not a failed build or simulator test,
+and must not by itself cause a repair dispatch or a blocked verdict. Real required
+failures cannot be hidden by reclassifying them as additional. For new coordinated
+results whose required checks pass, the host retains artifact-verification findings
+without marking the Round failed. Historical records are not rewritten.
 
 ## Visibility, records and cancellation
 

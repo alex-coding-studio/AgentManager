@@ -39,6 +39,13 @@ export type CoordinationDecision = {
   summary: string;
   instructions: string;
   verificationPlan: VerificationPlanItem[];
+  repairAssessment?: {
+    fixability: 'actionable' | 'unavailable' | 'uncertain';
+    criterionIds: string[];
+    cause: string;
+    changedApproach: string;
+    expectedEvidence: string;
+  };
   checks: CheckResult[];
   artifactRefs: string[];
   additionalFindings: Array<
@@ -140,11 +147,26 @@ export const coordinationSchema = object({
   scopeNotes: strings,
   contextSummary: { type: 'string', maxLength: 6000 },
 });
+Object.assign(coordinationSchema.properties, {
+  repairAssessment: object({
+    fixability: { enum: ['actionable', 'unavailable', 'uncertain'] },
+    criterionIds: {
+      type: 'array',
+      minItems: 1,
+      maxItems: 40,
+      uniqueItems: true,
+      items: text,
+    },
+    cause: text,
+    changedApproach: text,
+    expectedEvidence: text,
+  }),
+});
 const validate = new Ajv2020({ allErrors: true }).compile(coordinationSchema);
 
 export function coordinationPrompt(request: CoordinationRequest) {
   const { task, priorEvidence, ...dynamic } = request;
-  return `You are the read-only coordination Agent for one Action in a larger confirmed Plan. Own task continuity, bounded dispatch and result qualification. Do not implement code, run broad builds/tests, create or modify PRs, merge, accept Actions, alter host records, or start another Agent yourself. The host dispatches workers from your structured result. Read only the relevant referenced evidence and logs. Use the previous context as a navigation aid, not authority over current facts. Never add required criteria. The user's current input may clarify the task; honor clear simulator-only scope when applicable, but do not fabricate human observations or invent user waivers. If an explicit decision needs recording and is not in acceptanceOverrides, return needs-user with that exact decision, mark its verificationPlan mode needs-user-decision and keep the observed check not-run; the UI can ask the user to confirm that interpretation without dispatching coding work.\n\nReturn dispatch (prepare only) or repair (qualify only) only for necessary bounded work; instructions must state the delta, non-goals, applicable prior lessons, verification order and stop conditions. Do not repeat valid checks solely to replay a whole checklist. Return ready without a worker when read-only reference inspection or existing valid evidence suffices. For every required criterion supply a verificationPlan item: worker for work requiring execution, reuse with priorEvidence IDs and applicability rationale, coordinator for lightweight read-only inspection, or user-decision for an already recorded override. Reuse requires matching basis and source evidence. If inputs changed, rerun affected work. Existing required repository hooks cannot be bypassed.\n\nOn ready/needs-user/blocked, include one checks entry per required criterion. Ready requires every criterion passed with evidence or an existing explicit user override. Do not change a worker's current failed required check into passed without correction or an explicit recorded override. Older passing evidence cannot erase a current failure. Never silently waive one. Additional findings must indicate resolved and needsAttention; only unresolved decision-relevant findings are displayed. Resolved failures and future scope remain historical context, not acceptance blockers. No extra Remaining work checklist. Preserve honest observed failures.\n\nUse the user's language for summaries. Keep contextSummary short: current facts, applicable verified lessons, remaining constraints and next-step guidance with evidence pointers. Return only JSON matching this schema: ${JSON.stringify(coordinationSchema)}\n\nCOORDINATION REQUEST:\n${JSON.stringify({ task, priorEvidence, ...dynamic })}`;
+  return `You are the read-only coordination Agent for one Action in a larger confirmed Plan. Own task continuity, bounded dispatch and result qualification. Do not implement code, run broad builds/tests, create or modify PRs, merge, accept Actions, alter host records, or start another Agent yourself. The host dispatches workers from your structured result. Read only the relevant referenced evidence and logs. Use the previous context as a navigation aid, not authority over current facts. Never add required criteria. The user's current input may clarify the task; honor clear simulator-only scope when applicable, but do not fabricate human observations or invent user waivers. If an explicit decision needs recording and is not in acceptanceOverrides, return needs-user with that exact decision, mark its verificationPlan mode needs-user-decision and keep the observed check not-run; the UI can ask the user to confirm that interpretation without dispatching coding work.\n\nReturn dispatch (prepare only) or repair (qualify only) only for necessary bounded work; instructions must state the delta, non-goals, applicable prior lessons, verification order and stop conditions. Do not repeat valid checks solely to replay a whole checklist. Before requesting repair, diagnose whether an authorized worker action can change the result. Include repairAssessment with fixability, affected required criterionIds, evidence-grounded cause, changedApproach and expectedEvidence. Repair is allowed only for actionable gaps in required checks, not optional diagnostics. Repeating the same commands without a changed condition or concrete corrective action is not a repair plan. Missing capability/permission outside the assignment is unavailable; unknown causality is uncertain. Inspect relevant existing evidence first; if no supported remedy exists, return blocked/needs-user only for actual required gaps, or ready when required checks pass. A tool or host that does not support .app inspection cannot be fixed by repeating the inspection or expanding this Action to implement host support. Return ready without a worker when read-only reference inspection or existing valid evidence suffices. For every required criterion supply a verificationPlan item: worker for work requiring execution, reuse with priorEvidence IDs and applicability rationale, coordinator for lightweight read-only inspection, or user-decision for an already recorded override. Reuse requires matching basis and source evidence. If inputs changed, rerun affected work. Existing required repository hooks cannot be bypassed.\n\nOn ready/needs-user/blocked, include one checks entry per required criterion. Ready requires every criterion passed with evidence or an existing explicit user override. Do not change a worker's current failed required check into passed without correction or an explicit recorded override. Older passing evidence cannot erase a current failure. Never silently waive one. Classify additional findings yourself: set needsAttention only for an unresolved issue that materially affects the user decision or requires user action. Ignore routine optional successes, resolved issues and unsupported diagnostic capabilities in the user-facing report; retain them in the recorded findings. An inability of the host to inspect a .app bundle is a verifier limitation, not a failed build, simulator test or required criterion. Do not return blocked or dispatch repair solely for additional diagnostics when all required criteria pass. Do not conceal a genuine required failure by relabeling it additional. Additional findings must indicate resolved and needsAttention; only unresolved decision-relevant findings are displayed. Resolved failures and future scope remain historical context, not acceptance blockers. No extra Remaining work checklist. Preserve honest observed failures.\n\nUse the user's language for summaries. Keep contextSummary short: current facts, applicable verified lessons, remaining constraints and next-step guidance with evidence pointers. Return only JSON matching this schema: ${JSON.stringify(coordinationSchema)}\n\nCOORDINATION REQUEST:\n${JSON.stringify({ task, priorEvidence, ...dynamic })}`;
 }
 
 export function createCoordinationRequest(
@@ -223,8 +245,26 @@ export function parseCoordinationDecision(
   if (value.decision === 'dispatch' || value.decision === 'repair') {
     if (!value.instructions.trim())
       throw new Error('Worker dispatch requires concrete instructions.');
-    if (value.decision === 'repair' && request.repairsRemaining < 1)
-      throw new Error('Coordinator repair budget exhausted.');
+    if (value.decision === 'repair') {
+      if (request.repairsRemaining < 1)
+        throw new Error('Coordinator repair budget exhausted.');
+      const assessment = value.repairAssessment;
+      if (!assessment || assessment.fixability !== 'actionable')
+        throw new Error(
+          'Repair requires an actionable diagnosis and changed approach.',
+        );
+      const gaps = assessRequiredChecks(
+        checklist,
+        request.workerReport?.checks ?? [],
+        request.task.context.acceptanceOverrides,
+      )
+        .items.filter((item) => item.status !== 'passed')
+        .map((item) => item.criterion.id);
+      if (assessment.criterionIds.some((id) => !gaps.includes(id)))
+        throw new Error(
+          'Repair must target an unmet required criterion, not additional diagnostics.',
+        );
+    }
     return value;
   }
   const checkIds = value.checks.map((check) => check.criterionId);

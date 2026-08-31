@@ -95,6 +95,19 @@ function decision(
       kind === 'dispatch' || kind === 'repair'
         ? 'Only repair the requested output.'
         : '',
+    ...(kind === 'repair'
+      ? {
+          repairAssessment: {
+            fixability: 'actionable' as const,
+            criterionIds: ['C1'],
+            cause: 'Worker output does not contain the required value.',
+            changedApproach:
+              'Correct the observed value before verifying again.',
+            expectedEvidence:
+              'Read the corrected output and report the matching value.',
+          },
+        }
+      : {}),
     verificationPlan: [
       {
         criterionId: 'C1',
@@ -541,4 +554,80 @@ void test('proposed user decisions require explicit confirmation and cannot prod
     () => parseCoordinationDecision(JSON.stringify(d), req),
     /needs-user result/,
   );
+});
+
+void test('coordinator filters ignored diagnostics, surfaces material extras, and preserves raw findings without failing required checks', async () => {
+  const f = setup((req) => {
+    const d = decision(req, req.phase === 'prepare' ? 'dispatch' : 'ready');
+    d.additionalFindings = [
+      {
+        criterionId: '',
+        summary: 'Host cannot inspect .app bundles',
+        status: 'not-run',
+        evidenceRefs: ['file:build/App.app'],
+        resolved: false,
+        needsAttention: false,
+      },
+      {
+        criterionId: '',
+        summary: 'Optional probe fixed',
+        status: 'failed',
+        evidenceRefs: ['log:probe'],
+        resolved: true,
+        needsAttention: false,
+      },
+      {
+        criterionId: '',
+        summary: 'User may want to review optional layout behavior',
+        status: 'failed',
+        evidenceRefs: ['log:layout'],
+        resolved: false,
+        needsAttention: true,
+      },
+    ];
+    return d;
+  });
+  const output = (await f.start()
+    .completion) as import('../lib/just-do-it-coordination-runner.ts').CoordinatedResult;
+  const report = JSON.parse(output.finalOutput);
+  assert.equal(f.calls.length, 3);
+  assert.equal(report.outcome, 'delivered');
+  assert.equal(report.checks[0].status, 'passed');
+  assert.deepEqual(
+    report.additionalChecks.map((c: { summary: string }) => c.summary),
+    ['User may want to review optional layout behavior'],
+  );
+  assert.equal(
+    output.coordination.decisions.at(-1)!.additionalFindings.length,
+    3,
+  );
+});
+
+void test('repair without a supported actionable remedy stops before another worker call', async () => {
+  for (const fixability of ['unavailable', 'uncertain', 'missing'] as const) {
+    const f = setup(
+      (req) => {
+        const d = decision(
+          req,
+          req.phase === 'prepare' ? 'dispatch' : 'repair',
+        );
+        if (d.repairAssessment) {
+          if (fixability === 'missing') delete d.repairAssessment;
+          else d.repairAssessment.fixability = fixability;
+        }
+        return d;
+      },
+      ['failed'],
+    );
+    await assert.rejects(f.start().completion, /actionable diagnosis/);
+    assert.equal(f.calls.length, 3);
+  }
+});
+
+void test('repair cannot dispatch work for additional diagnostics after required checks passed', async () => {
+  const f = setup((req) =>
+    decision(req, req.phase === 'prepare' ? 'dispatch' : 'repair'),
+  );
+  await assert.rejects(f.start().completion, /unmet required criterion/);
+  assert.equal(f.calls.length, 3);
 });
