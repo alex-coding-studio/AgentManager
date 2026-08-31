@@ -168,3 +168,11 @@ Full Access. It queries the real simulator service, builds a disposable XCTest
 fixture and runs it on an already booted iPhone simulator. It does not run a model
 turn, build the user's project, boot/reset devices, or change permission settings.
 The restricted-profile isolation smoke remains `npm run test:worktree-sandbox`.
+
+GitHub repository URLs matching the observed `origin` are valid external references
+only after a live repository identity check. An empty repository is valid even
+before it has a default-branch ref. PR artifact URLs additionally require the
+recorded output HEAD to match the verified PR HEAD. External references are kept
+separate from observed file/Git changes: they prove an accessible delivery location,
+not creation during this Round, successful publication, correctness or acceptance.
+Foreign URLs and failed lookups remain invalid delivery claims.

@@ -1,3 +1,4 @@
+import { repositoryDefaultBranch } from '../lib/github-delivery.ts';
 import { summarizeGitHub } from '../lib/github-delivery-summary.ts';
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -257,4 +258,90 @@ void test('Card summary uses newest query evidence even when an earlier round wa
   assert.equal(result.length, 1);
   assert.equal(result[0].pr.state, 'MERGED');
   assert.equal(result[0].stale, true);
+});
+
+void test('an empty remote remains valid repository evidence; unknown URLs and failed lookups do not', async (t) => {
+  const { verifiedGitHubArtifactRefs } =
+    await import('../lib/github-delivery.ts');
+  const { project, git } = await fixture(t);
+  git('init', '-b', 'feature');
+  git(
+    '-c',
+    'user.name=Fixture',
+    '-c',
+    'user.email=fixture@example.invalid',
+    'commit',
+    '--allow-empty',
+    '-m',
+    'fixture',
+  );
+  git('remote', 'add', 'origin', url);
+  const empty = {
+    ...reader,
+    repository: async () => null,
+    branchPullRequests: async () => [],
+  };
+  const delivery = await discoverGitHubDelivery(project, '', null, empty);
+  assert.equal(delivery?.error, null);
+  assert.equal(delivery?.defaultBranch, null);
+  assert.deepEqual(
+    await verifiedGitHubArtifactRefs(
+      project,
+      [url, 'https://github.com/other/repo', 'command:fake'],
+      hash,
+      empty,
+    ),
+    [url],
+  );
+  assert.deepEqual(
+    await verifiedGitHubArtifactRefs(project, [url], hash, {
+      ...reader,
+      repository: async () => {
+        throw new Error('Unavailable');
+      },
+    }),
+    [],
+  );
+  assert.deepEqual(
+    await verifiedGitHubArtifactRefs(
+      project,
+      [`${url}/pull/1`],
+      'b'.repeat(40),
+      reader,
+    ),
+    [],
+  );
+});
+
+void test('GitHub CLI empty repository response with an empty branch name is valid', () => {
+  const metadata = { nameWithOwner: repo, url, isEmpty: true };
+  assert.equal(
+    repositoryDefaultBranch(repo, {
+      ...metadata,
+      defaultBranchRef: { name: '' },
+    }),
+    null,
+  );
+  assert.equal(
+    repositoryDefaultBranch(repo, { ...metadata, defaultBranchRef: null }),
+    null,
+  );
+  assert.throws(
+    () =>
+      repositoryDefaultBranch(repo, {
+        ...metadata,
+        isEmpty: false,
+        defaultBranchRef: null,
+      }),
+    /Invalid/,
+  );
+  assert.throws(
+    () =>
+      repositoryDefaultBranch(repo, {
+        ...metadata,
+        url: 'https://github.com/other/repo',
+        defaultBranchRef: null,
+      }),
+    /identity/,
+  );
 });

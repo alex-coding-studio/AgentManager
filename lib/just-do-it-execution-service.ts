@@ -12,6 +12,7 @@ import {
   discoverGitHubDelivery,
   refreshGitHubDelivery,
   githubReader,
+  verifiedGitHubArtifactRefs,
 } from './github-delivery.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
@@ -196,12 +197,37 @@ export function createExecutionService(
         if (card.execution?.workspace)
           await verifyCardWorkspace(card.execution.workspace);
         if (outcome instanceof Error) throw outcome;
-        const result = parseCardHarnessResult(
-          outcome.finalOutput,
-          request,
-          card.revision,
-          refs,
-        );
+        let result;
+        try {
+          result = parseCardHarnessResult(
+            outcome.finalOutput,
+            request,
+            card.revision,
+            refs,
+          );
+        } catch (error) {
+          if (!(error instanceof ExecutionEvidenceError)) throw error;
+          const verified = await verifiedGitHubArtifactRefs(
+            workingProject,
+            error.result.artifactRefs,
+            snapshot.head,
+            reader,
+          );
+          if (!verified.length) throw error;
+          nextRun.verifiedExternalRefs = verified;
+          files['verified-external-refs.json'] = JSON.stringify({
+            checkedAt: new Date().toISOString(),
+            refs: verified,
+            meaning:
+              'Verified current external references; not proof that resources were newly created or that delivery is accepted.',
+          });
+          result = parseCardHarnessResult(
+            outcome.finalOutput,
+            request,
+            card.revision,
+            [...refs, ...verified],
+          );
+        }
         if (result.stage !== 'execution')
           throw new Error('Expected an execution response.');
         const outputRef = reference(card, 'output.md');
@@ -221,11 +247,10 @@ export function createExecutionService(
           snapshot.head,
         );
         files['github-delivery.json'] = JSON.stringify(nextRun.github);
-        nextRun.unverifiedCheckRefs = unverifiedCheckRefs(
-          result,
-          request,
-          refs,
-        );
+        nextRun.unverifiedCheckRefs = unverifiedCheckRefs(result, request, [
+          ...refs,
+          ...(nextRun.verifiedExternalRefs ?? []),
+        ]);
         files['result.json'] = JSON.stringify(result);
         files['output.md'] =
           `# Action output\n\n${result.summary}\n\nOutcome: ${result.outcome}\n\n## Observed changes\n${refs.map((ref) => `- ${ref}`).join('\n')}\n\n## Agent-reported checks\n${result.checks.map((check) => `- ${check.status}: ${check.summary}`).join('\n')}\n\n## Remaining\n${result.remaining.map((item) => `- ${item}`).join('\n')}`;
@@ -475,7 +500,7 @@ export function createExecutionService(
         outputRef: null,
         parentCommit: git.head,
       };
-      const prompt = `${buildCardHarnessPrompt(request)}\n\nExecution runtime: work only in ${baseline.root}. This is the Card-owned worktree on branch ${workspace?.branch ?? 'legacy'}. Keep all Actions and Rounds on this branch. The primary checkout ${project.codePath ?? project.rootPath} is not your editing directory. Never switch this worktree to main, reset the primary checkout, or merge into main. Repository commits and pushes belong on this Card branch; only the agreed PR delivery process may merge to main. The planning store ${project.planningPath} is host-owned; do not edit it or call AgentManager mutation APIs. Preserve pre-existing user changes. The host has prepared the local repository and Card branch. Do not reinitialize Git or create a replacement branch. Creating a GitHub repository or publishing branches still requires the signed-off Action or explicit user instruction. A local empty baseline does not authorize pushing the default branch to GitHub. If initializing or publishing a project repository, exclude .agent-manager/ before staging; never publish the host-owned planning store or its private Git history. No automatic merge, rollback, acceptance, or next Action. Use file:relative/path for changed files, deleted:relative/path for removals, or git:full-commit-hash for a commit newly reachable from the final project HEAD in artifactRefs. Command descriptions and external URLs may be included in check evidenceRefs, but remain unverified Agent-reported references; they are not observed delivery artifacts. The host checks these against before/after snapshots. Do not list unchanged input files as new artifacts or invent URLs. Include actual PR URLs in the output summary when PRs were produced; the host queries GitHub to verify their state. Checks are your reported evidence, not user acceptance. The host records a new local Git checkpoint for this round. You may reference checkpoint:${request.requestId} as this round's workspace snapshot when reporting checks without file changes; explicitly state that no code changed and do not invent completed functionality. If permissions prevent an operation, report blocked; never bypass sandbox restrictions. Return the required JSON, not a Markdown envelope.`;
+      const prompt = `${buildCardHarnessPrompt(request)}\n\nExecution runtime: work only in ${baseline.root}. This is the Card-owned worktree on branch ${workspace?.branch ?? 'legacy'}. Keep all Actions and Rounds on this branch. The primary checkout ${project.codePath ?? project.rootPath} is not your editing directory. Never switch this worktree to main, reset the primary checkout, or merge into main. Repository commits and pushes belong on this Card branch; only the agreed PR delivery process may merge to main. The planning store ${project.planningPath} is host-owned; do not edit it or call AgentManager mutation APIs. Preserve pre-existing user changes. The host has prepared the local repository and Card branch. Do not reinitialize Git or create a replacement branch. Creating a GitHub repository or publishing branches still requires the signed-off Action or explicit user instruction. A local empty baseline does not authorize pushing the default branch to GitHub. If initializing or publishing a project repository, exclude .agent-manager/ before staging; never publish the host-owned planning store or its private Git history. No automatic merge, rollback, acceptance, or next Action. Use file:relative/path for changed files, deleted:relative/path for removals, or git:full-commit-hash for a commit newly reachable from the final project HEAD in artifactRefs. Command descriptions and external URLs may be included in check evidenceRefs, but remain Agent-reported unless independently verified. Real GitHub repository or PR URLs may appear in artifactRefs; the host verifies the current origin and remote identity, and requires PR HEAD to match this output. A repository link identifies the delivery location, not proof of new files or completed work. The host checks these against before/after snapshots. Do not list unchanged input files as new artifacts or invent URLs. Include actual PR URLs in the output summary when PRs were produced; the host queries GitHub to verify their state. Checks are your reported evidence, not user acceptance. The host records a new local Git checkpoint for this round. You may reference checkpoint:${request.requestId} as this round's workspace snapshot when reporting checks without file changes; explicitly state that no code changed and do not invent completed functionality. If permissions prevent an operation, report blocked; never bypass sandbox restrictions. Return the required JSON, not a Markdown envelope.`;
       const saved = await commit(
         project,
         {

@@ -29,7 +29,7 @@ export type GitHubDelivery = {
   error: string | null;
 };
 export type GitHubReader = {
-  repository: (repo: string) => Promise<string>;
+  repository: (repo: string) => Promise<string | null>;
   pullRequest: (repo: string, number: number) => Promise<GitHubPullRequest>;
   branchPullRequests: (
     repo: string,
@@ -72,6 +72,33 @@ export function validatePullRequest(
     throw new Error('Invalid GitHub PR response.');
   return pr;
 }
+export function repositoryDefaultBranch(
+  repo: string,
+  data: {
+    nameWithOwner?: string;
+    url?: string;
+    isEmpty?: boolean;
+    defaultBranchRef?: { name?: string } | null;
+  },
+) {
+  if (
+    data.nameWithOwner?.toLowerCase() !== repo.toLowerCase() ||
+    data.url?.toLowerCase() !== `https://github.com/${repo}`.toLowerCase()
+  )
+    throw new Error('Repository identity mismatch.');
+  if (
+    typeof data.defaultBranchRef?.name === 'string' &&
+    data.defaultBranchRef.name.length
+  )
+    return data.defaultBranchRef.name;
+  if (
+    data.isEmpty === true &&
+    (data.defaultBranchRef === null || data.defaultBranchRef?.name === '')
+  )
+    return null;
+  throw new Error('Invalid repository metadata.');
+}
+
 export const githubReader: GitHubReader = {
   async repository(repo) {
     const data = (await gh([
@@ -79,10 +106,14 @@ export const githubReader: GitHubReader = {
       'view',
       repo,
       '--json',
-      'defaultBranchRef',
-    ])) as { defaultBranchRef?: { name?: string } };
-    if (!data.defaultBranchRef?.name) throw new Error('No default branch.');
-    return data.defaultBranchRef.name;
+      'nameWithOwner,url,isEmpty,defaultBranchRef',
+    ])) as {
+      nameWithOwner?: string;
+      url?: string;
+      isEmpty?: boolean;
+      defaultBranchRef?: { name?: string } | null;
+    };
+    return repositoryDefaultBranch(repo, data);
   },
   async pullRequest(repo, number) {
     return validatePullRequest(
@@ -266,4 +297,43 @@ export function mergedDeliveryMatches(delivery: GitHubDelivery) {
         pr.baseRefName === delivery.defaultBranch,
     )
   );
+}
+
+export async function verifiedGitHubArtifactRefs(
+  project: RegisteredProject,
+  claimed: string[],
+  outputHead: string | null,
+  reader = githubReader,
+) {
+  const repositoryUrl = getGitHubRepositoryUrl(project);
+  if (!repositoryUrl) return [];
+  const candidates = [...new Set(claimed)].filter(
+    (ref) => ref === repositoryUrl || ref.startsWith(`${repositoryUrl}/pull/`),
+  );
+  if (!candidates.length || candidates.length > 20) return [];
+  const repo = repositoryUrl.slice('https://github.com/'.length);
+  const verified: string[] = [];
+  try {
+    await reader.repository(repo);
+  } catch {
+    return [];
+  }
+  for (const ref of candidates) {
+    if (ref === repositoryUrl) {
+      verified.push(ref);
+      continue;
+    }
+    const match = ref.match(/\/pull\/([1-9][0-9]*)$/);
+    if (!match || !Number.isSafeInteger(Number(match[1]))) continue;
+    try {
+      const pr = validatePullRequest(
+        repo,
+        await reader.pullRequest(repo, Number(match[1])),
+      );
+      if (pr.url === ref && pr.headRefOid === outputHead) verified.push(ref);
+    } catch {
+      continue;
+    }
+  }
+  return verified;
 }

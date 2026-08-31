@@ -893,3 +893,55 @@ void test('invalid delivery references preserve a rejected report and cannot be 
     /observed output/,
   );
 });
+
+void test('a verified repository-only blocked output is retained without pretending it is a changed file or acceptance', async (t) => {
+  const { project, service, store, calls, input } = await fixture(t, {
+    repository: async () => null,
+    branchPullRequests: async () => [],
+    pullRequest: async () => {
+      throw new Error('No PR');
+    },
+  });
+  await service.start(project, input);
+  const exec = promisify(execFile);
+  await exec('git', ['init', '-b', 'feature'], { cwd: project.rootPath });
+  await exec(
+    'git',
+    [
+      '-c',
+      'user.name=Fixture',
+      '-c',
+      'user.email=fixture@example.invalid',
+      'commit',
+      '--allow-empty',
+      '-m',
+      'fixture',
+    ],
+    { cwd: project.rootPath },
+  );
+  await exec(
+    'git',
+    ['remote', 'add', 'origin', 'https://github.com/example/empty'],
+    { cwd: project.rootPath },
+  );
+  const response = delivered(calls[0].request, [
+    'https://github.com/example/empty',
+  ]);
+  const result = JSON.parse(response.finalOutput);
+  result.outcome = 'blocked';
+  result.remaining = ['Push gate is blocked'];
+  calls[0].resolve({ ...response, finalOutput: JSON.stringify(result) });
+  const current = await settled(store, project);
+  const run = current.execution!.runs[0];
+  assert.equal(run.status, 'succeeded');
+  assert.equal(run.result?.outcome, 'blocked');
+  assert.deepEqual(run.verifiedExternalRefs, [
+    'https://github.com/example/empty',
+  ]);
+  assert.equal(
+    run.observedRefs.includes('https://github.com/example/empty'),
+    false,
+  );
+  assert.equal(run.github?.error, null);
+  assert.deepEqual(current.execution!.acceptedActionIds, []);
+});
