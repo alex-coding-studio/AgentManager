@@ -18,6 +18,7 @@ import {
   GitBranch,
   SlidersHorizontal,
 } from 'lucide-react';
+import { ActionRunProgress } from '@/components/action-run-progress';
 import { AgentProfileSelector } from '@/components/agent-profile-selector';
 import {
   Dialog,
@@ -55,6 +56,11 @@ export function JustDoItAction({
     card.execution?.profile ??
       card.execution?.runs.at(-1)?.profile ??
       card.run?.profile ?? { agent: 'codex', model: '', effort: '' },
+  );
+  const [coordinatorProfile, setCoordinatorProfile] = useState<AgentProfile>(
+    card.execution?.coordinationSettings?.profile ??
+      card.run?.profile ??
+      profile,
   );
   const [pending, setPending] = useState(false);
   const [preparingAcceptance, setPreparingAcceptance] = useState(false);
@@ -99,6 +105,7 @@ export function JustDoItAction({
     outputId = latest?.id,
     initializeRepository = false,
     criterionId?: string,
+    decisionNote = instruction,
   ) {
     setPending(true);
     setError('');
@@ -113,10 +120,11 @@ export function JustDoItAction({
           expectedRevision: card.revision,
           instruction,
           profile,
+          coordination: { profile: coordinatorProfile },
           outputId,
           initializeRepository,
           criterionId,
-          note: instruction,
+          note: decisionNote,
         }),
       });
       const data = await response.json();
@@ -426,13 +434,11 @@ export function JustDoItAction({
                   </div>
                 )}
               </details>
+              {run.status === 'running' && <ActionRunProgress run={run} />}
               {run.status === 'running' && (
                 <div className="mt-4 flex items-center gap-3">
                   <LoaderCircle className="size-4 animate-spin text-blue-500" />
-                  <span className="text-sm">
-                    {run.profile.agent === 'codex' ? 'Codex' : 'Claude'} ·{' '}
-                    {t('Agent running')}
-                  </span>
+                  <span className="text-sm">{t('Agent running')}</span>
                   <Button
                     variant="outline"
                     size="sm"
@@ -459,7 +465,11 @@ export function JustDoItAction({
                   </p>
                   <div className="mt-4 space-y-3">
                     <h4 className="text-sm font-medium">
-                      {t('Agent-reported checks')}
+                      {t(
+                        run.coordination
+                          ? 'Coordinator report'
+                          : 'Agent-reported checks',
+                      )}
                     </h4>
                     <h5 className="text-xs font-semibold">
                       {t('Required checks')}
@@ -511,6 +521,34 @@ export function JustDoItAction({
                         {item.status !== 'passed' &&
                           run.id === latest?.id &&
                           !accepted &&
+                          run.input.trim() &&
+                          run.coordination?.decisions
+                            .at(-1)
+                            ?.verificationPlan.some(
+                              (plan) =>
+                                plan.criterionId === item.criterion.id &&
+                                plan.mode === 'needs-user-decision',
+                            ) && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={!enabled}
+                              onClick={() =>
+                                void send(
+                                  'override-check',
+                                  run.id,
+                                  false,
+                                  item.criterion.id,
+                                  `User confirmed the coordinator interpretation for ${item.criterion.id}. Source input: ${run.input}. Interpretation: ${item.observed?.summary ?? ''}`,
+                                )
+                              }
+                            >
+                              {t('Confirm this user decision')}
+                            </Button>
+                          )}
+                        {item.status !== 'passed' &&
+                          run.id === latest?.id &&
+                          !accepted &&
                           run.status !== 'running' && (
                             <Button
                               size="sm"
@@ -532,11 +570,18 @@ export function JustDoItAction({
                           )}
                       </CheckDetails>
                     ))}
-                    <h5 className="text-xs font-semibold">
-                      {run.acceptanceChecklist
-                        ? `${t('Additional checks')} · non-blocker`
-                        : t('Historical checks (not classified)')}
-                    </h5>
+                    {(!run.acceptanceChecklist ||
+                      splitChecks(
+                        run.acceptanceChecklist,
+                        run.result.checks,
+                        run.result.additionalChecks,
+                      ).additional.length > 0) && (
+                      <h5 className="text-xs font-semibold">
+                        {run.acceptanceChecklist
+                          ? `${t('Additional checks')} · non-blocker`
+                          : t('Historical checks (not classified)')}
+                      </h5>
+                    )}
                     {(run.acceptanceChecklist
                       ? splitChecks(
                           run.acceptanceChecklist,
@@ -689,6 +734,58 @@ export function JustDoItAction({
                   </div>
                 </details>
               ) : null}
+              {run.coordination && (
+                <details className="mt-4 border-t border-border pt-3 text-xs">
+                  <summary className="cursor-pointer text-muted-foreground">
+                    {t('Coordination record')} ·{' '}
+                    {run.coordination.attempts.length} {t('calls')}
+                  </summary>
+                  <div className="mt-2 space-y-2">
+                    {run.coordination.attempts.map((attempt) => (
+                      <div
+                        key={attempt.id}
+                        className="rounded border border-border p-2"
+                      >
+                        <p>
+                          {t(
+                            attempt.role === 'coordinator'
+                              ? 'Coordinator'
+                              : 'Worker',
+                          )}{' '}
+                          · {attempt.phase} ·{' '}
+                          {attempt.profile.model || t('Agent default')}
+                        </p>
+                        <p>{attempt.error ?? attempt.summary}</p>
+                        <p className="text-muted-foreground">
+                          {attempt.usage
+                            ? `${attempt.usage.inputTokens} input · ${attempt.usage.cachedInputTokens} cached · ${attempt.usage.outputTokens} output`
+                            : t('Usage not available')}
+                        </p>
+                        {run.coordination?.logRef && (
+                          <a
+                            className="underline"
+                            target="_blank"
+                            rel="noreferrer"
+                            href={`/api/projects/${projectId}/execution-log?cardId=${card.id}&runId=${run.id}&attempt=${attempt.id}`}
+                          >
+                            {t('View recorded response')}
+                          </a>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
+              {run.activityRef && (
+                <a
+                  className="mt-3 block text-xs underline"
+                  href={`/api/projects/${projectId}/execution-log?cardId=${card.id}&runId=${run.id}&view=activity`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {t('View activity log')}
+                </a>
+              )}
               {run.observedRefs.some(
                 (ref) => !ref.startsWith('checkpoint:'),
               ) && (
@@ -713,6 +810,20 @@ export function JustDoItAction({
             </details>
           ))}
         </div>
+      )}
+      {!accepted && current?.id === action.id && !history.length && (
+        <label className="block text-sm">
+          <span className="sr-only">{t('Additional Action instructions')}</span>
+          <Textarea
+            value={instruction}
+            onChange={(event) => setInstruction(event.target.value)}
+            maxLength={20000}
+            disabled={pending || running}
+            placeholder={t(
+              'Add requirements for this step, or leave empty to follow the confirmed Plan.',
+            )}
+          />
+        </label>
       )}
       {!accepted && current?.id === action.id && (
         <div
@@ -774,9 +885,18 @@ export function JustDoItAction({
                 }
               >
                 <SlidersHorizontal className="size-4" />
-                {profile.agent === 'codex' ? 'Codex' : 'Claude'} ·{' '}
-                {profile.model || t('Agent default')} ·{' '}
-                {profile.effort || t('Agent default')}
+                <span className="text-left text-xs">
+                  <span className="block">
+                    {t('Coordinator')}: {coordinatorProfile.agent} ·{' '}
+                    {coordinatorProfile.model || t('Agent default')} ·{' '}
+                    {coordinatorProfile.effort || t('Agent default')}
+                  </span>
+                  <span className="block">
+                    {t('Worker')}: {profile.agent} ·{' '}
+                    {profile.model || t('Agent default')} ·{' '}
+                    {profile.effort || t('Agent default')}
+                  </span>
+                </span>
               </Button>
               {editingFeedback ? (
                 <>
@@ -882,6 +1002,14 @@ export function JustDoItAction({
                       )}
                     </p>
                   </div>
+                  <h5 className="text-xs font-medium">{t('Coordinator')}</h5>
+                  <AgentProfileSelector
+                    value={coordinatorProfile}
+                    onChange={setCoordinatorProfile}
+                    disabled={pending || running}
+                    label="Coordination profile"
+                  />
+                  <h5 className="text-xs font-medium">{t('Worker')}</h5>
                   <AgentProfileSelector
                     value={profile}
                     onChange={setProfile}
