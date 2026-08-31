@@ -851,8 +851,8 @@ export function JustDoItAction({
               className="max-h-[45dvh] space-y-3 overflow-y-auto rounded-b-xl border-t border-border bg-muted/50 p-4"
             >
               {controlPanel === 'feedback' ? (
-                <label className="block space-y-2 text-sm">
-                  <span className="font-medium">
+                <label className="block text-sm">
+                  <span className="sr-only">
                     {t(
                       history.length
                         ? 'Feedback for this Action'
