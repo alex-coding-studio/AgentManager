@@ -450,3 +450,11 @@ The following are intentionally not implemented in the first project-creation sl
 - Manual canvas positioning
 - Pull-request reconciliation
 - Cross-machine synchronization
+
+## Development environment diagnosis and repair
+
+The proposed [Development Environment](DEVELOPMENT_ENVIRONMENT.md) capability
+checks the actual worker context, explains environment blockers and validates
+bounded repairs. Its preferred permission direction is a workspace sandbox with
+native per-command approval handling; current Full Access support is a compatibility
+path. This proposal does not activate a new execution policy or alter running Actions.
