@@ -107,7 +107,7 @@ void test('legacy Claude driver exposes no push or persistent-thread capability'
   assert.equal(result.turnId, 'legacy-session');
 });
 
-void test('Codex App Server driver holds one dynamic tool request until Host job exit', async (t) => {
+void test('Codex App Server driver resumes a new physical turn only after Host job exit', async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'app-server-driver-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const server = path.join(root, 'fake-server.mjs');
@@ -115,16 +115,17 @@ void test('Codex App Server driver holds one dynamic tool request until Host job
     server,
     `import readline from 'node:readline';
 const rl=readline.createInterface({input:process.stdin});
-let toolResponses=0;
+let turnStarts=0;
 function send(value){process.stdout.write(JSON.stringify(value)+'\\n')}
 rl.on('line',line=>{const message=JSON.parse(line);
 if(message.method==='initialize')send({id:message.id,result:{}});
 else if(message.method==='thread/start')send({id:message.id,result:{thread:{id:'thread-1'}}});
-else if(message.method==='turn/start'){send({id:message.id,result:{turn:{id:'turn-1'}}});send({id:900,method:'item/tool/call',params:{threadId:'thread-1',turnId:'turn-1',callId:'call-1',tool:'run_job',arguments:{label:'wait',executable:process.execPath,arguments:['-e',"setTimeout(()=>console.log('EVENT_DONE'),100)"],workingDirectory:'.'}}});}
-else if(message.id===900){toolResponses++;send({method:'thread/tokenUsage/updated',params:{threadId:'thread-1',turnId:'turn-1',tokenUsage:{last:{inputTokens:10,cachedInputTokens:5,cacheWriteInputTokens:0,outputTokens:2,reasoningOutputTokens:1,totalTokens:13},total:{inputTokens:10,cachedInputTokens:5,cacheWriteInputTokens:0,outputTokens:2,reasoningOutputTokens:1,totalTokens:13},modelContextWindow:1000}}});send({method:'item/completed',params:{threadId:'thread-1',turnId:'turn-1',item:{type:'agentMessage',text:'EVENT_OK'}}});send({method:'turn/completed',params:{threadId:'thread-1',turn:{id:'turn-1',status:'completed'},toolResponses}});}
+else if(message.method==='turn/start'){turnStarts++;const turnId='turn-'+turnStarts;send({id:message.id,result:{turn:{id:turnId}}});if(turnStarts===1)send({id:900,method:'item/tool/call',params:{threadId:'thread-1',turnId,callId:'call-1',tool:'run_job',arguments:{label:'wait',executable:process.execPath,arguments:['-e',"setTimeout(()=>console.log('EVENT_DONE'),100)"],workingDirectory:'.'}}});else{send({method:'thread/tokenUsage/updated',params:{threadId:'thread-1',turnId,tokenUsage:{total:{inputTokens:20,cachedInputTokens:8,cacheWriteInputTokens:0,outputTokens:4,reasoningOutputTokens:1,totalTokens:25}}}});send({method:'item/completed',params:{threadId:'thread-1',turnId,item:{type:'agentMessage',text:'EVENT_OK'}}});send({method:'turn/completed',params:{threadId:'thread-1',turn:{id:turnId,status:'completed'}}});}}
+else if(message.method==='turn/interrupt'){send({id:message.id,result:{}});send({method:'turn/completed',params:{threadId:'thread-1',turn:{id:message.params.turnId,status:'interrupted'}}});}
 });`,
   );
   const statuses: string[] = [];
+  const runtimeEvents: string[] = [];
   const driver = new CodexAppServerDriver({
     command: process.execPath,
     arguments: [server],
@@ -141,13 +142,25 @@ else if(message.id===900){toolResponses++;send({method:'thread/tokenUsage/update
     workingDirectory: root,
     access: 'workspace-write',
   });
-  const result = await driver.startTurn(thread, { prompt: 'wait' }).completion;
+  const result = await driver.startTurn(thread, {
+    prompt: 'wait',
+    onEvent: (event) => runtimeEvents.push(event.type),
+  }).completion;
   assert.equal(result.threadId, 'thread-1');
-  assert.equal(result.turnId, 'turn-1');
+  assert.equal(result.turnId, 'turn-2');
   assert.equal(result.finalOutput, 'EVENT_OK');
-  assert.equal(result.usage?.inputTokens, 10);
-  assert.equal(result.usage?.cachedInputTokens, 5);
+  assert.equal(result.usage?.inputTokens, 20);
+  assert.equal(result.usage?.cachedInputTokens, 8);
   assert.deepEqual(statuses, ['running', 'completed']);
+  assert.deepEqual(runtimeEvents, [
+    'turn-started',
+    'job-started',
+    'turn-completed',
+    'job-completed',
+    'turn-started',
+    'activity',
+    'turn-completed',
+  ]);
   assert.match(
     await readFile(
       path.join(

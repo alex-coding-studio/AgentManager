@@ -23,9 +23,17 @@ vector.
 
 The Codex driver uses the experimental App Server protocol with the current local Codex
 login. `thread/start` registers one dynamic `run_job` tool. When Codex emits the
-`item/tool/call` JSON-RPC request, AgentManager starts the process and deliberately holds
-the response. The operating-system exit event resolves the pending request with structured
-job status. Codex then continues the same turn. No model polling is involved.
+`item/tool/call` JSON-RPC request, AgentManager starts the process, immediately acknowledges
+the job identifier and interrupts that physical turn. The operating-system exit event then
+starts a continuation turn in the same provider thread with structured job status. The
+logical worker call remains pending until the continuation produces the final report. No
+model polling or long-lived outer tool call is involved.
+
+The dynamic tool must acknowledge startup immediately. Holding its response open until
+process exit is insufficient because Codex invokes nested tools through an outer execution
+cell; that cell yields after its own bounded wait and exposes a `wait` handle to the model.
+Ending the physical turn removes that polling surface instead of merely reducing its
+frequency.
 
 The generic tool accepts a label, executable, argument vector, worktree-relative directory
 and optional timeout. The Host validates that the resolved directory remains under the
@@ -52,18 +60,19 @@ Card, Coordinator, checklist, job and UI code must not branch on Claude-specific
 
 ## Recovery
 
-The initial App Server driver keeps pending job calls in memory. Before activating the push
-driver outside the controlled Full Access pilot, add restart recovery: persist provider
-thread/turn/call IDs beside the Host job, reconnect or
+The initial App Server driver keeps the logical turn and pending continuation in memory.
+Before activating the push driver outside the controlled Full Access pilot, add restart
+recovery: persist provider thread, physical turn and job IDs beside the Host job, reconnect or
 `thread/resume` after restart, and send a new recovery turn when the original pending RPC
 connection cannot be restored. A recovered result must preserve the original job evidence
 and cannot launch the command again automatically.
 
 ## Pilot acceptance
 
-- A temporary coding task changes a file, calls `run_job`, waits for a real long command,
-  receives its exit result and returns a structured self-check in the same turn.
-- The provider Session contains one dynamic tool call and no model-mediated process polls.
+- A temporary coding task changes a file, calls `run_job`, ends its first physical turn,
+  receives the exit result in a continuation turn and returns one logical final result.
+- The provider Session contains one dynamic tool call, two physical turns and no
+  model-mediated process polls.
 - Logs, elapsed activity and Stop remain observable while the turn waits.
 - The command is restricted to the Card worktree and a symlink/path escape is rejected.
 - One cancellation test terminates the process group and returns a canceled tool result.
