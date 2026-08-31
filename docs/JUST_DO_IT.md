@@ -369,21 +369,29 @@ recovery, and measurable cost accounting remain integration work. Separating
 planning from execution and using a fresh review Session are proposed defaults
 to evaluate, not already implemented runtime behavior.
 
-### Local Skills — requested integration, mechanics open
+### Working instructions and local Skills
 
-The module needs user-customizable global Instructions, including which local
-Skills to use and how optional Skill behaviors should yield to these module
-rules when they conflict. The three input layers are module work methods,
-signed-off Plan scope, and current Action feedback. These do not replace host
-permissions. The offline Harness accepts these instructions as context; a real
-settings surface, persistence and provider loading remain unimplemented.
+The project-level Working instructions entry applies to all Just Do It Cards
+in that project, not to other modules. Its optional editor starts empty and
+stores only user-authored instructions, including local Skill choices, reading
+locations, development conventions, and optional Skill conflict handling.
+Saved content is preserved verbatim, including previously saved default text;
+the user can replace or clear it. Each new planning run captures the current
+instructions without changing an already running request.
+
+Common workflow rules live in the Harness as built-in instructions, separate
+from this editable field. Clearing custom instructions does not remove them.
+The three input layers are module work methods, signed-off Plan scope, and
+current Action feedback. These do not replace host permissions.
 
 Execution and verification should be able to use relevant installed development
 and review Skills. Action scope and user decisions define the desired outcome;
 Skills supply professional methods. Select and load them in the appropriate
 Session without inventing a new user-facing technical configuration workflow.
-Discovery, runtime compatibility, selection, and version/provenance recording
-still need a concrete design. Some Skills include PR/Issue/merge or autonomous
+The Agent can locate and read Skills as directed by Working instructions; a
+Harness-owned Skill registry or loader is not required for this approach.
+Actual provider access and Skill use still require runtime validation. Some
+Skills include PR/Issue/merge or autonomous
 continuation behavior: their lifecycle and permission requirements must be
 reconciled with this manual loop, not silently invoked as extra authority.
 

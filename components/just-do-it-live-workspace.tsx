@@ -376,7 +376,7 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
             onClick={() => setContextOpen(true)}
           >
             <SlidersHorizontal />
-            {t('Context')}
+            {t('Working instructions')}
           </Button>
         </div>
       </header>
@@ -705,17 +705,21 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
       <Dialog open={contextOpen} onOpenChange={setContextOpen}>
         <DialogContent className="max-h-[85dvh] overflow-auto sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{t('Context')}</DialogTitle>
+            <DialogTitle>{t('Working instructions')}</DialogTitle>
             <DialogDescription>
               {t(
-                'Project-wide working rules. Each new planning run takes a snapshot; running Agents are unchanged.',
+                'Applies to every Just Do It Card in this project. System workflow rules are built in; only add your own preferences here. Changes apply to new planning runs, not running Agents.',
               )}
             </DialogDescription>
           </DialogHeader>
           <label className="space-y-2 text-sm">
-            <span>{t('Just Do It instructions')}</span>
+            <span>{t('Custom instructions (optional)')}</span>
             <Textarea
               className="min-h-64"
+              maxLength={20000}
+              placeholder={t(
+                'Add development conventions or local Skill instructions. Leave empty to use the built-in workflow.',
+              )}
               value={instructions ?? view?.instructions ?? ''}
               onChange={(event) => setInstructions(event.target.value)}
             />

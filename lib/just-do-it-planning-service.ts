@@ -19,7 +19,6 @@ import {
   createCardHarnessRequest,
   buildCardHarnessPrompt,
   parseCardHarnessResult,
-  JUST_DO_IT_DEFAULT_INSTRUCTIONS,
   type ExecutionPlan,
   type ActionContract,
   type CardHarnessContext,
@@ -736,8 +735,7 @@ export async function readPlanningInstructions(project: RegisteredProject) {
       throw new Error('Instructions exceed 20000 characters.');
     return value;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT')
-      return JUST_DO_IT_DEFAULT_INSTRUCTIONS;
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return '';
     throw error;
   }
 }
@@ -746,8 +744,8 @@ export async function savePlanningInstructions(
   project: RegisteredProject,
   value: string,
 ) {
-  if (typeof value !== 'string' || !value.trim() || value.length > 20_000)
-    throw new Error('Instructions must contain 1–20000 characters.');
+  if (typeof value !== 'string' || value.length > 20_000)
+    throw new Error('Instructions must contain at most 20000 characters.');
   const directory = path.join(project.planningPath, 'implementation');
   await mkdir(directory, { recursive: true });
   const actual = await realpath(directory);
