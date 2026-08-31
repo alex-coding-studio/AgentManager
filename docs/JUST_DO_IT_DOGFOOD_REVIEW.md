@@ -3,8 +3,11 @@
 Status: rolling review, not a final Card retrospective. Capture verified findings
 while the user completes the Card; discuss the overall workflow after that trial.
 This document does not authorize more execution, acceptance, resets or GitHub writes.
+The opening snapshot is historical; later sections record subsequent changes.
+Defer the overall architecture review until all six Actions and their user
+acceptance are complete, as requested by the user.
 
-## Trial and current evidence boundary
+## Trial and initial evidence boundary
 
 - Managed project: `../HereItIsV2`, registered as a standalone project.
 - Goal: experience two registration orders in the same HereItIs iPhone app.
@@ -12,7 +15,7 @@ This document does not authorize more execution, acceptance, resets or GitHub wr
 - First Action: `054e02a1-33e8-460b-bb26-c6e307104dad`.
 - The six-step Plan was confirmed before execution. Findings below concern setup,
   GitHub publication and the first Action's feedback Rounds, not a completed app.
-- Current verified remote: private `alex-coding-studio/HereItIs`; default branch
+- At the initial checkpoint, the verified remote was private `alex-coding-studio/HereItIs`; default branch
   `main` points to empty baseline `8e9b7bd9a0cb1bd58fc75f215e5c804f8c1bf6ca`.
 - Card branch points to `2e677253c4074db81c2d9cb102a03d35f12e391f`; it has not been
   merged into main. Its tree is `af2fa8bc6be56facffed3758047fb07c81664f68`.
@@ -422,3 +425,17 @@ confirmed the four new checklist counts without missing-checklist messages. No
 Action started, no result was marked passed and no PR was merged during migration.
 The final phone trial still requires actual user observations and an explicit user
 verdict; the earlier setup simulator waiver was not generalized to that trial.
+
+## Shared logs and context direction — documented, deferred
+
+The user requested a cross-module log and context proposal after the Card trial
+extended from the previous evening into the following morning. The agreed direction
+is documented in [Run Logs, Progress and Reusable Context](RUN_LOGS_AND_CONTEXT.md):
+elapsed time, current activity and latest update in the running UI; small current
+facts and verified conclusions in handoffs; bounded access to detailed logs through
+summary references. This applies to What's Next, Break It Down and Just Do It.
+
+This update is documentation only. It does not rebuild storage, add mandatory gates
+or inject full transcripts into execution. Finish the existing six-Action trial,
+then use its evidence to review repeated work, missing context, observability and
+token cost before choosing implementation priorities.
