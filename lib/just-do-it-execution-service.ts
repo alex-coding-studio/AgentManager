@@ -1383,14 +1383,10 @@ export function createExecutionService(
         !last ||
         card.execution!.acceptedActionIds.length ||
         card.run?.status === 'running' ||
-        !(
-          last.status === 'failed' ||
-          last.status === 'canceled' ||
-          (last.status === 'succeeded' && last.result?.outcome !== 'delivered')
-        )
+        !['failed', 'canceled', 'succeeded'].includes(last.status)
       )
         throw new Error(
-          'Only failed, canceled or blocked Cards without accepted Actions can restart from their base.',
+          'Only unaccepted Cards with a completed Round can restart from their base.',
         );
       await verifyCardWorkspace(workspace);
       const snapshot = await snapshotWorkspace(

@@ -364,6 +364,36 @@ void test('failed Card restart preserves untracked and ignored files plus histor
   f.calls[1].reject(new Error('Fixture ends'));
   await f.settled();
 });
+void test('delivered but unaccepted Card can restart from its base', async (t) => {
+  const f = await fixture(t);
+  await f.service.start(f.project, { ...f.input, initializeRepository: true });
+  const directory = f.calls[0].options.workingDirectory;
+  await writeFile(path.join(directory, 'app.txt'), 'delivered candidate');
+  f.calls[0].resolve(delivered(f.calls[0].request));
+  const current = await f.settled();
+  assert.equal(current.execution?.runs.at(-1)?.result?.outcome, 'delivered');
+  const preview = (
+    await f.service.resetWorkspace(f.project, f.card.id, current.revision)
+  ).preview!;
+  const reset = (
+    await f.service.resetWorkspace(
+      f.project,
+      f.card.id,
+      current.revision,
+      preview.token,
+    )
+  ).card!;
+  assert.equal(reset.execution?.runs.length, 0);
+  assert.equal(reset.execution?.acceptedActionIds.length, 0);
+  assert.notEqual(reset.execution?.workspace?.path, directory);
+  const backup = reset.execution?.workspaceBackups?.at(-1);
+  assert.ok(backup);
+  assert.notEqual(backup.path, directory);
+  assert.equal(
+    await readFile(path.join(backup.path, 'app.txt'), 'utf8'),
+    'delivered candidate',
+  );
+});
 void test('missing and branch-switched worktrees block continuation rather than silently changing directories', async (t) => {
   const f = await fixture(t);
   const workspace = await ensureCardWorkspace(f.project, f.card, true);

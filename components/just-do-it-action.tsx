@@ -1041,9 +1041,7 @@ export function JustDoItAction({
       {card.execution?.workspace &&
         !card.execution.acceptedActionIds.length &&
         latest &&
-        (['failed', 'canceled'].includes(latest.status) ||
-          (latest.status === 'succeeded' &&
-            latest.result?.outcome !== 'delivered')) && (
+        latest.status !== 'running' && (
           <Button
             variant="outline"
             disabled={pending || running}
