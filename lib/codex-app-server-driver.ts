@@ -10,7 +10,11 @@ import type {
   AgentRuntimeTurnResult,
   AgentSessionDriver,
 } from './agent-runtime-driver.ts';
-import { HostJobBroker, type HostJobRequest } from './host-job-broker.ts';
+import {
+  HostJobBroker,
+  type HostJobEvent,
+  type HostJobRequest,
+} from './host-job-broker.ts';
 
 export type CodexAppServerDriverOptions = {
   command?: string;
@@ -37,6 +41,11 @@ type TurnState = {
   onEvent?: (event: AgentRuntimeEvent) => void;
   resolve: (result: AgentRuntimeTurnResult) => void;
   reject: (error: Error) => void;
+  stopped: boolean;
+  physicalCompleted: boolean;
+  continuationStarted: boolean;
+  pendingJob?: { id: string; completion: Promise<HostJobEvent> };
+  jobResult?: HostJobEvent;
 };
 
 export class CodexAppServerDriver implements AgentSessionDriver {
@@ -88,14 +97,14 @@ export class CodexAppServerDriver implements AgentSessionDriver {
       approvalPolicy: 'never',
       multiAgentMode: 'explicitRequestOnly',
       developerInstructions:
-        'Complete only the assigned worker task. Do not create or delegate to other agents. Use the Host run_job tool for long-running commands and wait for its pushed result.',
+        'Complete only the assigned worker task. Do not create or delegate to other agents. Use the Host run_job tool for long-running commands. It starts the job and AgentManager interrupts this physical turn; do not call wait or poll. AgentManager starts a continuation turn in this same thread when the operating-system process exits.',
       ephemeral: false,
       dynamicTools: [
         {
           type: 'function',
           name: 'run_job',
           description:
-            'Run one long command in the current Card workspace. The Host returns only after process completion; do not poll it.',
+            'Start one long command in the current Card workspace. AgentManager suspends this physical turn and starts a continuation turn with the completion result. Never call wait or poll.',
           inputSchema: {
             type: 'object',
             additionalProperties: false,
@@ -143,42 +152,64 @@ export class CodexAppServerDriver implements AgentSessionDriver {
     thread: AgentRuntimeThread,
     input: AgentRuntimeTurnInput,
   ): AgentRuntimeTurn {
-    let turnId = '';
-    const completion = (async () => {
-      await this.ready;
-      const started = (await this.request('turn/start', {
-        threadId: thread.threadId,
-        input: [{ type: 'text', text: input.prompt }],
-        model: thread.profile.model || null,
-        effort: thread.profile.effort || null,
-      })) as { turn: { id: string } };
-      turnId = started.turn.id;
-      return await new Promise<AgentRuntimeTurnResult>((resolve, reject) => {
-        this.turns.set(turnId, {
+    let state!: TurnState;
+    const completion = new Promise<AgentRuntimeTurnResult>(
+      (resolve, reject) => {
+        state = {
           threadId: thread.threadId,
-          turnId,
+          turnId: '',
           finalOutput: '',
           usage: null,
           onEvent: input.onEvent,
           resolve,
           reject,
-        });
-        const buffered = this.bufferedTurnMessages.get(turnId) ?? [];
-        this.bufferedTurnMessages.delete(turnId);
-        for (const message of buffered) this.receiveTurnMessage(message);
-      });
-    })();
+          stopped: false,
+          physicalCompleted: false,
+          continuationStarted: false,
+        };
+        void this.startPhysicalTurn(thread, input.prompt, state).catch(reject);
+      },
+    );
     return {
       completion,
       interrupt: () => {
-        if (turnId)
+        state.stopped = true;
+        if (state.turnId)
           void this.request('turn/interrupt', {
             threadId: thread.threadId,
-            turnId,
+            turnId: state.turnId,
           }).catch(() => undefined);
         this.brokers.get(thread.threadId)?.cancelAll();
       },
     };
+  }
+
+  private async startPhysicalTurn(
+    thread: AgentRuntimeThread,
+    prompt: string,
+    state: TurnState,
+  ) {
+    await this.ready;
+    const started = (await this.request('turn/start', {
+      threadId: thread.threadId,
+      input: [{ type: 'text', text: prompt }],
+      model: thread.profile.model || null,
+      effort: thread.profile.effort || null,
+    })) as { turn: { id: string } };
+    state.turnId = started.turn.id;
+    state.finalOutput = '';
+    state.physicalCompleted = false;
+    state.continuationStarted = false;
+    this.turns.set(state.turnId, state);
+    state.onEvent?.({
+      type: 'turn-started',
+      threadId: state.threadId,
+      turnId: state.turnId,
+      at: new Date().toISOString(),
+    });
+    const buffered = this.bufferedTurnMessages.get(state.turnId) ?? [];
+    this.bufferedTurnMessages.delete(state.turnId);
+    for (const message of buffered) this.receive(JSON.stringify(message));
   }
 
   async close() {
@@ -217,16 +248,23 @@ export class CodexAppServerDriver implements AgentSessionDriver {
     } catch {
       return;
     }
+    if (message.method === 'item/tool/call') {
+      const turnId = stringValue(message.params?.turnId);
+      if (!this.turns.has(turnId)) {
+        const buffered = this.bufferedTurnMessages.get(turnId) ?? [];
+        if (buffered.length < 100) buffered.push(message);
+        this.bufferedTurnMessages.set(turnId, buffered);
+        return;
+      }
+      void this.handleToolCall(message);
+      return;
+    }
     if (typeof message.id === 'number' && this.pending.has(message.id)) {
       const pending = this.pending.get(message.id)!;
       this.pending.delete(message.id);
       if (message.error)
         pending.reject(new Error(JSON.stringify(message.error)));
       else pending.resolve(message.result);
-      return;
-    }
-    if (message.method === 'item/tool/call') {
-      void this.handleToolCall(message);
       return;
     }
     const nestedTurn = message.params?.turn as
@@ -302,12 +340,21 @@ export class CodexAppServerDriver implements AgentSessionDriver {
       );
     if (message.method === 'turn/completed') {
       this.turns.delete(turn.turnId);
+      turn.physicalCompleted = true;
       turn.onEvent?.({
         type: 'turn-completed',
         threadId: turn.threadId,
         turnId: turn.turnId,
         at: now,
       });
+      if (turn.pendingJob) {
+        this.continueAfterJob(turn);
+        return;
+      }
+      if (turn.stopped) {
+        turn.reject(new Error('Agent turn interrupted.'));
+        return;
+      }
       turn.resolve({
         threadId: turn.threadId,
         turnId: turn.turnId,
@@ -332,13 +379,29 @@ export class CodexAppServerDriver implements AgentSessionDriver {
     const threadId = stringValue(params.threadId);
     const thread = this.threads.get(threadId);
     const broker = this.brokers.get(threadId);
-    if (!thread || !broker) {
+    const turn = this.turns.get(stringValue(params.turnId));
+    if (!thread || !broker || !turn) {
       this.send({
         id: message.id,
         result: {
           success: false,
           contentItems: [
             { type: 'inputText', text: 'Unknown App Server thread.' },
+          ],
+        },
+      });
+      return;
+    }
+    if (turn.pendingJob) {
+      this.send({
+        id: message.id,
+        result: {
+          success: false,
+          contentItems: [
+            {
+              type: 'inputText',
+              text: 'A Host job is already running. Do not start or poll another task.',
+            },
           ],
         },
       });
@@ -364,14 +427,37 @@ export class CodexAppServerDriver implements AgentSessionDriver {
             ? arguments_.timeoutMs
             : undefined,
       });
-      const result = await job.completion;
+      turn.pendingJob = { id: job.id, completion: job.completion };
+      turn.onEvent?.({
+        type: 'job-started',
+        threadId,
+        turnId: turn.turnId,
+        jobId: job.id,
+        label: String(arguments_.label ?? ''),
+        at: new Date().toISOString(),
+      });
       this.send({
         id: message.id,
         result: {
-          success: result.status === 'completed',
-          contentItems: [{ type: 'inputText', text: JSON.stringify(result) }],
+          success: true,
+          contentItems: [
+            {
+              type: 'inputText',
+              text: `Host job ${job.id} started. AgentManager will interrupt this physical turn and start a continuation turn with the operating-system result. Do not call wait, write_stdin, or another tool.`,
+            },
+          ],
         },
       });
+      void job.completion
+        .then((result) => {
+          turn.jobResult = result;
+          this.continueAfterJob(turn);
+        })
+        .catch((error: Error) => turn.reject(error));
+      void this.request('turn/interrupt', {
+        threadId,
+        turnId: turn.turnId,
+      }).catch((error: Error) => turn.reject(error));
     } catch (error) {
       this.send({
         id: message.id,
@@ -386,6 +472,34 @@ export class CodexAppServerDriver implements AgentSessionDriver {
         },
       });
     }
+  }
+
+  private continueAfterJob(turn: TurnState) {
+    if (!turn.physicalCompleted || !turn.jobResult || turn.continuationStarted)
+      return;
+    if (turn.stopped) {
+      turn.reject(new Error('Agent turn interrupted.'));
+      return;
+    }
+    turn.continuationStarted = true;
+    const result = turn.jobResult;
+    turn.pendingJob = undefined;
+    turn.jobResult = undefined;
+    turn.onEvent?.({
+      type: 'job-completed',
+      threadId: turn.threadId,
+      turnId: turn.turnId,
+      jobId: result.jobId,
+      exitCode: result.exitCode,
+      at: result.endedAt ?? new Date().toISOString(),
+    });
+    const thread = this.threads.get(turn.threadId);
+    if (!thread) {
+      turn.reject(new Error('Unknown App Server thread.'));
+      return;
+    }
+    const prompt = `HOST_JOB_COMPLETED\n${JSON.stringify(result)}\nThe Host ran this command exactly once. Do not rerun it merely to obtain the result. Inspect the referenced log only when details are needed, then continue the original assignment. If another long command is necessary, use run_job once and let AgentManager suspend and resume the thread again.`;
+    void this.startPhysicalTurn(thread, prompt, turn).catch(turn.reject);
   }
 
   private failAll(error: Error) {

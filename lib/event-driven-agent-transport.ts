@@ -67,7 +67,7 @@ export function startEventDrivenWorkerRun(
     const permissionContext =
       '\n\nExecution permissions: Full Access, selected in local Codex settings. There is no OS filesystem sandbox protecting the primary checkout or planning store. You must still work only in the Card worktree, preserve host-owned records, and follow the explicit PR and acceptance boundaries. Full Access is not authorization for unrelated actions.';
     const hostToolContext =
-      '\n\nHost job tool: use run_job for builds, tests and other commands that may run longer than a quick inspection. The Host owns waiting, progress, logs and cancellation. The tool returns only after completion; never poll the process with write_stdin or start an overlapping replacement. Short read-only commands and file edits may use normal tools.';
+      '\n\nHost job tool: use run_job for builds, tests and other commands that may run longer than a quick inspection. The Host owns waiting, progress, logs and cancellation. Starting a job ends the current physical turn; AgentManager will create a continuation turn in this same thread only when the operating-system process exits. Never call wait or write_stdin and never start an overlapping replacement. Short read-only commands and file edits may use normal tools.';
     const turn = driver.startTurn(thread, {
       prompt:
         withSkillCatalog(input.prompt, catalog) +

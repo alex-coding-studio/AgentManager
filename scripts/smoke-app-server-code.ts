@@ -23,6 +23,7 @@ console.log('TEST_OK');
 `,
 );
 const events: HostJobEvent[] = [];
+const runtimeEvents: string[] = [];
 const driver = new CodexAppServerDriver({
   brokerFactory: (input) =>
     new HostJobBroker(input.workingDirectory, records, (event) =>
@@ -38,6 +39,7 @@ try {
   });
   const turn = driver.startTurn(thread, {
     prompt: `Inspect math.mjs and test.mjs. Fix only the add implementation. Then call the Host dynamic tool run_job exactly once with executable ${JSON.stringify(process.execPath)}, arguments ["test.mjs"], label "code smoke", and workingDirectory ".". Do not run the test with shell or another tool. Wait for the Host tool result, then return exactly SMOKE_OK if it passed.`,
+    onEvent: (event) => runtimeEvents.push(event.type),
   });
   const result = await turn.completion;
   assert.match(await readFile(path.join(root, 'math.mjs'), 'utf8'), /a \+ b/);
@@ -47,6 +49,14 @@ try {
   assert.equal(completed.exitCode, 0);
   assert.match(await readFile(completed.logRef, 'utf8'), /TEST_OK/);
   assert.match(result.finalOutput, /SMOKE_OK/);
+  assert.equal(
+    runtimeEvents.filter((event) => event === 'turn-started').length,
+    2,
+  );
+  assert.equal(
+    runtimeEvents.filter((event) => event === 'job-started').length,
+    1,
+  );
   const evidence = {
     passed: true,
     model,
@@ -59,6 +69,7 @@ try {
       exitCode: event.exitCode,
       logRef: event.logRef,
     })),
+    runtimeEvents,
     usage: result.usage,
   };
   await mkdir(path.resolve('outputs'), { recursive: true });
