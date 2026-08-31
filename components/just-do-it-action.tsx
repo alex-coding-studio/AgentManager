@@ -18,6 +18,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -46,6 +47,10 @@ export function JustDoItAction({
   );
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
+  const [acceptancePreview, setAcceptancePreview] = useState<{
+    runId: string;
+    revision: number;
+  } | null>(null);
   const [resetOpen, setResetOpen] = useState(false);
   const [resetError, setResetError] = useState('');
   const [resetPreview, setResetPreview] = useState<{
@@ -102,6 +107,7 @@ export function JustDoItAction({
       if (!response.ok) throw new Error(data.error);
       onChange(data.card);
       if (operation === 'start') setInstruction('');
+      if (operation === 'accept') setAcceptancePreview(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Execution failed.');
     } finally {
@@ -141,13 +147,28 @@ export function JustDoItAction({
     }
   }
 
-  const requiredPassed = assessRequiredChecks(
+  const requiredAssessment = assessRequiredChecks(
     latest?.acceptanceChecklist,
     latest?.result?.checks ?? [],
     card.execution?.acceptanceOverrides?.[action.id],
-  ).passed;
+  );
+  const requiredPassed = requiredAssessment.passed;
+  const additionalChecks =
+    latest?.result && latest.acceptanceChecklist
+      ? splitChecks(
+          latest.acceptanceChecklist,
+          latest.result.checks,
+          latest.result.additionalChecks,
+        ).additional
+      : [];
+  const previewChanged =
+    acceptancePreview &&
+    (acceptancePreview.revision !== card.revision ||
+      acceptancePreview.runId !== latest?.id);
+  const nextAction =
+    card.actions[card.actions.findIndex((item) => item.id === action.id) + 1];
   const stage = accepted
-    ? 2
+    ? 1
     : latest?.status === 'succeeded' && requiredPassed
       ? 1
       : 0;
@@ -167,35 +188,27 @@ export function JustDoItAction({
       <output className="block text-sm font-medium">
         {t('Current status')}: {t(currentStatus)}
       </output>
-      <div className="grid grid-cols-3 gap-2 text-xs">
-        {['Ready to start', 'Ready to verify', 'Verified'].map(
-          (label, index) => (
-            <div
-              key={label}
-              aria-current={index === stage ? 'step' : undefined}
-              className={`flex items-center gap-1.5 border-t-2 px-2 py-2 ${index === stage && !accepted ? 'border-blue-500 bg-blue-500/10 font-semibold text-blue-600 dark:text-blue-400' : index < stage || accepted ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400' : 'border-border text-muted-foreground'}`}
-            >
-              {index < stage || accepted ? (
-                <Check aria-hidden="true" className="size-3.5 shrink-0" />
-              ) : (
-                String(index + 1).padStart(2, '0')
-              )}{' '}
-              · {t(label)}
-              {index === stage && !accepted && (
-                <span className="ml-auto rounded bg-blue-500/15 px-1 py-0.5 text-[10px]">
-                  {t('Current stage')}
-                </span>
-              )}
-            </div>
-          ),
-        )}
+      <div className="grid grid-cols-2 gap-2 text-xs">
+        {['Execution phase', 'Acceptance phase'].map((label, index) => (
+          <div
+            key={label}
+            aria-current={!accepted && index === stage ? 'step' : undefined}
+            className={`flex items-center gap-1.5 border-t-2 px-2 py-2 ${index === stage && !accepted ? 'border-blue-500 bg-blue-500/10 font-semibold text-blue-600 dark:text-blue-400' : index < stage || accepted ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400' : 'border-border text-muted-foreground'}`}
+          >
+            {index < stage || accepted ? (
+              <Check aria-hidden="true" className="size-3.5 shrink-0" />
+            ) : (
+              String(index + 1).padStart(2, '0')
+            )}{' '}
+            · {t(label)}
+            {index === stage && !accepted && (
+              <span className="ml-auto rounded bg-blue-500/15 px-1 py-0.5 text-[10px]">
+                {t('Current stage')}
+              </span>
+            )}
+          </div>
+        ))}
       </div>
-      {accepted && (
-        <p className="flex items-center gap-2 text-sm text-emerald-500">
-          <Check className="size-4" />
-          {t('This Action was accepted by you.')}
-        </p>
-      )}
       {card.execution?.workspace && (
         <div className="space-y-3 rounded-lg border border-border p-3 text-xs">
           <div className="flex items-center justify-between gap-3">
@@ -654,7 +667,13 @@ export function JustDoItAction({
                 <Button
                   variant="outline"
                   disabled={!enabled || !requiredPassed}
-                  onClick={() => void send('accept')}
+                  onClick={() => {
+                    setError('');
+                    setAcceptancePreview({
+                      runId: latest.id,
+                      revision: card.revision,
+                    });
+                  }}
                 >
                   <Check />
                   {t('Accept this output')}
@@ -680,6 +699,157 @@ export function JustDoItAction({
             {t('Restart this Card from its base')}
           </Button>
         )}
+      <Dialog
+        open={Boolean(acceptancePreview)}
+        onOpenChange={(open) => {
+          if (!open && !pending) setAcceptancePreview(null);
+        }}
+      >
+        <DialogContent className="max-h-[85dvh] overflow-auto sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>{t('Confirm Action acceptance')}</DialogTitle>
+            <DialogDescription>
+              {t(
+                'Review this output and its limitations before accepting. This records your acceptance, not just the Agent’s self-check.',
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 text-sm">
+            <section className="space-y-1">
+              <p className="font-medium">
+                {action.title} · {t('Round')} {history.length}
+              </p>
+              <p className="whitespace-pre-wrap text-muted-foreground">
+                {latest?.result?.summary}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {t('Code revision')}:{' '}
+                <code>
+                  {latest?.github?.outputHead?.slice(0, 12) ??
+                    t('Not recorded')}
+                </code>
+              </p>
+            </section>
+            <section className="space-y-2 rounded-lg border border-border p-3">
+              <p>
+                {t('Required checks')}:{' '}
+                {
+                  requiredAssessment.items.filter(
+                    (item) => item.status === 'passed',
+                  ).length
+                }
+                /{requiredAssessment.items.length} ·{' '}
+                {t(requiredPassed ? 'passed' : 'not-run')}
+              </p>
+              {requiredAssessment.items
+                .filter((item) => item.override)
+                .map((item) => (
+                  <p
+                    key={item.criterion.id}
+                    className="text-amber-600 dark:text-amber-400"
+                  >
+                    {t('Passed by user decision')} · {item.criterion.criterion}:{' '}
+                    {item.override!.note} ({t('Observed result')}:{' '}
+                    {t(item.observed?.status ?? 'not-run')})
+                  </p>
+                ))}
+              <p className="text-xs text-muted-foreground">
+                {t(
+                  'These are Agent-reported results. Passing self-checks does not replace your review.',
+                )}
+              </p>
+            </section>
+            {additionalChecks.some((check) => check.status !== 'passed') && (
+              <section className="space-y-2">
+                <h4 className="font-medium">
+                  {t('Additional checks')} · non-blocker
+                </h4>
+                <ul className="list-disc space-y-1 pl-5 text-amber-600 dark:text-amber-400">
+                  {additionalChecks
+                    .filter((check) => check.status !== 'passed')
+                    .map((check, index) => (
+                      <li key={index}>{check.summary}</li>
+                    ))}
+                </ul>
+              </section>
+            )}
+            {Boolean(latest?.result?.remaining.length) && (
+              <section className="space-y-2">
+                <h4 className="font-medium">{t('Remaining work')}</h4>
+                <ul className="list-disc space-y-1 pl-5">
+                  {latest!.result!.remaining.map((item, index) => (
+                    <li key={index}>{item}</li>
+                  ))}
+                </ul>
+              </section>
+            )}
+            <section className="space-y-1">
+              <h4 className="font-medium">PR</h4>
+              {latest?.github?.pullRequests.length ? (
+                latest.github.pullRequests.map((pr) => (
+                  <a
+                    key={pr.url}
+                    className="block underline underline-offset-4"
+                    href={pr.url}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    #{pr.number} · {pr.title} ·{' '}
+                    {t(pr.isDraft && pr.state === 'OPEN' ? 'Draft' : pr.state)}
+                  </a>
+                ))
+              ) : (
+                <p className="text-muted-foreground">{t('No PR')}</p>
+              )}
+              {latest?.github && (
+                <p className="text-xs text-muted-foreground">
+                  {t('Last attempted check')}: {latest.github.checkedAt}
+                </p>
+              )}
+              {latest?.github?.error && (
+                <p className="text-amber-600 dark:text-amber-400">
+                  {t('Stale status')}: {t(latest.github.error)}
+                </p>
+              )}
+            </section>
+            <p className="rounded-lg bg-muted p-3">
+              {nextAction
+                ? `${t('Acceptance unlocks the next Action')}: ${nextAction.title}.`
+                : t('This is the final Action in this Plan.')}{' '}
+              {t(
+                'Nothing starts automatically. Acceptance does not merge a PR.',
+              )}
+            </p>
+            {previewChanged && (
+              <p className="text-destructive">
+                {t(
+                  'Output changed. Close this dialog and review the latest output before confirming.',
+                )}
+              </p>
+            )}
+            {error && (
+              <p role="alert" className="text-destructive">
+                {error}
+              </p>
+            )}
+          </div>
+          <div className="sticky bottom-0 flex justify-end gap-2 border-t border-border bg-background pt-3">
+            <Button
+              variant="outline"
+              disabled={pending}
+              onClick={() => setAcceptancePreview(null)}
+            >
+              {t('Back to review')}
+            </Button>
+            <Button
+              disabled={!enabled || !requiredPassed || Boolean(previewChanged)}
+              onClick={() => void send('accept', acceptancePreview?.runId)}
+            >
+              {t('Confirm acceptance')}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       <Dialog
         open={resetOpen}
         onOpenChange={(open) => {

@@ -389,3 +389,19 @@ Action, including while it awaits user acceptance. Running execution retains its
 blue spinner; accepted Actions retain green checks. The marker derives from
 execution state rather than the selected detail tab. Browser verification showed
 Action 1 checked, Action 2 arrowed, and the arrow unchanged when viewing Action 3.
+
+Acceptance now opens a confirmation dialog showing output identity and summary,
+required-check coverage, explicit user overrides, additional non-blockers, remaining
+work and PR state. It explains which Action unlocks next and that neither execution
+nor merge starts automatically. The dialog binds to the displayed output/revision;
+changed props disable confirmation, while backend revision validation remains in
+place. Errors remain visible in the dialog. An isolated browser fixture verified
+zero requests on initial click/cancel and one request on confirmation; real user
+acceptance was not changed by this test.
+
+The user also corrected the stage model: accepted is the completed state of
+acceptance, not a third phase. The progress display now has Execution and Acceptance
+only, with blue for current work and green checks for completion. The redundant
+accepted-output sentence was removed. Real accepted Action 2 shows two green phases
+without that duplicate message. Lint and typecheck passed; temporary fixture files
+and its browser tab were removed.

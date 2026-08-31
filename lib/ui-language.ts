@@ -131,6 +131,23 @@ export const chineseUi: Record<string, string> = {
   'Workspace path': '路径',
   'Shared by this Card’s Actions. Main receives changes through PR merges.':
     '所有步骤共用此工作区；通过 PR 合并到 main。',
+  'Execution phase': '执行',
+  'Acceptance phase': '验收',
+  'Confirm Action acceptance': '确认验收这一步',
+  'Review this output and its limitations before accepting. This records your acceptance, not just the Agent’s self-check.':
+    '请确认本轮产出与未完成事项。这将记录你的验收决定，而不只是 Agent 自检通过。',
+  'Code revision': '代码版本',
+  'Not recorded': '未记录',
+  'These are Agent-reported results. Passing self-checks does not replace your review.':
+    '以上是 Agent 报告的检查结果，自检通过不代替你的审阅。',
+  'Acceptance unlocks the next Action': '确认后解锁下一步',
+  'This is the final Action in this Plan.': '这是本计划的最后一步。',
+  'Nothing starts automatically. Acceptance does not merge a PR.':
+    '不会自动开始执行，也不会合并 PR。',
+  'Output changed. Close this dialog and review the latest output before confirming.':
+    '产出已变化，请关闭弹窗并重新查看最新结果后确认。',
+  'Back to review': '返回查看',
+  'Confirm acceptance': '确认验收通过',
   'Current Action': '当前推进步骤',
   'Current stage': '当前',
   'Required checks': '必查项',
