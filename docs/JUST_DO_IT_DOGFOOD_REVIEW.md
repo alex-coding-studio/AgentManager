@@ -206,3 +206,12 @@ no checklist enforcement, Ready transition, acceptance or merge is claimed here.
 
 The latest product ruling lives in [Just Do It](JUST_DO_IT.md). Existing historical
 Plan/report text is not rewritten to pretend the new checklist existed beforehand.
+
+### Confirmed checklist refinement
+
+The user clarified that Input/Output may remain high-level, but acceptance must be
+detailed and fixed before execution. Every Round must refer to that checklist;
+extra acceptance probes are allowed only as non-blockers and cannot block user
+acceptance. This is the confirmed resolution direction for JDI-DF-09/13/14, recorded
+in the product workflow. Its data/schema/UI enforcement remains pending; existing
+Plan text and historical reports are not retroactively presented as a frozen list.

@@ -64,6 +64,42 @@ never implement Draft-first delivery by silently skipping those gates. The syste
 must make this prerequisite explicit rather than leaving the user without any
 handoff artifact through repeated full execution Rounds.
 
+### Acceptance checklist authority — confirmed refinement
+
+Input and Output may remain directional descriptions while implementation details
+are still being discovered. Acceptance must not remain comparably vague. Every
+Action needs a detailed required acceptance checklist agreed before execution.
+Plan confirmation fixes that checklist; it is not generated after a Round finishes.
+
+Each required criterion has a stable ID, a concrete condition to establish, the
+expected passing result and the evidence needed to judge it. Commands and technical
+methods may be chosen by the Agent; observable success conditions may not be
+silently changed. Avoid umbrella items such as "everything works" or "tests pass"
+without identifying the behavior, scope and result they are meant to establish.
+
+Every Round receives the same confirmed checklist version and reports each required
+criterion by ID as passed, failed or not run, with evidence. Missing criteria are
+incomplete, not implicitly passed. Round-specific feedback narrows the work to do;
+it does not erase the remaining Action criteria or turn completion of one repair
+into completion of the entire Action.
+
+Additional checks are allowed, but belong to an explicitly separate non-blocker
+list. Their result may be failed or unsupported without blocking user acceptance
+or the self-check pass verdict when every required criterion has passed. The user
+judges whether an additional observation is an error worth addressing. A diagnostic
+method failing does not negate a criterion established by another sufficient,
+verified method. Preserve both pieces of evidence without conflating their roles.
+
+Only an explicit user decision can add a new mandatory criterion or change an
+existing one. Record a new checklist version for the next Round; do not rewrite
+an executing Round's standard or relabel historical results. Full and explicitly
+limited user acceptance remain distinguishable decisions with preserved limitations.
+
+The system must eventually validate required-ID coverage and keep required results
+separate from non-blockers. Until the current free-text validation schema and
+post-hoc checks are upgraded, this remains an agreed contract awaiting enforcement,
+not a claim that the existing implementation can already guarantee it.
+
 ## Purpose and boundary — settled
 
 Just Do It helps a user turn a goal they believe is feasible into concrete,
