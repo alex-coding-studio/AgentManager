@@ -21,6 +21,7 @@ import {
   type LocalAgentResult,
   type LocalAgentUsage,
 } from './local-agent-transport.ts';
+import { startEventDrivenWorkerRun } from './event-driven-agent-transport.ts';
 
 type Options = Parameters<typeof startLocalAgentRun>[1];
 type ExecutionReport = Extract<CardHarnessResult, { stage: 'execution' }>;
@@ -149,9 +150,12 @@ export function startCoordinatedExecution(input: {
   readBasis: () => Promise<string>;
   onProgress: (progress: CoordinationProgress) => void;
   transport?: typeof startLocalAgentRun;
+  workerTransport?: typeof startLocalAgentRun;
   limits?: typeof coordinationLimits;
 }): LocalAgentRun {
   const transport = input.transport ?? startLocalAgentRun;
+  const workerTransport =
+    input.workerTransport ?? input.transport ?? startEventDrivenWorkerRun;
   const limits = input.limits ?? coordinationLimits;
   const trace: CoordinationTrace = {
     profile: input.settings.profile,
@@ -250,7 +254,10 @@ export function startCoordinatedExecution(input: {
       },
     };
     try {
-      child = transport(profile.agent, options);
+      child =
+        role === 'worker'
+          ? workerTransport(profile.agent, options)
+          : transport(profile.agent, options);
       if (role === 'coordinator')
         deadline = setTimeout(() => {
           budgetError = new Error('Coordinator call timed out.');
