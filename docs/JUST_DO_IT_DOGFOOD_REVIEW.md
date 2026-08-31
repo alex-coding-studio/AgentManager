@@ -1,7 +1,8 @@
 # Just Do It Dogfooding Review — HereItIsV2
 
-Status: rolling review, not a final Card retrospective. Capture verified findings
-while the user completes the Card; discuss the overall workflow after that trial.
+Status: the six-Action trial is accepted within the user-approved simulator scope.
+This remains the chronological evidence ledger; the overall retrospective discussion
+is starting. See [final statistics](evals/2026-08-31-hereitis-final-trial-statistics.md).
 This document does not authorize more execution, acceptance, resets or GitHub writes.
 The opening snapshot is historical; later sections record subsequent changes.
 Defer the overall architecture review until all six Actions and their user
@@ -566,3 +567,69 @@ transport request, including legacy recovery without rerunning the prior Agent.
 Action 4 was already running when the fix was made; its dispatched context was not
 rewritten or interrupted. This is a bounded handoff fix, not the deferred shared-log
 architecture implementation.
+
+## Action 4 efficiency assessment during execution
+
+At 17:15 UTC on August 31, Action 4 had run for approximately 26m07s and was
+still executing its final acceptance tests. Its public progress records at
+17:12:44 and 17:13:05 report that a constructor-argument-order compilation fix
+had been omitted from the published commit. The Agent corrected the omission,
+pushed `e8e757d`, and repeated lint/build/acceptance against the final head.
+At 17:13:46 it reported that acceptance testing was still in progress.
+
+The user agreed to record two separate judgments: delivery outcome was not yet
+established at this checkpoint; execution efficiency and the amount of attention
+required from the user were below expectations. A later passing result must not
+erase the avoidable repair/publication cycle or the user's repeated status queries.
+Do not attribute all elapsed time to necessary simulator work or to model choice
+without separating those costs from implementation and orchestration failures.
+
+The final six-Action review should include avoidable retries, repeated validation,
+waiting time and concrete user interventions alongside functional acceptance.
+Count interventions from recorded events rather than inventing a total. This is an
+in-progress assessment, not the final Action result or a decision to cancel it.
+
+## Action 4 completed: resolved attempts are not current findings
+
+Action 4 ended at 17:17:39 UTC after 28m38s. Its report marked all six LOC criteria
+passed and reported nine executed tests. The additional-check list nevertheless
+contained three failed attempts explicitly described as repaired: lint formatting,
+constructor argument order during the generic build, and a duplicated local
+variable during UI-test compilation. It also listed absent GitHub checks as
+not-run despite the agreed local gates having passed.
+
+The user confirmed the distinction: final required results belong in acceptance;
+only unresolved, decision-relevant additional findings belong in the additional
+section. Resolved failures/retries belong in logs and the efficiency retrospective.
+No configured GitHub checks is not itself an acceptance gap when remote CI was not
+a declared requirement. An empty additional-findings section should be omitted.
+
+Preserving evidence does not require displaying every historical failure as a
+current warning. Keep original attempt outcomes and their resolution references,
+without erasing the wasted time or relabeling failed commands as successful.
+This update records the rule only; it does not rewrite Action 4's saved report,
+accept the Action, merge its PR or implement automatic classification.
+
+## Six-Action trial acceptance closed by explicit user decision
+
+The user explicitly accepted the existing simulator-validated MVP and stated that
+physical-device testing was unnecessary despite the original Plan wording. At Card
+revision 59, TRIAL-01 through TRIAL-03 were recorded as user-decision passes for
+this limited acceptance scope; their original observed results remain not-run.
+TRIAL-04 already recorded the user's positive verdict and remains passed. No real
+phone/two-box observations or experience comparison were fabricated.
+
+Action 6 was then explicitly accepted and received an accepted-output handoff.
+All six Actions are now accepted. This operation added no Agent run and performed
+no GitHub merge. The completed workflow is the user-approved simulator scope, not
+proof that the original physical-device trial occurred. The end-to-end evidence
+is now available for the agreed overall retrospective, including dispatch design,
+context continuity, execution cost, user intervention and acceptance UX.
+
+## Final statistics reconciled
+
+The final statistics include 13 executions (12 current plus one pre-reset attempt)
+and two planning runs. Counts are deduplicated by run ID across revision history.
+The separate report records exact token totals, run durations, acceptance scope and
+verified merged PRs, and distinguishes original host failures from product outcomes.
+No complete primary-assistant, review-session or human-time accounting is claimed.

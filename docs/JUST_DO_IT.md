@@ -814,3 +814,25 @@ Stop execution has its own confirmation explaining that current files remain.
 Do not repeat cancellation/acceptance disclaimers below every completed report.
 Unsupported artifact types must not offer a retry that cannot change the result;
 recheck does not call a model but still consumes local work and remote requests.
+
+## Additional findings versus resolved attempts
+
+Confirmed presentation rule for subsequent implementation: the acceptance surface
+shows final required-check outcomes and only additional findings that remain
+unresolved and materially inform the user's decision. Additional findings stay
+non-blocking; they cannot introduce a new mandatory acceptance condition.
+
+A failed attempt that was corrected and followed by a passing check belongs in the
+execution log and efficiency retrospective, not the current additional-findings
+list. Preserve its actual failure and resolution evidence; do not relabel the
+original command as passed or delete its history. If no relevant unresolved
+additional finding remains, omit the section.
+
+An unconfigured external service or optional check is an environment fact, not an
+unperformed acceptance requirement unless the frozen checklist explicitly requires
+it. For example, absent GitHub checks must not appear as a missing gate when only
+local gates were required and passed.
+
+This records the agreed distinction; automatic resolution classification and log
+navigation are not implemented by this documentation update. Do not infer that a
+finding is resolved merely because its text contains a reassuring phrase.
