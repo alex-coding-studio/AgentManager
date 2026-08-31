@@ -383,3 +383,9 @@ the stored Card workspace and verifies ownership before opening the system file
 manager; no arbitrary browser-provided path is executed. Clicking the real UI
 button opened Finder at the expected Card worktree. Lint, typecheck and all 42
 execution regression tests passed; no execution or acceptance state changed.
+
+The Plan sidebar now retains a blue arrow on the started, unaccepted current
+Action, including while it awaits user acceptance. Running execution retains its
+blue spinner; accepted Actions retain green checks. The marker derives from
+execution state rather than the selected detail tab. Browser verification showed
+Action 1 checked, Action 2 arrowed, and the arrow unchanged when viewing Action 3.

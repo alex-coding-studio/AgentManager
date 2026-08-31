@@ -5,6 +5,7 @@ import { summarizeGitHub } from '@/lib/github-delivery-summary';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArrowLeft,
+  ArrowRight,
   Check,
   LoaderCircle,
   Pencil,
@@ -122,6 +123,11 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
   const running = card?.run?.status === 'running';
   const busy = pending || reading || Boolean(running);
   const finalized = card?.plan?.status === 'finalized';
+  const currentActionId = finalized
+    ? card?.actions.find(
+        (action) => !card.execution?.acceptedActionIds.includes(action.id),
+      )?.id
+    : undefined;
   const scopedBusy = running && Boolean(card?.run?.targetId);
 
   function patchDraft(id: string, patch: Partial<Draft>) {
@@ -593,6 +599,24 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
                         {card.execution?.runs.at(-1)?.actionId === step.id &&
                           card.execution.runs.at(-1)?.status === 'running' && (
                             <LoaderCircle className="ml-auto size-4 shrink-0 animate-spin text-blue-500" />
+                          )}
+                        {step.id === currentActionId &&
+                          card.execution?.runs.some(
+                            (run) => run.actionId === step.id,
+                          ) &&
+                          card.execution.runs.at(-1)?.status !== 'running' && (
+                            <span
+                              className="ml-auto shrink-0 text-blue-500"
+                              title={t('Current Action')}
+                            >
+                              <span className="sr-only">
+                                {t('Current Action')}
+                              </span>
+                              <ArrowRight
+                                aria-hidden="true"
+                                className="size-4"
+                              />
+                            </span>
                           )}
                         {running && card.run?.targetId === step.id && (
                           <LoaderCircle className="ml-auto size-4 shrink-0 animate-spin" />

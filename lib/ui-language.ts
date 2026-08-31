@@ -131,6 +131,7 @@ export const chineseUi: Record<string, string> = {
   'Workspace path': '路径',
   'Shared by this Card’s Actions. Main receives changes through PR merges.':
     '所有步骤共用此工作区；通过 PR 合并到 main。',
+  'Current Action': '当前推进步骤',
   'Current stage': '当前',
   'Required checks': '必查项',
   'Additional checks': '附加项',
