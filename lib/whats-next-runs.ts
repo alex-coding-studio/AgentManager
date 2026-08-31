@@ -1,5 +1,10 @@
 import { createHash, randomUUID } from 'node:crypto';
 import {
+  validateAgentProfile,
+  sameModelSelection,
+  type AgentProfile,
+} from './agent-profile.ts';
+import {
   ensureGraphIdentities,
   parseIdentifiedResult,
   readIdentifiedEntities,
@@ -98,6 +103,7 @@ export type WhatsNextRunRecord = {
   cleanupWarning?: string;
   status: WhatsNextRunStatus;
   transport: WhatsNextRunTransport;
+  profile?: AgentProfile;
   harness: {
     id: typeof WHATS_NEXT_HARNESS_ID;
     revision: typeof WHATS_NEXT_HARNESS_REVISION;
@@ -132,6 +138,8 @@ export type WhatsNextFeedbackAnchor = {
 type RunRequest = {
   sourceNodeIds: string[];
   agent: LocalAgentKind;
+  model?: AgentProfile['model'];
+  effort?: AgentProfile['effort'];
   instruction: string;
   contextRefs: string[];
   files: File[];
@@ -159,6 +167,12 @@ async function startWhatsNextRunUnlocked(
   input: RunRequest,
 ) {
   validateRunRequest(input);
+  const profile: AgentProfile = {
+    agent: input.agent,
+    model: input.model ?? '',
+    effort: input.effort ?? '',
+  };
+  validateAgentProfile(profile);
   const nodes = await listTaskGraphNodes(project, GRAPH_ROOT);
   const allRuns = await readAllWhatsNextRuns(project);
   const redo = input.redoProposal
@@ -181,7 +195,8 @@ async function startWhatsNextRunUnlocked(
   const coordinatorRun =
     !redo &&
     coordinatorCandidate &&
-    canReuseWhatsNextSession(coordinatorCandidate, transport)
+    canReuseWhatsNextSession(coordinatorCandidate, transport) &&
+    sameModelSelection(coordinatorCandidate.profile, profile)
       ? coordinatorCandidate
       : null;
   const continuesExistingSession = Boolean(coordinatorRun?.agentSessionId);
@@ -342,7 +357,7 @@ async function startWhatsNextRunUnlocked(
   await writeFile(
     path.join(runPath, 'request.json'),
     `${JSON.stringify(
-      { schemaVersion: 1, createdAt: timestamp, packet, prompt },
+      { schemaVersion: 1, createdAt: timestamp, profile, packet, prompt },
       null,
       2,
     )}\n`,
@@ -368,6 +383,7 @@ async function startWhatsNextRunUnlocked(
       : undefined,
     status: 'running',
     transport,
+    profile,
     harness: {
       id: WHATS_NEXT_HARNESS_ID,
       revision: WHATS_NEXT_HARNESS_REVISION,
@@ -417,6 +433,8 @@ async function startWhatsNextRunUnlocked(
     workingDirectory: runPath,
     prompt,
     resumeSessionId: coordinatorRun?.agentSessionId ?? undefined,
+    model: profile.model || undefined,
+    effort: profile.effort || undefined,
   });
   activeRuns.set(runKey(project, runId), { record, agent });
   void finishWhatsNextRun(

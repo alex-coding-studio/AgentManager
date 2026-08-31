@@ -12,7 +12,8 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { AgentSelectField, AgentToggle } from '@/components/agent-selector';
+import { AgentProfileSelector } from '@/components/agent-profile-selector';
+import { sameModelSelection, type AgentProfile } from '@/lib/agent-profile';
 import { ContextAttachmentPicker } from '@/components/context-attachment-picker';
 import { WhatsNextContextToolbar } from '@/components/whats-next-context-toolbar';
 import { createBrowserUuid } from '@/lib/browser-uuid';
@@ -103,9 +104,14 @@ function WhatsNextCanvas({
     mergePreviews([], initialRuns.flatMap(runToPreviews)),
   );
   const [runs, setRuns] = useState<WhatsNextRunRecord[]>(initialRuns);
-  const [selectedAgent, setSelectedAgent] = useState<LocalAgentKind>(
-    agentForRun(initialRuns.at(-1)),
+  const [agentProfile, setAgentProfile] = useState<AgentProfile>(
+    initialRuns.at(-1)?.profile ?? {
+      agent: agentForRun(initialRuns.at(-1)),
+      model: '',
+      effort: '',
+    },
   );
+  const selectedAgent = agentProfile.agent;
   const [error, setError] = useState('');
 
   const [idea, setIdea] = useState('');
@@ -229,6 +235,7 @@ function WhatsNextCanvas({
         (run) =>
           run.agentSessionId &&
           run.harness.revision === WHATS_NEXT_HARNESS_REVISION &&
+          sameModelSelection(run.profile, agentProfile) &&
           run.transport ===
             (selectedAgent === 'codex' ? 'codex-cli' : 'claude-cli') &&
           run.sourceNodeIds.length === 1 &&
@@ -243,7 +250,17 @@ function WhatsNextCanvas({
     if (!response?.ok) return;
     const payload = (await response.json()) as { runs: WhatsNextRunRecord[] };
     setRuns(payload.runs);
-    setSelectedAgent(agentForRun(payload.runs.at(-1)));
+    setAgentProfile((current) =>
+      current.agent === agentForRun(initialRuns.at(-1)) &&
+      !current.model &&
+      !current.effort
+        ? (payload.runs.at(-1)?.profile ?? {
+            agent: agentForRun(payload.runs.at(-1)),
+            model: '',
+            effort: '',
+          })
+        : current,
+    );
     setPreviews(mergePreviews([], payload.runs.flatMap(runToPreviews)));
   }
 
@@ -322,12 +339,15 @@ function WhatsNextCanvas({
     revisionTarget?: { runId: string; candidateId: string };
     redoProposal?: boolean;
   }) {
+    if (developmentPreview) return;
     const body = new FormData();
     for (const nodeId of input.sourceNodeIds) {
       body.append('sourceNodeIds', nodeId);
     }
     body.append('instruction', input.instruction);
     body.append('agent', selectedAgent);
+    body.append('model', agentProfile.model);
+    body.append('effort', agentProfile.effort);
     if (input.redoProposal) body.append('redoProposal', 'true');
     for (const ref of input.contextRefs ?? []) body.append('contextRefs', ref);
     for (const file of input.files ?? []) body.append('files', file);
@@ -376,7 +396,7 @@ function WhatsNextCanvas({
 
   async function beginFromIdea() {
     const sentence = idea.trim();
-    if (!sentence || starting) return;
+    if (!sentence || starting || developmentPreview) return;
     setStarting(true);
     setError('');
     try {
@@ -752,11 +772,16 @@ function WhatsNextCanvas({
               label={t('Optional sources')}
             />
           </div>
-          <div className="mt-4 flex items-center justify-between gap-3">
-            <AgentToggle value={selectedAgent} onChange={setSelectedAgent} />
+          <div className="mt-4 flex flex-col items-stretch gap-3">
+            <AgentProfileSelector
+              value={agentProfile}
+              onChange={setAgentProfile}
+              disabled={starting}
+              mode={developmentPreview ? 'demo' : 'live'}
+            />
             <Button
               onClick={() => void beginFromIdea()}
-              disabled={!idea.trim() || starting}
+              disabled={!idea.trim() || starting || developmentPreview}
             >
               {starting ? (
                 <LoaderCircle className="size-4 animate-spin" />
@@ -888,11 +913,15 @@ function WhatsNextCanvas({
             aria-label={t('What to do with the selected cards')}
           />
 
-          <div className="mt-3 flex items-center justify-between gap-3">
-            <AgentToggle value={selectedAgent} onChange={setSelectedAgent} />
+          <div className="mt-3 flex flex-col items-stretch gap-3">
+            <AgentProfileSelector
+              value={agentProfile}
+              onChange={setAgentProfile}
+              mode={developmentPreview ? 'demo' : 'live'}
+            />
             <Button
               size="sm"
-              disabled={!combineInstruction.trim()}
+              disabled={!combineInstruction.trim() || developmentPreview}
               onClick={() => void submitCombine()}
             >
               <Sparkles className="size-3.5" />
@@ -984,10 +1013,11 @@ function WhatsNextCanvas({
                 </p>
               </div>
 
-              <AgentSelectField
-                id="whats-next-agent"
-                value={selectedAgent}
-                onChange={setSelectedAgent}
+              <AgentProfileSelector
+                value={agentProfile}
+                onChange={setAgentProfile}
+                mode={developmentPreview ? 'demo' : 'live'}
+                disabled={submittingGrow}
               />
 
               {redoProposal && redoBoundary.context ? (
@@ -1422,6 +1452,13 @@ function WhatsNextCanvas({
                       className="mt-2 resize-none text-sm"
                       aria-label={t('Revision note')}
                     />
+                    <div className="mt-3">
+                      <AgentProfileSelector
+                        value={agentProfile}
+                        onChange={setAgentProfile}
+                        mode={developmentPreview ? 'demo' : 'live'}
+                      />
+                    </div>
                     <div className="mt-2 flex justify-end gap-2">
                       <Button
                         variant="ghost"

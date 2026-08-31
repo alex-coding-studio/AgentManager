@@ -47,6 +47,8 @@ const { redoProposalPlan, redoProposalContext } =
   await import('../lib/whats-next-redo.ts');
 const { saveWhatsNextInstructions } =
   await import('../lib/whats-next-context.ts');
+const { startTaskDecompositionRun, readTaskDecompositionRun } =
+  await import('../lib/task-decomposition-runs.ts');
 
 void test('continued Runs receive current Instructions, clearing is explicit, and running snapshots stay unchanged', async () =>
   fixture(async ({ project, input, original }) => {
@@ -170,6 +172,8 @@ const fs=require('node:fs');
 process.stdin.resume();process.stdin.on('end',()=>setTimeout(()=>{
  if(process.env.REDO_TEST_MODE==='fail'){console.log(JSON.stringify({type:'turn.failed',error:{message:'Fixture failure'}}));return;}
  const {packet}=JSON.parse(fs.readFileSync('request.json','utf8'));
+ fs.writeFileSync('fixture-argv.json',JSON.stringify(process.argv.slice(2)));
+ if(!packet.origins){console.log(JSON.stringify({type:'thread.started',thread_id:'fixture-decomposition-session'}));console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'{}'}}));console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:0,output_tokens:0}}));return;}
  const candidates=Array.from({length:packet.proposalCorrection?3:2},(_,i)=>({candidateId:'CANDIDATE-000'+(i+1),revision:1,type:'direction',title:'Direction '+(i+1),summary:'A concrete next direction.',derivedFrom:packet.origins.map(n=>n.id),dependsOn:[],resources:packet.resources.filter(r=>r.kind==='previous-proposal').map(r=>({kind:r.kind,path:r.path})),typeTemplateRef:null,metadata:{},presentation:{},assumptions:[],outputMarkdown:'# Direction '+(i+1)+'\\n\\nA concrete next direction.\\n\\n## Why this direction\\n\\n- Resolve the current uncertainty.\\n- Keep the next step bounded.\\n\\n## Assumptions\\n\\n- None'}));
  const result={schemaVersion:1,harness:{id:'agent-manager.whats-next',revision:3},request:packet.request,outcome:'proposal',reflection:{markdown:'The previous directions misunderstood the user.',continuationAdvice:{action:'continue',recommendedFocus:'compare',reason:'Compare the corrected choices.'}},exploration:{consideredNodeIds:packet.origins.map(n=>n.id),notes:[]},candidates};
  console.log(JSON.stringify({type:'thread.started',thread_id:'fixture-session'}));console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:JSON.stringify(result)}}));console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:0,output_tokens:0}}));
@@ -223,14 +227,135 @@ process.stdin.resume();process.stdin.on('end',()=>setTimeout(()=>{
   }
 }
 
-async function finished(project, run) {
+async function finished(project, run, reader = readWhatsNextRun) {
   for (let i = 0; i < 200; i++) {
-    const value = await readWhatsNextRun(project, run.runId);
+    const value = await reader(project, run.runId);
     if (!['running', 'validating'].includes(value.status)) return value;
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
   throw Error('Fixture Run did not finish');
 }
+
+void test('What’s Next persists the requested model, forwards CLI flags, and isolates changed profiles', async () =>
+  fixture(async ({ project, input, original }) => {
+    const selected = { ...input, model: 'test-model', effort: 'high' };
+    const first = await finished(
+      project,
+      await startWhatsNextRun(project, selected),
+    );
+    assert.notEqual(first.sessionId, original.sessionId);
+    assert.deepEqual(first.profile, {
+      agent: 'codex',
+      model: 'test-model',
+      effort: 'high',
+    });
+    const artifact = (run, name) =>
+      path.join(project.planningPath, 'whats-next/runs', run.runId, name);
+    const argv = JSON.parse(
+      await readFile(artifact(first, 'fixture-argv.json'), 'utf8'),
+    );
+    assert.equal(argv[argv.indexOf('--model') + 1], 'test-model');
+    assert.ok(argv.includes('model_reasoning_effort="high"'));
+    assert.ok(!argv.includes('resume'));
+    assert.deepEqual(
+      JSON.parse(await readFile(artifact(first, 'request.json'), 'utf8'))
+        .profile,
+      first.profile,
+    );
+    const continued = await finished(
+      project,
+      await startWhatsNextRun(project, selected),
+    );
+    assert.equal(continued.sessionId, first.sessionId);
+    const changed = await finished(
+      project,
+      await startWhatsNextRun(project, { ...selected, effort: 'low' }),
+    );
+    assert.notEqual(changed.sessionId, continued.sessionId);
+    const defaults = await finished(
+      project,
+      await startWhatsNextRun(project, input),
+    );
+    assert.notEqual(defaults.sessionId, changed.sessionId);
+    assert.equal(defaults.profile.model, '');
+    await assert.rejects(
+      () => startWhatsNextRun(project, { ...input, model: 'bad;model' }),
+      /configuration/,
+    );
+  }));
+
+void test('Break It Down persists profiles, forwards flags, and resumes only matching selections', async () =>
+  fixture(async ({ project }) => {
+    const created = await createStartNode(project, {
+      title: 'Decompose goal',
+      idea: 'A small feature',
+      contextRefs: [],
+      files: [],
+    });
+    const source = created.node ?? created;
+    const input = {
+      sourceNodeId: source.id,
+      agent: 'codex',
+      model: 'test-model',
+      effort: 'max',
+      instruction: 'Find boundaries',
+      contextRefs: [],
+      files: [],
+    };
+    const first = await finished(
+      project,
+      await startTaskDecompositionRun(project, input),
+      readTaskDecompositionRun,
+    );
+    assert.equal(first.status, 'failed');
+    assert.ok(first.error);
+    assert.equal(first.agentSessionId, 'fixture-decomposition-session');
+    assert.deepEqual(first.profile, {
+      agent: 'codex',
+      model: 'test-model',
+      effort: 'max',
+    });
+    const artifact = (run, name) =>
+      path.join(
+        project.planningPath,
+        'task-decomposition/runs',
+        run.runId,
+        name,
+      );
+    const argv = JSON.parse(
+      await readFile(artifact(first, 'fixture-argv.json'), 'utf8'),
+    );
+    assert.equal(argv[argv.indexOf('--model') + 1], 'test-model');
+    assert.ok(argv.includes('model_reasoning_effort="max"'));
+    assert.deepEqual(
+      JSON.parse(await readFile(artifact(first, 'request.json'), 'utf8'))
+        .profile,
+      first.profile,
+    );
+    const continued = await finished(
+      project,
+      await startTaskDecompositionRun(project, {
+        ...input,
+        operation: 'append-candidates',
+      }),
+      readTaskDecompositionRun,
+    );
+    assert.equal(continued.sessionId, first.sessionId);
+    const changed = await finished(
+      project,
+      await startTaskDecompositionRun(project, {
+        ...input,
+        operation: 'append-candidates',
+        model: '',
+      }),
+      readTaskDecompositionRun,
+    );
+    assert.notEqual(changed.sessionId, continued.sessionId);
+    await assert.rejects(
+      () => startTaskDecompositionRun(project, { ...input, effort: 'invalid' }),
+      /configuration/,
+    );
+  }));
 
 void test('Re-propose trashes the previous proposal before generation and exposes new cards without another action', async () =>
   fixture(async ({ project, input, original, root }) => {

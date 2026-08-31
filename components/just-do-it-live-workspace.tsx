@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { LocalAgentProfile } from '@/components/local-agent-profile';
+import { AgentProfileSelector } from '@/components/agent-profile-selector';
 import {
   Dialog,
   DialogContent,
@@ -286,7 +286,7 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
         disabled={busy}
         accept=".md,.markdown,.txt"
       />
-      <LocalAgentProfile
+      <AgentProfileSelector
         key={card.id}
         value={draft.profile}
         disabled={busy}

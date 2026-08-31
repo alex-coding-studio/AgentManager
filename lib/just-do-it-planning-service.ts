@@ -8,11 +8,7 @@ import {
   lstat,
 } from 'node:fs/promises';
 import path from 'node:path';
-import {
-  isModelId,
-  reasoningEfforts,
-  type ReasoningEffort,
-} from './local-agent-model-types.ts';
+import { validateAgentProfile, type AgentProfile } from './agent-profile.ts';
 import type { RegisteredProject } from './project-registry.ts';
 import {
   startLocalAgentRun,
@@ -42,11 +38,7 @@ import {
   type PlanningSource,
 } from './just-do-it-planning-sources.ts';
 
-export type PlanningProfile = {
-  agent: 'codex' | 'claude';
-  model: string;
-  effort: '' | ReasoningEffort;
-};
+export type PlanningProfile = AgentProfile;
 export type PlanningResource = { name: string; ref: string };
 export type PlanningRun = {
   feedback?: string;
@@ -133,14 +125,7 @@ function assertRevision(value: number) {
 }
 
 export function validatePlanningProfile(profile: PlanningProfile) {
-  if (
-    !profile ||
-    !['codex', 'claude'].includes(profile.agent) ||
-    typeof profile.model !== 'string' ||
-    (profile.model && !isModelId(profile.model)) ||
-    !['', ...reasoningEfforts].includes(profile.effort)
-  )
-    throw new Error('Invalid Agent configuration.');
+  validateAgentProfile(profile);
 }
 
 export function createPlanningService(

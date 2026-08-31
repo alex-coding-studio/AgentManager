@@ -56,6 +56,7 @@ export const chineseUi: Record<string, string> = {
     '填写开发约定、使用哪些本地 Skill 等。可以留空，系统会自动应用内置流程规则。',
   'Your additional requirements': '你的补充要求',
   'Model ID (optional)': '模型 ID（可选）',
+  'Agent configuration': 'Agent 配置',
   'Custom model…': '自定义模型…',
   'Custom model ID': '自定义模型 ID',
   'Previously selected': '此前选择',
