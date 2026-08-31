@@ -61,6 +61,7 @@ import {
   startLocalAgentRun,
   type LocalAgentRun,
 } from './local-agent-transport.ts';
+import { startEventDrivenWorkerRun } from './event-driven-agent-transport.ts';
 import {
   captureLocalAcceptanceArtifacts,
   observedChanges,
@@ -107,6 +108,7 @@ export function createExecutionService(
   ) => Promise<CardWorkspace | undefined> = ensureCardWorkspace,
   writeRecord = appendCardWorkRecord,
   coordinate = startCoordinatedExecution,
+  workerTransport?: typeof startLocalAgentRun,
 ) {
   async function commit(
     project: Project,
@@ -723,6 +725,11 @@ export function createExecutionService(
               verificationBasis(await snapshotWorkspace(workingProject)),
             onProgress: recordProgress,
             transport,
+            workerTransport:
+              workerTransport ??
+              (transport === startLocalAgentRun
+                ? startEventDrivenWorkerRun
+                : transport),
           });
         }
       } catch (error) {
