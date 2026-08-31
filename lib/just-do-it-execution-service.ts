@@ -1,3 +1,5 @@
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import {
   validateAcceptanceCriteria,
   assessRequiredChecks,
@@ -796,6 +798,32 @@ export function createExecutionService(
     );
   }
 
+  async function openWorkspace(
+    project: Project,
+    cardId: string,
+    expectedRevision: number,
+  ) {
+    assertCardUuid(cardId);
+    const card = await store.read(project, cardId);
+    if (card.revision !== expectedRevision)
+      throw new Error('Card changed. Reload before trying again.');
+    const workspace = card.execution?.workspace;
+    if (!workspace) throw new Error('This Card has no workspace yet.');
+    await verifyCardWorkspace(workspace);
+    const command =
+      process.platform === 'darwin'
+        ? 'open'
+        : process.platform === 'win32'
+          ? 'explorer.exe'
+          : process.platform === 'linux'
+            ? 'xdg-open'
+            : null;
+    if (!command)
+      throw new Error('Opening the system file manager is unsupported.');
+    await promisify(execFile)(command, [workspace.path], { timeout: 10000 });
+    return card;
+  }
+
   async function overrideRequiredCheck(
     project: Project,
     cardId: string,
@@ -1210,6 +1238,7 @@ export function createExecutionService(
     resetWorkspace,
     recheckOutput,
     overrideRequiredCheck,
+    openWorkspace,
     bindLegacyChecklist,
   };
 }

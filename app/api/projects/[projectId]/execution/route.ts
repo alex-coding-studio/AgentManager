@@ -35,6 +35,14 @@ export async function POST(
         ),
       );
     }
+    if (input.action === 'open-workspace')
+      return Response.json({
+        card: await executionService.openWorkspace(
+          project,
+          input.cardId,
+          input.expectedRevision,
+        ),
+      });
     if (input.action === 'override-check')
       return Response.json({
         card: await executionService.overrideRequiredCheck(

@@ -376,3 +376,10 @@ the global project header; repeated repository URLs and the large GitHub panel a
 removed. Full PR title and query time are available on hover. Stale/error reporting
 is retained. Browser verification confirmed the PR link remains visible while the
 Round is collapsed and refreshing does not expand it. Lint and typecheck pass.
+
+The Card workspace panel now separates labeled path and branch values from its
+short scope note, with an Open folder action in the header. The server resolves
+the stored Card workspace and verifies ownership before opening the system file
+manager; no arbitrary browser-provided path is executed. Clicking the real UI
+button opened Finder at the expected Card worktree. Lint, typecheck and all 42
+execution regression tests passed; no execution or acceptance state changed.

@@ -9,6 +9,8 @@ import {
   ChevronRight,
   GitPullRequest,
   RefreshCw,
+  FolderOpen,
+  GitBranch,
 } from 'lucide-react';
 import { AgentProfileSelector } from '@/components/agent-profile-selector';
 import {
@@ -71,7 +73,8 @@ export function JustDoItAction({
       | 'accept'
       | 'refresh-github'
       | 'recheck-output'
-      | 'override-check',
+      | 'override-check'
+      | 'open-workspace',
     outputId = latest?.id,
     initializeRepository = false,
     criterionId?: string,
@@ -194,15 +197,35 @@ export function JustDoItAction({
         </p>
       )}
       {card.execution?.workspace && (
-        <div className="space-y-1 rounded-lg border border-border p-3 text-xs">
-          <p className="font-medium">{t('Card workspace')}</p>
-          <p className="break-all">{card.execution.workspace.path}</p>
-          <p className="break-all">
-            {t('Branch')}: {card.execution.workspace.branch}
-          </p>
+        <div className="space-y-3 rounded-lg border border-border p-3 text-xs">
+          <div className="flex items-center justify-between gap-3">
+            <p className="font-medium">{t('Card workspace')}</p>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={pending}
+              onClick={() => void send('open-workspace')}
+            >
+              <FolderOpen className="size-3.5" />
+              {t('Open workspace folder')}
+            </Button>
+          </div>
+          <dl className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-2">
+            <dt className="text-muted-foreground">{t('Workspace path')}</dt>
+            <dd className="min-w-0 break-all font-mono leading-5">
+              {card.execution.workspace.path}
+            </dd>
+            <dt className="flex items-center gap-1 text-muted-foreground">
+              <GitBranch className="size-3.5" />
+              {t('Branch')}
+            </dt>
+            <dd className="min-w-0 break-all font-mono leading-5">
+              {card.execution.workspace.branch}
+            </dd>
+          </dl>
           <p className="text-muted-foreground">
             {t(
-              'All Actions use this worktree. Main changes only through the agreed PR delivery flow.',
+              'Shared by this Card’s Actions. Main receives changes through PR merges.',
             )}
           </p>
           {card.execution.workspaceBackups?.at(-1) && (

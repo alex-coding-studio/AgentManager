@@ -127,6 +127,10 @@ export const chineseUi: Record<string, string> = {
     '计划与验收标准确认后锁定，用户裁决单独记录。',
   'Current status': '当前状态',
   'No PR': '暂无 PR',
+  'Open workspace folder': '打开文件夹',
+  'Workspace path': '路径',
+  'Shared by this Card’s Actions. Main receives changes through PR merges.':
+    '所有步骤共用此工作区；通过 PR 合并到 main。',
   'Current stage': '当前',
   'Required checks': '必查项',
   'Additional checks': '附加项',
