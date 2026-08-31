@@ -60,10 +60,12 @@ The host validates identity, version, allowed criteria/decision references and
 capability limits before launching the worker. It does not claim that field/schema
 validation proves the coordinator's semantic judgment correct.
 
-## Exchange C: worker result and coordinator qualification
+## Exchange C: worker self-check and unresolved-work recovery
 
-Retain the worker's report and tool evidence without rewriting them. The coordinator
-combines new and still-valid prior evidence into a separate qualification record.
+Retain the worker's report and tool evidence without rewriting them. When every effective
+required item is worker-passed, present that self-check directly for user acceptance.
+Do not call the coordinator to semantically review passed implementation or test coverage.
+Call it only with failed/not-run items or a machine-observed contradiction.
 
 | Qualification             | Meaning                                                                    | Host action                                                            |
 | ------------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
@@ -72,12 +74,12 @@ combines new and still-valid prior evidence into a separate qualification record
 | User decision needed      | A material requirement or human observation is missing                     | Ask for that decision; do not launch unrelated coding work             |
 | Blocked                   | A required dependency/capability is unavailable or the budget is exhausted | Preserve artifacts and show the specific blocker                       |
 
-The qualification records each criterion's observed result, evidence source and
-applicable user decision. It distinguishes new evidence from reused evidence and
-preserves conflicting evidence for resolution. Host artifact-verification findings
+The recovery record preserves passed worker results and adds a disposition only for
+unresolved criteria. It distinguishes new evidence from reused evidence and preserves
+conflicting machine facts for resolution. Host artifact-verification findings
 remain advisory under the agreed acceptance policy; they cannot silently become
 another gate. Required code/security review, when applicable, remains separate
-from this coordinator's result qualification.
+from this recovery result.
 
 The user-facing report contains the delivered result, required-check outcomes,
 material unresolved additional findings and next available action. Resolved retries,
@@ -103,8 +105,8 @@ already implemented coordinator or a complete context-reuse policy.
 
 ## Host lifecycle and visibility
 
-Proposed conceptual boundaries are preparation, coordinator decision, worker work,
-result qualification and waiting for the user. They are internal lifecycle states,
+Conceptual boundaries are preparation, coordinator dispatch, worker work, worker
+self-check, optional unresolved-work recovery and waiting for the user. They are internal lifecycle states,
 not five new mandatory stages for users to click through. Existing execution and
 acceptance presentation should remain simple.
 
@@ -125,10 +127,10 @@ there is no automatic rollback or live instruction injection in this first slice
 ## Proposed implementation slices
 
 1. **Record and contract foundation.** Reuse the Card ledger for coordinator
-   decisions, attempt relationships, qualification records and bounded context
+   decisions, attempt relationships, self-check/recovery records and bounded context
    references. Add deterministic identity/version/stop tests before live model use.
 2. **One vertical coordination loop.** Route every new execution through coordinator preparation,
-   one bounded worker call and result qualification using existing transports.
+   one bounded worker call and direct self-check presentation using existing transports.
    Support the no-worker and needs-user paths. Surface available activity events
    and retain direct stopping. Do not migrate an active dispatched run in place.
 3. **Evidence continuity and bounded correction.** Add explicit reuse/invalidation,

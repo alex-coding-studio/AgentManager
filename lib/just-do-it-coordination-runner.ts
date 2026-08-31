@@ -4,7 +4,9 @@ import { redactActivity, redactRecord } from './local-agent-activity.ts';
 import {
   parseCardHarnessResult,
   type CardHarnessRequest,
+  type CardHarnessResult,
 } from './just-do-it-harness.ts';
+import { assessRequiredChecks } from './just-do-it-checklist.ts';
 import {
   createCoordinationRequest,
   coordinationPrompt,
@@ -21,6 +23,7 @@ import {
 } from './local-agent-transport.ts';
 
 type Options = Parameters<typeof startLocalAgentRun>[1];
+type ExecutionReport = Extract<CardHarnessResult, { stage: 'execution' }>;
 export const coordinationLimits = {
   maxAgentCalls: 5,
   maxWorkerCalls: 2,
@@ -40,15 +43,74 @@ export type CoordinatedResult = LocalAgentResult & {
 export class CoordinationRunError extends Error {
   coordination: CoordinationTrace;
   coordinationRecords: Record<string, string>;
+  workerReport: ExecutionReport | null;
   constructor(
     message: string,
     coordination: CoordinationTrace,
     coordinationRecords: Record<string, string>,
+    workerReport: ExecutionReport | null = null,
   ) {
     super(message);
     this.coordination = coordination;
     this.coordinationRecords = coordinationRecords;
+    this.workerReport = workerReport;
   }
+}
+
+function currentAdditionalChecks(report: ExecutionReport) {
+  return (report.additionalChecks ?? []).filter(
+    (check) =>
+      !check.resolved && (check.needsAttention ?? check.status !== 'passed'),
+  );
+}
+
+function workerOutput(
+  request: CardHarnessRequest,
+  report: ExecutionReport,
+  contextSummary: string,
+) {
+  return {
+    harnessRevision: request.harnessRevision,
+    requestId: request.requestId,
+    cardId: request.context.cardId,
+    contextRevision: request.context.contextRevision,
+    inputFingerprint: request.inputFingerprint,
+    handoffSummary: contextSummary,
+    stage: 'execution' as const,
+    actionId: request.actionId,
+    outcome: report.outcome,
+    summary: report.summary,
+    artifactRefs: report.artifactRefs,
+    checks: report.checks,
+    additionalChecks: currentAdditionalChecks(report),
+    scopeNotes: report.scopeNotes ?? [],
+    remaining: [],
+  };
+}
+
+function applyMachineContradictions(
+  report: ExecutionReport,
+  outcomes: Map<string, number>,
+): ExecutionReport {
+  const checks = report.checks.map((check) => {
+    if (check.status !== 'passed') return check;
+    for (const ref of check.evidenceRefs) {
+      const claim = ref.match(/^command:(?:final\s+)?(.+?)\s+exit\s+0$/i);
+      if (!claim) continue;
+      const observed = [...outcomes.entries()].findLast(([command]) =>
+        command.includes(claim[1]),
+      );
+      if (observed && observed[1] !== 0)
+        return {
+          ...check,
+          status: 'failed' as const,
+          summary: `Machine evidence contradicts the self-check: ${claim[1]} exited ${observed[1]}.`,
+          evidenceRefs: [...check.evidenceRefs, `observed-exit:${observed[1]}`],
+        };
+    }
+    return check;
+  });
+  return { ...report, checks };
 }
 export function totalCoordinationUsage(
   trace: CoordinationTrace,
@@ -101,6 +163,8 @@ export function startCoordinatedExecution(input: {
   let child: LocalAgentRun | undefined;
   let stopped = false;
   let lastWorker: LocalAgentResult | undefined;
+  let lastWorkerReport: ExecutionReport | null = null;
+  const workerCommandOutcomes = new Map<string, number>();
   const assertActive = () => {
     if (stopped) throw new Error('Coordinated execution stopped.');
   };
@@ -175,6 +239,12 @@ export function startCoordinatedExecution(input: {
         ) {
           budgetError = new Error('Coordinator tool-call budget exhausted.');
           child?.cancel();
+        }
+        if (role === 'worker' && activity.kind === 'tool') {
+          const match = activity.summary.match(
+            /^Finished: ([\s\S]+) \(exit (\d+)\)$/,
+          );
+          if (match) workerCommandOutcomes.set(match[1], Number(match[2]));
         }
         if (!stopped) progress(phase, redactActivity(activity.summary));
       },
@@ -262,16 +332,53 @@ export function startCoordinatedExecution(input: {
         );
         if (parsed.stage !== 'execution')
           throw new Error('Worker returned another stage.');
+        lastWorkerReport = applyMachineContradictions(
+          parsed,
+          workerCommandOutcomes,
+        );
         trace.attempts.at(-1)!.summary = parsed.summary;
         basis = await input.readBasis();
         assertActive();
+        const required = assessRequiredChecks(
+          input.request.context.acceptanceChecklist,
+          lastWorkerReport.checks,
+          input.request.context.acceptanceOverrides,
+        );
+        if (required.passed) {
+          if (lastWorkerReport.outcome !== 'delivered')
+            throw new Error(
+              'Worker reported all required checks passed but did not deliver the Action.',
+            );
+          trace.contextSummary = [
+            trace.contextSummary,
+            lastWorkerReport.handoffSummary,
+          ]
+            .filter(Boolean)
+            .join('\n')
+            .slice(0, 6000);
+          trace.attempts.at(-1)!.summary = lastWorkerReport.summary;
+          const output = workerOutput(
+            input.request,
+            lastWorkerReport,
+            trace.contextSummary,
+          );
+          progress('complete', lastWorkerReport.summary);
+          return {
+            agentSessionId: lastWorker.agentSessionId,
+            finalOutput: JSON.stringify(output),
+            usage: totalCoordinationUsage(trace),
+            executionAccess: lastWorker.executionAccess,
+            coordination: trace,
+            coordinationRecords: records,
+          };
+        }
         req = createCoordinationRequest({
           phase: 'qualify',
           task: input.request,
           basis,
           priorEvidence: input.priorEvidence,
           previousContext: trace.contextSummary,
-          workerReport: parsed,
+          workerReport: lastWorkerReport,
           previousDecision: decision,
           repairsRemaining: repairs,
         });
@@ -325,6 +432,7 @@ export function startCoordinatedExecution(input: {
         error instanceof Error ? error.message : 'Coordination failed.',
         trace,
         records,
+        lastWorkerReport,
       );
     }
   })();

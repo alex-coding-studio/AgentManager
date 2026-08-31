@@ -41,6 +41,7 @@ import {
 } from '../lib/local-agent-transport.ts';
 import type { RegisteredProject } from '../lib/project-registry.ts';
 import type { CardHarnessRequest } from '../lib/just-do-it-harness.ts';
+import { CoordinationRunError } from '../lib/just-do-it-coordination-runner.ts';
 
 const id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const one = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -1607,11 +1608,11 @@ void test('new executions always coordinate, persist role traces, and carry cont
   assert.equal(first.status, 'succeeded', first.error ?? '');
   assert.deepEqual(
     calls.map((c) => c.access),
-    ['read-only', 'workspace-write', 'read-only'],
+    ['read-only', 'workspace-write'],
   );
   assert.equal(calls[0].model, 'coordinator-model');
   assert.equal(calls[1].model, 'test-model');
-  assert.equal(first.coordination?.attempts.length, 3);
+  assert.equal(first.coordination?.attempts.length, 2);
   assert.ok(first.coordination?.logRef);
   assert.ok(first.activityRef);
   assert.equal(
@@ -1621,7 +1622,7 @@ void test('new executions always coordinate, persist role traces, and carry cont
         'utf8',
       ),
     ).attempts.length,
-    3,
+    2,
   );
   assert.ok(
     (
@@ -1641,13 +1642,53 @@ void test('new executions always coordinate, persist role traces, and carry cont
     instruction: 'Only verify existing evidence.',
   });
   card = await settled(f.store, f.project);
-  assert.equal(calls.length, 4);
+  assert.equal(calls.length, 3);
   assert.match(
     requests.at(-1)!.previousContext,
     /retain the fixture repository target/,
   );
   assert.equal(card.execution!.runs.at(-1)!.coordination?.attempts.length, 1);
   assert.equal(card.execution!.runs.at(-1)!.status, 'succeeded');
+});
+
+void test('host preserves worker checklist when coordination recovery fails', async (t) => {
+  const f = await fixture(t);
+  const service = createExecutionService(
+    f.store,
+    f.transport,
+    new Map(),
+    1800000,
+    undefined,
+    async () => undefined,
+    undefined,
+    (input) => {
+      const report = JSON.parse(delivered(input.request).finalOutput);
+      report.outcome = 'blocked';
+      report.checks[0].status = 'failed';
+      const error = new CoordinationRunError(
+        'Fixture recovery failed.',
+        {
+          profile: input.settings.profile,
+          attempts: [],
+          decisions: [],
+          contextSummary: 'Fixture context',
+        },
+        {},
+        report,
+      );
+      return {
+        completion: Promise.reject(error),
+        cancel: () => {},
+      };
+    },
+  );
+  await service.start(f.project, f.input);
+  const card = await settled(f.store, f.project);
+  const run = card.execution!.runs[0];
+  assert.equal(run.status, 'failed');
+  assert.equal(run.error, 'Fixture recovery failed.');
+  assert.equal(run.result?.checks[0].status, 'failed');
+  assert.equal(run.result?.checks.length, 1);
 });
 
 void test('canceling coordinator preparation persists its partial record and never starts a worker', async (t) => {

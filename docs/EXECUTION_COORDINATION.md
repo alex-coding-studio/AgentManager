@@ -27,16 +27,17 @@ hypotheses to measure, not promised consequences of adding another model call.
 
 ## Responsibilities
 
-| Role              | Owns                                                                                                                         | Does not own                                                                                               |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| User              | Product intent, changed requirements, explicit waivers and final acceptance                                                  | Reconstructing every preceding run for each worker                                                         |
-| Coordinator Agent | Overall task context, requirement translation, bounded dispatch, evidence reuse, result qualification and user-facing report | Inventing acceptance requirements, changing failed evidence into success, or silently expanding scope      |
-| Execution Agent   | The dispatched work, tool use, proportionate checks, concrete artifacts and honest evidence                                  | Global product decisions, surprise required checks or automatic user acceptance                            |
-| Host system       | Durable records, identity/revision checks, permissions, process lifecycle, progress events and explicit state transitions    | Pretending model judgments are deterministic proof or requiring a model response before stopping a process |
+| Role              | Owns                                                                                                                      | Does not own                                                                                               |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| User              | Product intent, changed requirements, explicit waivers and final acceptance                                               | Reconstructing every preceding run for each worker                                                         |
+| Coordinator Agent | Overall task context, requirement translation, bounded dispatch, continuity and unresolved-work recovery                  | Semantic review of passed self-checks, implementation, final acceptance or silently expanding scope        |
+| Execution Agent   | The dispatched work, tool use, proportionate checks, self-checks, concrete artifacts and honest evidence                  | Global product decisions, surprise required checks or automatic user acceptance                            |
+| Host system       | Durable records, identity/revision checks, permissions, process lifecycle, progress events and explicit state transitions | Pretending model judgments are deterministic proof or requiring a model response before stopping a process |
 
-The coordinator's delivery qualification asks whether the output is ready for the
-user to accept. It does not replace final user acceptance or a separately required
-independent code/security review. Existing local permission and Git/GitHub rules
+The worker's complete self-check moves the result to user acceptance without another
+coordinator review. The coordinator handles failed, not-run or mechanically contradictory
+items. It does not replace final user acceptance or a separately required independent
+code/security review. Existing local permission and Git/GitHub rules
 remain binding. A coordinator cannot authorize a tool or merge that the user has
 not authorized.
 
@@ -180,8 +181,8 @@ automatic rollback.
 ## First-slice scope and deferred capabilities
 
 In scope: logical coordinator continuity, pre-dispatch context/requirement work,
-bounded worker assignments, result qualification, evidence reuse, filtered reports,
-observable progress and reliable direct stopping.
+bounded worker assignments, unresolved-work recovery, evidence reuse, worker self-check
+presentation, observable progress and reliable direct stopping.
 
 Deferred: injecting corrective instructions into a currently running worker,
 real-time bidirectional Session steering, concurrent worker teams, broad automatic
@@ -198,8 +199,9 @@ Session. Missing transport capabilities are not a reason to delay the first slic
   environment change causes the affected evidence to be revalidated.
 - An explicit user scope change is recorded and applied without fabricating trial
   observations; a user-decision-only task does not launch unnecessary coding work.
-- Required failures remain visible and block qualification until resolved or
-  explicitly waived. Resolved optional failures do not clutter the final report.
+- Required failures remain visible and enter bounded recovery until resolved or
+  explicitly waived. Passed worker self-checks proceed to user acceptance without
+  coordinator review. Resolved optional failures do not clutter the final report.
 - Progress/failure events are visible before final completion; stopping still works
   when the coordinator is unavailable.
 - Coordinator and worker calls, durations, token usage, repeated checks and user

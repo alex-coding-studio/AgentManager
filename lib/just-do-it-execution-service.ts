@@ -98,7 +98,7 @@ export function createExecutionService(
   store = planningService,
   transport = startLocalAgentRun,
   active = sharedActive,
-  timeoutMs = 1800000,
+  timeoutMs = 7200000,
   reader = githubReader,
   provisionWorkspace: (
     project: Project,
@@ -346,6 +346,8 @@ export function createExecutionService(
       } catch (error) {
         const message =
           error instanceof Error ? error.message : 'Execution failed.';
+        const workerReport =
+          error instanceof CoordinationRunError ? error.workerReport : null;
         const advisoryOnly =
           Boolean(coordinated) &&
           error instanceof ExecutionEvidenceError &&
@@ -359,7 +361,10 @@ export function createExecutionService(
           status: advisoryOnly ? 'succeeded' : 'failed',
           error: advisoryOnly ? null : message,
           observedRefs: refs,
-          result: error instanceof ExecutionEvidenceError ? error.result : null,
+          result:
+            error instanceof ExecutionEvidenceError
+              ? error.result
+              : workerReport,
           ...(error instanceof ExecutionEvidenceError
             ? {
                 evidenceErrors: [error.message],
@@ -372,8 +377,13 @@ export function createExecutionService(
             : {}),
         };
         if (nextRun.result)
-          files[advisoryOnly ? 'result.json' : 'rejected-report.json'] =
-            JSON.stringify(nextRun.result);
+          files[
+            advisoryOnly
+              ? 'result.json'
+              : workerReport
+                ? 'worker-report.json'
+                : 'rejected-report.json'
+          ] = JSON.stringify(nextRun.result);
         if (snapshot) {
           nextRun.github = await discoverGitHubDelivery(
             workingProject,
