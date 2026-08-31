@@ -44,7 +44,7 @@ export function startEventDrivenWorkerRun(
               summary:
                 event.status === 'running'
                   ? `Running job: ${event.label}`
-                  : `Finished job: ${event.label} (${event.status}, exit ${event.exitCode ?? 'none'})`,
+                  : `Finished: ${event.command} (exit ${event.exitCode ?? 'none'})`,
             }),
           (progress) =>
             input.onActivity?.({

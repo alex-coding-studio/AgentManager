@@ -53,6 +53,7 @@ export class CodexAppServerDriver implements AgentSessionDriver {
   private threads = new Map<string, AgentRuntimeThread>();
   private brokers = new Map<string, HostJobBroker>();
   private turns = new Map<string, TurnState>();
+  private bufferedTurnMessages = new Map<string, RpcMessage[]>();
   private ready: Promise<void>;
   private brokerFactory: CodexAppServerDriverOptions['brokerFactory'];
 
@@ -162,6 +163,9 @@ export class CodexAppServerDriver implements AgentSessionDriver {
           resolve,
           reject,
         });
+        const buffered = this.bufferedTurnMessages.get(turnId) ?? [];
+        this.bufferedTurnMessages.delete(turnId);
+        for (const message of buffered) this.receiveTurnMessage(message);
       });
     })();
     return {
@@ -225,6 +229,23 @@ export class CodexAppServerDriver implements AgentSessionDriver {
       void this.handleToolCall(message);
       return;
     }
+    const nestedTurn = message.params?.turn as
+      | Record<string, unknown>
+      | undefined;
+    const turnId = stringValue(message.params?.turnId ?? nestedTurn?.id);
+    const turn = this.turns.get(turnId);
+    if (!turn) {
+      if (turnId) {
+        const buffered = this.bufferedTurnMessages.get(turnId) ?? [];
+        if (buffered.length < 100) buffered.push(message);
+        this.bufferedTurnMessages.set(turnId, buffered);
+      }
+      return;
+    }
+    this.receiveTurnMessage(message);
+  }
+
+  private receiveTurnMessage(message: RpcMessage) {
     const nestedTurn = message.params?.turn as
       | Record<string, unknown>
       | undefined;
@@ -372,6 +393,7 @@ export class CodexAppServerDriver implements AgentSessionDriver {
     this.pending.clear();
     for (const turn of this.turns.values()) turn.reject(error);
     this.turns.clear();
+    this.bufferedTurnMessages.clear();
   }
 }
 

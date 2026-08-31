@@ -162,6 +162,38 @@ else if(message.id===900){toolResponses++;send({method:'thread/tokenUsage/update
   );
 });
 
+void test('Codex App Server driver retains output delivered beside turn start', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'app-server-immediate-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const server = path.join(root, 'fake-server.mjs');
+  await writeFile(
+    server,
+    `import readline from 'node:readline';
+const rl=readline.createInterface({input:process.stdin});
+function send(value){process.stdout.write(JSON.stringify(value)+'\\n')}
+rl.on('line',line=>{const message=JSON.parse(line);
+if(message.method==='initialize')send({id:message.id,result:{}});
+else if(message.method==='thread/start')send({id:message.id,result:{thread:{id:'thread-fast'}}});
+else if(message.method==='turn/start'){send({id:message.id,result:{turn:{id:'turn-fast'}}});send({method:'item/completed',params:{threadId:'thread-fast',turnId:'turn-fast',item:{type:'agentMessage',text:'FAST_OK'}}});send({method:'turn/completed',params:{threadId:'thread-fast',turn:{id:'turn-fast',status:'completed'}}});}
+});`,
+  );
+  const driver = new CodexAppServerDriver({
+    command: process.execPath,
+    arguments: [server],
+    brokerFactory: (input) =>
+      new HostJobBroker(input.workingDirectory, path.join(root, 'jobs')),
+  });
+  t.after(() => driver.close());
+  const thread = await driver.startThread({
+    profile: { agent: 'codex', model: 'fixture', effort: 'low' },
+    workingDirectory: root,
+    access: 'workspace-write',
+  });
+  const result = await driver.startTurn(thread, { prompt: 'finish now' })
+    .completion;
+  assert.equal(result.finalOutput, 'FAST_OK');
+});
+
 async function readdirOne(directory: string) {
   const entries = await import('node:fs/promises').then((fs) =>
     fs.readdir(directory),

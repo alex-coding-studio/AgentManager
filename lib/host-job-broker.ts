@@ -15,6 +15,7 @@ export type HostJobEvent = {
   jobId: string;
   status: 'running' | 'completed' | 'failed' | 'canceled';
   label: string;
+  command: string;
   startedAt: string;
   endedAt: string | null;
   exitCode: number | null;
@@ -61,6 +62,7 @@ export class HostJobBroker {
     await mkdir(directory, { recursive: true });
     const logRef = path.join(directory, 'output.log');
     const startedAt = new Date().toISOString();
+    const command = [request.executable, ...request.arguments].join(' ');
     const child = spawn(request.executable, request.arguments, {
       cwd: workingDirectory,
       env: { ...process.env, ...request.environment },
@@ -88,6 +90,7 @@ export class HostJobBroker {
       jobId: id,
       status: 'running' as const,
       label: request.label,
+      command,
       startedAt,
       endedAt: null,
       exitCode: null,
