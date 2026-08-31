@@ -384,7 +384,7 @@ export function createExecutionService(
         if (current.execution?.runs.at(-1)?.status === 'running')
           throw new Error('This project already has a running Action.');
       }
-      const card = await store.read(project, input.cardId);
+      let card = await store.read(project, input.cardId);
       if (card.revision !== input.expectedRevision)
         throw new Error('Card changed. Reload before trying again.');
       if (card.run?.status === 'running')
@@ -427,6 +427,7 @@ export function createExecutionService(
               description: `Accepted prerequisite ${prerequisite.source.title}`,
             });
       }
+      card = await ensureAcceptedOutputRefs(project, card);
       const log = await readCardWorklog(root(project), card.id);
       const previous = card.execution?.runs.findLast(
         (run) => run.actionId === input.actionId && run.result,
@@ -458,7 +459,7 @@ export function createExecutionService(
           : []),
         ...(card.execution?.acceptedActionIds ?? []).flatMap((id) => {
           const accepted = card.execution!.runs.findLast(
-            (run) => run.actionId === id && run.outputRef,
+            (run) => run.actionId === id,
           );
           return accepted?.outputRef
             ? [
@@ -730,12 +731,16 @@ export function createExecutionService(
       run.actionId
     )
       throw new Error('Only the current Action can be accepted.');
+    const outputRef = reference(card, 'output.md');
     return commit(
       project,
       {
         ...card,
         execution: {
           ...card.execution!,
+          runs: card.execution!.runs.map((item) =>
+            item.id === run.id ? { ...item, outputRef } : item,
+          ),
           acceptedActionIds: [...accepted, run.actionId],
         },
       },
@@ -744,9 +749,52 @@ export function createExecutionService(
         stage: 'execution',
         actionId: run.actionId,
         event: 'user-accepted',
-        text: `User accepted output ${run.id}. Agent-reported checks and remaining limitations remain recorded. No GitHub merge was inferred.`,
-        refs: run.outputRef ? [run.outputRef] : [],
+        text: `User accepted output ${run.id}. Agent-reported checks and verification findings remain unchanged. No GitHub merge was inferred.`,
+        refs: [outputRef],
       },
+      { 'output.md': acceptedOutputMarkdown(card, run) },
+    );
+  }
+
+  async function ensureAcceptedOutputRefs(
+    project: Project,
+    card: PlanningCard,
+  ) {
+    const missing = (card.execution?.acceptedActionIds ?? [])
+      .map((id) => card.execution!.runs.findLast((run) => run.actionId === id))
+      .filter((run): run is ActionRun => Boolean(run && !run.outputRef));
+    if (!missing.length) return card;
+    if (missing.some((run) => !hasReviewableReport(run)))
+      throw new Error(
+        'An accepted Action is missing its original report; restore the record before continuing.',
+      );
+    const files: Record<string, string> = {};
+    const refs = new Map<string, string>();
+    for (const run of missing) {
+      const name = `accepted-${run.actionId}.md`;
+      files[name] = acceptedOutputMarkdown(card, run);
+      refs.set(run.id, reference(card, name));
+    }
+    return commit(
+      project,
+      {
+        ...card,
+        execution: {
+          ...card.execution!,
+          runs: card.execution!.runs.map((run) =>
+            refs.has(run.id) ? { ...run, outputRef: refs.get(run.id)! } : run,
+          ),
+        },
+      },
+      {
+        kind: 'system-event',
+        stage: 'execution',
+        actionId: null,
+        event: 'output-recorded',
+        text: 'Restored missing handoff references for previously accepted reports. Original results, verification findings and acceptance decisions are unchanged. No Agent was rerun.',
+        refs: [...refs.values()],
+      },
+      files,
     );
   }
 
@@ -1295,3 +1343,24 @@ function replaceRun(card: PlanningCard, run: ActionRun): PlanningCard {
 }
 
 export const executionService = createExecutionService();
+
+function acceptedOutputMarkdown(card: PlanningCard, run: ActionRun) {
+  const result = run.result!;
+  const decisions = card.execution?.acceptanceOverrides?.[run.actionId] ?? {};
+  const checks = result.checks
+    .map(
+      (check) =>
+        `- ${check.criterionId ?? 'unclassified'}: ${check.status} — ${check.summary}\n${check.evidenceRefs.map((ref) => `  - ${ref}`).join('\n')}`,
+    )
+    .join('\n');
+  const overrides = Object.entries(decisions)
+    .filter(
+      ([, decision]) =>
+        decision.checklistVersion === run.acceptanceChecklist?.version,
+    )
+    .map(
+      ([id, decision]) => `- ${id}: ${decision.note} (${decision.recordedAt})`,
+    )
+    .join('\n');
+  return `# Accepted Action output\n\nAction: ${run.actionId}\nRound: ${run.id}\nChecklist: ${run.acceptanceChecklist?.version ?? 'legacy'}\n\n${result.summary}\n\n## Handoff\n${result.handoffSummary}\n\n## Required checks (observed results)\n${checks}\n\n## User decisions\n${overrides || 'None.'}\n\n## Delivery references (Agent-reported)\n${result.artifactRefs.map((ref) => `- ${ref}`).join('\n')}\n\n## System verification findings\n${run.evidenceErrors?.map((error) => `- ${error}`).join('\n') || 'None recorded.'}\n\nUser acceptance does not turn unverified references into verified artifacts.\n\n## Additional checks (non-blocker)\n${(result.additionalChecks ?? []).map((check) => `- ${check.status}: ${check.summary}\n${check.evidenceRefs.map((ref) => `  - ${ref}`).join('\n')}`).join('\n')}\n`;
+}

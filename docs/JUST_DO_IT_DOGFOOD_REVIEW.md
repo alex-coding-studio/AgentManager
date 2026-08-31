@@ -551,3 +551,18 @@ confirmation, including purple for merged. The user removed query timestamps fro
 both visible content and hover text; refresh still occurs before confirmation and
 stale/error signals remain. Browser inspection confirmed matching merged-chip color,
 icon and text in both locations and no query-time line in the dialog.
+
+## Pre-merge accepted-output handoff correction
+
+PR readiness review found a mismatch introduced by the accepted verification policy:
+a valid report could be accepted with warnings but still have no `outputRef`, while
+later Actions injected only reports with that reference. The live accepted Action 3
+record demonstrated the gap. Acceptance now writes an explicit handoff document
+atomically with the decision. Legacy missing references are restored before a later
+Action starts; original reports, warning statuses and decisions remain unchanged.
+
+Two regressions verify actual handoff file contents and their inclusion in the next
+transport request, including legacy recovery without rerunning the prior Agent.
+Action 4 was already running when the fix was made; its dispatched context was not
+rewritten or interrupted. This is a bounded handoff fix, not the deferred shared-log
+architecture implementation.

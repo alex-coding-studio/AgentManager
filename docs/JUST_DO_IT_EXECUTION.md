@@ -237,3 +237,17 @@ The acceptance control remains available for a retained valid report. Its final
 confirmation depends on required-check coverage and current output/revision identity,
 not on artifact-verifier capability. Accepting never relabels the original verifier
 findings or starts the next Action automatically.
+
+## Accepted-output handoff
+
+Acceptance atomically records a Markdown handoff and assigns its `outputRef` to the
+accepted Round, including when artifact-verification warnings remain. The handoff
+contains the original check results, delivery references, user decisions and
+verification findings; acceptance does not relabel those findings as verified.
+Subsequent Actions use the latest accepted Round rather than falling back to an
+older Round that happens to have a document reference.
+
+Before a later Action starts, missing references on legacy accepted reports in
+that Card are restored in a new append-only revision. Original report records,
+statuses and acceptance decisions are preserved. No Agent rerun is performed.
+This does not rewrite context already dispatched to an active worker.

@@ -1396,3 +1396,112 @@ void test('unsupported app bundle retries stop before workspace and remote verif
   assert.equal((await store.read(project, id)).revision, card.revision);
   assert.equal(calls.length, 1);
 });
+
+void test('accepted reports with artifact warnings are handed to the next Action with their original evidence', async (t) => {
+  const { project, store, service, calls, input } = await fixture(t);
+  await service.start(project, input);
+  calls[0].resolve(delivered(calls[0].request, ['file:unverified.txt']));
+  let card = await settled(store, project);
+  const original = structuredClone(card.execution!.runs[0]);
+  card = await service.update(
+    project,
+    id,
+    card.revision,
+    'accept',
+    original.id,
+  );
+  const accepted = card.execution!.runs[0];
+  assert.ok(accepted.outputRef);
+  assert.deepEqual(accepted.result, original.result);
+  assert.deepEqual(accepted.evidenceErrors, original.evidenceErrors);
+  assert.equal(accepted.status, 'failed');
+  const text = await readFile(
+    path.join(project.planningPath, accepted.outputRef),
+    'utf8',
+  );
+  assert.match(text, /file:unverified.txt/);
+  assert.match(text, /System verification findings/);
+  assert.match(text, /Preserve the user choice: compact display/);
+  await service.start(project, {
+    ...input,
+    actionId: two,
+    expectedRevision: card.revision,
+  });
+  const resource = calls[1].request.context.resources.find((r) =>
+    r.description.startsWith(`Accepted Action ${one}:`),
+  );
+  assert.equal(
+    resource?.ref,
+    path.join(project.planningPath, accepted.outputRef),
+  );
+  calls[1].reject(new Error('Fixture finished'));
+  await settled(store, project);
+});
+
+void test('continuation repairs a legacy accepted report without changing history or rerunning it', async (t) => {
+  const { project, store, service, calls, input } = await fixture(t);
+  await service.start(project, input);
+  calls[0].resolve(delivered(calls[0].request, ['file:unverified.txt']));
+  let card = await settled(store, project);
+  card = await service.update(
+    project,
+    id,
+    card.revision,
+    'accept',
+    card.execution!.runs[0].id,
+  );
+  const legacy = structuredClone(card);
+  legacy.revision++;
+  legacy.execution!.runs[0].outputRef = null;
+  await appendCardWorkRecord(
+    path.join(project.planningPath, 'implementation/cards'),
+    id,
+    card.revision,
+    {
+      kind: 'system-event',
+      stage: 'execution',
+      actionId: one,
+      event: 'output-recorded',
+      text: 'Fixture restores legacy accepted report without a handoff reference.',
+      refs: [],
+    },
+    { 'planning-state.json': JSON.stringify(legacy) },
+  );
+  const running = await service.start(project, {
+    ...input,
+    actionId: two,
+    expectedRevision: legacy.revision,
+  });
+  assert.equal(calls.length, 2);
+  assert.deepEqual(running.execution!.acceptedActionIds, [one]);
+  const repaired = running.execution!.runs[0];
+  assert.ok(repaired.outputRef);
+  assert.deepEqual(repaired.result, legacy.execution!.runs[0].result);
+  assert.deepEqual(
+    repaired.evidenceErrors,
+    legacy.execution!.runs[0].evidenceErrors,
+  );
+  assert.equal(repaired.status, legacy.execution!.runs[0].status);
+  const resource = calls[1].request.context.resources.find((r) =>
+    r.description.startsWith(`Accepted Action ${one}:`),
+  );
+  assert.equal(
+    resource?.ref,
+    path.join(project.planningPath, repaired.outputRef),
+  );
+  assert.match(await readFile(resource!.ref, 'utf8'), /file:unverified.txt/);
+  assert.equal(
+    JSON.parse(
+      await readFile(
+        path.join(
+          project.planningPath,
+          `implementation/cards/${id}/${String(legacy.revision).padStart(8, '0')}/planning-state.json`,
+        ),
+        'utf8',
+      ),
+    ).execution.runs[0].outputRef,
+    null,
+  );
+  calls[1].reject(new Error('Fixture finished'));
+  await settled(store, project);
+});
