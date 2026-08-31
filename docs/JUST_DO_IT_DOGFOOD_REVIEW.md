@@ -364,3 +364,8 @@ The pre-execution checklist above the current-status indicator now has an outer
 collapsed group labeled with its item count, avoiding duplication of the results
 below. Browser verification confirmed the eight-item group starts closed, opens
 and closes normally, and leaves all nine result rows unchanged.
+
+The user refined stage colors to match the Plan: completed stages retain green
+checkmarks, the current stage uses blue text/background and an explicit current
+badge, and future stages stay gray. Real Action 2 DOM inspection confirmed all
+three distinct states without changing acceptance data; lint and typecheck pass.

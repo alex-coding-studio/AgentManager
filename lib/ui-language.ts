@@ -126,6 +126,7 @@ export const chineseUi: Record<string, string> = {
   'Plan and acceptance criteria are locked after confirmation. User decisions remain separate.':
     '计划与验收标准确认后锁定，用户裁决单独记录。',
   'Current status': '当前状态',
+  'Current stage': '当前',
   'Required checks': '必查项',
   'Additional checks': '附加项',
   'Pass condition': '通过条件',

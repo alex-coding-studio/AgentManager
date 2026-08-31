@@ -164,14 +164,19 @@ export function JustDoItAction({
             <div
               key={label}
               aria-current={index === stage ? 'step' : undefined}
-              className={`flex items-center gap-1.5 border-t-2 px-2 py-2 ${index === stage ? 'border-emerald-500 bg-emerald-500/10 font-semibold text-emerald-600 dark:text-emerald-400' : 'border-border text-muted-foreground'}`}
+              className={`flex items-center gap-1.5 border-t-2 px-2 py-2 ${index === stage && !accepted ? 'border-blue-500 bg-blue-500/10 font-semibold text-blue-600 dark:text-blue-400' : index < stage || accepted ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400' : 'border-border text-muted-foreground'}`}
             >
-              {index < stage ? (
+              {index < stage || accepted ? (
                 <Check aria-hidden="true" className="size-3.5 shrink-0" />
               ) : (
                 String(index + 1).padStart(2, '0')
               )}{' '}
               · {t(label)}
+              {index === stage && !accepted && (
+                <span className="ml-auto rounded bg-blue-500/15 px-1 py-0.5 text-[10px]">
+                  {t('Current stage')}
+                </span>
+              )}
             </div>
           ),
         )}
