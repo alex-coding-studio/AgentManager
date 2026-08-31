@@ -405,3 +405,20 @@ only, with blue for current work and green checks for completion. The redundant
 accepted-output sentence was removed. Real accepted Action 2 shows two green phases
 without that duplicate message. Lint and typecheck passed; temporary fixture files
 and its browser tab were removed.
+
+## Complete legacy Plan checklist migration
+
+The user identified that Actions 3–6 still had only free-text validation. Earlier
+one-Action upgrades did not complete migration of the finalized Plan. Under the
+explicit request to migrate the whole Plan, revision 32 adds all four missing
+checklists atomically: BOX (7), LOC (6), MVP (6), and TRIAL (4). The current Plan
+reference now points to the complete migrated plan, alongside a dedicated
+`acceptance-migration.md` in the same append-only revision.
+
+Actions 1–2 and their 6/8 criteria, original Action IDs and scope, all seven Rounds,
+and both accepted Action IDs were compared before/after and preserved. All six
+Actions now have valid detailed criteria matching the Plan steps. Browser inspection
+confirmed the four new checklist counts without missing-checklist messages. No
+Action started, no result was marked passed and no PR was merged during migration.
+The final phone trial still requires actual user observations and an explicit user
+verdict; the earlier setup simulator waiver was not generalized to that trial.
