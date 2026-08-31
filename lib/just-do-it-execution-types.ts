@@ -18,8 +18,14 @@ export type ActionRun = {
   error: string | null;
   observedRefs: string[];
   outputRef: string | null;
+  commit?: string;
+  parentCommit?: string;
 };
-export type CardExecution = { runs: ActionRun[]; acceptedActionIds: string[] };
+export type CardExecution = {
+  runs: ActionRun[];
+  acceptedActionIds: string[];
+  git?: { baseline: string; head: string; firstTrackedRunId: string };
+};
 export type ExecuteActionInput = {
   cardId: string;
   actionId: string;

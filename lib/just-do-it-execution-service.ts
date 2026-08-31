@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
+import { checkpointWorkspace } from './just-do-it-git.ts';
 import { validateAgentProfile } from './agent-profile.ts';
 import {
   planningService,
@@ -37,6 +38,7 @@ type Active = {
   cardId: string;
   handle: LocalAgentRun | null;
   timer: ReturnType<typeof setTimeout> | null;
+  canceling?: boolean;
 };
 const runtime = globalThis as typeof globalThis & {
   jdiExecutionActive?: Map<string, Active>;
@@ -143,6 +145,16 @@ export function createExecutionService(
         snapshot = await snapshotWorkspace(project);
         refs = observedChanges(baseline, snapshot);
         files['observed-workspace.json'] = JSON.stringify(snapshot);
+        const checkpointHash = await checkpointWorkspace(
+          project,
+          card.id,
+          snapshot,
+          run.parentCommit ?? card.execution!.git!.head,
+          run.id,
+          `Action ${run.actionId}\nRound ${run.id}\n${card.source.title}`,
+        );
+        nextRun = { ...nextRun, commit: checkpointHash };
+        refs.push(`checkpoint:${run.id}`);
         if (outcome instanceof Error) throw outcome;
         files['raw-response.txt'] = outcome.finalOutput.slice(0, 1000000);
         const result = parseCardHarnessResult(
@@ -175,7 +187,7 @@ export function createExecutionService(
             basedOnRevision: card.revision,
             summary: result.handoffSummary.slice(0, 600),
             currentState:
-              `Goal: ${card.source.title}\nPlan: finalized.\nAccepted Actions: ${card.execution?.acceptedActionIds.join(', ') || 'none'}\nCurrent Action: ${run.actionId}\nOutput: ../${String(card.revision + 1).padStart(8, '0')}/output.md\n${result.handoffSummary}\nNext: user validates this output or supplies follow-up. Do not start another Action.`.slice(
+              `Goal: ${card.source.title}\nPlan: finalized.\nAccepted Actions: ${card.execution?.acceptedActionIds.join(', ') || 'none'}\nCurrent Action: ${run.actionId}\nOutput: ../${String(card.revision + 1).padStart(8, '0')}/output.md\nGit checkpoint: ${nextRun.commit ?? 'unavailable'}\nGit history: ../versions.git\n${result.handoffSummary}\nNext: user validates this output or supplies follow-up. Do not start another Action.`.slice(
                 0,
                 6000,
               ),
@@ -208,7 +220,7 @@ export function createExecutionService(
       }
     } finally {
       const running = active.get(project.rootPath);
-      if (running?.id === request.requestId) {
+      if (running?.id === request.requestId && !running.canceling) {
         if (running.timer) clearTimeout(running.timer);
         active.delete(project.rootPath);
       }
@@ -349,6 +361,22 @@ export function createExecutionService(
         input.actionId,
       );
       const baseline = await snapshotWorkspace(project);
+      let git = card.execution?.git;
+      if (!git) {
+        const baselineCommit = await checkpointWorkspace(
+          project,
+          card.id,
+          baseline,
+          null,
+          randomUUID(),
+          `Execution baseline\n${card.source.title}`,
+        );
+        git = {
+          baseline: baselineCommit,
+          head: baselineCommit,
+          firstTrackedRunId: request.requestId,
+        };
+      }
       reservation.id = request.requestId;
       const run: ActionRun = {
         id: request.requestId,
@@ -365,8 +393,9 @@ export function createExecutionService(
         error: null,
         observedRefs: [],
         outputRef: null,
+        parentCommit: git.head,
       };
-      const prompt = `${buildCardHarnessPrompt(request)}\n\nExecution runtime: work only in ${baseline.root}. The planning store ${project.planningPath} is host-owned; do not edit it or call AgentManager mutation APIs. Preserve pre-existing user changes. Repository creation is not a prerequisite; create or publish a repository only if the signed-off Action or current user instruction explicitly requests it. No automatic merge, rollback, acceptance, or next Action. Use file:relative/path for changed files, deleted:relative/path for removals, or git:full-commit-hash for a new commit in artifactRefs. The host checks these against before/after snapshots. Do not list unchanged input files as new artifacts or invent URLs. Checks are your reported evidence, not user acceptance. If there is no filesystem or Git change, do not claim a delivered coding artifact. If permissions prevent an operation, report blocked; never bypass sandbox restrictions. Return the required JSON, not a Markdown envelope.`;
+      const prompt = `${buildCardHarnessPrompt(request)}\n\nExecution runtime: work only in ${baseline.root}. The planning store ${project.planningPath} is host-owned; do not edit it or call AgentManager mutation APIs. Preserve pre-existing user changes. Repository creation is not a prerequisite; create or publish a repository only if the signed-off Action or current user instruction explicitly requests it. If initializing or publishing a project repository, exclude .agent-manager/ before staging; never publish the host-owned planning store or its private Git history. No automatic merge, rollback, acceptance, or next Action. Use file:relative/path for changed files, deleted:relative/path for removals, or git:full-commit-hash for a new commit in artifactRefs. The host checks these against before/after snapshots. Do not list unchanged input files as new artifacts or invent URLs. Checks are your reported evidence, not user acceptance. The host records a new local Git checkpoint for this round. You may reference checkpoint:${request.requestId} as this round's workspace snapshot when reporting checks without file changes; explicitly state that no code changed and do not invent completed functionality. If permissions prevent an operation, report blocked; never bypass sandbox restrictions. Return the required JSON, not a Markdown envelope.`;
       const saved = await commit(
         project,
         {
@@ -374,6 +403,7 @@ export function createExecutionService(
           execution: {
             runs: [...(card.execution?.runs ?? []), run],
             acceptedActionIds: card.execution?.acceptedActionIds ?? [],
+            git,
           },
         },
         {
@@ -473,11 +503,51 @@ export function createExecutionService(
         },
       );
       if (handle.timer) clearTimeout(handle.timer);
+      handle.canceling = true;
       handle.handle?.cancel();
       await handle.handle?.completion.catch(() => undefined);
-      if (active.get(project.rootPath)?.id === run.id)
-        active.delete(project.rootPath);
-      return saved;
+      try {
+        const snapshot = await snapshotWorkspace(project);
+        const hash = await checkpointWorkspace(
+          project,
+          card.id,
+          snapshot,
+          run.parentCommit ?? card.execution!.git!.head,
+          run.id,
+          `Canceled Action ${run.actionId}\nRound ${run.id}`,
+        );
+        return await commit(
+          project,
+          replaceRun(saved, { ...saved.execution!.runs.at(-1)!, commit: hash }),
+          {
+            kind: 'system-event',
+            stage: 'execution',
+            actionId: run.actionId,
+            event: 'output-recorded',
+            text: `Recorded canceled-round Git checkpoint ${hash}. No rollback occurred.`,
+            refs: [],
+          },
+        );
+      } catch (error) {
+        return await commit(
+          project,
+          replaceRun(saved, {
+            ...saved.execution!.runs.at(-1)!,
+            error: `Canceled; changes remain. Git checkpoint failed: ${error instanceof Error ? error.message : 'unknown error'}`,
+          }),
+          {
+            kind: 'system-event',
+            stage: 'execution',
+            actionId: run.actionId,
+            event: 'run-ended',
+            text: 'Cancellation completed but its Git checkpoint failed. Inspect the workspace before continuing.',
+            refs: [],
+          },
+        );
+      } finally {
+        if (active.get(project.rootPath)?.id === run.id)
+          active.delete(project.rootPath);
+      }
     }
     if (
       action !== 'accept' ||
@@ -520,6 +590,9 @@ function replaceRun(card: PlanningCard, run: ActionRun): PlanningCard {
     ...card,
     execution: {
       ...card.execution!,
+      ...(run.commit && card.execution?.git
+        ? { git: { ...card.execution.git, head: run.commit } }
+        : {}),
       runs: card.execution!.runs.map((item) =>
         item.id === run.id ? run : item,
       ),

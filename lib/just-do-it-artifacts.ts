@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { lstat, readdir, realpath } from 'node:fs/promises';
+import { lstat, readdir, realpath, readlink } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import path from 'node:path';
@@ -46,7 +46,12 @@ export async function snapshotWorkspace(
       if (++count > 20000)
         throw new Error('Workspace snapshot exceeds the file limit.');
       const stat = await lstat(absolute);
-      if (stat.isSymbolicLink()) continue;
+      if (stat.isSymbolicLink()) {
+        const target = await readlink(absolute, { encoding: 'buffer' });
+        files[path.relative(root, absolute).split(path.sep).join('/')] =
+          `link:${createHash('sha256').update(target).digest('hex')}`;
+        continue;
+      }
       if (stat.isDirectory()) await walk(absolute);
       else if (stat.isFile()) {
         bytes += stat.size;

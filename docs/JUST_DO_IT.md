@@ -15,9 +15,10 @@ request/result validation and a file-backed Card worklog. The subsequent
 [Planning integration](JUST_DO_IT_PLANNING.md) connects real read-only generation,
 adjustment and Finalize while retaining the isolated Preview. The first
 [Action execution integration](JUST_DO_IT_EXECUTION.md) adds project-file coding,
-durable outputs, feedback rounds, and explicit user acceptance. Automatic Git
-checkpoints, rollback, GitHub synchronization, Agent review, and Todo publication
-remain unconnected; instructions-driven repository work is not a built-in GitHub
+durable outputs, feedback rounds, and explicit user acceptance. Card-owned local
+Git checkpoints now record a baseline and each execution round without touching
+the delivery repository's staging area. Rollback, GitHub synchronization, Agent
+review, and Todo publication remain unconnected; instructions-driven repository work is not a built-in GitHub
 integration.
 This document records the
 settled product intent and explicitly separates unresolved mechanics and

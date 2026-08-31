@@ -16,14 +16,15 @@ network access is enabled for explicitly requested development operations, and
 it cannot request unrestricted escalation. Claude uses restricted mode with
 file-edit permission; shell commands requiring approval may return blocked.
 Only Codex has received the live write smoke so far. Neither mode automatically
-creates a repository, commits, publishes a PR, or merges. Those are not implied
+creates a delivery repository, commits to an existing project branch, publishes
+a PR, or merges. Those are not implied
 by merely pressing Start; any repository operation must belong to the accepted
 Action or explicit user instruction.
 
 Local Git and GitHub are separate: commits and local history need a local Git
-repository, whereas PRs and hosted Issues need a remote repository. This slice
-does not implement the proposed automatic per-round Git history. File hashes
-and worklog records are evidence, not restorable Git checkpoints.
+repository, whereas PRs and hosted Issues need a remote repository. The app now
+maintains its own local Git history per Card, independently of the project's
+delivery repository. See [Git checkpoints](#git-checkpoints) below.
 
 ## State and handoff
 
@@ -42,11 +43,11 @@ and worklog records are evidence, not restorable Git checkpoints.
 
 ## Evidence and limitations
 
-Before/after workspace snapshots identify changed regular files, deletions and
-a changed project-local Git HEAD. Symlinks are not followed. The planning store,
+Before/after workspace snapshots identify changed files, symlink targets,
+deletions and a changed project-local Git HEAD. Symlinks are never followed. The planning store,
 Git internals and common dependency/build directories are excluded. Snapshots
 are bounded to 20,000 entries and 256 MB. A reported delivery must reference an
-observed artifact; an unchanged input file cannot stand in for new output.
+  observed artifact; an unchanged input file cannot stand in for new output.
 The observer detects changes, not authorship: manual edits during a run can also
 appear. It is not a rollback engine or protection against every external effect.
 
@@ -58,8 +59,43 @@ stored state to bypass that lock is unsupported. Multiple servers managing one
 project, external modifications during execution, and automatic PR validation
 are not validated workflows.
 
-Review-Agent integration, GitHub merge monitoring, Issue creation, automatic
-per-round commits, restoration and downstream invalidation remain future work.
+Review-Agent integration, GitHub merge monitoring, Issue creation, restoration
+and downstream invalidation remain future work.
+
+## Git checkpoints
+
+Before the first tracked execution round, the host creates a baseline Commit
+in a Card-owned bare repository at `implementation/cards/<uuid>/versions.git`
+inside the planning store. Every normally completed round is then committed
+before response validation, including blocked/error responses. A canceled
+worker is stopped before its final checkpoint is attempted. Checkpoint failures
+are surfaced and never treated as successful version capture.
+
+These are real Git objects, not copies of Markdown labeled as commits. They
+preserve regular-file bytes, executable mode and symlink targets, including
+binary content and deletions. Link destinations are never copied. The app uses `git fast-import` without the project's index, branches,
+hooks, attributes or clean/smudge filters. The project's existing staged changes
+and HEAD are untouched. No GitHub connection or project-local `.git` is required.
+
+Each Run stores its parent and checkpoint Commit; the UI displays its short hash
+and a read-only version diff. Commits also remain reachable from checkpoint refs
+and the private `history` branch. Existing rounds created before this integration
+are not reconstructed: their first tracked baseline starts at the current
+workspace, identified by `firstTrackedRunId`, not the original Plan's beginning.
+
+The source snapshot exclusions still apply. Known environment secrets and key
+files (`.env` variants except example/sample/template, PEM/P12/PFX/key and
+provisioning files) are additionally omitted. This is not a comprehensive secret
+scanner or a complete machine backup. A changing file invalidates checkpoint
+capture rather than silently binding different bytes to observed evidence.
+
+The host exposes `checkpoint:<requestId>` as this round's recorded workspace
+version. An Agent can cite it for a no-code-change verification round, but must
+state that no code changed. It is evidence of a snapshot, not proof of feature
+correctness or user acceptance. Agent-reported checks remain separate.
+
+There is no automatic reset, checkout or revert of the project. Restoration and
+the corresponding safe Plan-reopening flow remain deliberately unavailable.
 
 ## Validation
 

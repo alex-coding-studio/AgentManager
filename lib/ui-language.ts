@@ -61,6 +61,11 @@ export const chineseUi: Record<string, string> = {
     '一起制定计划，逐步执行，再验收产出。',
   'Completed Actions': '已验收步骤',
   Actions: '执行步骤',
+  'Local Git baseline': '本地 Git 基线',
+  'App-owned history; separate from repository commits and PRs.':
+    '应用内部版本记录，与工程 Commit／PR 分开。',
+  'Local version': '本地版本',
+  'View version diff': '查看版本差异',
   'Plan editing is locked after execution starts. Rollback is not connected yet.':
     '执行开始后不可直接修改计划；干净回退功能暂未接入。',
   'Select the current Action to start. Later Actions unlock after acceptance.':

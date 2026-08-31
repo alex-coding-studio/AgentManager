@@ -89,6 +89,13 @@ export function JustDoItAction({
           {t('This Action was accepted by you.')}
         </p>
       )}
+      {card.execution?.git && (
+        <p className="text-xs text-muted-foreground">
+          {t('Local Git baseline')}:{' '}
+          <code>{card.execution.git.baseline.slice(0, 8)}</code> ·{' '}
+          {t('App-owned history; separate from repository commits and PRs.')}
+        </p>
+      )}
       {current?.id !== action.id && !accepted && (
         <p className="text-sm text-muted-foreground">
           {t('Accept earlier Actions before starting this step.')}
@@ -118,6 +125,21 @@ export function JustDoItAction({
                             : 'Needs your input',
                 )}
               </summary>
+              {run.commit && (
+                <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
+                  <span>
+                    {t('Local version')} · <code>{run.commit.slice(0, 8)}</code>
+                  </span>
+                  <a
+                    className="underline underline-offset-4"
+                    href={`/api/projects/${projectId}/execution-history?cardId=${card.id}&runId=${run.id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {t('View version diff')}
+                  </a>
+                </div>
+              )}
               {run.input && (
                 <p className="mt-3 whitespace-pre-wrap text-xs text-muted-foreground">
                   {t('Your input')}: {run.input}
@@ -179,16 +201,24 @@ export function JustDoItAction({
                   )}
                 </>
               )}
-              {run.observedRefs.length > 0 && (
+              {run.observedRefs.some(
+                (ref) => !ref.startsWith('checkpoint:'),
+              ) && (
                 <details className="mt-4">
                   <summary className="cursor-pointer text-xs text-muted-foreground">
                     {t('Observed file and Git changes')} ·{' '}
-                    {run.observedRefs.length}
+                    {
+                      run.observedRefs.filter(
+                        (ref) => !ref.startsWith('checkpoint:'),
+                      ).length
+                    }
                   </summary>
                   <ul className="mt-2 space-y-1 break-all font-mono text-xs">
-                    {run.observedRefs.map((ref) => (
-                      <li key={ref}>{ref}</li>
-                    ))}
+                    {run.observedRefs
+                      .filter((ref) => !ref.startsWith('checkpoint:'))
+                      .map((ref) => (
+                        <li key={ref}>{ref}</li>
+                      ))}
                   </ul>
                 </details>
               )}

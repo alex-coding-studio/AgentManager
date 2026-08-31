@@ -10,6 +10,14 @@ import {
 import path from 'node:path';
 import os from 'node:os';
 import test from 'node:test';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { randomUUID } from 'node:crypto';
+import {
+  checkpointWorkspace,
+  includeInGitHistory,
+  readCheckpointDiff,
+} from '../lib/just-do-it-git.ts';
 import { createExecutionService } from '../lib/just-do-it-execution-service.ts';
 import {
   createPlanningService,
@@ -207,7 +215,17 @@ void test('coding output persists, feedback creates another round, and only user
   await writeFile(path.join(project.rootPath, 'module.txt'), 'first');
   calls[0].resolve(delivered(calls[0].request));
   card = await settled(store, project);
-  assert.equal(card.execution?.runs[0].status, 'succeeded');
+  assert.equal(
+    card.execution?.runs[0].status,
+    'succeeded',
+    card.execution?.runs[0].error ?? '',
+  );
+  assert.match(card.execution!.git!.baseline, /^[0-9a-f]{40}$/);
+  assert.match(card.execution!.runs[0].commit!, /^[0-9a-f]{40}$/);
+  assert.equal(
+    card.execution!.runs[0].parentCommit,
+    card.execution!.git!.baseline,
+  );
   assert.deepEqual(card.execution?.acceptedActionIds, []);
   await assert.rejects(
     () => store.update(project, id, card.revision, 'reopen'),
@@ -234,6 +252,39 @@ void test('coding output persists, feedback creates another round, and only user
   await writeFile(path.join(project.rootPath, 'module.txt'), 'compact');
   calls[1].resolve(delivered(calls[1].request));
   card = await settled(store, project);
+  const gitDir = path.join(
+    project.planningPath,
+    'implementation/cards',
+    id,
+    'versions.git',
+  );
+  const git = promisify(execFile);
+  assert.equal(
+    (
+      await git('git', [
+        '--git-dir',
+        gitDir,
+        'show',
+        `${card.execution!.runs[0].commit}:module.txt`,
+      ])
+    ).stdout,
+    'first',
+  );
+  assert.equal(
+    (
+      await git('git', [
+        '--git-dir',
+        gitDir,
+        'show',
+        `${card.execution!.runs[1].commit}:module.txt`,
+      ])
+    ).stdout,
+    'compact',
+  );
+  assert.equal(
+    card.execution!.runs[1].parentCommit,
+    card.execution!.runs[0].commit,
+  );
   await assert.rejects(
     () =>
       service.update(
@@ -282,6 +333,7 @@ void test('cancellation preserves partial files and never accepts late output', 
     calls[0].request.requestId,
   );
   assert.equal(card.execution?.runs[0].status, 'canceled');
+  assert.match(card.execution!.runs[0].commit!, /^[0-9a-f]{40}$/);
   assert.equal(calls[0].canceled, true);
   assert.equal(
     await readFile(path.join(project.rootPath, 'partial.txt'), 'utf8'),
@@ -333,7 +385,14 @@ void test('workspace evidence excludes the planning store and does not follow sy
   );
   await writeFile(path.join(project.rootPath, 'output.txt'), 'new output');
   const after = await snapshotWorkspace(project);
-  assert.deepEqual(observedChanges(before, after), ['file:output.txt']);
+  assert.deepEqual(observedChanges(before, after), [
+    'file:linked-store',
+    'file:output.txt',
+  ]);
+  assert.equal(
+    Object.keys(after.files).some((name) => name.startsWith('linked-store/')),
+    false,
+  );
   assert.deepEqual(Object.keys(before.files), []);
 });
 
@@ -404,4 +463,189 @@ void test('source dependencies prevent execution before prerequisite acceptance'
     /Accept prerequisite NODE-deadbeef/,
   );
   assert.equal(calls.length, 0);
+});
+
+void test('Git checkpoints preserve exact bytes and deletions without changing the project Git index or branch', async (t) => {
+  const { project } = await fixture(t);
+  const git = promisify(execFile);
+  await writeFile(
+    path.join(project.rootPath, '.gitignore'),
+    '.agent-manager/\n',
+  );
+  await writeFile(path.join(project.rootPath, 'existing.txt'), 'existing');
+  await git('git', ['init', '--initial-branch=fixture'], {
+    cwd: project.rootPath,
+  });
+  await git('git', ['add', '.gitignore', 'existing.txt'], {
+    cwd: project.rootPath,
+  });
+  await git(
+    'git',
+    [
+      '-c',
+      'user.name=Fixture',
+      '-c',
+      'user.email=fixture@localhost',
+      'commit',
+      '-m',
+      'Fixture baseline',
+    ],
+    { cwd: project.rootPath },
+  );
+  await writeFile(
+    path.join(project.rootPath, 'existing.txt'),
+    'staged user change',
+  );
+  await git('git', ['add', 'existing.txt'], { cwd: project.rootPath });
+  const originalIndex = (
+    await git('git', ['write-tree'], { cwd: project.rootPath })
+  ).stdout;
+  const originalHead = (
+    await git('git', ['rev-parse', 'HEAD'], { cwd: project.rootPath })
+  ).stdout;
+  const first = await checkpointWorkspace(
+    project,
+    id,
+    await snapshotWorkspace(project),
+    null,
+    randomUUID(),
+    'Baseline',
+  );
+  const binary = Buffer.from([0, 1, 255, 13, 10]);
+  await writeFile(path.join(project.rootPath, '中文 空格.bin'), binary);
+  await writeFile(
+    path.join(project.rootPath, 'line-endings.txt'),
+    'one\r\ntwo\r\n',
+  );
+  await writeFile(path.join(project.rootPath, '.env'), 'SECRET=do-not-record');
+  await symlink(
+    '../external-tools/format-config',
+    path.join(project.rootPath, 'format-link'),
+  );
+  await rm(path.join(project.rootPath, 'existing.txt'));
+  const second = await checkpointWorkspace(
+    project,
+    id,
+    await snapshotWorkspace(project),
+    first,
+    randomUUID(),
+    'Round one',
+  );
+  const gitDir = path.join(
+    project.planningPath,
+    'implementation/cards',
+    id,
+    'versions.git',
+  );
+  assert.deepEqual(
+    (
+      await git(
+        'git',
+        ['--git-dir', gitDir, 'show', `${second}:中文 空格.bin`],
+        { encoding: 'buffer' },
+      )
+    ).stdout,
+    binary,
+  );
+  assert.equal(
+    (
+      await git('git', [
+        '--git-dir',
+        gitDir,
+        'show',
+        `${second}:line-endings.txt`,
+      ])
+    ).stdout,
+    'one\r\ntwo\r\n',
+  );
+  assert.equal(
+    (await git('git', ['--git-dir', gitDir, 'show', `${first}:existing.txt`]))
+      .stdout,
+    'staged user change',
+  );
+  await assert.rejects(
+    git('git', ['--git-dir', gitDir, 'show', `${second}:existing.txt`]),
+  );
+  await assert.rejects(
+    git('git', ['--git-dir', gitDir, 'show', `${second}:.env`]),
+  );
+  assert.equal(
+    (await git('git', ['--git-dir', gitDir, 'show', `${second}:format-link`]))
+      .stdout,
+    '../external-tools/format-config',
+  );
+  assert.equal(
+    (await git('git', ['write-tree'], { cwd: project.rootPath })).stdout,
+    originalIndex,
+  );
+  assert.equal(
+    (await git('git', ['rev-parse', 'HEAD'], { cwd: project.rootPath })).stdout,
+    originalHead,
+  );
+  assert.equal(
+    (
+      await git('git', ['branch', '--show-current'], { cwd: project.rootPath })
+    ).stdout.trim(),
+    'fixture',
+  );
+  assert.match(
+    await readCheckpointDiff(project, id, first, second),
+    /deleted file mode/,
+  );
+  assert.equal(includeInGitHistory('.env.example'), true);
+  assert.equal(includeInGitHistory('certificates/private.p12'), false);
+});
+
+void test('Git checkpoint rejects changed input bytes and linked history stores', async (t) => {
+  const { project } = await fixture(t);
+  await writeFile(path.join(project.rootPath, 'test.txt'), 'before');
+  const snapshot = await snapshotWorkspace(project);
+  await writeFile(path.join(project.rootPath, 'test.txt'), 'after');
+  await assert.rejects(
+    () =>
+      checkpointWorkspace(
+        project,
+        id,
+        snapshot,
+        null,
+        randomUUID(),
+        'Raced snapshot',
+      ),
+    /Workspace changed/,
+  );
+  const secondId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  const parent = path.join(
+    project.planningPath,
+    'implementation/cards',
+    secondId,
+  );
+  await mkdir(parent);
+  const outside = path.join(project.rootPath, 'outside-history');
+  await mkdir(outside);
+  await symlink(outside, path.join(parent, 'versions.git'));
+  await assert.rejects(
+    async () =>
+      checkpointWorkspace(
+        project,
+        secondId,
+        await snapshotWorkspace(project),
+        null,
+        randomUUID(),
+        'Linked store',
+      ),
+    /Invalid Git history/,
+  );
+});
+
+void test('a no-code-change round can report its real Git checkpoint without relabeling unchanged inputs', async (t) => {
+  const { project, service, store, calls, input } = await fixture(t);
+  await writeFile(path.join(project.rootPath, 'module.txt'), 'already present');
+  await service.start(project, input);
+  calls[0].resolve(
+    delivered(calls[0].request, [`checkpoint:${calls[0].request.requestId}`]),
+  );
+  const card = await settled(store, project);
+  assert.equal(card.execution?.runs[0].status, 'succeeded');
+  assert.match(card.execution!.runs[0].commit!, /^[0-9a-f]{40}$/);
+  assert.deepEqual(card.execution?.acceptedActionIds, []);
 });
