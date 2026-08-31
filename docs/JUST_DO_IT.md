@@ -807,8 +807,8 @@ Use a separate sticky control bar for Action-level operations, with a visible
 Agent/model/effort summary. Current-result acceptance is primary when eligible.
 Continue opens a change-input mode with Cancel changes and Confirm changes, hiding
 acceptance until that mode is canceled or submitted. Submission starts the next
-Round only after explicit confirmation. Settings and input panels open above a
-stationary bar, separate from read-only Round information and diagnostics.
+Round only after explicit confirmation. Settings and input panels expand below the toolbar within a cohesive dark dock,
+separate from read-only Round information and diagnostics.
 
 Stop execution has its own confirmation explaining that current files remain.
 Do not repeat cancellation/acceptance disclaimers below every completed report.

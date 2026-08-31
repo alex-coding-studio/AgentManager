@@ -712,86 +712,29 @@ export function JustDoItAction({
         </div>
       )}
       {!accepted && current?.id === action.id && (
-        <div data-action-controls className="sticky bottom-3 z-20">
-          {controlPanel && (
-            <div
-              id={`controls-${action.id}`}
-              className="absolute bottom-full left-0 right-0 mb-2 max-h-[45dvh] space-y-3 overflow-y-auto rounded-xl border border-border bg-background p-4 shadow-xl"
-            >
-              {controlPanel === 'feedback' ? (
-                <label className="block space-y-2 text-sm">
-                  <span className="font-medium">
-                    {t(
-                      history.length
-                        ? 'Feedback for this Action'
-                        : 'Additional Action instructions',
-                    )}
-                  </span>
-                  <Textarea
-                    value={instruction}
-                    onChange={(event) => setInstruction(event.target.value)}
-                    maxLength={20000}
-                    disabled={pending || running}
-                    placeholder={t(
-                      'Add requirements for this step, or leave empty to follow the confirmed Plan.',
-                    )}
-                  />
-                </label>
-              ) : (
-                <>
-                  <div>
-                    <h4 className="text-sm font-medium">
-                      {t('Execution settings')}
-                    </h4>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {t(
-                        'Applies to the next execution, not the recorded round.',
-                      )}
-                    </p>
-                  </div>
-                  <AgentProfileSelector
-                    value={profile}
-                    onChange={setProfile}
-                    disabled={pending || running}
-                    label="Execution profile"
-                  />
-                  {profile.agent === 'codex' && (
-                    <p className="text-xs text-muted-foreground">
-                      {t(
-                        'Codex execution follows your local Full Access or read-only choice. Full Access relies on worktree and PR discipline, not an OS write barrier around main.',
-                      )}
-                    </p>
-                  )}
-                  {profile.agent === 'claude' && (
-                    <p className="text-xs text-muted-foreground">
-                      {t(
-                        'Claude can edit project files; commands requiring approval may return blocked in this non-interactive run.',
-                      )}
-                    </p>
-                  )}
-                </>
-              )}
-            </div>
-          )}
+        <div
+          data-action-controls
+          style={
+            {
+              colorScheme: 'dark',
+              '--background': '#18181b',
+              '--foreground': '#fafafa',
+              '--primary': '#fafafa',
+              '--primary-foreground': '#18181b',
+              '--secondary': '#3f3f46',
+              '--secondary-foreground': '#fafafa',
+              '--muted': '#27272a',
+              '--muted-foreground': '#a1a1aa',
+              '--border': '#52525b',
+              '--input': '#52525b',
+              '--ring': '#a1a1aa',
+            } as CSSProperties
+          }
+          className="sticky bottom-3 z-20 rounded-xl border border-border bg-background text-foreground shadow-xl"
+        >
           <div
             data-control-bar
-            style={
-              {
-                colorScheme: 'dark',
-                '--background': '#18181b',
-                '--foreground': '#fafafa',
-                '--primary': '#fafafa',
-                '--primary-foreground': '#18181b',
-                '--secondary': '#3f3f46',
-                '--secondary-foreground': '#fafafa',
-                '--muted': '#27272a',
-                '--muted-foreground': '#a1a1aa',
-                '--border': '#52525b',
-                '--input': '#52525b',
-                '--ring': '#a1a1aa',
-              } as CSSProperties
-            }
-            className="flex min-h-16 flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-background p-3 text-foreground shadow-xl"
+            className="flex min-h-16 flex-wrap items-center justify-between gap-3 p-3"
           >
             <div className="min-w-0 text-sm">
               <p className="font-medium">
@@ -902,6 +845,66 @@ export function JustDoItAction({
               )}
             </div>
           </div>
+          {controlPanel && (
+            <div
+              id={`controls-${action.id}`}
+              className="max-h-[45dvh] space-y-3 overflow-y-auto rounded-b-xl border-t border-border bg-muted/50 p-4"
+            >
+              {controlPanel === 'feedback' ? (
+                <label className="block space-y-2 text-sm">
+                  <span className="font-medium">
+                    {t(
+                      history.length
+                        ? 'Feedback for this Action'
+                        : 'Additional Action instructions',
+                    )}
+                  </span>
+                  <Textarea
+                    value={instruction}
+                    onChange={(event) => setInstruction(event.target.value)}
+                    maxLength={20000}
+                    disabled={pending || running}
+                    placeholder={t(
+                      'Add requirements for this step, or leave empty to follow the confirmed Plan.',
+                    )}
+                  />
+                </label>
+              ) : (
+                <>
+                  <div>
+                    <h4 className="text-sm font-medium">
+                      {t('Execution settings')}
+                    </h4>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {t(
+                        'Applies to the next execution, not the recorded round.',
+                      )}
+                    </p>
+                  </div>
+                  <AgentProfileSelector
+                    value={profile}
+                    onChange={setProfile}
+                    disabled={pending || running}
+                    label="Execution profile"
+                  />
+                  {profile.agent === 'codex' && (
+                    <p className="text-xs text-muted-foreground">
+                      {t(
+                        'Codex execution follows your local Full Access or read-only choice. Full Access relies on worktree and PR discipline, not an OS write barrier around main.',
+                      )}
+                    </p>
+                  )}
+                  {profile.agent === 'claude' && (
+                    <p className="text-xs text-muted-foreground">
+                      {t(
+                        'Claude can edit project files; commands requiring approval may return blocked in this non-interactive run.',
+                      )}
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+          )}
         </div>
       )}
       {card.execution?.workspace &&

@@ -527,3 +527,11 @@ filesystem mtimes can have sub-millisecond precision while stored Round timestam
 have milliseconds. Comparing at the recorded precision prevents same-millisecond
 false rejection; a deterministic test still rejects a file modified in a later
 millisecond. This change does not add app-bundle support.
+
+The user superseded the upward white-popover layout: the dark toolbar now sits
+above an in-flow expandable panel in the same bottom dock. Both feedback and Agent
+settings inherit the dark surface and light text, eliminating white overlays on
+the page. Browser geometry checks confirmed each panel begins at the toolbar's
+bottom edge; native selects and textarea text retain contrast. Toolbar height stays
+64px while the dock expands to accommodate the lower panel. Typecheck/lint passed;
+no execution or acceptance was triggered by the layout verification.
