@@ -714,6 +714,20 @@ export function JustDoItAction({
           ))}
         </div>
       )}
+      {!accepted && current?.id === action.id && !history.length && (
+        <label className="block text-sm">
+          <span className="sr-only">{t('Additional Action instructions')}</span>
+          <Textarea
+            value={instruction}
+            onChange={(event) => setInstruction(event.target.value)}
+            maxLength={20000}
+            disabled={pending || running}
+            placeholder={t(
+              'Add requirements for this step, or leave empty to follow the confirmed Plan.',
+            )}
+          />
+        </label>
+      )}
       {!accepted && current?.id === action.id && (
         <div
           data-action-controls
