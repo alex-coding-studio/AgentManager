@@ -119,3 +119,58 @@ export async function observedGitCommits(
     throw new Error('Invalid Git history response.');
   return hashes.map((hash) => `git:${hash}`);
 }
+
+export async function verifiedGitVersionRefs(
+  snapshot: WorkspaceSnapshot,
+  claimed: string[],
+) {
+  if (!snapshot.head) return [];
+  const candidates = [...new Set(claimed)].filter((ref) =>
+    /^git:[0-9a-f]{40,64}$/.test(ref),
+  );
+  if (candidates.length > 20) return [];
+  const verified: string[] = [];
+  for (const ref of candidates) {
+    const sha = ref.slice(4);
+    try {
+      const type = (
+        await exec('git', ['-C', snapshot.root, 'cat-file', '-t', sha], {
+          timeout: 5000,
+        })
+      ).stdout.trim();
+      if (type !== 'commit') continue;
+      await exec(
+        'git',
+        [
+          '-C',
+          snapshot.root,
+          'merge-base',
+          '--is-ancestor',
+          sha,
+          snapshot.head,
+        ],
+        { timeout: 5000 },
+      );
+      verified.push(ref);
+    } catch {
+      continue;
+    }
+  }
+  return verified;
+}
+
+export async function verifiedOutputVersionRefs(
+  snapshot: WorkspaceSnapshot,
+  claimed: string[],
+) {
+  const files = claimed.filter(
+    (ref) =>
+      ref.startsWith('file:') && Object.hasOwn(snapshot.files, ref.slice(5)),
+  );
+  return [
+    ...new Set([
+      ...files,
+      ...(await verifiedGitVersionRefs(snapshot, claimed)),
+    ]),
+  ];
+}

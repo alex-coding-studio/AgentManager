@@ -115,6 +115,8 @@ export const chineseUi: Record<string, string> = {
   'read-only': '只读',
   'Codex execution follows your local Full Access or read-only choice. Full Access relies on worktree and PR discipline, not an OS write barrier around main.':
     'Codex 执行会遵循你本地的完全访问或只读选择。完全访问依靠 worktree 和 PR 流程约束，不再由操作系统禁止写入 main。',
+  'Recheck saved report without rerunning Agent':
+    '重新核验已保存报告（不重跑 Agent）',
   'This Action was accepted by you.': '你已验收这一步的产出。',
   'Accept earlier Actions before starting this step.':
     '请先验收前面的步骤，再开始这一步。',

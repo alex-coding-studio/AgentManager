@@ -25,6 +25,7 @@ export type ActionRun = {
   evidenceErrors?: string[];
   unverifiedCheckRefs?: string[];
   verifiedExternalRefs?: string[];
+  verifiedVersionRefs?: string[];
   commit?: string;
   parentCommit?: string;
   github?: GitHubDelivery | null;

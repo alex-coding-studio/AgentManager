@@ -356,25 +356,21 @@ void test('cancellation preserves partial files and never accepts late output', 
   );
 });
 
-void test('unchanged input files cannot be claimed as new output and interrupted execution does not unlock replanning', async (t) => {
+void test('existing workspace files are version references rather than new changes and interruption still locks replanning', async (t) => {
   const { project, store, service, calls, input } = await fixture(t);
   await writeFile(path.join(project.rootPath, 'module.txt'), 'existing');
   await service.start(project, input);
   calls[0].resolve(delivered(calls[0].request));
   const card = await settled(store, project);
-  assert.equal(card.execution?.runs[0].status, 'failed');
-  assert.match(card.execution!.runs[0].error!, /Unobserved/);
-  await assert.rejects(
-    () =>
-      service.update(
-        project,
-        id,
-        card.revision,
-        'accept',
-        calls[0].request.requestId,
-      ),
-    /observed output/,
+  assert.equal(card.execution?.runs[0].status, 'succeeded');
+  assert.deepEqual(card.execution?.runs[0].verifiedVersionRefs, [
+    'file:module.txt',
+  ]);
+  assert.equal(
+    card.execution!.runs[0].observedRefs.includes('file:module.txt'),
+    false,
   );
+  assert.deepEqual(card.execution?.acceptedActionIds, []);
   await service.start(project, { ...input, expectedRevision: card.revision });
   const fresh = createExecutionService(store, undefined, new Map());
   const recovered = await fresh.refresh(project, await store.read(project, id));
@@ -944,4 +940,195 @@ void test('a verified repository-only blocked output is retained without pretend
   );
   assert.equal(run.github?.error, null);
   assert.deepEqual(current.execution!.acceptedActionIds, []);
+});
+
+async function legacyRejectedVersionFixture(t: {
+  after: (fn: () => Promise<void>) => void;
+}) {
+  const f = await fixture(t);
+  const exec = promisify(execFile);
+  await exec('git', ['init', '-b', 'feature'], { cwd: f.project.rootPath });
+  await exec(
+    'git',
+    [
+      '-c',
+      'user.name=Fixture',
+      '-c',
+      'user.email=fixture@example.invalid',
+      'commit',
+      '--allow-empty',
+      '-m',
+      'baseline',
+    ],
+    { cwd: f.project.rootPath },
+  );
+  const sha = (
+    await exec('git', ['rev-parse', 'HEAD'], { cwd: f.project.rootPath })
+  ).stdout.trim();
+  await f.service.start(f.project, f.input);
+  f.calls[0].resolve(delivered(f.calls[0].request, [`git:${sha}`]));
+  const current = await settled(f.store, f.project);
+  const run = current.execution!.runs[0];
+  assert.equal(run.status, 'succeeded');
+  assert.equal(run.observedRefs.includes(`git:${sha}`), false);
+  const legacy = {
+    ...current,
+    revision: current.revision + 1,
+    execution: {
+      ...current.execution!,
+      runs: [
+        {
+          ...run,
+          status: 'failed',
+          error: 'Legacy evidence rejection',
+          evidenceErrors: ['Legacy evidence rejection'],
+          verifiedVersionRefs: undefined,
+        },
+      ],
+    },
+  };
+  await appendCardWorkRecord(
+    path.join(f.project.planningPath, 'implementation/cards'),
+    id,
+    current.revision,
+    {
+      kind: 'system-event',
+      stage: 'execution',
+      actionId: one,
+      event: 'run-ended',
+      text: 'Fixture simulates the earlier validator rejecting an existing commit.',
+      refs: [],
+    },
+    { 'planning-state.json': JSON.stringify(legacy) },
+  );
+  return { ...f, sha, legacy, run };
+}
+
+void test('recheck repairs legacy version-reference rejection without another Agent call or acceptance', async (t) => {
+  const f = await legacyRejectedVersionFixture(t);
+  const fixed = await f.service.recheckOutput(
+    f.project,
+    id,
+    f.legacy.revision,
+    f.run.id,
+  );
+  assert.equal(fixed.execution?.runs[0].status, 'succeeded');
+  assert.equal(fixed.execution?.runs[0].error, null);
+  assert.deepEqual(fixed.execution?.runs[0].verifiedVersionRefs, [
+    `git:${f.sha}`,
+  ]);
+  assert.deepEqual(fixed.execution?.acceptedActionIds, []);
+  assert.equal(fixed.execution?.runs[0].endedAt, f.run.endedAt);
+  assert.equal(f.calls.length, 1);
+  assert.ok(fixed.execution?.runs[0].outputRef);
+  const old = JSON.parse(
+    await readFile(
+      path.join(
+        f.project.planningPath,
+        'implementation/cards',
+        id,
+        String(f.legacy.revision).padStart(8, '0'),
+        'planning-state.json',
+      ),
+      'utf8',
+    ),
+  );
+  assert.equal(old.execution.runs[0].status, 'failed');
+});
+
+void test('recheck refuses changed workspaces and stale Card revisions', async (t) => {
+  const f = await legacyRejectedVersionFixture(t);
+  await assert.rejects(
+    () =>
+      f.service.recheckOutput(f.project, id, f.legacy.revision - 1, f.run.id),
+    /Card changed/,
+  );
+  await writeFile(path.join(f.project.rootPath, 'new-edit.txt'), 'keep');
+  await assert.rejects(
+    () => f.service.recheckOutput(f.project, id, f.legacy.revision, f.run.id),
+    /Workspace changed/,
+  );
+  assert.equal((await f.store.read(f.project, id)).revision, f.legacy.revision);
+  assert.equal(f.calls.length, 1);
+});
+
+void test('recheck preserves captured branch evidence for implicit PR discovery', async (t) => {
+  const f = await legacyRejectedVersionFixture(t);
+  const exec = promisify(execFile);
+  await exec(
+    'git',
+    ['remote', 'add', 'origin', 'https://github.com/example/fixture'],
+    { cwd: f.project.rootPath },
+  );
+  const github = {
+    repositoryUrl: 'https://github.com/example/fixture',
+    outputHead: f.sha,
+    outputBranch: 'feature',
+    cleanAtOutput: true,
+    requestedNumbers: [],
+    defaultBranch: 'main',
+    pullRequests: [],
+    checkedAt: new Date().toISOString(),
+    error: null,
+  };
+  const current = await f.store.read(f.project, id);
+  await appendCardWorkRecord(
+    path.join(f.project.planningPath, 'implementation/cards'),
+    id,
+    current.revision,
+    {
+      kind: 'system-event',
+      stage: 'execution',
+      actionId: one,
+      event: 'output-recorded',
+      text: 'Fixture retains captured branch evidence.',
+      refs: [],
+    },
+    {
+      'planning-state.json': JSON.stringify({
+        ...current,
+        revision: current.revision + 1,
+        execution: {
+          ...current.execution,
+          runs: [{ ...current.execution!.runs[0], github }],
+        },
+      }),
+    },
+  );
+  const service = createExecutionService(
+    f.store,
+    f.transport,
+    new Map(),
+    1800000,
+    {
+      repository: async () => 'main',
+      pullRequest: async () => {
+        throw new Error('No explicit PR');
+      },
+      branchPullRequests: async (_repo, branch) => {
+        assert.equal(branch, 'feature');
+        return [
+          {
+            number: 7,
+            url: 'https://github.com/example/fixture/pull/7',
+            title: 'Fixture',
+            state: 'OPEN',
+            isDraft: false,
+            headRefOid: f.sha,
+            headRefName: 'feature',
+            baseRefName: 'main',
+            mergedAt: null,
+          },
+        ];
+      },
+    },
+  );
+  const fixed = await service.recheckOutput(
+    f.project,
+    id,
+    current.revision + 1,
+    f.run.id,
+  );
+  assert.equal(fixed.execution?.runs[0].github?.outputBranch, 'feature');
+  assert.equal(fixed.execution?.runs[0].github?.pullRequests[0].number, 7);
 });

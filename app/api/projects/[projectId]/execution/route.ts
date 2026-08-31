@@ -40,6 +40,15 @@ export async function POST(
         { card: await executionService.start(project, input) },
         { status: 202 },
       );
+    if (input.action === 'recheck-output')
+      return Response.json({
+        card: await executionService.recheckOutput(
+          project,
+          input.cardId,
+          input.expectedRevision,
+          input.outputId,
+        ),
+      });
     if (input.action === 'refresh-github')
       return Response.json({
         card: await executionService.refreshGitHub(

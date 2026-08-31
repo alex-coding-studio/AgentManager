@@ -57,7 +57,12 @@ export function JustDoItAction({
   const enabled = current?.id === action.id && !pending && !running;
 
   async function send(
-    operation: 'start' | 'cancel' | 'accept' | 'refresh-github',
+    operation:
+      | 'start'
+      | 'cancel'
+      | 'accept'
+      | 'refresh-github'
+      | 'recheck-output',
     outputId = latest?.id,
     initializeRepository = false,
   ) {
@@ -315,6 +320,18 @@ export function JustDoItAction({
                     : run.error}
                 </p>
               )}
+              {run.evidenceErrors &&
+                run.id === card.execution?.runs.at(-1)?.id &&
+                run.status === 'failed' && (
+                  <Button
+                    className="mt-3"
+                    variant="outline"
+                    disabled={pending || running}
+                    onClick={() => void send('recheck-output', run.id)}
+                  >
+                    {t('Recheck saved report without rerunning Agent')}
+                  </Button>
+                )}
               {run.evidenceErrors && (
                 <details className="mt-3 text-xs">
                   <summary>{t('Evidence validation details')}</summary>

@@ -50,7 +50,9 @@ Before/after workspace snapshots identify changed files, symlink targets,
 deletions and a changed project-local Git HEAD. Symlinks are never followed. The planning store,
 Git internals and common dependency/build directories are excluded. Snapshots
 are bounded to 20,000 entries and 256 MB. A reported delivery must reference an
-observed artifact; an unchanged input file cannot stand in for new output.
+verified deliverable/version reference. Existing workspace files and reachable
+commits may identify a version being tested or published; they are not counted as
+new changes. Unrelated input resources and missing files remain invalid.
 The observer detects changes, not authorship: manual edits during a run can also
 appear. It is not a rollback engine or protection against every external effect.
 
@@ -106,7 +108,7 @@ is preserved; no Action starts automatically.
 
 - `npm run test:implementation-execution` covers real fixture-file changes,
   output persistence, feedback context, manual progression, cancellation,
-  interrupted runs, unchanged-input rejection and permission separation.
+  interrupted runs, version/change separation and permission separation.
 - `node --experimental-strip-types scripts/smoke-just-do-it-execution.ts --run-live <model>`
   authorizes one real Codex call in a newly created temporary directory. It leaves
   the fixture as inspectable evidence and does not register or execute user projects.
@@ -176,3 +178,23 @@ recorded output HEAD to match the verified PR HEAD. External references are kept
 separate from observed file/Git changes: they prove an accessible delivery location,
 not creation during this Round, successful publication, correctness or acceptance.
 Foreign URLs and failed lookups remain invalid delivery claims.
+
+## Report recheck and regression boundary
+
+`artifactRefs` identify deliverables and versions. They do not assert that every
+referenced file or commit was created during the Round. Host-observed changes,
+verified workspace/version references and verified external references are stored
+separately. Keep identity/schema validation strict and reject missing workspace
+files, unreachable commits, foreign repositories and unverified URLs.
+
+The latest unaccepted report rejected for evidence can be rechecked without another
+Agent call. Recheck uses the original request/raw report, requires an unchanged
+workspace and Plan, validates the references and records a new worklog revision.
+It does not rewrite the original failure, change reported checks, rerun commands,
+accept the Action, advance another Action, or publish anything to GitHub.
+
+Regression coverage must include existing-file verification, no-code-change rounds,
+publication of an existing commit, an empty-main baseline, invalid/foreign references,
+and stale-workspace rejection during recheck. A failed diagnostic query remains
+historical evidence; it must not be conflated with failure of a separately verified
+validation condition. The future environment module owns richer check classification.

@@ -16,6 +16,7 @@ import {
 } from './github-delivery.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
+import { lstat, readFile } from 'node:fs/promises';
 import { checkpointWorkspace } from './just-do-it-git.ts';
 import { validateAgentProfile } from './agent-profile.ts';
 import {
@@ -43,6 +44,7 @@ import {
 import {
   observedChanges,
   observedGitCommits,
+  verifiedOutputVersionRefs,
   snapshotWorkspace,
   type WorkspaceSnapshot,
 } from './just-do-it-artifacts.ts';
@@ -207,25 +209,31 @@ export function createExecutionService(
           );
         } catch (error) {
           if (!(error instanceof ExecutionEvidenceError)) throw error;
+          const versions = await verifiedOutputVersionRefs(
+            snapshot,
+            error.result.artifactRefs,
+          );
           const verified = await verifiedGitHubArtifactRefs(
             workingProject,
             error.result.artifactRefs,
             snapshot.head,
             reader,
           );
-          if (!verified.length) throw error;
+          if (!verified.length && !versions.length) throw error;
           nextRun.verifiedExternalRefs = verified;
-          files['verified-external-refs.json'] = JSON.stringify({
+          nextRun.verifiedVersionRefs = versions;
+          files['verified-references.json'] = JSON.stringify({
             checkedAt: new Date().toISOString(),
-            refs: verified,
+            external: verified,
+            versions,
             meaning:
-              'Verified current external references; not proof that resources were newly created or that delivery is accepted.',
+              'Verified delivery/version references, not a claim that files or commits changed during this Round.',
           });
           result = parseCardHarnessResult(
             outcome.finalOutput,
             request,
             card.revision,
-            [...refs, ...verified],
+            [...refs, ...verified, ...versions],
           );
         }
         if (result.stage !== 'execution')
@@ -250,6 +258,7 @@ export function createExecutionService(
         nextRun.unverifiedCheckRefs = unverifiedCheckRefs(result, request, [
           ...refs,
           ...(nextRun.verifiedExternalRefs ?? []),
+          ...(nextRun.verifiedVersionRefs ?? []),
         ]);
         files['result.json'] = JSON.stringify(result);
         files['output.md'] =
@@ -500,7 +509,7 @@ export function createExecutionService(
         outputRef: null,
         parentCommit: git.head,
       };
-      const prompt = `${buildCardHarnessPrompt(request)}\n\nExecution runtime: work only in ${baseline.root}. This is the Card-owned worktree on branch ${workspace?.branch ?? 'legacy'}. Keep all Actions and Rounds on this branch. The primary checkout ${project.codePath ?? project.rootPath} is not your editing directory. Never switch this worktree to main, reset the primary checkout, or merge into main. Repository commits and pushes belong on this Card branch; only the agreed PR delivery process may merge to main. The planning store ${project.planningPath} is host-owned; do not edit it or call AgentManager mutation APIs. Preserve pre-existing user changes. The host has prepared the local repository and Card branch. Do not reinitialize Git or create a replacement branch. Creating a GitHub repository or publishing branches still requires the signed-off Action or explicit user instruction. A local empty baseline does not authorize pushing the default branch to GitHub. If initializing or publishing a project repository, exclude .agent-manager/ before staging; never publish the host-owned planning store or its private Git history. No automatic merge, rollback, acceptance, or next Action. Use file:relative/path for changed files, deleted:relative/path for removals, or git:full-commit-hash for a commit newly reachable from the final project HEAD in artifactRefs. Command descriptions and external URLs may be included in check evidenceRefs, but remain Agent-reported unless independently verified. Real GitHub repository or PR URLs may appear in artifactRefs; the host verifies the current origin and remote identity, and requires PR HEAD to match this output. A repository link identifies the delivery location, not proof of new files or completed work. The host checks these against before/after snapshots. Do not list unchanged input files as new artifacts or invent URLs. Include actual PR URLs in the output summary when PRs were produced; the host queries GitHub to verify their state. Checks are your reported evidence, not user acceptance. The host records a new local Git checkpoint for this round. You may reference checkpoint:${request.requestId} as this round's workspace snapshot when reporting checks without file changes; explicitly state that no code changed and do not invent completed functionality. If permissions prevent an operation, report blocked; never bypass sandbox restrictions. Return the required JSON, not a Markdown envelope.`;
+      const prompt = `${buildCardHarnessPrompt(request)}\n\nExecution runtime: work only in ${baseline.root}. This is the Card-owned worktree on branch ${workspace?.branch ?? 'legacy'}. Keep all Actions and Rounds on this branch. The primary checkout ${project.codePath ?? project.rootPath} is not your editing directory. Never switch this worktree to main, reset the primary checkout, or merge into main. Repository commits and pushes belong on this Card branch; only the agreed PR delivery process may merge to main. The planning store ${project.planningPath} is host-owned; do not edit it or call AgentManager mutation APIs. Preserve pre-existing user changes. The host has prepared the local repository and Card branch. Do not reinitialize Git or create a replacement branch. Creating a GitHub repository or publishing branches still requires the signed-off Action or explicit user instruction. A local empty baseline does not authorize pushing the default branch to GitHub. If initializing or publishing a project repository, exclude .agent-manager/ before staging; never publish the host-owned planning store or its private Git history. No automatic merge, rollback, acceptance, or next Action. Use file:relative/path for changed files, deleted:relative/path for removals, or git:full-commit-hash for a commit newly reachable from the final project HEAD in artifactRefs. Command descriptions and external URLs may be included in check evidenceRefs, but remain Agent-reported unless independently verified. Real GitHub repository or PR URLs may appear in artifactRefs; the host verifies the current origin and remote identity, and requires PR HEAD to match this output. A repository link identifies the delivery location, not proof of new files or completed work. The host checks these against before/after snapshots. artifactRefs identify the resulting deliverable or version, not a list of new changes. You may cite an existing file inside this workspace or a commit reachable from the output HEAD when validating or publishing existing work; state clearly when no code changed. Do not cite unrelated input resources, missing files or invented URLs. The host records actual changes separately. Include actual PR URLs in the output summary when PRs were produced; the host queries GitHub to verify their state. Checks are your reported evidence, not user acceptance. The host records a new local Git checkpoint for this round. You may reference checkpoint:${request.requestId} as this round's workspace snapshot when reporting checks without file changes; explicitly state that no code changed and do not invent completed functionality. If permissions prevent an operation, report blocked; never bypass sandbox restrictions. Return the required JSON, not a Markdown envelope.`;
       const saved = await commit(
         project,
         {
@@ -738,6 +747,180 @@ export function createExecutionService(
     );
   }
 
+  async function recheckOutput(
+    project: Project,
+    cardId: string,
+    expectedRevision: number,
+    outputId: string,
+  ) {
+    assertCardUuid(cardId);
+    assertCardUuid(outputId);
+    if (active.has(project.rootPath))
+      throw new Error(
+        'Wait for project execution to finish before rechecking.',
+      );
+    const reservation: Active = {
+      id: randomUUID(),
+      cardId,
+      handle: null,
+      timer: null,
+    };
+    active.set(project.rootPath, reservation);
+    try {
+      const card = await store.read(project, cardId);
+      if (card.revision !== expectedRevision)
+        throw new Error('Card changed. Reload before trying again.');
+      const run = card.execution?.runs.at(-1);
+      if (
+        !run ||
+        run.id !== outputId ||
+        run.status !== 'failed' ||
+        !run.evidenceErrors ||
+        card.execution!.acceptedActionIds.includes(run.actionId)
+      )
+        throw new Error(
+          'Only the latest unaccepted report rejected for evidence can be rechecked.',
+        );
+      if (card.execution?.workspace)
+        await verifyCardWorkspace(card.execution.workspace);
+      const workingProject = workspaceProject(
+        project,
+        card.execution?.workspace,
+      );
+      const log = await readCardWorklog(root(project), cardId);
+      let request: CardHarnessRequest | undefined;
+      let raw: string | undefined;
+      let recorded: WorkspaceSnapshot | undefined;
+      for (const entry of [...log.entries].reverse()) {
+        if (entry.record.stage !== 'execution') continue;
+        const directory = path.join(
+          root(project),
+          cardId,
+          String(entry.revision).padStart(8, '0'),
+        );
+        if (!request) {
+          const text = await optionalRecordFile(
+            path.join(directory, 'request.json'),
+          );
+          if (text) {
+            const candidate = JSON.parse(text);
+            if (candidate.requestId === run.id) request = candidate;
+          }
+        }
+        if (!raw) {
+          const text = await optionalRecordFile(
+            path.join(directory, 'raw-response.txt'),
+          );
+          if (text && JSON.parse(text).requestId === run.id) {
+            raw = text;
+            const snapshot = await optionalRecordFile(
+              path.join(directory, 'observed-workspace.json'),
+            );
+            if (snapshot) recorded = JSON.parse(snapshot);
+          }
+        }
+        if (request && raw && recorded) break;
+      }
+      if (!request || !raw || !recorded)
+        throw new Error('Original report evidence is unavailable.');
+      if (JSON.stringify(card.plan) !== JSON.stringify(request.context.plan))
+        throw new Error('Plan changed since this report.');
+      const current = await snapshotWorkspace(workingProject);
+      if (
+        current.root !== recorded.root ||
+        current.head !== recorded.head ||
+        JSON.stringify(Object.entries(current.files).sort()) !==
+          JSON.stringify(Object.entries(recorded.files).sort())
+      )
+        throw new Error(
+          'Workspace changed since this report. Rechecking cannot certify a different output.',
+        );
+      let result;
+      let versions: string[] = [];
+      let external: string[] = [];
+      try {
+        result = parseCardHarnessResult(
+          raw,
+          request,
+          request.context.contextRevision,
+          run.observedRefs,
+        );
+      } catch (error) {
+        if (!(error instanceof ExecutionEvidenceError)) throw error;
+        versions = await verifiedOutputVersionRefs(
+          recorded,
+          error.result.artifactRefs,
+        );
+        external = await verifiedGitHubArtifactRefs(
+          workingProject,
+          error.result.artifactRefs,
+          recorded.head,
+          reader,
+        );
+        result = parseCardHarnessResult(
+          raw,
+          request,
+          request.context.contextRevision,
+          [...run.observedRefs, ...versions, ...external],
+        );
+      }
+      if (result.stage !== 'execution')
+        throw new Error('Expected an execution report.');
+      const github =
+        run.github?.outputHead === recorded.head &&
+        run.github.repositoryUrl === getGitHubRepositoryUrl(workingProject)
+          ? await refreshGitHubDelivery(run.github, reader)
+          : await discoverGitHubDelivery(
+              workingProject,
+              JSON.stringify(result),
+              recorded.head,
+              reader,
+              recorded.head,
+            );
+      const outputRef = reference(card, 'output.md');
+      const nextRun = {
+        ...run,
+        status: 'succeeded' as const,
+        error: null,
+        evidenceErrors: undefined,
+        result,
+        github,
+        outputRef,
+        verifiedExternalRefs: external,
+        verifiedVersionRefs: versions,
+        unverifiedCheckRefs: unverifiedCheckRefs(result, request, [
+          ...run.observedRefs,
+          ...external,
+          ...versions,
+        ]),
+      };
+      return commit(
+        project,
+        replaceRun(card, nextRun),
+        {
+          kind: 'system-event',
+          stage: 'execution',
+          actionId: run.actionId,
+          event: 'output-recorded',
+          text: `Rechecked recorded output ${run.id} against its unchanged workspace and verified references. No Agent commands were rerun. Reported check statuses remain unchanged; no user acceptance was recorded.`,
+          refs: [outputRef],
+        },
+        {
+          'result.json': JSON.stringify(result),
+          'verified-references.json': JSON.stringify({
+            checkedAt: new Date().toISOString(),
+            versions,
+            external,
+          }),
+          'output.md': `# Rechecked Action output\n\n${result.summary}\n\nOutcome: ${result.outcome}\n\nNo Agent commands were rerun. Reported checks and remaining limitations are unchanged.\n\n## Agent-reported checks\n${result.checks.map((check) => `- ${check.status}: ${check.summary}`).join('\n')}\n\n## Remaining\n${result.remaining.map((item) => `- ${item}`).join('\n')}`,
+        },
+      );
+    } finally {
+      if (active.get(project.rootPath) === reservation)
+        active.delete(project.rootPath);
+    }
+  }
+
   async function resetWorkspace(
     project: Project,
     cardId: string,
@@ -849,7 +1032,26 @@ export function createExecutionService(
     }
   }
 
-  return { start, update, refresh, refreshGitHub, resetWorkspace };
+  return {
+    start,
+    update,
+    refresh,
+    refreshGitHub,
+    resetWorkspace,
+    recheckOutput,
+  };
+}
+
+async function optionalRecordFile(file: string) {
+  try {
+    const stat = await lstat(file);
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 8000000)
+      throw new Error('Invalid recorded output file.');
+    return await readFile(file, 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
+  }
 }
 
 function unverifiedCheckRefs(
