@@ -348,7 +348,10 @@ void test('review is bound to the selected Action and exact output version', () 
 
 void test('artifact claims require observed references and do not grant acceptance', () => {
   const req = request('execution');
-  assert.throws(() => parse(response(req), req), /Unobserved/);
+  assert.throws(
+    () => parse(response(req), req),
+    /Delivery references could not be verified/,
+  );
   const result = parse(response(req), req, 0, [artifact]);
   assert.equal(result.stage, 'execution');
   assert.equal('accepted' in result, false);
@@ -369,7 +372,7 @@ void test('an input document or an earlier output cannot masquerade as a new del
         { ...response(req), artifactRefs: ['source/output.md'], checks: [] },
         req,
       ),
-    /input references/,
+    /Delivery references could not be verified/,
   );
   const ctx = context();
   ctx.plan!.status = 'finalized';
@@ -382,7 +385,7 @@ void test('an input document or an earlier output cannot masquerade as a new del
   );
   assert.throws(
     () => parse({ ...response(correction), checks: [] }, correction),
-    /input references/,
+    /Delivery references could not be verified/,
   );
   assert.equal(
     parse(response(correction), correction, 0, [artifact]).stage,

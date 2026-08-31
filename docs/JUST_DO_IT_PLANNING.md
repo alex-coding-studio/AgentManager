@@ -8,9 +8,11 @@ The ordinary route now supports persistent import, generation, whole-plan and
 single-step adjustment, cancel/retry, Finalize and reopening before execution.
 `?preview=just-do-it` retains the separate frozen, in-memory demonstration.
 
-Finalize copies the exact displayed contracts into ready Actions. There is no
-Action execution, PR/Issue creation, merge, completion propagation or rollback
-endpoint. Reopening is available because this slice cannot produce Action output.
+Finalize copies the exact displayed contracts into ready Actions. The subsequent
+[Action execution integration](JUST_DO_IT_EXECUTION.md) adds coding, output and
+manual acceptance endpoints. Reopening remains available before execution; once
+execution starts, it is locked until clean rollback is supported. PR/Issue
+automation, automatic merge synchronization and rollback remain separate work.
 The preview's simulation controls are never mounted on the live route.
 
 Add a goal opens a near-fullscreen source map with separate What's Next and
@@ -25,8 +27,8 @@ added; they cannot navigate or trigger another import from this picker. Long
 links detour around actual blocking Cards using the nearest clear lane, not
 above unrelated high Nodes elsewhere in the graph.
 Issues are intentionally absent. Execution-completed entries are excluded by the
-graph adapter, but the live planning-only store has no execution completion yet:
-Plan finalization never hides a Node or claims its task has been completed.
+graph adapter. Plan finalization never hides a Node or claims its task has been
+completed. Live source-Canvas completion markers remain separate integration work.
 
 ## Runtime and context
 

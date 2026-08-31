@@ -57,6 +57,167 @@ export const chineseUi: Record<string, string> = {
   'Your additional requirements': '你的补充要求',
   'Model ID (optional)': '模型 ID（可选）',
   'Agent configuration': 'Agent 配置',
+  'Plan together, execute one Action, then verify the output.':
+    '一起制定计划，逐步执行，再验收产出。',
+  'Completed Actions': '已验收步骤',
+  Actions: '执行步骤',
+  'Local Git baseline': '本地 Git 基线',
+  'App-owned history; separate from repository commits and PRs.':
+    '应用内部版本记录，与工程 Commit／PR 分开。',
+  'Local version': '本地版本',
+  'View version diff': '查看版本差异',
+  'Plan editing is locked after execution starts. Rollback is not connected yet.':
+    '执行开始后不可直接修改计划；干净回退功能暂未接入。',
+  'Select the current Action to start. Later Actions unlock after acceptance.':
+    '选择当前步骤开始执行，验收后解锁下一步。',
+  'Refresh GitHub status': '刷新 GitHub 状态',
+  'Last attempted check': '最近查询时间',
+  'Stale status': '历史状态',
+  OPEN: '未合并',
+  CLOSED: '已关闭',
+  MERGED: '已合并',
+  'No verified PR association for this output.': '尚未核实此产出关联的 PR。',
+  'PR state is separate from your acceptance. Refresh to check for remote changes.':
+    'PR 状态与用户验收分开记录；点击刷新查询远端变化。',
+  'No GitHub repository was captured for this round. Future rounds discover it automatically.':
+    '本轮未记录 GitHub 仓库，后续执行轮次会自动发现。',
+  'Could not refresh GitHub status. Check login and repository access. Previous status is not current verification.':
+    '无法刷新 GitHub 状态，请检查登录和仓库权限。历史状态不代表当前核验结果。',
+  'Could not capture repository output. No GitHub delivery was verified.':
+    '无法记录仓库产出，尚未核实 GitHub 交付。',
+  'Starting runs the Agent with project write access. Only this Action runs; you decide acceptance. GitHub status never starts the next Action.':
+    '开始后 Agent 可以修改项目文件，只执行当前步骤，由你验收。GitHub 状态不会自动启动下一步。',
+  'Output evidence could not be verified. The Agent report is retained below.':
+    '产出证据未通过核验。下方保留了 Agent 的报告。',
+  'Evidence validation details': '证据校验详情',
+  'Unverified check references': '未核实的自检引用',
+  'These references were reported by the Agent; the host has not verified the commands or external results.':
+    '以下引用由 Agent 报告，系统尚未核实命令执行或外部结果。',
+  'Card workspace': 'Card 工作区',
+  Branch: '分支',
+  'Previous workspace backup': '上一次工作区备份',
+  'Base commit': '起点提交',
+  'All Actions use this worktree. Main changes only through the agreed PR delivery flow.':
+    '所有步骤共用这个 worktree，main 只通过约定的 PR 交付流程接收成果。',
+  'Restart this Card from its base': '让这张 Card 从头开始',
+  'Keep the confirmed Plan. Preserve this worktree and branch as a backup, then create a fresh Card worktree at its original base. No Action starts automatically.':
+    '保留已确认计划，将当前 worktree 和分支完整保留为备份，再从最初的起点创建新工作区。不会自动开始执行。',
+  'Main, GitHub repositories, PRs and installed apps are not reverted by this operation.':
+    '此操作不会回退 main、GitHub 仓库、PR 或已安装应用。',
+  'Back up and restart Card workspace': '备份并重建 Card 工作区',
+  'Working…': '处理中…',
+  'This empty project needs a local Git baseline. Confirm creating an empty commit on local main; no files are committed and nothing is pushed to GitHub.':
+    '这个空项目需要本地 Git 起点。请确认在本地 main 创建一个空提交：不提交任何文件，也不会推送到 GitHub。',
+  'Create empty local main baseline and start': '创建本地空 main 基线并开始',
+  'Execution permissions': '执行权限',
+  'full-access': '完全访问',
+  'workspace-write': '工作区写入',
+  'read-only': '只读',
+  'Codex execution follows your local Full Access or read-only choice. Full Access relies on worktree and PR discipline, not an OS write barrier around main.':
+    'Codex 执行会遵循你本地的完全访问或只读选择。完全访问依靠 worktree 和 PR 流程约束，不再由操作系统禁止写入 main。',
+  'Recheck saved report without rerunning Agent':
+    '重新核验已保存报告（不重跑 Agent）',
+  'This Action was accepted by you.': '你已验收这一步的产出。',
+  'Accept earlier Actions before starting this step.':
+    '请先验收前面的步骤，再开始这一步。',
+  'Your input': '你的输入',
+  'Historical checks (not classified)': '历史检查（未分类）',
+  'Confirmed checklist locked': '已确认清单已锁定',
+  'Plan and acceptance criteria are locked after confirmation. User decisions remain separate.':
+    '计划与验收标准确认后锁定，用户裁决单独记录。',
+  'Current status': '当前状态',
+  'No PR': '暂无 PR',
+  'Open workspace folder': '打开文件夹',
+  'Workspace path': '路径',
+  'Shared by this Card’s Actions. Main receives changes through PR merges.':
+    '所有步骤共用此工作区；通过 PR 合并到 main。',
+  'App bundle verification is not supported yet.':
+    '系统暂不支持 .app 构建目录核验；需补齐支持后处理，重复核验无法解决。',
+  'Acceptance is unavailable until the system artifact verification is resolved.':
+    '系统产物核验尚未解决，暂不能确认验收。',
+  'This run has not produced a verified output for acceptance.':
+    '本轮尚无可确认验收的已核验产出。',
+  'Required checks are incomplete. Review them before confirming acceptance.':
+    '必查项尚未全部通过，请先查看具体结果。',
+  'System artifact verification note': '系统产物核验提示',
+  'Artifact verification notes do not block acceptance when required checks pass.':
+    '此项为系统核验提示；必查项通过即可验收。',
+  Feedback: '反馈',
+  'Cancel changes': '取消修改',
+  'Confirm changes': '确认修改',
+  'Enter change instructions': '填写修改意见',
+  'Run information': '运行信息',
+  'Run started': '开始时间',
+  'System diagnostics': '系统诊断',
+  'Verification note': '有核验提示',
+  'Execution settings': '执行设置',
+  'Applies to the next execution, not the recorded round.':
+    '用于后续执行，不影响已记录的轮次。',
+  'Retry verification': '重试核验',
+  'System artifact verification pending': '系统产物待核验',
+  'Agent-reported required checks': 'Agent 必查结果',
+  'The system has not verified these delivery references:':
+    '系统尚未核验以下交付物：',
+  'Resolve artifact verification before acceptance. Additional checks do not cause this state.':
+    '处理产物核验后才能验收；此状态并非由附加项造成。',
+  'Current Action gaps': '当前步骤尚未完成',
+  'Stop execution': '停止执行',
+  'Stop execution?': '停止本轮执行？',
+  'Stopping keeps the current code and files. It does not restore an earlier version.':
+    '停止后保留当前代码和文件，不会恢复到之前的版本。',
+  'To restart from the original baseline, use the separate Card restart action when available; it creates a backup first.':
+    '如需从初始版本重新开始，请使用单独的 Card 重开操作（适用时会先备份）。',
+  'Keep running': '继续运行',
+  'Execution phase': '执行',
+  'Acceptance phase': '验收',
+  'Confirm Action acceptance': '确认验收这一步',
+  'Review this output, required checks and any user overrides before confirming.':
+    '请确认本轮产出、必查结果和用户裁决。',
+  'Code revision': '代码版本',
+  'Not recorded': '未记录',
+  'These are Agent-reported results. Passing self-checks does not replace your review.':
+    '以上是 Agent 报告的检查结果，自检通过不代替你的审阅。',
+  'Acceptance unlocks the next Action': '确认后解锁下一步',
+  'This is the final Action in this Plan.': '这是本计划的最后一步。',
+  'Nothing starts automatically. Acceptance does not merge a PR.':
+    '不会自动开始执行，也不会合并 PR。',
+  'Output changed. Close this dialog and review the latest output before confirming.':
+    '产出已变化，请关闭弹窗并重新查看最新结果后确认。',
+  'Back to review': '返回查看',
+  'Confirm acceptance': '确认验收通过',
+  'Current Action': '当前推进步骤',
+  'Current stage': '当前',
+  'Required checks': '必查项',
+  'Additional checks': '附加项',
+  'Pass condition': '通过条件',
+  Evidence: '验收证据',
+  'Observed result': '实际检查结果',
+  'Passed by user decision': '用户裁决通过',
+  'Use feedback as user decision to pass this item':
+    '用当前反馈明确裁决此项通过',
+  'No fixed checklist. Define it before execution.':
+    '尚无固定验收清单，请在执行前补齐。',
+  'Historical report without a fixed checklist; rerun against confirmed criteria.':
+    '本历史轮次没有固定清单，不能据此判定新清单通过。',
+  'Agent-reported checks': 'Agent 自检结果',
+  'Remaining work': '尚未完成',
+  'Observed file and Git changes': '已检测到的文件与 Git 变更',
+  'Self-checks are not acceptance. Canceling does not revert changes.':
+    '自检不等于验收；取消不会撤销已产生的变更。',
+  'Feedback for this Action': '针对这一步的反馈',
+  'Additional Action instructions': '这一步的补充要求',
+  'Add requirements for this step, or leave empty to follow the confirmed Plan.':
+    '补充这一步的要求，也可以留空，按已确认计划执行。',
+  'Starting runs the Agent with project write access. Only this Action runs; you decide acceptance. GitHub merge is not monitored yet.':
+    '开始后 Agent 可以修改项目文件，只执行当前步骤，由你验收。暂不自动同步 GitHub 合并状态。',
+  'Claude can edit project files; commands requiring approval may return blocked in this non-interactive run.':
+    'Claude 可以编辑项目文件；需要额外批准的命令可能返回阻塞说明。',
+  'Continue this Action': '继续修改这一步',
+  'Start this Action': '开始执行这一步',
+  'Accept this output': '验收当前产出',
+  passed: '通过',
+  failed: '失败',
+  'not-run': '未执行',
   'Custom model…': '自定义模型…',
   'Custom model ID': '自定义模型 ID',
   'Previously selected': '此前选择',

@@ -1,0 +1,1218 @@
+'use client';
+
+import { useState, type CSSProperties } from 'react';
+import {
+  unverifiedDeliveryRefs,
+  hasUnsupportedAppArtifact,
+  hasReviewableReport,
+} from '@/lib/just-do-it-result-display';
+import { CheckDetails } from '@/components/check-details';
+import { assessRequiredChecks, splitChecks } from '@/lib/just-do-it-checklist';
+import {
+  LoaderCircle,
+  Check,
+  ChevronRight,
+  GitPullRequest,
+  RefreshCw,
+  FolderOpen,
+  GitBranch,
+  SlidersHorizontal,
+} from 'lucide-react';
+import { AgentProfileSelector } from '@/components/agent-profile-selector';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { useUiText } from '@/components/ui-language-provider';
+import type { PlanningCard } from '@/lib/just-do-it-planning-service';
+import type { ActionContract } from '@/lib/just-do-it-harness';
+import type { AgentProfile } from '@/lib/agent-profile';
+import type { GitHubPullRequest } from '@/lib/github-delivery';
+
+export function JustDoItAction({
+  projectId,
+  card,
+  action,
+  onChange,
+}: {
+  projectId: string;
+  card: PlanningCard;
+  action: ActionContract;
+  onChange: (card: PlanningCard) => void;
+}) {
+  const { t } = useUiText();
+  const [instruction, setInstruction] = useState('');
+  const [editingFeedback, setEditingFeedback] = useState(false);
+  const [controlPanel, setControlPanel] = useState<
+    'feedback' | 'settings' | null
+  >(null);
+  const [profile, setProfile] = useState<AgentProfile>(
+    card.execution?.profile ??
+      card.execution?.runs.at(-1)?.profile ??
+      card.run?.profile ?? { agent: 'codex', model: '', effort: '' },
+  );
+  const [pending, setPending] = useState(false);
+  const [preparingAcceptance, setPreparingAcceptance] = useState(false);
+  const [error, setError] = useState('');
+  const [acceptancePreview, setAcceptancePreview] = useState<{
+    runId: string;
+    revision: number;
+  } | null>(null);
+  const [stopPreview, setStopPreview] = useState<{
+    runId: string;
+    revision: number;
+  } | null>(null);
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetError, setResetError] = useState('');
+  const [resetPreview, setResetPreview] = useState<{
+    token: string;
+    path: string;
+    branch: string;
+    baseCommit: string;
+    repositoryUrl: string | null;
+  } | null>(null);
+  const history =
+    card.execution?.runs.filter((run) => run.actionId === action.id) ?? [];
+  const latest = history.at(-1);
+  const accepted =
+    card.execution?.acceptedActionIds.includes(action.id) ?? false;
+  const current = card.actions.find(
+    (item) => !card.execution?.acceptedActionIds.includes(item.id),
+  );
+  const running = card.execution?.runs.at(-1)?.status === 'running';
+  const enabled = current?.id === action.id && !pending && !running;
+
+  async function send(
+    operation:
+      | 'start'
+      | 'cancel'
+      | 'accept'
+      | 'refresh-github'
+      | 'recheck-output'
+      | 'override-check'
+      | 'open-workspace',
+    outputId = latest?.id,
+    initializeRepository = false,
+    criterionId?: string,
+  ) {
+    setPending(true);
+    setError('');
+    try {
+      const response = await fetch(`/api/projects/${projectId}/execution`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: operation,
+          cardId: card.id,
+          actionId: action.id,
+          expectedRevision: card.revision,
+          instruction,
+          profile,
+          outputId,
+          initializeRepository,
+          criterionId,
+          note: instruction,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
+      onChange(data.card);
+      if (operation === 'start') {
+        setEditingFeedback(false);
+        setInstruction('');
+        setControlPanel(null);
+      }
+      if (operation === 'accept') setAcceptancePreview(null);
+      if (operation === 'cancel') setStopPreview(null);
+      return data.card as PlanningCard;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Execution failed.');
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function prepareAcceptance() {
+    if (!latest || pending || preparingAcceptance) return;
+    setPreparingAcceptance(true);
+    try {
+      const updated = latest.github
+        ? await send('refresh-github', latest.id)
+        : card;
+      if (updated) {
+        setError('');
+        setAcceptancePreview({ runId: latest.id, revision: updated.revision });
+      }
+    } finally {
+      setPreparingAcceptance(false);
+    }
+  }
+
+  async function resetCard(token?: string) {
+    setResetOpen(true);
+    setPending(true);
+    setResetError('');
+    try {
+      const response = await fetch(`/api/projects/${projectId}/execution`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: token ? 'reset' : 'preview-reset',
+          cardId: card.id,
+          expectedRevision: card.revision,
+          token,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
+      if (data.preview) setResetPreview(data.preview);
+      if (data.card) {
+        onChange(data.card);
+        setInstruction('');
+        setResetPreview(null);
+        setResetOpen(false);
+      }
+    } catch (err) {
+      setResetPreview(null);
+      setResetError(err instanceof Error ? err.message : 'Reset failed.');
+    } finally {
+      setPending(false);
+    }
+  }
+
+  const requiredAssessment = assessRequiredChecks(
+    latest?.acceptanceChecklist,
+    latest?.result?.checks ?? [],
+    card.execution?.acceptanceOverrides?.[action.id],
+  );
+  const requiredPassed = requiredAssessment.passed;
+  const additionalChecks =
+    latest?.result && latest.acceptanceChecklist
+      ? splitChecks(
+          latest.acceptanceChecklist,
+          latest.result.checks,
+          latest.result.additionalChecks,
+        ).additional
+      : [];
+  const previewChanged =
+    acceptancePreview &&
+    (acceptancePreview.revision !== card.revision ||
+      acceptancePreview.runId !== latest?.id);
+  const nextAction =
+    card.actions[card.actions.findIndex((item) => item.id === action.id) + 1];
+  const stage = accepted
+    ? 1
+    : hasReviewableReport(latest) && requiredPassed
+      ? 1
+      : 0;
+  const currentStatus = accepted
+    ? 'Verified'
+    : latest?.status === 'running'
+      ? 'Agent running'
+      : hasReviewableReport(latest)
+        ? requiredPassed
+          ? 'Ready to verify'
+          : 'Needs your input'
+        : latest?.status === 'failed'
+          ? 'Execution failed'
+          : latest
+            ? 'Needs your input'
+            : 'Ready to start';
+  return (
+    <section className="mt-6 space-y-4 border-t border-border pt-5">
+      <output className="block text-sm font-medium">
+        {t('Current status')}: {t(currentStatus)}
+      </output>
+      <div className="grid grid-cols-2 gap-2 text-xs">
+        {['Execution phase', 'Acceptance phase'].map((label, index) => (
+          <div
+            key={label}
+            aria-current={!accepted && index === stage ? 'step' : undefined}
+            className={`flex items-center gap-1.5 border-t-2 px-2 py-2 ${index === stage && !accepted ? 'border-blue-500 bg-blue-500/10 font-semibold text-blue-600 dark:text-blue-400' : index < stage || accepted ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400' : 'border-border text-muted-foreground'}`}
+          >
+            {index < stage || accepted ? (
+              <Check aria-hidden="true" className="size-3.5 shrink-0" />
+            ) : (
+              String(index + 1).padStart(2, '0')
+            )}{' '}
+            · {t(label)}
+            {index === stage && !accepted && (
+              <span className="ml-auto rounded bg-blue-500/15 px-1 py-0.5 text-[10px]">
+                {t('Current stage')}
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+      {card.execution?.workspace && (
+        <div className="space-y-3 rounded-lg border border-border p-3 text-xs">
+          <div className="flex items-center justify-between gap-3">
+            <p className="font-medium">{t('Card workspace')}</p>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={pending}
+              onClick={() => void send('open-workspace')}
+            >
+              <FolderOpen className="size-3.5" />
+              {t('Open workspace folder')}
+            </Button>
+          </div>
+          <dl className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-2">
+            <dt className="text-muted-foreground">{t('Workspace path')}</dt>
+            <dd className="min-w-0 break-all font-mono leading-5">
+              {card.execution.workspace.path}
+            </dd>
+            <dt className="flex items-center gap-1 text-muted-foreground">
+              <GitBranch className="size-3.5" />
+              {t('Branch')}
+            </dt>
+            <dd className="min-w-0 break-all font-mono leading-5">
+              {card.execution.workspace.branch}
+            </dd>
+          </dl>
+          <p className="text-muted-foreground">
+            {t(
+              'Shared by this Card’s Actions. Main receives changes through PR merges.',
+            )}
+          </p>
+          {card.execution.workspaceBackups?.at(-1) && (
+            <p className="break-all">
+              {t('Previous workspace backup')}:{' '}
+              {card.execution.workspaceBackups.at(-1)!.path}
+            </p>
+          )}
+        </div>
+      )}
+      {card.execution?.git && (
+        <p className="text-xs text-muted-foreground">
+          {t('Local Git baseline')}:{' '}
+          <code>{card.execution.git.baseline.slice(0, 8)}</code> ·{' '}
+          {t('App-owned history; separate from repository commits and PRs.')}
+        </p>
+      )}
+      {current?.id !== action.id && !accepted && (
+        <p className="text-sm text-muted-foreground">
+          {t('Accept earlier Actions before starting this step.')}
+        </p>
+      )}
+      {history.length > 0 && (
+        <div className="space-y-3">
+          {history.map((run, index) => (
+            <details
+              key={run.id}
+              open={run.id === latest?.id}
+              className="group/round rounded-xl border border-border p-4"
+            >
+              <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 text-sm font-medium [&::-webkit-details-marker]:hidden">
+                <ChevronRight
+                  aria-hidden="true"
+                  className="size-4 shrink-0 text-muted-foreground transition-transform group-open/round:rotate-90"
+                />
+                <span className="mr-auto">
+                  {t('Round')} {index + 1} ·{' '}
+                  {t(
+                    accepted && run.id === latest?.id
+                      ? 'Verified'
+                      : run.status === 'running'
+                        ? 'Agent running'
+                        : run.status === 'canceled'
+                          ? 'Canceled'
+                          : hasReviewableReport(run)
+                            ? assessRequiredChecks(
+                                run.acceptanceChecklist,
+                                run.result?.checks ?? [],
+                                run.id === latest?.id
+                                  ? card.execution?.acceptanceOverrides?.[
+                                      action.id
+                                    ]
+                                  : undefined,
+                              ).passed
+                              ? 'Ready to verify'
+                              : 'Needs your input'
+                            : run.status === 'failed'
+                              ? 'Execution failed'
+                              : 'Needs your input',
+                  )}
+                </span>
+                {run.status !== 'running' && (
+                  <span className="flex flex-wrap items-center gap-1.5 text-xs">
+                    {run.github?.pullRequests.map((pr) => (
+                      <PullRequestChip
+                        key={pr.url}
+                        pr={pr}
+                        stale={Boolean(run.github?.error)}
+                      />
+                    ))}
+                    {!run.github?.pullRequests.length && (
+                      <span className="text-muted-foreground">
+                        {t('No PR')}
+                      </span>
+                    )}
+                    {run.github && (
+                      <button
+                        type="button"
+                        disabled={pending || running}
+                        aria-label={t('Refresh GitHub status')}
+                        title={
+                          run.github.error
+                            ? t(run.github.error)
+                            : t('Refresh GitHub status')
+                        }
+                        className="rounded-md p-1.5 text-muted-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-50"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          void send('refresh-github', run.id);
+                        }}
+                      >
+                        <RefreshCw aria-hidden="true" className="size-3.5" />
+                      </button>
+                    )}
+                  </span>
+                )}
+              </summary>
+              <details className="mt-3 rounded-lg bg-muted/40 px-3 py-2 text-xs">
+                <summary className="cursor-pointer font-medium text-muted-foreground">
+                  {t('Run information')}
+                </summary>
+                <dl className="mt-3 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2">
+                  <dt className="text-muted-foreground">Agent</dt>
+                  <dd>
+                    {run.profile.agent} ·{' '}
+                    {run.profile.model || t('Agent default')} ·{' '}
+                    {run.profile.effort || t('Agent default')}
+                  </dd>
+                  <dt className="text-muted-foreground">
+                    {t('Execution permissions')}
+                  </dt>
+                  <dd>
+                    {run.executionAccess
+                      ? t(run.executionAccess)
+                      : t('Not recorded')}
+                  </dd>
+                  <dt className="text-muted-foreground">{t('Run started')}</dt>
+                  <dd>{run.startedAt}</dd>
+                  {run.commit && (
+                    <>
+                      <dt className="text-muted-foreground">
+                        {t('Local version')}
+                      </dt>
+                      <dd className="flex flex-wrap gap-2">
+                        <code>{run.commit.slice(0, 8)}</code>
+                        <a
+                          className="underline underline-offset-4"
+                          href={`/api/projects/${projectId}/execution-history?cardId=${card.id}&runId=${run.id}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {t('View version diff')}
+                        </a>
+                      </dd>
+                    </>
+                  )}
+                </dl>
+                {run.input && (
+                  <div className="mt-3 border-t border-border pt-3">
+                    <p className="mb-1 font-medium">{t('Your input')}</p>
+                    <p className="whitespace-pre-wrap text-muted-foreground">
+                      {run.input}
+                    </p>
+                  </div>
+                )}
+              </details>
+              {run.status === 'running' && (
+                <div className="mt-4 flex items-center gap-3">
+                  <LoaderCircle className="size-4 animate-spin text-blue-500" />
+                  <span className="text-sm">
+                    {run.profile.agent === 'codex' ? 'Codex' : 'Claude'} ·{' '}
+                    {t('Agent running')}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={pending}
+                    onClick={() => {
+                      setError('');
+                      setStopPreview({
+                        runId: run.id,
+                        revision: card.revision,
+                      });
+                    }}
+                  >
+                    {t('Stop execution')}
+                  </Button>
+                </div>
+              )}
+              {run.error && !run.evidenceErrors && (
+                <p className="mt-3 text-sm text-destructive">{run.error}</p>
+              )}
+              {run.result && (
+                <>
+                  <p className="mt-3 whitespace-pre-wrap text-sm leading-7">
+                    {run.result.summary}
+                  </p>
+                  <div className="mt-4 space-y-3">
+                    <h4 className="text-sm font-medium">
+                      {t('Agent-reported checks')}
+                    </h4>
+                    <h5 className="text-xs font-semibold">
+                      {t('Required checks')}
+                    </h5>
+                    {!run.acceptanceChecklist && (
+                      <p className="text-xs text-muted-foreground">
+                        {t(
+                          'Historical report without a fixed checklist; rerun against confirmed criteria.',
+                        )}
+                      </p>
+                    )}
+                    {assessRequiredChecks(
+                      run.acceptanceChecklist,
+                      run.result.checks,
+                      run.id === latest?.id
+                        ? card.execution?.acceptanceOverrides?.[action.id]
+                        : undefined,
+                    ).items.map((item) => (
+                      <CheckDetails
+                        key={item.criterion.id}
+                        title={item.criterion.criterion}
+                        status={item.status}
+                      >
+                        <p className="text-xs text-muted-foreground">
+                          {item.criterion.id}
+                        </p>
+                        <p>
+                          {t('Pass condition')}: {item.criterion.passCondition}
+                        </p>
+                        <p>
+                          {t('Observed result')}:{' '}
+                          {t(item.observed?.status ?? 'not-run')} ·{' '}
+                          {item.observed?.summary}
+                        </p>
+                        {item.observed?.evidenceRefs.map((ref, i) => (
+                          <p
+                            key={i}
+                            className="break-all text-xs text-muted-foreground"
+                          >
+                            {ref}
+                          </p>
+                        ))}
+                        {item.override && (
+                          <p>
+                            {t('Passed by user decision')}: {item.override.note}{' '}
+                            · {item.override.recordedAt}
+                          </p>
+                        )}
+                        {item.status !== 'passed' &&
+                          run.id === latest?.id &&
+                          !accepted &&
+                          run.status !== 'running' && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={!enabled || !instruction.trim()}
+                              onClick={() =>
+                                void send(
+                                  'override-check',
+                                  run.id,
+                                  false,
+                                  item.criterion.id,
+                                )
+                              }
+                            >
+                              {t(
+                                'Use feedback as user decision to pass this item',
+                              )}
+                            </Button>
+                          )}
+                      </CheckDetails>
+                    ))}
+                    <h5 className="text-xs font-semibold">
+                      {run.acceptanceChecklist
+                        ? `${t('Additional checks')} · non-blocker`
+                        : t('Historical checks (not classified)')}
+                    </h5>
+                    {(run.acceptanceChecklist
+                      ? splitChecks(
+                          run.acceptanceChecklist,
+                          run.result.checks,
+                          run.result.additionalChecks,
+                        ).additional
+                      : [
+                          ...run.result.checks,
+                          ...(run.result.additionalChecks ?? []),
+                        ]
+                    ).map((check, i) => (
+                      <CheckDetails
+                        key={i}
+                        title={check.summary}
+                        status={check.status}
+                        nonBlocking={Boolean(run.acceptanceChecklist)}
+                      >
+                        <p>
+                          {t('Observed result')}: {t(check.status)}
+                        </p>
+                        {run.acceptanceChecklist && (
+                          <p className="text-xs text-muted-foreground">
+                            non-blocker
+                          </p>
+                        )}
+                        {check.evidenceRefs.map((ref, j) => (
+                          <p
+                            key={j}
+                            className="break-all text-xs text-muted-foreground"
+                          >
+                            {ref}
+                          </p>
+                        ))}
+                      </CheckDetails>
+                    ))}
+                  </div>
+                </>
+              )}
+              {run.evidenceErrors?.length ||
+              run.unverifiedCheckRefs?.length ||
+              run.github?.error ? (
+                <details className="mt-4 border-t border-border pt-3 text-xs">
+                  <summary className="cursor-pointer text-muted-foreground">
+                    {t('System diagnostics')}
+                    {run.evidenceErrors?.length
+                      ? ` · ${t('Verification note')}`
+                      : ''}
+                  </summary>
+                  <div className="mt-2">
+                    {run.github?.error && (
+                      <p className="text-amber-700 dark:text-amber-400">
+                        {t(run.github.error)}
+                      </p>
+                    )}
+                    {run.evidenceErrors ? (
+                      <section className="mt-3 space-y-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <h4 className="font-medium text-amber-600 dark:text-amber-400">
+                            {t('System artifact verification note')}
+                          </h4>
+                          {run.id === card.execution?.runs.at(-1)?.id &&
+                            run.status === 'failed' &&
+                            !accepted &&
+                            !hasUnsupportedAppArtifact(run) && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 gap-1.5 border-amber-500/30 bg-transparent px-2 text-xs text-amber-700 hover:bg-amber-500/10 dark:text-amber-400"
+                                disabled={pending || running}
+                                title={t(
+                                  'Recheck saved report without rerunning Agent',
+                                )}
+                                onClick={() =>
+                                  void send('recheck-output', run.id)
+                                }
+                              >
+                                <RefreshCw
+                                  aria-hidden="true"
+                                  className="size-3"
+                                />
+                                {t('Retry verification')}
+                              </Button>
+                            )}
+                        </div>
+                        <p>
+                          {t('Agent-reported required checks')}:{' '}
+                          {
+                            assessRequiredChecks(
+                              run.acceptanceChecklist,
+                              run.result?.checks ?? [],
+                              card.execution?.acceptanceOverrides?.[action.id],
+                            ).items.filter((item) => item.status === 'passed')
+                              .length
+                          }
+                          /{run.acceptanceChecklist?.items.length ?? 0}
+                        </p>
+                        <p className="text-muted-foreground">
+                          {t(
+                            'The system has not verified these delivery references:',
+                          )}
+                        </p>
+                        {hasUnsupportedAppArtifact(run) && (
+                          <p className="text-xs text-amber-700 dark:text-amber-400">
+                            {t('App bundle verification is not supported yet.')}
+                          </p>
+                        )}
+                        <ul className="space-y-1 break-all font-mono text-xs">
+                          {unverifiedDeliveryRefs(run).map((ref) => (
+                            <li key={ref}>{ref}</li>
+                          ))}
+                        </ul>
+                        <p className="text-xs text-muted-foreground">
+                          {t(
+                            'Artifact verification notes do not block acceptance when required checks pass.',
+                          )}
+                        </p>
+                      </section>
+                    ) : (
+                      run.error && (
+                        <p className="mt-3 whitespace-pre-wrap text-sm text-destructive">
+                          {run.error}
+                        </p>
+                      )
+                    )}
+                    {run.evidenceErrors && (
+                      <details className="mt-3 text-xs">
+                        <summary>{t('Evidence validation details')}</summary>
+                        <ul className="mt-2 space-y-1 break-all">
+                          {run.evidenceErrors.map((message) => (
+                            <li key={message}>{message}</li>
+                          ))}
+                        </ul>
+                      </details>
+                    )}
+                    {Boolean(run.unverifiedCheckRefs?.length) && (
+                      <details className="mt-3 text-xs text-muted-foreground">
+                        <summary>{t('Unverified check references')}</summary>
+                        <p className="mt-2">
+                          {t(
+                            'These references were reported by the Agent; the host has not verified the commands or external results.',
+                          )}
+                        </p>
+                        <ul className="mt-2 space-y-1 break-all">
+                          {run.unverifiedCheckRefs!.map((ref) => (
+                            <li key={ref}>{ref}</li>
+                          ))}
+                        </ul>
+                      </details>
+                    )}
+                  </div>
+                </details>
+              ) : null}
+              {run.observedRefs.some(
+                (ref) => !ref.startsWith('checkpoint:'),
+              ) && (
+                <details className="mt-4">
+                  <summary className="cursor-pointer text-xs text-muted-foreground">
+                    {t('Observed file and Git changes')} ·{' '}
+                    {
+                      run.observedRefs.filter(
+                        (ref) => !ref.startsWith('checkpoint:'),
+                      ).length
+                    }
+                  </summary>
+                  <ul className="mt-2 space-y-1 break-all font-mono text-xs">
+                    {run.observedRefs
+                      .filter((ref) => !ref.startsWith('checkpoint:'))
+                      .map((ref) => (
+                        <li key={ref}>{ref}</li>
+                      ))}
+                  </ul>
+                </details>
+              )}
+            </details>
+          ))}
+        </div>
+      )}
+      {!accepted && current?.id === action.id && (
+        <div
+          data-action-controls
+          style={
+            {
+              colorScheme: 'dark',
+              '--background': '#18181b',
+              '--foreground': '#fafafa',
+              '--primary': '#fafafa',
+              '--primary-foreground': '#18181b',
+              '--secondary': '#3f3f46',
+              '--secondary-foreground': '#fafafa',
+              '--muted': '#27272a',
+              '--muted-foreground': '#a1a1aa',
+              '--border': '#52525b',
+              '--input': '#52525b',
+              '--ring': '#a1a1aa',
+            } as CSSProperties
+          }
+          className="sticky bottom-3 z-20 rounded-xl border border-border bg-background text-foreground shadow-xl"
+        >
+          <div
+            data-control-bar
+            className="flex min-h-16 flex-wrap items-center justify-between gap-3 p-3"
+          >
+            <div className="min-w-0 text-sm">
+              <p className="font-medium">
+                {t(
+                  editingFeedback ? 'Enter change instructions' : currentStatus,
+                )}
+              </p>
+              {!editingFeedback && latest?.acceptanceChecklist && (
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {t('Required checks')} ·{' '}
+                  {
+                    requiredAssessment.items.filter(
+                      (item) => item.status === 'passed',
+                    ).length
+                  }
+                  /{requiredAssessment.items.length}
+                </p>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                variant={controlPanel === 'settings' ? 'secondary' : 'ghost'}
+                aria-expanded={controlPanel === 'settings'}
+                aria-controls={`controls-${action.id}`}
+                onClick={() =>
+                  setControlPanel(
+                    controlPanel === 'settings'
+                      ? editingFeedback
+                        ? 'feedback'
+                        : null
+                      : 'settings',
+                  )
+                }
+              >
+                <SlidersHorizontal className="size-4" />
+                {profile.agent === 'codex' ? 'Codex' : 'Claude'} ·{' '}
+                {profile.model || t('Agent default')} ·{' '}
+                {profile.effort || t('Agent default')}
+              </Button>
+              {editingFeedback ? (
+                <>
+                  <Button
+                    variant="outline"
+                    disabled={pending}
+                    onClick={() => {
+                      setEditingFeedback(false);
+                      setControlPanel(null);
+                      setInstruction('');
+                      setError('');
+                    }}
+                  >
+                    {t('Cancel changes')}
+                  </Button>
+                  <Button
+                    disabled={!enabled || !instruction.trim()}
+                    onClick={() => void send('start')}
+                  >
+                    {t('Confirm changes')}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button
+                    variant={
+                      hasReviewableReport(latest) && requiredPassed
+                        ? 'outline'
+                        : 'default'
+                    }
+                    disabled={!enabled}
+                    onClick={() => {
+                      if (history.length) {
+                        setError('');
+                        setEditingFeedback(true);
+                        setControlPanel('feedback');
+                      } else {
+                        void send('start');
+                      }
+                    }}
+                  >
+                    {t(
+                      history.length
+                        ? 'Continue this Action'
+                        : 'Start this Action',
+                    )}
+                  </Button>
+                  {latest && latest.status !== 'running' && latest.result && (
+                    <Button
+                      variant={
+                        hasReviewableReport(latest) && requiredPassed
+                          ? 'default'
+                          : 'outline'
+                      }
+                      disabled={!enabled || preparingAcceptance}
+                      onClick={() => void prepareAcceptance()}
+                    >
+                      {preparingAcceptance ? (
+                        <LoaderCircle className="animate-spin" />
+                      ) : (
+                        <Check />
+                      )}
+                      {t('Accept this output')}
+                    </Button>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+          {controlPanel && (
+            <div
+              id={`controls-${action.id}`}
+              className="max-h-[45dvh] space-y-3 overflow-y-auto rounded-b-xl border-t border-border bg-muted/50 p-4"
+            >
+              {controlPanel === 'feedback' ? (
+                <label className="block text-sm">
+                  <span className="sr-only">
+                    {t(
+                      history.length
+                        ? 'Feedback for this Action'
+                        : 'Additional Action instructions',
+                    )}
+                  </span>
+                  <Textarea
+                    value={instruction}
+                    onChange={(event) => setInstruction(event.target.value)}
+                    maxLength={20000}
+                    disabled={pending || running}
+                    placeholder={t(
+                      'Add requirements for this step, or leave empty to follow the confirmed Plan.',
+                    )}
+                  />
+                </label>
+              ) : (
+                <>
+                  <div>
+                    <h4 className="text-sm font-medium">
+                      {t('Execution settings')}
+                    </h4>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {t(
+                        'Applies to the next execution, not the recorded round.',
+                      )}
+                    </p>
+                  </div>
+                  <AgentProfileSelector
+                    value={profile}
+                    onChange={setProfile}
+                    disabled={pending || running}
+                    label="Execution profile"
+                  />
+                  {profile.agent === 'codex' && (
+                    <p className="text-xs text-muted-foreground">
+                      {t(
+                        'Codex execution follows your local Full Access or read-only choice. Full Access relies on worktree and PR discipline, not an OS write barrier around main.',
+                      )}
+                    </p>
+                  )}
+                  {profile.agent === 'claude' && (
+                    <p className="text-xs text-muted-foreground">
+                      {t(
+                        'Claude can edit project files; commands requiring approval may return blocked in this non-interactive run.',
+                      )}
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+      {card.execution?.workspace &&
+        !card.execution.acceptedActionIds.length &&
+        latest &&
+        (['failed', 'canceled'].includes(latest.status) ||
+          (latest.status === 'succeeded' &&
+            latest.result?.outcome !== 'delivered')) && (
+          <Button
+            variant="outline"
+            disabled={pending || running}
+            onClick={() => {
+              setResetPreview(null);
+              void resetCard();
+            }}
+          >
+            {t('Restart this Card from its base')}
+          </Button>
+        )}
+      <Dialog
+        open={Boolean(stopPreview)}
+        onOpenChange={(open) => {
+          if (!open && !pending) setStopPreview(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t('Stop execution?')}</DialogTitle>
+            <DialogDescription>
+              {t(
+                'Stopping keeps the current code and files. It does not restore an earlier version.',
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          {error && (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              disabled={pending}
+              onClick={() => setStopPreview(null)}
+            >
+              {t('Keep running')}
+            </Button>
+            <Button
+              disabled={
+                pending ||
+                !running ||
+                stopPreview?.runId !== latest?.id ||
+                stopPreview?.revision !== card.revision
+              }
+              onClick={() => void send('cancel', stopPreview?.runId)}
+            >
+              {t('Stop execution')}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={Boolean(acceptancePreview)}
+        onOpenChange={(open) => {
+          if (!open && !pending) setAcceptancePreview(null);
+        }}
+      >
+        <DialogContent className="max-h-[85dvh] overflow-auto sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>{t('Confirm Action acceptance')}</DialogTitle>
+            <DialogDescription>
+              {t(
+                'Review this output, required checks and any user overrides before confirming.',
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 text-sm">
+            <section className="space-y-1">
+              <p className="font-medium">
+                {action.title} · {t('Round')} {history.length}
+              </p>
+              <p className="whitespace-pre-wrap text-muted-foreground">
+                {latest?.result?.summary}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {t('Code revision')}:{' '}
+                <code>
+                  {latest?.github?.outputHead?.slice(0, 12) ??
+                    t('Not recorded')}
+                </code>
+              </p>
+            </section>
+            <section className="space-y-2 rounded-lg border border-border p-3">
+              <p>
+                {t('Required checks')}:{' '}
+                {
+                  requiredAssessment.items.filter(
+                    (item) => item.status === 'passed',
+                  ).length
+                }
+                /{requiredAssessment.items.length} ·{' '}
+                {t(requiredPassed ? 'passed' : 'not-run')}
+              </p>
+              {requiredAssessment.items
+                .filter((item) => item.override)
+                .map((item) => (
+                  <p
+                    key={item.criterion.id}
+                    className="text-amber-600 dark:text-amber-400"
+                  >
+                    {t('Passed by user decision')} · {item.criterion.criterion}:{' '}
+                    {item.override!.note} ({t('Observed result')}:{' '}
+                    {t(item.observed?.status ?? 'not-run')})
+                  </p>
+                ))}
+            </section>
+            {additionalChecks.some((check) => check.status !== 'passed') && (
+              <section className="space-y-2">
+                <h4 className="font-medium">
+                  {t('Additional checks')} · non-blocker
+                </h4>
+                <ul className="list-disc space-y-1 pl-5 text-amber-600 dark:text-amber-400">
+                  {additionalChecks
+                    .filter((check) => check.status !== 'passed')
+                    .map((check, index) => (
+                      <li key={index}>{check.summary}</li>
+                    ))}
+                </ul>
+              </section>
+            )}
+            {latest?.evidenceErrors && (
+              <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-amber-700 dark:text-amber-400">
+                {t(
+                  'Artifact verification notes do not block acceptance when required checks pass.',
+                )}
+              </p>
+            )}
+            <section className="space-y-1">
+              <h4 className="font-medium">PR</h4>
+              {latest?.github?.pullRequests.length ? (
+                latest.github.pullRequests.map((pr) => (
+                  <PullRequestChip
+                    key={pr.url}
+                    pr={pr}
+                    stale={Boolean(latest.github?.error)}
+                  />
+                ))
+              ) : (
+                <p className="text-muted-foreground">{t('No PR')}</p>
+              )}
+              {latest?.github?.error && (
+                <p className="text-amber-600 dark:text-amber-400">
+                  {t('Stale status')}: {t(latest.github.error)}
+                </p>
+              )}
+            </section>
+            <p className="rounded-lg bg-muted p-3">
+              {nextAction
+                ? `${t('Acceptance unlocks the next Action')}: ${nextAction.title}.`
+                : t('This is the final Action in this Plan.')}{' '}
+              {t(
+                'Nothing starts automatically. Acceptance does not merge a PR.',
+              )}
+            </p>
+            {!requiredPassed && (
+              <p className="text-amber-700 dark:text-amber-400">
+                {t(
+                  'Required checks are incomplete. Review them before confirming acceptance.',
+                )}
+              </p>
+            )}
+            {previewChanged && (
+              <p className="text-destructive">
+                {t(
+                  'Output changed. Close this dialog and review the latest output before confirming.',
+                )}
+              </p>
+            )}
+            {error && (
+              <p role="alert" className="text-destructive">
+                {error}
+              </p>
+            )}
+          </div>
+          <div className="sticky bottom-0 flex justify-end gap-2 border-t border-border bg-background pt-3">
+            <Button
+              variant="outline"
+              disabled={pending}
+              onClick={() => setAcceptancePreview(null)}
+            >
+              {t('Back to review')}
+            </Button>
+            <Button
+              disabled={
+                !enabled ||
+                !requiredPassed ||
+                !hasReviewableReport(latest) ||
+                Boolean(previewChanged)
+              }
+              onClick={() => void send('accept', acceptancePreview?.runId)}
+            >
+              {t('Confirm acceptance')}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={resetOpen}
+        onOpenChange={(open) => {
+          if (!pending) setResetOpen(open);
+        }}
+      >
+        <DialogContent className="max-h-[85dvh] overflow-auto sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>{t('Restart this Card from its base')}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm">
+            {t(
+              'Keep the confirmed Plan. Preserve this worktree and branch as a backup, then create a fresh Card worktree at its original base. No Action starts automatically.',
+            )}
+          </p>
+          {resetPreview && (
+            <>
+              <p className="break-all text-xs">
+                {resetPreview.path}
+                <br />
+                {resetPreview.branch}
+                <br />
+                {t('Base commit')}: {resetPreview.baseCommit.slice(0, 8)}
+              </p>
+              <p className="text-sm">
+                {t(
+                  'Main, GitHub repositories, PRs and installed apps are not reverted by this operation.',
+                )}
+              </p>
+              {resetPreview.repositoryUrl && (
+                <p className="break-all text-xs">
+                  {resetPreview.repositoryUrl}
+                </p>
+              )}
+              <Button
+                disabled={pending}
+                onClick={() => void resetCard(resetPreview.token)}
+              >
+                {t('Back up and restart Card workspace')}
+              </Button>
+            </>
+          )}
+          {pending && <p className="text-sm">{t('Working…')}</p>}
+          {resetError && (
+            <p role="alert" className="text-sm text-destructive">
+              {resetError}
+            </p>
+          )}
+          <Button
+            variant="outline"
+            disabled={pending}
+            onClick={() => setResetOpen(false)}
+          >
+            {t('Cancel')}
+          </Button>
+        </DialogContent>
+      </Dialog>
+      {error === 'EMPTY_REPOSITORY_CONFIRMATION_REQUIRED' && (
+        <div className="space-y-2 rounded-lg border border-border p-3 text-sm">
+          <p>
+            {t(
+              'This empty project needs a local Git baseline. Confirm creating an empty commit on local main; no files are committed and nothing is pushed to GitHub.',
+            )}
+          </p>
+          <Button
+            disabled={pending}
+            onClick={() => void send('start', latest?.id, true)}
+          >
+            {t('Create empty local main baseline and start')}
+          </Button>
+        </div>
+      )}
+      {error && error !== 'EMPTY_REPOSITORY_CONFIRMATION_REQUIRED' && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
+    </section>
+  );
+}
+
+function PullRequestChip({
+  pr,
+  stale,
+}: {
+  pr: GitHubPullRequest;
+  stale: boolean;
+}) {
+  const { t } = useUiText();
+  return (
+    <a
+      href={pr.url}
+      target="_blank"
+      rel="noreferrer"
+      onClick={(event) => event.stopPropagation()}
+      title={pr.title}
+      className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring ${stale ? 'border-amber-500/40 text-amber-500' : pr.state === 'MERGED' ? 'border-purple-500/30 text-purple-500' : pr.isDraft || pr.state === 'CLOSED' ? 'border-border text-muted-foreground' : 'border-blue-500/30 text-blue-500'}`}
+    >
+      <GitPullRequest aria-hidden="true" className="size-3.5" />#{pr.number} ·{' '}
+      {t(pr.isDraft && pr.state === 'OPEN' ? 'Draft' : pr.state)}
+      {stale && ` · ${t('Stale status')}`}
+    </a>
+  );
+}

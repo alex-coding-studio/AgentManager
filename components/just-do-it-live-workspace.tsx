@@ -1,9 +1,11 @@
 'use client';
 
 import Link from 'next/link';
+import { summarizeGitHub } from '@/lib/github-delivery-summary';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArrowLeft,
+  ArrowRight,
   Check,
   LoaderCircle,
   Pencil,
@@ -14,6 +16,7 @@ import {
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { AgentProfileSelector } from '@/components/agent-profile-selector';
+import { JustDoItAction } from '@/components/just-do-it-action';
 import {
   Dialog,
   DialogContent,
@@ -51,7 +54,7 @@ type Draft = {
 function initialDraft(card: PlanningCard): Draft {
   return {
     requirements: card.requirements,
-    feedback: card.run?.feedback ?? '',
+    feedback: '',
     profile: card.run?.profile ?? { agent: 'codex', model: '', effort: '' },
     files: [],
     retainRefs: card.resources.map((item) => item.ref),
@@ -120,6 +123,11 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
   const running = card?.run?.status === 'running';
   const busy = pending || reading || Boolean(running);
   const finalized = card?.plan?.status === 'finalized';
+  const currentActionId = finalized
+    ? card?.actions.find(
+        (action) => !card.execution?.acceptedActionIds.includes(action.id),
+      )?.id
+    : undefined;
   const scopedBusy = running && Boolean(card?.run?.targetId);
 
   function patchDraft(id: string, patch: Partial<Draft>) {
@@ -187,6 +195,7 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
     });
     if (saved) {
       patchDraft(card.id, {
+        feedback: '',
         files: [],
         contextRefs: [],
         retainRefs: saved.resources.map((item) => item.ref),
@@ -311,7 +320,7 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
             {t('Execution workspace')}
           </h1>
           <p className="mt-2 max-w-xl text-sm text-muted-foreground">
-            {t('Live planning · read-only Agent · execution not connected')}
+            {t('Plan together, execute one Action, then verify the output.')}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -375,19 +384,28 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
                     <span
                       className={cn(
                         'rounded-full px-2 py-1 text-[10px]',
-                        item.plan?.status === 'finalized'
+                        item.actions.length > 0 &&
+                          item.execution?.acceptedActionIds.length ===
+                            item.actions.length
                           ? 'bg-emerald-500/10 text-emerald-600'
                           : 'bg-secondary text-muted-foreground',
                       )}
                     >
                       {t(
-                        item.run?.status === 'running'
+                        item.run?.status === 'running' ||
+                          item.execution?.runs.at(-1)?.status === 'running'
                           ? 'Agent running'
-                          : item.plan?.status === 'finalized'
-                            ? 'Plan finalized'
-                            : item.run?.status === 'failed'
+                          : item.actions.length > 0 &&
+                              item.execution?.acceptedActionIds.length ===
+                                item.actions.length
+                            ? 'Verified'
+                            : item.execution?.runs.at(-1)?.result
                               ? 'Needs attention'
-                              : 'Planning',
+                              : item.plan?.status === 'finalized'
+                                ? 'Plan finalized'
+                                : item.run?.status === 'failed'
+                                  ? 'Needs attention'
+                                  : 'Planning',
                       )}
                     </span>
                   </div>
@@ -399,8 +417,24 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
                       ? `${t('Plan')} · ${item.plan.steps.length}`
                       : t('Not planned yet')}
                   </p>
+                  {Boolean(item.execution?.runs.some((run) => run.github)) && (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      GitHub ·{' '}
+                      {summarizeGitHub(item.execution!.runs)
+                        .map(
+                          ({ pr, stale }) =>
+                            `#${pr.number} ${t(pr.state)}${stale ? ` (${t('Stale status')})` : ''}`,
+                        )
+                        .join(' · ') ||
+                        t('No verified PR association for this output.')}
+                    </p>
+                  )}
                   <div className="mt-3 flex items-center justify-between border-t border-border pt-3 text-[10px] text-muted-foreground">
-                    <span>{t('Execution not connected')}</span>
+                    <span>
+                      {t('Completed Actions')} ·{' '}
+                      {item.execution?.acceptedActionIds.length ?? 0} /{' '}
+                      {item.actions.length}
+                    </span>
                     <span>
                       {view.sources.some(
                         (source) => source.uid === item.source.uid,
@@ -486,20 +520,23 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
                     <p className="mt-2 text-xs text-muted-foreground">
                       {t(
                         finalized
-                          ? 'Actions are ready. Execution is not connected yet.'
+                          ? 'Select the current Action to start. Later Actions unlock after acceptance.'
                           : 'Review each step, then confirm the entire plan to create Actions.',
                       )}
                     </p>
+                    {Boolean(card.execution?.runs.length) && (
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        {t(
+                          'Plan and acceptance criteria are locked after confirmation. User decisions remain separate.',
+                        )}
+                      </p>
+                    )}
                   </div>
                   <div className="flex gap-2">
                     {finalized ? (
-                      <Button
-                        variant="outline"
-                        disabled={busy}
-                        onClick={() => command('reopen')}
-                      >
-                        {t('Reopen plan')}
-                      </Button>
+                      <span className="text-xs text-muted-foreground">
+                        {t('Confirmed checklist locked')}
+                      </span>
                     ) : (
                       <>
                         <Button
@@ -554,6 +591,33 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
                           {String(index + 1).padStart(2, '0')}
                         </span>
                         <span className="text-sm leading-5">{step.title}</span>
+                        {card.execution?.acceptedActionIds.includes(
+                          step.id,
+                        ) && (
+                          <Check className="ml-auto size-4 shrink-0 text-emerald-500" />
+                        )}
+                        {card.execution?.runs.at(-1)?.actionId === step.id &&
+                          card.execution.runs.at(-1)?.status === 'running' && (
+                            <LoaderCircle className="ml-auto size-4 shrink-0 animate-spin text-blue-500" />
+                          )}
+                        {step.id === currentActionId &&
+                          card.execution?.runs.some(
+                            (run) => run.actionId === step.id,
+                          ) &&
+                          card.execution.runs.at(-1)?.status !== 'running' && (
+                            <span
+                              className="ml-auto shrink-0 text-blue-500"
+                              title={t('Current Action')}
+                            >
+                              <span className="sr-only">
+                                {t('Current Action')}
+                              </span>
+                              <ArrowRight
+                                aria-hidden="true"
+                                className="size-4"
+                              />
+                            </span>
+                          )}
                         {running && card.run?.targetId === step.id && (
                           <LoaderCircle className="ml-auto size-4 shrink-0 animate-spin" />
                         )}
@@ -594,6 +658,29 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
                             )}
                           </header>
                           <PlanningStepDetails step={selectedStep} />
+                          {finalized && (
+                            <JustDoItAction
+                              key={`${card.id}:${selectedStep.id}`}
+                              projectId={projectId}
+                              card={card}
+                              action={selectedStep}
+                              onChange={(updated) =>
+                                setView((old) =>
+                                  old
+                                    ? {
+                                        ...old,
+                                        cards: old.cards.map((item) =>
+                                          item.id === updated.id &&
+                                          item.revision <= updated.revision
+                                            ? updated
+                                            : item,
+                                        ),
+                                      }
+                                    : old,
+                                )
+                              }
+                            />
+                          )}
                         </>
                       ) : (
                         <>

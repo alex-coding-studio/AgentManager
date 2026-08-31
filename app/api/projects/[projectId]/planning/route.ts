@@ -1,5 +1,6 @@
 import { getProject } from '@/lib/project-registry';
 import { readContextBrowser } from '@/lib/product-context';
+import { executionService } from '@/lib/just-do-it-execution-service';
 import {
   planningService,
   readPlanningInstructions,
@@ -25,7 +26,14 @@ export async function GET(
       readContextBrowser(project),
     ]);
     return Response.json(
-      { cards, sources, instructions, folders },
+      {
+        cards: await Promise.all(
+          cards.map((card) => executionService.refresh(project, card)),
+        ),
+        sources,
+        instructions,
+        folders,
+      },
       { headers: { 'Cache-Control': 'no-store' } },
     );
   } catch (error) {

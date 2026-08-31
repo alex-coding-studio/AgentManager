@@ -2,8 +2,8 @@
 
 ## Status and document ownership
 
-Design discussion captured on 2026-08-29. Just Do It now has an isolated
-[interactive UI demo](JUST_DO_IT_DEMO.md), not an integrated execution workflow.
+Design discussion captured on 2026-08-29. Just Do It retains an isolated
+[interactive UI demo](JUST_DO_IT_DEMO.md) alongside the live workflow.
 On 2026-08-30, the user accepted the UI direction and froze its interaction
 baseline. It remains available in explicit Preview Mode while Harness contracts
 are discussed; real integration and task validation are subsequent work.
@@ -13,8 +13,16 @@ where noted; the frozen demo has not been updated to enforce them.
 An offline [Harness foundation](JUST_DO_IT_HARNESS.md) now provides phase prompts,
 request/result validation and a file-backed Card worklog. The subsequent
 [Planning integration](JUST_DO_IT_PLANNING.md) connects real read-only generation,
-adjustment and Finalize while retaining the isolated Preview. GitHub writes,
-Action execution and automatic Skill loading remain unconnected.
+adjustment and Finalize while retaining the isolated Preview. The first
+[Action execution integration](JUST_DO_IT_EXECUTION.md) adds project-file coding,
+durable outputs, feedback rounds, and explicit user acceptance. Card-owned local
+Git checkpoints now record a baseline and each execution round without touching
+the delivery repository's staging area. GitHub repository discovery, output PR association, and explicit state refresh are
+connected. Each Card now owns a persistent worktree; explicit backup-first restart
+is available for failed unaccepted Cards. Agent review, merged-delivery reversal,
+and Todo publication remain unconnected.
+Repository creation and PR publication remain instructions-driven execution,
+not automatic host operations.
 This document records the
 settled product intent and explicitly separates unresolved mechanics and
 deferred ideas. It does not authorize implementation or data migration.
@@ -22,6 +30,122 @@ deferred ideas. It does not authorize implementation or data migration.
 This document owns the Just Do It workflow. [DECOMPOSITION_MODEL.md](DECOMPOSITION_MODEL.md)
 owns the shared Formal Node and independent-operation model. [ROADMAP.md](ROADMAP.md)
 owns deferred work, including the exploratory local Git versioning proposal.
+
+## Draft-first delivery and fixed self-checks — latest user ruling
+
+The user changed the delivery order during HereItIsV2 dogfooding: provide a Draft
+PR as the early handoff artifact, perform the agreed self-checks, then mark the PR
+ready for review after every required check passes. A Draft lets the user inspect,
+comment or take over while work remains incomplete. User acceptance and merge are
+separate later decisions; neither is implied by Ready for review. This supersedes
+the earlier requirement to withhold every PR until UI acceptance in this workflow.
+
+The required self-check list must be fixed before evaluating the output and must
+map to the Action's agreed validation requirements and explicit user revisions.
+Each item needs an identity, a pass condition and expected evidence. The list is
+not a demand that the user write commands or implementation details. The Agent may
+choose suitable methods, but cannot silently add mandatory acceptance conditions.
+
+All required items passing means self-checks pass. Additional diagnostic probes
+must be reported separately and explicitly labeled `non-blocker`, including when
+the probe fails or is unsupported. The user decides whether those observations
+need action. During Plan adjustment, a proposed required item can be added before
+finalization; after finalization, additional findings remain non-blockers for this
+Action and may become separately agreed future work. Never falsify its result or use it to block the agreed delivery implicitly.
+
+The implementation now stores structured acceptance criteria on Plan Actions,
+validates them at finalization/start, and snapshots the checklist into each Round.
+Required results are matched by ID; missing, duplicate or unevidenced passing
+results cannot satisfy a criterion. Additional results render separately. Explicit
+user decisions are stored separately and do not rewrite actual check evidence.
+Legacy rounds without a checklist cannot establish new-checklist acceptance.
+
+Early Draft creation also needs a published branch with a real diff. Existing Git
+hooks and required publication gates must be reconciled with the new ordering;
+never implement Draft-first delivery by silently skipping those gates. The system
+must make this prerequisite explicit rather than leaving the user without any
+handoff artifact through repeated full execution Rounds.
+
+### Acceptance checklist authority — confirmed refinement
+
+Input and Output may remain directional descriptions while implementation details
+are still being discovered. Acceptance must not remain comparably vague. Every
+Action needs a detailed required acceptance checklist agreed before execution.
+Plan confirmation fixes that checklist; it is not generated after a Round finishes.
+
+Each required criterion has a stable ID, a concrete condition to establish, the
+expected passing result and the evidence needed to judge it. Commands and technical
+methods may be chosen by the Agent; observable success conditions may not be
+silently changed. Avoid umbrella items such as "everything works" or "tests pass"
+without identifying the behavior, scope and result they are meant to establish.
+
+Every Round receives the same confirmed checklist version and reports each required
+criterion by ID as passed, failed or not run, with evidence. Missing criteria are
+incomplete, not implicitly passed. Round-specific feedback narrows the work to do;
+it does not erase the remaining Action criteria or turn completion of one repair
+into completion of the entire Action.
+
+Additional checks are allowed, but belong to an explicitly separate non-blocker
+list. Their result may be failed or unsupported without blocking user acceptance
+or the self-check pass verdict when every required criterion has passed. The user
+judges whether an additional observation is an error worth addressing. A diagnostic
+method failing does not negate a criterion established by another sufficient,
+verified method. Preserve both pieces of evidence without conflating their roles.
+
+The Agent drafts the detailed checklist during planning. Plan adjustment rounds
+may revise it; finalization locks it for execution and all subsequent Rounds.
+Round feedback does not reopen that list. A user decision may override the effective
+verdict of a named required item, including explicitly treating it as passed. Record
+the user's instruction, affected criterion, checklist version and time separately;
+preserve the actual failed or missing check evidence. Show "passed by user decision"
+rather than claiming a command succeeded. The Agent cannot grant itself an override.
+Full and explicitly limited user acceptance remain distinguishable decisions with
+preserved limitations.
+
+A one-time user-authorized migration can attach a missing checklist to a legacy,
+unaccepted Action. It cannot replace an existing list or rewrite historical Rounds.
+The user can record a named-item override using their feedback and the explicit
+per-item decision control; free-text feedback alone is not silently interpreted as
+authorization to turn arbitrary failures into passes.
+
+### Dependency-aware stopping and bounded repair — confirmed direction
+
+A Round executes only its current Action, not every Action in the Plan. Before
+execution, identify required prerequisites and the work that depends on them.
+When a prerequisite fails, stop dependent work and report the cause immediately.
+Independent work may continue only when it produces useful partial output; state
+why it remains valid and do not imply the Action is ready for acceptance.
+
+Attempt a bounded repair that targets the observed cause. Retry only when there
+is a relevant change in code, configuration, permissions, environment or evidence,
+or a justified transient-failure policy with an explicit attempt/time limit. When
+the repair budget is exhausted, preserve the work and report blocked. Do not keep
+trying alternative platforms or rerunning the same failing command without a
+reason it can now succeed. The execution instruction allows one cause-directed repair per unchanged failure
+per Round unless the user explicitly asks for further investigation. This is an
+Agent instruction, not a host-enforced command interceptor; actual compliance must
+still be observed in live trials.
+
+Before publishing, inspect the actual publication gates. If a required pre-push
+hook will repeat a known failing prerequisite, do not invoke push merely to wait
+for the same failure again. Existing mandatory hooks remain authoritative; no
+`--no-verify`, silent hook replacement or fabricated pass is permitted. Reconcile
+the gate policy explicitly before claiming Draft-first delivery works.
+
+The intended order is: establish a safe publication path, publish an inspectable
+work-branch diff and Draft PR, perform the frozen required self-checks, then mark
+Ready for review when all required items pass or have explicit user overrides.
+Publication safety checks must be distinguished from full acceptance checks. The
+current shared hook policy may prevent that order; until reconciled, expose a
+Draft-publication blocker and a local handoff rather than claiming a Draft exists.
+Changing shared hooks is separate scoped work, not authorized implicitly by this
+workflow document. Neither Draft nor Ready means automatic user acceptance or merge.
+
+Additional diagnostics remain non-blockers. Stop collecting redundant probes once
+the required condition has sufficient evidence. On a later Round, reuse evidence
+only when its source revision and relevant environment remain applicable; rerun
+invalidated checks and all checks required by actual gates. A new Round must report
+the complete checklist, distinguishing reused evidence from new execution.
 
 ## Purpose and boundary — settled
 
@@ -647,3 +771,46 @@ discussion, or assume it is already the selected implementation architecture.
 
 These are design questions, not authorization to add automation, a general
 cross-domain execution engine, or a new storage architecture in this docs round.
+
+## Active dogfooding review
+
+The [HereItIsV2 rolling review](JUST_DO_IT_DOGFOOD_REVIEW.md) records verified
+workflow findings while the user completes the Card. It is not final product
+acceptance or authorization to expand implementation scope.
+
+### Opt-in publication implementation
+
+Shared infrastructure PR #63 introduces `pre_push_tests=deferred` for explicitly
+configured projects only. In that mode the hook allows only AgentManager Card refs
+and requires the executable acceptance entry. Other projects retain the default
+testing hook. HereItIs opts in and runs `./scripts/acceptance-tests.sh` after Draft
+publication; that entry never skips scheme tests based on upstream equality and
+rejects no-target and zero-test results. This is not remote branch protection or
+a host-enforced Ready transition: the executing Agent still owns the Ready write.
+
+## Acceptance authority and control-bar refinement
+
+The user explicitly reaffirmed that a valid current Action report whose required
+checks pass (including separately recorded user decisions) is eligible for manual
+acceptance. Host artifact-verification findings and additional checks are advisory;
+they do not introduce a second acceptance gate. Preserve unverified references as
+unverified after acceptance. Schema/identity-invalid responses and missing or failed
+required checks still do not establish an acceptable report.
+
+There is no separate Remaining work section in the results or confirmation dialog.
+Current Action gaps belong to failed/not-run required criteria. PR lifecycle,
+future Actions and later user trials must not become extra execution requirements.
+Historical report fields remain stored; the execution prompt requests empty
+`remaining` and permits necessary non-gating context in `scopeNotes`.
+
+Use a separate sticky control bar for Action-level operations, with a visible
+Agent/model/effort summary. Current-result acceptance is primary when eligible.
+Continue opens a change-input mode with Cancel changes and Confirm changes, hiding
+acceptance until that mode is canceled or submitted. Submission starts the next
+Round only after explicit confirmation. Settings and input panels expand below the toolbar within a cohesive dark dock,
+separate from read-only Round information and diagnostics.
+
+Stop execution has its own confirmation explaining that current files remain.
+Do not repeat cancellation/acceptance disclaimers below every completed report.
+Unsupported artifact types must not offer a retry that cannot change the result;
+recheck does not call a model but still consumes local work and remote requests.

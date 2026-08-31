@@ -1,5 +1,11 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import readline from 'node:readline';
+import {
+  readCodexSkills,
+  withSkillCatalog,
+  type SkillCatalog,
+  type ExecutionAccess,
+} from './local-agent-skills.ts';
 import type { ReasoningEffort } from './local-agent-model-types.ts';
 
 export type LocalAgentKind = 'codex' | 'claude';
@@ -16,6 +22,7 @@ export type LocalAgentResult = {
   agentSessionId: string | null;
   finalOutput: string;
   usage: LocalAgentUsage | null;
+  executionAccess?: ExecutionAccess;
 };
 
 export type LocalAgentRun = {
@@ -29,6 +36,10 @@ type LocalAgentRunInput = {
   resumeSessionId?: string;
   model?: string;
   effort?: ReasoningEffort;
+  access?: 'read-only' | 'workspace-write';
+  protectedPath?: string;
+  gitWritePaths?: string[];
+  primaryRepositoryPath?: string;
 };
 
 type CodexEvent =
@@ -93,16 +104,65 @@ export function parseClaudeEvent(line: string): ClaudeEvent | null {
   return parseLocalAgentEvent(line) as ClaudeEvent | null;
 }
 
-function startCodexRun(input: LocalAgentRunInput): LocalAgentRun {
-  const child = spawnCodex(input);
+export function startCodexRun(
+  input: LocalAgentRunInput,
+  discover = readCodexSkills,
+  launch = launchCodexRun,
+): LocalAgentRun {
+  const controller = new AbortController();
+  let run: LocalAgentRun | undefined;
+  const completion = discover(input.workingDirectory, {
+    signal: controller.signal,
+  }).then((catalog) => {
+    if (controller.signal.aborted)
+      throw new Error('Execution canceled before Agent startup.');
+    const executionAccess =
+      input.access === 'workspace-write'
+        ? (catalog.executionAccess ?? 'workspace-write')
+        : 'read-only';
+    const permissionContext =
+      executionAccess === 'full-access'
+        ? '\n\nExecution permissions: Full Access, selected in local Codex settings. There is no OS filesystem sandbox protecting the primary checkout or planning store. You must still work only in the Card worktree, preserve host-owned records, and follow the explicit PR and acceptance boundaries. Full Access is not authorization for unrelated actions.'
+        : '';
+    run = launch(
+      {
+        ...input,
+        prompt: withSkillCatalog(input.prompt, catalog) + permissionContext,
+      },
+      catalog,
+    );
+    return run.completion.then((result) => ({ ...result, executionAccess }));
+  });
+  return {
+    completion,
+    cancel: () => {
+      controller.abort();
+      run?.cancel();
+    },
+  };
+}
+
+function launchCodexRun(
+  input: LocalAgentRunInput,
+  catalog: SkillCatalog,
+): LocalAgentRun {
+  const child = spawnCodex(input, catalog);
   child.stdin.end(input.prompt);
-  return trackLocalAgentRun(child, consumeCodexRun);
+  return trackLocalAgentRun(
+    child,
+    consumeCodexRun,
+    input.access === 'workspace-write',
+  );
 }
 
 function startClaudeRun(input: LocalAgentRunInput): LocalAgentRun {
   const child = spawnClaude(input);
   child.stdin.end(input.prompt);
-  return trackLocalAgentRun(child, consumeClaudeRun);
+  return trackLocalAgentRun(
+    child,
+    consumeClaudeRun,
+    input.access === 'workspace-write',
+  );
 }
 
 function trackLocalAgentRun(
@@ -111,6 +171,7 @@ function trackLocalAgentRun(
     child: ChildProcessWithoutNullStreams,
     wasCanceled: () => boolean,
   ) => Promise<LocalAgentResult>,
+  processGroup = false,
 ): LocalAgentRun {
   let canceled = false;
   const completion = consume(child, () => canceled);
@@ -120,17 +181,33 @@ function trackLocalAgentRun(
     cancel: () => {
       if (canceled || child.exitCode !== null) return;
       canceled = true;
-      child.kill('SIGTERM');
+      const stop = (signal: NodeJS.Signals) => {
+        try {
+          if (processGroup && process.platform !== 'win32' && child.pid)
+            process.kill(-child.pid, signal);
+          else child.kill(signal);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
+        }
+      };
+      stop('SIGTERM');
       const forceTimer = setTimeout(() => {
-        if (child.exitCode === null) child.kill('SIGKILL');
+        if (child.exitCode === null) stop('SIGKILL');
       }, 2_000);
       forceTimer.unref();
     },
   };
 }
 
-export function buildCodexArguments(input: LocalAgentRunInput) {
+export function buildCodexArguments(
+  input: LocalAgentRunInput,
+  catalog?: SkillCatalog,
+) {
   const { workingDirectory, resumeSessionId } = input;
+  if (input.access === 'workspace-write' && resumeSessionId)
+    throw new Error(
+      'Execution requires a fresh Session with explicit permissions.',
+    );
   return [
     ...(resumeSessionId
       ? [
@@ -146,12 +223,40 @@ export function buildCodexArguments(input: LocalAgentRunInput) {
           '--ignore-user-config',
           '--ignore-rules',
           '--skip-git-repo-check',
-          '--sandbox',
-          'read-only',
+          ...(input.access === 'workspace-write' &&
+          catalog?.executionAccess === 'full-access'
+            ? [
+                '-c',
+                'approval_policy="never"',
+                '--sandbox',
+                'danger-full-access',
+              ]
+            : input.access === 'workspace-write' &&
+                catalog?.executionAccess !== 'read-only'
+              ? [
+                  '-c',
+                  'approval_policy="never"',
+                  '-c',
+                  'default_permissions="agent_manager_action"',
+                  '-c',
+                  `permissions.agent_manager_action={extends=":workspace",filesystem={":root"="read",":workspace_roots"={"."="write",".git"="write"}${input.primaryRepositoryPath ? `,${JSON.stringify(input.primaryRepositoryPath)}="read"` : ''}${(input.gitWritePaths ?? []).map((entry) => `,${JSON.stringify(entry)}="write"`).join('')}${input.protectedPath ? `,${JSON.stringify(input.protectedPath)}="read"` : ''}},network={enabled=true}}`,
+                ]
+              : ['--sandbox', 'read-only']),
           '--json',
           '-C',
           workingDirectory,
         ]),
+    ...(catalog
+      ? [
+          '-c',
+          `skills.config=[${catalog.skills
+            .filter((skill) => !skill.enabled)
+            .map(
+              (skill) => `{path=${JSON.stringify(skill.path)},enabled=false}`,
+            )
+            .join(',')}]`,
+        ]
+      : []),
     ...(input.model ? ['--model', input.model] : []),
     ...(input.effort
       ? ['-c', `model_reasoning_effort=${JSON.stringify(input.effort)}`]
@@ -161,29 +266,36 @@ export function buildCodexArguments(input: LocalAgentRunInput) {
   ];
 }
 
-function spawnCodex(input: LocalAgentRunInput) {
+function spawnCodex(input: LocalAgentRunInput, catalog: SkillCatalog) {
   const { workingDirectory } = input;
   const environment = { ...process.env };
   delete environment.OPENAI_API_KEY;
 
-  const arguments_ = buildCodexArguments(input);
+  const arguments_ = buildCodexArguments(input, catalog);
   return spawn('codex', arguments_, {
     cwd: workingDirectory,
     env: environment,
+    detached:
+      input.access === 'workspace-write' && process.platform !== 'win32',
     stdio: ['pipe', 'pipe', 'pipe'],
   });
 }
 
 export function buildClaudeArguments(
   resumeSessionId?: string,
-  profile?: Pick<LocalAgentRunInput, 'model' | 'effort'>,
+  profile?: Pick<LocalAgentRunInput, 'model' | 'effort' | 'access'>,
 ) {
   return [
     '--print',
     '--safe-mode',
     '--restricted',
     '--tools',
-    'Read,Glob,Grep',
+    profile?.access === 'workspace-write'
+      ? 'Read,Glob,Grep,Edit,Write,Bash'
+      : 'Read,Glob,Grep',
+    ...(profile?.access === 'workspace-write'
+      ? ['--permission-mode', 'acceptEdits']
+      : []),
     '--output-format',
     'stream-json',
     '--verbose',
@@ -201,6 +313,8 @@ function spawnClaude(input: LocalAgentRunInput) {
   return spawn('claude', buildClaudeArguments(resumeSessionId, input), {
     cwd: workingDirectory,
     env: environment,
+    detached:
+      input.access === 'workspace-write' && process.platform !== 'win32',
     stdio: ['pipe', 'pipe', 'pipe'],
   });
 }
