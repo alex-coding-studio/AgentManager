@@ -25,7 +25,7 @@ export const coordinationLimits = {
   maxAgentCalls: 5,
   maxWorkerCalls: 2,
   maxCoordinatorToolCalls: 40,
-  coordinatorTimeoutMs: 120000,
+  coordinatorTimeoutMs: 300000,
 };
 export type CoordinationProgress = {
   phase: string;

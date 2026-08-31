@@ -1790,3 +1790,113 @@ void test('coordinated app verification limitations retain diagnostics without f
   assert.deepEqual(card.execution!.runs[0].evidenceErrors, run.evidenceErrors);
   assert.equal(calls, 1);
 });
+
+void test('successor context includes only final accepted prerequisite reports, not superseded rounds', async (t) => {
+  const f = await fixture(t);
+  await f.service.start(f.project, f.input);
+  await writeFile(path.join(f.project.rootPath, 'module.txt'), 'first attempt');
+  f.calls[0].resolve(delivered(f.calls[0].request));
+  let card = await settled(f.store, f.project);
+  const superseded = card.execution!.runs[0].outputRef;
+  await f.service.start(f.project, {
+    ...f.input,
+    expectedRevision: card.revision,
+    instruction: 'Correct the first output before acceptance.',
+  });
+  await writeFile(
+    path.join(f.project.rootPath, 'module.txt'),
+    'accepted correction',
+  );
+  f.calls[1].resolve(delivered(f.calls[1].request));
+  card = await settled(f.store, f.project);
+  card = await f.service.update(
+    f.project,
+    id,
+    card.revision,
+    'accept',
+    card.execution!.runs.at(-1)!.id,
+  );
+  await f.service.start(f.project, {
+    ...f.input,
+    expectedRevision: card.revision,
+    actionId: two,
+  });
+  await writeFile(
+    path.join(f.project.rootPath, 'module.txt'),
+    'second accepted output',
+  );
+  f.calls[2].resolve(delivered(f.calls[2].request));
+  card = await settled(f.store, f.project);
+  card = await f.service.update(
+    f.project,
+    id,
+    card.revision,
+    'accept',
+    card.execution!.runs.at(-1)!.id,
+  );
+  const successorId = randomUUID();
+  const prefix = `implementation/cards/${successorId}/00000001`;
+  const successor = {
+    ...f.card,
+    id: successorId,
+    source: {
+      ...f.card.source,
+      uid: successorId,
+      id: 'NODE-next',
+      dependsOn: [id],
+    },
+    sourceRef: `${prefix}/source.md`,
+    planRef: `${prefix}/plan.md`,
+  };
+  await appendCardWorkRecord(
+    path.join(f.project.planningPath, 'implementation/cards'),
+    successorId,
+    0,
+    {
+      kind: 'system-event',
+      stage: 'planning',
+      actionId: null,
+      event: 'plan-finalized',
+      text: 'Successor fixture',
+      refs: [],
+    },
+    {
+      'planning-state.json': JSON.stringify(successor),
+      'source.md': 'Successor',
+      'plan.md': JSON.stringify(successor.plan),
+    },
+  );
+  await f.service.start(f.project, { ...f.input, cardId: successorId });
+  const resources = f.calls[3].request.context.resources.filter((r) =>
+    r.description.startsWith('Accepted prerequisite'),
+  );
+  const expected = card.execution!.acceptedActionIds.map((actionId) =>
+    path.join(
+      f.project.planningPath,
+      card.execution!.runs.findLast((r) => r.actionId === actionId)!.outputRef!,
+    ),
+  );
+  assert.deepEqual(
+    resources.map((r) => r.ref),
+    expected,
+  );
+  assert.equal(resources.length, 2);
+  assert.ok(
+    !resources.some(
+      (r) => r.ref === path.join(f.project.planningPath, superseded!),
+    ),
+  );
+  f.calls[3].reject(new Error('Fixture finished'));
+  for (let i = 0; i < 100; i++) {
+    if (
+      (await f.store.read(f.project, successorId)).execution!.runs.at(-1)!
+        .status !== 'running'
+    )
+      break;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  assert.equal(
+    (await f.store.read(f.project, successorId)).execution!.runs.at(-1)!.status,
+    'failed',
+  );
+});

@@ -480,15 +480,16 @@ export function createExecutionService(
           throw new Error(
             `Accept prerequisite ${id} before executing this goal.`,
           );
-        for (const run of prerequisite.execution?.runs ?? [])
-          if (
-            run.outputRef &&
-            prerequisite.execution!.acceptedActionIds.includes(run.actionId)
-          )
+        for (const actionId of prerequisite.execution!.acceptedActionIds) {
+          const run = prerequisite.execution!.runs.findLast(
+            (candidate) => candidate.actionId === actionId,
+          );
+          if (run?.outputRef)
             dependencyResources.push({
               ref: path.join(project.planningPath, run.outputRef),
-              description: `Accepted prerequisite ${prerequisite.source.title}`,
+              description: `Accepted prerequisite ${prerequisite.source.title}, Action ${actionId}`,
             });
+        }
       }
       card = await ensureAcceptedOutputRefs(project, card);
       const log = await readCardWorklog(root(project), card.id);

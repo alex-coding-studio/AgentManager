@@ -42,7 +42,7 @@ prove that its diagnosis is correct.
 | -------------------- | -------------------------------------------------------------- |
 | Total Agent calls    | At most 5 per Round, checked before dispatch                   |
 | Worker calls         | At most 2, including the one repair                            |
-| Coordinator time     | 120 seconds per coordinator call; host cancels the child       |
+| Coordinator time     | 300 seconds per coordinator call; host cancels the child       |
 | Total Action time    | Existing 30-minute host deadline includes coordination         |
 | Coordinator tools    | Cancel on the first reported tool start beyond 40 per call     |
 | Dispatch size        | Reject prompts larger than 1,500,000 UTF-8 bytes               |
@@ -56,6 +56,13 @@ and cannot count unreported internal tools. Native Codex multi-agent features ar
 disabled; Claude's explicit tool allowlist does not grant Agent/Task delegation.
 Both prompts forbid shell-based Agent spawning. This is not an OS guarantee against
 arbitrary subprocesses from a trusted full-access worker.
+
+The first real successor Card trial reached the original 120-second deadline during
+preparation, before any worker dispatch (Round 059dc91e-c45b-4380-90d2-88a1122fd519).
+It also exposed superseded prerequisite reports being injected as accepted outputs.
+The follow-up uses only final accepted reports and a five-minute coordinator call
+budget. This budget is a bounded trial setting, not a latency guarantee; the total
+Action deadline and attempt/tool limits remain unchanged.
 
 There is no exact in-flight token or dollar ceiling in this CLI adapter. Terminal usage
 is recorded per attempt. An aggregate is shown only when every attempt has telemetry;
@@ -94,6 +101,9 @@ slice is conservative: unrelated included file changes can invalidate reuse, and
 legacy runs without a basis do not qualify for automatic reuse. It does not yet model
 per-criterion file dependencies. Unchanged source does not prove unchanged external
 environment; the coordinator must assess that applicability explicitly.
+
+Prerequisite context includes only the latest accepted Round for each accepted Action,
+not superseded reports from earlier attempts. Historical records remain addressable.
 
 Accepted-output Markdown retains the current summary and coordination/activity record
 references for later Actions. Request/response records retain the worker evidence and
