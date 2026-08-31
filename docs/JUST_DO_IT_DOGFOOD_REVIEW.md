@@ -63,6 +63,32 @@ unchanged. The empty-tree query failure remains in the original report as eviden
 | JDI-DF-11 | Running-state visibility was insufficient | The user needed external transcript inspection to learn which Skill was loaded, which permissions were effective, what command was running and why it was waiting. Effective access is recorded only after successful transport completion. | Open. Expose bounded progress and actual runtime facts without injecting whole transcripts or private reasoning into the UI. |
 | JDI-DF-12 | Recovery/handoff summaries could lag authoritative state | Early handoff prose still called the Plan a draft after finalization. Later ownership corrections competed with older repository references. | Current host stage/Plan/Action facts are now explicit in the execution prompt; reset events override stale summary state. Canonical GitHub target propagation still needs stronger ownership. |
 
+## Action readiness gap surfaced after report recheck
+
+The user challenged the UI's "Ready to verify" state: there was no PR or runnable
+phone delivery to inspect. Live inspection confirmed no PRs, no accepted Actions,
+and a latest Round that completed only remote initialization repair. The first
+Action still requires a phone-launchable app and the agreed delivery evidence.
+
+The current UI derives readiness from the latest successful execution/report and
+its Round outcome. That promotes a narrow repair Round's `delivered` result into
+whole-Action readiness without establishing the Action's complete output and
+validation requirements. Host report validity, Round completion, an inspectable
+user deliverable and Action acceptance are separate facts.
+
+This is not resolved merely by renaming the status. The workflow needs a concrete
+user-facing delivery entry point and evidence for the full Action before offering
+ordinary completion acceptance. Explicit partial acceptance, if chosen, must remain
+an explicit exception with retained limitations, not the default inferred from a
+successful repair report.
+
+Under the existing UI-bearing delivery rule, the immediate missing handoff is the
+phone-installed app for UI inspection; a ready PR follows explicit UI acceptance.
+No PR by itself would establish the missing phone evidence, and no report recheck
+should silently mark this Action complete. Record this as JDI-DF-13, open for the
+post-Card product/state-model discussion. No Action was accepted or started while
+recording this finding.
+
 ## Time and usage evidence
 
 The organization repository creation call itself took about 3.3 seconds. Round 2's
