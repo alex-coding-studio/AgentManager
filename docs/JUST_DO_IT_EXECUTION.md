@@ -1,0 +1,76 @@
+# Just Do It — first live Action execution
+
+## Implemented boundary
+
+After Plan sign-off, the user can run the first unaccepted Action, inspect its
+output, supply in-scope feedback for another round, and explicitly accept the
+current output. Acceptance unlocks the next Action but never starts it. The
+existing Preview remains isolated. All execution configuration uses the shared
+Agent/model/effort selector.
+
+Planning stays read-only. Execution starts a fresh provider Session rooted at
+the registered code directory, or the project root when no code directory is
+registered. Codex uses an explicit write-capable permission profile with the
+planning store read-only; project-local Git metadata can be written. Its shell
+network access is enabled for explicitly requested development operations, and
+it cannot request unrestricted escalation. Claude uses restricted mode with
+file-edit permission; shell commands requiring approval may return blocked.
+Only Codex has received the live write smoke so far. Neither mode automatically
+creates a repository, commits, publishes a PR, or merges. Those are not implied
+by merely pressing Start; any repository operation must belong to the accepted
+Action or explicit user instruction.
+
+Local Git and GitHub are separate: commits and local history need a local Git
+repository, whereas PRs and hosted Issues need a remote repository. This slice
+does not implement the proposed automatic per-round Git history. File hashes
+and worklog records are evidence, not restorable Git checkpoints.
+
+## State and handoff
+
+- Input, requested profile, finalized contracts, source resources, module working
+  instructions and handoff are captured before launching the worker.
+- Prior output and feedback remain in the Card worklog. Accepted Action outputs
+  are explicit references for later Actions, including across fresh Sessions.
+- Source dependencies block execution until corresponding imported Cards have
+  all their Actions accepted. Their output references become execution context.
+- Run completion stores the raw response, structured result and concise output.
+  Agent self-checks remain labeled as reported checks, not independent acceptance.
+- Explicit acceptance targets the current output ID and Card revision. It records
+  user acceptance, not a verified GitHub merge, and preserves limitations/checks.
+- There is one active execution per project in this local server. Revisions reject
+  conflicting updates; interrupted workers become failed without automatic retry.
+
+## Evidence and limitations
+
+Before/after workspace snapshots identify changed regular files, deletions and
+a changed project-local Git HEAD. Symlinks are not followed. The planning store,
+Git internals and common dependency/build directories are excluded. Snapshots
+are bounded to 20,000 entries and 256 MB. A reported delivery must reference an
+observed artifact; an unchanged input file cannot stand in for new output.
+The observer detects changes, not authorship: manual edits during a run can also
+appear. It is not a rollback engine or protection against every external effect.
+
+Cancellation terminates the worker/process group but does not revert files,
+installed dependencies or external operations. Failures keep visible partial
+changes where observation succeeds. Plan editing is conservatively locked once
+execution begins because clean rollback is not implemented. Directly modifying
+stored state to bypass that lock is unsupported. Multiple servers managing one
+project, external modifications during execution, and automatic PR validation
+are not validated workflows.
+
+Review-Agent integration, GitHub merge monitoring, Issue creation, automatic
+per-round commits, restoration and downstream invalidation remain future work.
+
+## Validation
+
+- `npm run test:implementation-execution` covers real fixture-file changes,
+  output persistence, feedback context, manual progression, cancellation,
+  interrupted runs, unchanged-input rejection and permission separation.
+- `node --experimental-strip-types scripts/smoke-just-do-it-execution.ts --run-live <model>`
+  authorizes one real Codex call in a newly created temporary directory. It leaves
+  the fixture as inspectable evidence and does not register or execute user projects.
+- The initial live smoke used `gpt-5.6-luna`, low effort, produced exactly
+  `smoke.txt` with `ready\n`, passed host content comparison, and left acceptance
+  empty. This is file-writing integration evidence, not an iOS build/device pass.
+- Browser rendering and acceptance-state checks used the real smoke output with
+  intercepted fixture API responses. No user Plan was finalized or executed.

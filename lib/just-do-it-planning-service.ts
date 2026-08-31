@@ -9,6 +9,7 @@ import {
 } from 'node:fs/promises';
 import path from 'node:path';
 import { validateAgentProfile, type AgentProfile } from './agent-profile.ts';
+import type { CardExecution } from './just-do-it-execution-types.ts';
 import type { RegisteredProject } from './project-registry.ts';
 import {
   startLocalAgentRun,
@@ -68,6 +69,7 @@ export type PlanningCard = {
   createdAt: string;
   updatedAt: string;
   finalizedAt: string | null;
+  execution?: CardExecution;
 };
 export type StartPlanningInput = {
   cardId: string;
@@ -411,6 +413,10 @@ export function createPlanningService(
     const card = await read(project, input.cardId);
     if (card.revision !== input.expectedRevision)
       throw new Error('Card changed. Reload before trying again.');
+    if (card.execution?.runs.length)
+      throw new Error(
+        'Execution has started. Clean rollback is required before changing the Plan; rollback is not connected yet.',
+      );
     if (card.run?.status === 'running')
       throw new Error('This Card already has a running Agent.');
     if (card.plan?.status === 'finalized')
@@ -661,6 +667,10 @@ export function createPlanningService(
     }
     if (card.run?.status === 'running')
       throw new Error('Stop the current Agent before changing Plan state.');
+    if (card.execution?.runs.length)
+      throw new Error(
+        'Execution has started. Clean rollback is required before changing the Plan; rollback is not connected yet.',
+      );
     if (!card.plan) throw new Error('Generate a Plan first.');
     if (action === 'finalize') {
       if (card.run?.status !== 'succeeded')
@@ -679,7 +689,7 @@ export function createPlanningService(
           stage: 'planning',
           actionId: null,
           event: 'plan-finalized',
-          text: 'User confirmed the entire Plan. Actions are ready; execution is not connected.',
+          text: 'User confirmed the entire Plan. Actions are ready for manual execution.',
           refs: [],
         },
       );

@@ -57,6 +57,37 @@ export const chineseUi: Record<string, string> = {
   'Your additional requirements': '你的补充要求',
   'Model ID (optional)': '模型 ID（可选）',
   'Agent configuration': 'Agent 配置',
+  'Plan together, execute one Action, then verify the output.':
+    '一起制定计划，逐步执行，再验收产出。',
+  'Completed Actions': '已验收步骤',
+  Actions: '执行步骤',
+  'Plan editing is locked after execution starts. Rollback is not connected yet.':
+    '执行开始后不可直接修改计划；干净回退功能暂未接入。',
+  'Select the current Action to start. Later Actions unlock after acceptance.':
+    '选择当前步骤开始执行，验收后解锁下一步。',
+  'This Action was accepted by you.': '你已验收这一步的产出。',
+  'Accept earlier Actions before starting this step.':
+    '请先验收前面的步骤，再开始这一步。',
+  'Your input': '你的输入',
+  'Agent-reported checks': 'Agent 自检结果',
+  'Remaining work': '尚未完成',
+  'Observed file and Git changes': '已检测到的文件与 Git 变更',
+  'Self-checks are not acceptance. Canceling does not revert changes.':
+    '自检不等于验收；取消不会撤销已产生的变更。',
+  'Feedback for this Action': '针对这一步的反馈',
+  'Additional Action instructions': '这一步的补充要求',
+  'Add requirements for this step, or leave empty to follow the confirmed Plan.':
+    '补充这一步的要求，也可以留空，按已确认计划执行。',
+  'Starting runs the Agent with project write access. Only this Action runs; you decide acceptance. GitHub merge is not monitored yet.':
+    '开始后 Agent 可以修改项目文件，只执行当前步骤，由你验收。暂不自动同步 GitHub 合并状态。',
+  'Claude can edit project files; commands requiring approval may return blocked in this non-interactive run.':
+    'Claude 可以编辑项目文件；需要额外批准的命令可能返回阻塞说明。',
+  'Continue this Action': '继续修改这一步',
+  'Start this Action': '开始执行这一步',
+  'Accept this output': '验收当前产出',
+  passed: '通过',
+  failed: '失败',
+  'not-run': '未执行',
   'Custom model…': '自定义模型…',
   'Custom model ID': '自定义模型 ID',
   'Previously selected': '此前选择',

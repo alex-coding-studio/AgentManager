@@ -2,8 +2,8 @@
 
 ## Status and document ownership
 
-Design discussion captured on 2026-08-29. Just Do It now has an isolated
-[interactive UI demo](JUST_DO_IT_DEMO.md), not an integrated execution workflow.
+Design discussion captured on 2026-08-29. Just Do It retains an isolated
+[interactive UI demo](JUST_DO_IT_DEMO.md) alongside the live workflow.
 On 2026-08-30, the user accepted the UI direction and froze its interaction
 baseline. It remains available in explicit Preview Mode while Harness contracts
 are discussed; real integration and task validation are subsequent work.
@@ -13,8 +13,12 @@ where noted; the frozen demo has not been updated to enforce them.
 An offline [Harness foundation](JUST_DO_IT_HARNESS.md) now provides phase prompts,
 request/result validation and a file-backed Card worklog. The subsequent
 [Planning integration](JUST_DO_IT_PLANNING.md) connects real read-only generation,
-adjustment and Finalize while retaining the isolated Preview. GitHub writes,
-Action execution and automatic Skill loading remain unconnected.
+adjustment and Finalize while retaining the isolated Preview. The first
+[Action execution integration](JUST_DO_IT_EXECUTION.md) adds project-file coding,
+durable outputs, feedback rounds, and explicit user acceptance. Automatic Git
+checkpoints, rollback, GitHub synchronization, Agent review, and Todo publication
+remain unconnected; instructions-driven repository work is not a built-in GitHub
+integration.
 This document records the
 settled product intent and explicitly separates unresolved mechanics and
 deferred ideas. It does not authorize implementation or data migration.

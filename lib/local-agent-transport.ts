@@ -29,6 +29,8 @@ type LocalAgentRunInput = {
   resumeSessionId?: string;
   model?: string;
   effort?: ReasoningEffort;
+  access?: 'read-only' | 'workspace-write';
+  protectedPath?: string;
 };
 
 type CodexEvent =
@@ -96,13 +98,21 @@ export function parseClaudeEvent(line: string): ClaudeEvent | null {
 function startCodexRun(input: LocalAgentRunInput): LocalAgentRun {
   const child = spawnCodex(input);
   child.stdin.end(input.prompt);
-  return trackLocalAgentRun(child, consumeCodexRun);
+  return trackLocalAgentRun(
+    child,
+    consumeCodexRun,
+    input.access === 'workspace-write',
+  );
 }
 
 function startClaudeRun(input: LocalAgentRunInput): LocalAgentRun {
   const child = spawnClaude(input);
   child.stdin.end(input.prompt);
-  return trackLocalAgentRun(child, consumeClaudeRun);
+  return trackLocalAgentRun(
+    child,
+    consumeClaudeRun,
+    input.access === 'workspace-write',
+  );
 }
 
 function trackLocalAgentRun(
@@ -111,6 +121,7 @@ function trackLocalAgentRun(
     child: ChildProcessWithoutNullStreams,
     wasCanceled: () => boolean,
   ) => Promise<LocalAgentResult>,
+  processGroup = false,
 ): LocalAgentRun {
   let canceled = false;
   const completion = consume(child, () => canceled);
@@ -120,9 +131,18 @@ function trackLocalAgentRun(
     cancel: () => {
       if (canceled || child.exitCode !== null) return;
       canceled = true;
-      child.kill('SIGTERM');
+      const stop = (signal: NodeJS.Signals) => {
+        try {
+          if (processGroup && process.platform !== 'win32' && child.pid)
+            process.kill(-child.pid, signal);
+          else child.kill(signal);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
+        }
+      };
+      stop('SIGTERM');
       const forceTimer = setTimeout(() => {
-        if (child.exitCode === null) child.kill('SIGKILL');
+        if (child.exitCode === null) stop('SIGKILL');
       }, 2_000);
       forceTimer.unref();
     },
@@ -131,6 +151,10 @@ function trackLocalAgentRun(
 
 export function buildCodexArguments(input: LocalAgentRunInput) {
   const { workingDirectory, resumeSessionId } = input;
+  if (input.access === 'workspace-write' && resumeSessionId)
+    throw new Error(
+      'Execution requires a fresh Session with explicit permissions.',
+    );
   return [
     ...(resumeSessionId
       ? [
@@ -146,8 +170,16 @@ export function buildCodexArguments(input: LocalAgentRunInput) {
           '--ignore-user-config',
           '--ignore-rules',
           '--skip-git-repo-check',
-          '--sandbox',
-          'read-only',
+          ...(input.access === 'workspace-write'
+            ? [
+                '-c',
+                'approval_policy="never"',
+                '-c',
+                'default_permissions="agent_manager_action"',
+                '-c',
+                `permissions.agent_manager_action={extends=":workspace",filesystem={":root"="read",":workspace_roots"={"."="write",".git"="write"}${input.protectedPath ? `,${JSON.stringify(input.protectedPath)}="read"` : ''}},network={enabled=true}}`,
+              ]
+            : ['--sandbox', 'read-only']),
           '--json',
           '-C',
           workingDirectory,
@@ -170,20 +202,27 @@ function spawnCodex(input: LocalAgentRunInput) {
   return spawn('codex', arguments_, {
     cwd: workingDirectory,
     env: environment,
+    detached:
+      input.access === 'workspace-write' && process.platform !== 'win32',
     stdio: ['pipe', 'pipe', 'pipe'],
   });
 }
 
 export function buildClaudeArguments(
   resumeSessionId?: string,
-  profile?: Pick<LocalAgentRunInput, 'model' | 'effort'>,
+  profile?: Pick<LocalAgentRunInput, 'model' | 'effort' | 'access'>,
 ) {
   return [
     '--print',
     '--safe-mode',
     '--restricted',
     '--tools',
-    'Read,Glob,Grep',
+    profile?.access === 'workspace-write'
+      ? 'Read,Glob,Grep,Edit,Write,Bash'
+      : 'Read,Glob,Grep',
+    ...(profile?.access === 'workspace-write'
+      ? ['--permission-mode', 'acceptEdits']
+      : []),
     '--output-format',
     'stream-json',
     '--verbose',
@@ -201,6 +240,8 @@ function spawnClaude(input: LocalAgentRunInput) {
   return spawn('claude', buildClaudeArguments(resumeSessionId, input), {
     cwd: workingDirectory,
     env: environment,
+    detached:
+      input.access === 'workspace-write' && process.platform !== 'win32',
     stdio: ['pipe', 'pipe', 'pipe'],
   });
 }
