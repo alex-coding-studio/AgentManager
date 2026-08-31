@@ -145,3 +145,39 @@ Related owners: [execution](JUST_DO_IT_EXECUTION.md),
 and the proposed [development environment diagnosis and repair](DEVELOPMENT_ENVIRONMENT.md).
 The separately recorded dialog dependency-error issue remains in
 [DOGFOODING_ISSUES.md](DOGFOODING_ISSUES.md); it was not fixed by this trial.
+
+## Round 5 follow-up: delivery friction and diagnostic noise
+
+The user changed this trial's first-Action acceptance requirement: a physical phone
+is no longer required; simulator acceptance is sufficient. This explicit newer
+instruction supersedes the older phone requirement for this trial. It does not
+establish that later registration/persistence Actions have been delivered.
+
+Round 5 (`5b01aad6-65dc-4818-a5a3-a8ac7be3f574`, revisions 20/21) took about
+5m48s and returned a valid report. Project lint, the simulator test, simulator
+installation and launch passed. The Agent corrected the stale personal-repository
+entry in `docs/PROJECT.md`, committed `2df1c807efd64d8c7cf8e15e50e5aa5606ca509b`
+and pushed the Card branch. The simulator app is HereItIs,
+`com.cuxiao.ios.hereitismvp`, version 0.1.0 (1). No PR existed at inspection, and
+no Action had been accepted by the user.
+
+A further `simctl spawn ... ps` probe failed because that simulator image did not
+provide `ps`. This does not contradict successful install/launch/listapps evidence.
+It is a second concrete example of JDI-DF-09: an optional diagnostic attempt is
+shown with a red Failed label beside actual acceptance checks, making a successful
+operation look broken. Do not falsify the command result; classify it as an
+unsupported/nonblocking diagnostic and retain the successful primary evidence.
+
+The user also reported that the overall pace is too slow and that a branch-only
+handoff without a PR or a clear interactive delivery entry point is not useful for
+acceptance. This strengthens JDI-DF-10/11/13. The current implementation still leaves
+PR/review and UI acceptance transitions to loosely worded instructions; the Agent
+stops with "PR remains for the corresponding human stage" without completing a
+clear handoff. This must be discussed as a workflow ownership gap, not patched by
+asking the user to restate the entire setup task in another Round.
+
+Candidate prevention for discussion: freeze the required validation checks for the
+Action, keep ad hoc diagnostics separate, stop probing after a condition already has
+sufficient evidence, and present a concrete next user action with the actual artifact.
+Simulator automated tests, simulator installation/launch, visible UI inspection and
+PR review remain distinct evidence layers even when physical-device testing is waived.
