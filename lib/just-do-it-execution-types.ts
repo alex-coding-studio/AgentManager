@@ -1,3 +1,7 @@
+import type {
+  AcceptanceChecklist,
+  CheckOverride,
+} from './just-do-it-checklist.ts';
 import type { CardWorkspace } from './just-do-it-worktree.ts';
 import type { AgentProfile } from './agent-profile.ts';
 import type { CardHarnessResult } from './just-do-it-harness.ts';
@@ -22,6 +26,7 @@ export type ActionRun = {
   error: string | null;
   observedRefs: string[];
   outputRef: string | null;
+  acceptanceChecklist?: AcceptanceChecklist;
   evidenceErrors?: string[];
   unverifiedCheckRefs?: string[];
   verifiedExternalRefs?: string[];
@@ -36,6 +41,7 @@ export type CardExecution = {
   workspace?: CardWorkspace;
   workspaceBackups?: CardWorkspace[];
   acceptedActionIds: string[];
+  acceptanceOverrides?: Record<string, Record<string, CheckOverride>>;
   verification?: Record<string, 'manual' | 'github-merge'>;
   git?: { baseline: string; head: string; firstTrackedRunId: string };
 };

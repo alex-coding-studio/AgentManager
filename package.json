@@ -24,7 +24,7 @@
     "test:implementation-demo": "node --experimental-strip-types --test tests/just-do-it-demo.test.ts",
     "test:implementation-harness": "node --experimental-strip-types --test tests/just-do-it-harness.test.ts",
     "test:implementation-planning": "node --experimental-strip-types --test tests/just-do-it-planning.test.ts tests/local-agent-models.test.ts",
-    "test:implementation-execution": "node --experimental-strip-types --test tests/just-do-it-execution.test.ts tests/github-delivery.test.ts tests/just-do-it-worktree.test.ts",
+    "test:implementation-execution": "node --experimental-strip-types --test tests/just-do-it-checklist.test.ts tests/just-do-it-execution.test.ts tests/github-delivery.test.ts tests/just-do-it-worktree.test.ts",
     "test:simulator-access": "node --experimental-strip-types scripts/smoke-codex-simulator.ts",
     "test:worktree-sandbox": "node --experimental-strip-types scripts/smoke-card-worktree.ts",
     "preview:implementation-harness": "node --experimental-strip-types scripts/preview-just-do-it-harness.ts",

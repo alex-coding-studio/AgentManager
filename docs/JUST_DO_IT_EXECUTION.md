@@ -198,3 +198,25 @@ publication of an existing commit, an empty-main baseline, invalid/foreign refer
 and stale-workspace rejection during recheck. A failed diagnostic query remains
 historical evidence; it must not be conflated with failure of a separately verified
 validation condition. The future environment module owns richer check classification.
+
+## Execution-control implementation and remaining boundary
+
+The product contract in [Just Do It](JUST_DO_IT.md) now requires dependency-aware
+stopping and bounded repair. Runtime implementation must distinguish a failed
+prerequisite, blocked dependent work, independent partial progress and non-blocking
+diagnostics. A retry needs a relevant changed condition or an explicit bounded
+transient-failure policy; report reused evidence separately from newly run checks.
+Do not invoke publication when its mandatory hook is known to repeat an unchanged
+failed prerequisite. Reconcile full-test pre-push policy with early Draft publication
+before claiming that ordering is supported; never skip the hook implicitly.
+
+Required checklist items are defined during Plan adjustment and frozen at Plan
+finalization. Each run carries its snapshot; the acceptance API enforces required
+coverage and applies separately recorded user overrides. The UI separates required
+and additional results. Regression tests cover missing/duplicate/evidence-free
+checks, optional failures, overrides and legacy migration. Dependency stopping and
+the one-repair limit are execution instructions, not transport-level interception.
+Draft publication uses the explicitly opted-in shared hook policy; the Agent owns
+the later Ready transition.
+See [the rolling review](JUST_DO_IT_DOGFOOD_REVIEW.md) for the observed Round 1
+sequence and the real-flow validation still required.

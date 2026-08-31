@@ -1,3 +1,9 @@
+import {
+  splitChecks,
+  type AcceptanceCriterion,
+  type AcceptanceChecklist,
+  type CheckOverride,
+} from './just-do-it-checklist.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import Ajv2020 from 'ajv/dist/2020.js';
 
@@ -9,6 +15,7 @@ export type ActionContract = {
   input: string;
   output: string;
   validation: string;
+  acceptanceCriteria?: AcceptanceCriterion[];
 };
 export type ExecutionPlan = {
   status: 'draft' | 'finalized';
@@ -25,6 +32,8 @@ export type CardHarnessContext = {
   handoffMarkdown: string;
   plan: ExecutionPlan | null;
   acceptedActionIds: string[];
+  acceptanceChecklist?: AcceptanceChecklist;
+  acceptanceOverrides?: Record<string, CheckOverride>;
   currentOutput: { id: string; actionId: string; refs: string[] } | null;
   execution: {
     running: boolean;
@@ -48,8 +57,8 @@ export const JUST_DO_IT_BUILT_IN_INSTRUCTIONS = `Work within the selected goal a
 Keep user-facing output concise: observable behavior, remaining limitations, and artifact/PR links. Discover relevant code yourself. Do not require users to enumerate files or write technical contracts. Record useful decisions for handoff, not private reasoning. The user owns Plan sign-off and acceptance, including explicit acceptance of a limited result. Preserve failed checks and unfinished work honestly. Never invent approval, merge, rollback, Issue creation, or completion.`;
 
 const stageInstructions: Record<ExecutionStage, string> = {
-  planning: `Generate a useful current Plan, not a questionnaire or a request for permission to recommend a route. The source goal supplies product direction. Put your execution recommendation directly into an Overview and meaningful steps; the user reviews and guides the result. Roughly five to seven steps is a comfort guideline, not a minimum or maximum. Each step has semantic input, a user-observable output, and a way to validate it. Technical discovery belongs to the Agent. Preserve explicit scope and exclusions. Do not execute the Plan or finalize it. For a single-step adjustment, return only the target contract in the step field, preserving its UUID. Do not return an Overview or sibling steps; the host preserves those and inserts your updated contract at its original position. For a whole-plan adjustment, preserve IDs of retained steps and assign UUIDs only to genuinely new steps. Never add a second planning-history UI. Stop after returning the draft.`,
-  execution: `Execute only the selected Action of the finalized Plan, within separately granted runtime permissions. Inspect the real working tree and prerequisite artifacts; do not trust Session memory over current evidence. Make necessary in-scope technical adjustments and self-check the result. Deliver observable results and actual artifact references, or honestly report blocked/error with partial progress and remaining work. Self-checking is not user acceptance. Do not modify the Plan, automatically start the next Action, merge, or perform a rollback. Stop at the output boundary.`,
+  planning: `Generate a useful current Plan, not a questionnaire or a request for permission to recommend a route. The source goal supplies product direction. Put your execution recommendation directly into an Overview and meaningful steps; the user reviews and guides the result. Roughly five to seven steps is a comfort guideline, not a minimum or maximum. Each step has semantic input, a user-observable output, and acceptanceCriteria with stable IDs, concrete conditions, pass conditions and evidence. Input/output may be high-level; acceptanceCriteria must be detailed before finalization. Plan adjustment Rounds may revise the criteria; finalization freezes them. Technical discovery belongs to the Agent. Preserve explicit scope and exclusions. Do not execute the Plan or finalize it. For a single-step adjustment, return only the target contract in the step field, preserving its UUID. Do not return an Overview or sibling steps; the host preserves those and inserts your updated contract at its original position. For a whole-plan adjustment, preserve IDs of retained steps and assign UUIDs only to genuinely new steps. Never add a second planning-history UI. Stop after returning the draft.`,
+  execution: `Execute only the selected Action of the finalized Plan, within separately granted runtime permissions. Identify prerequisites before dependent work. Stop work that depends on a failed prerequisite; retain useful independent partial output. Attempt at most one cause-directed repair per unchanged failure in a Round, then report blocked unless the user explicitly requests further investigation. Never repeat a known failing test through pre-push without a changed condition. Extra probes cannot block and should stop when sufficient evidence exists. Inspect the real working tree and prerequisite artifacts; do not trust Session memory over current evidence. Make necessary in-scope technical adjustments. Open or reuse a Draft PR as soon as publication is possible, before the self-check delivery phase; never skip existing Git hooks to do so. Follow the exact acceptanceChecklist version supplied in context. It reflects the confirmed user rulings and supersedes conflicting legacy validation prose or older handoffs. Return one checks entry for every required criterion with its criterionId, actual status and evidence. Put all extra diagnostics in additionalChecks; they are non-blockers and cannot prevent user acceptance. Do not add mandatory criteria. Recorded acceptanceOverrides are user decisions and take precedence for the effective verdict, but keep actual observed statuses honest. When every required item passes or has a recorded user override, mark the existing Draft PR ready for review; do not merge or infer user acceptance. Deliver observable results and actual artifact references, or honestly report blocked/error with partial progress and remaining work. Self-checking is not user acceptance. Do not modify the Plan, automatically start the next Action, merge, or perform a rollback. Stop at the output boundary.`,
   review: `Review only the specified current output against the selected Action and user requirements. Apply designated review Skills within the manual workflow. Return findings and evidence for that exact output ID. Put blocking issues in findings and nonblocking suggestions in advisories. A ready verdict may include advisories, but not blocking findings or failed checks. A ready recommendation is not approval by the user, a merge, or completion. Do not fix code, run a correction loop, create Issues, merge, or start another Action. Stop after the review response.`,
   todo: `Organize the user's follow-up into an Issue-ready title, concise summary, body and suggested labels, retaining the original intent and relevant provenance. The host creates the Issue only under separate authorization; do not create one or fabricate a URL. Current delivery problems stay in the Action unless the user explicitly chooses to defer them or accept a limited result. When that decision is missing, return needs-decision with the concrete conflict, not an invented deferral. A Todo does not change the Plan or complete an Action. Later promotion selects a parent Node and preserves the Issue association; never automatically import or execute it. Stop after returning the draft or decision request.`,
 };
@@ -66,17 +75,48 @@ const object = (properties: Record<string, unknown>) => ({
   required: Object.keys(properties),
   properties,
 });
-const step = object({
+const criterion = object({
+  id: text,
+  criterion: text,
+  passCondition: text,
+  evidence: text,
+});
+const basicStep = object({
   id: uuid,
   title: text,
   input: text,
   output: text,
   validation: text,
 });
-const check = object({
+const step = {
+  ...basicStep,
+  properties: {
+    ...basicStep.properties,
+    acceptanceCriteria: {
+      type: 'array',
+      minItems: 1,
+      maxItems: 40,
+      items: criterion,
+    },
+  },
+};
+const basicCheck = object({
   summary: text,
   status: { enum: ['passed', 'failed', 'not-run'] },
   evidenceRefs: strings,
+});
+const check = {
+  ...basicCheck,
+  properties: { ...basicCheck.properties, criterionId: text },
+};
+const executionSchema = object({
+  stage: { const: 'execution' },
+  actionId: uuid,
+  outcome: { enum: ['delivered', 'blocked', 'error'] },
+  summary: text,
+  artifactRefs: strings,
+  checks: { type: 'array', items: check },
+  remaining: strings,
 });
 const shared = {
   harnessRevision: { const: JUST_DO_IT_HARNESS_REVISION },
@@ -95,16 +135,15 @@ export const JUST_DO_IT_OUTPUT_SCHEMA = {
       overview: text,
       steps: { type: 'array', minItems: 1, items: step },
     }),
-    object({
-      ...shared,
-      stage: { const: 'execution' },
-      actionId: uuid,
-      outcome: { enum: ['delivered', 'blocked', 'error'] },
-      summary: text,
-      artifactRefs: strings,
-      checks: { type: 'array', items: check },
-      remaining: strings,
-    }),
+    {
+      ...executionSchema,
+      required: [...Object.keys(shared), ...executionSchema.required],
+      properties: {
+        ...shared,
+        ...executionSchema.properties,
+        additionalChecks: { type: 'array', items: check },
+      },
+    },
     object({
       ...shared,
       stage: { const: 'review' },
@@ -139,6 +178,7 @@ type ResultBase = {
   handoffSummary: string;
 };
 type Check = {
+  criterionId?: string;
   summary: string;
   status: 'passed' | 'failed' | 'not-run';
   evidenceRefs: string[];
@@ -153,6 +193,7 @@ export type CardHarnessResult = ResultBase &
         summary: string;
         artifactRefs: string[];
         checks: Check[];
+        additionalChecks?: Check[];
         remaining: string[];
       }
     | {
@@ -378,6 +419,18 @@ export function parseCardHarnessResult(
   if (result.stage === 'execution' || result.stage === 'review') {
     if (result.actionId !== request.actionId)
       throw new Error('Wrong Action output.');
+    if (result.stage === 'execution' && request.context.acceptanceChecklist) {
+      const groups = splitChecks(
+        request.context.acceptanceChecklist,
+        result.checks,
+        result.additionalChecks,
+      );
+      result = {
+        ...result,
+        checks: groups.required,
+        additionalChecks: groups.additional,
+      };
+    }
     if (
       result.stage === 'review' &&
       result.outputId !== request.context.currentOutput?.id

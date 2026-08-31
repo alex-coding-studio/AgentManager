@@ -49,14 +49,16 @@ choose suitable methods, but cannot silently add mandatory acceptance conditions
 All required items passing means self-checks pass. Additional diagnostic probes
 must be reported separately and explicitly labeled `non-blocker`, including when
 the probe fails or is unsupported. The user decides whether those observations
-need action; promoting one into a required check requires an explicit checklist
-change. Never falsify its result or use it to block the agreed delivery implicitly.
+need action. During Plan adjustment, a proposed required item can be added before
+finalization; after finalization, additional findings remain non-blockers for this
+Action and may become separately agreed future work. Never falsify its result or use it to block the agreed delivery implicitly.
 
-Implementation gap: current Plan Actions contain only a free-text `validation`
-field. Execution responses contain post-hoc `checks` with summary, status and
-references, but no predeclared check IDs or required/non-blocker mapping. The host
-cannot yet enforce complete coverage of a frozen checklist. This ruling is the
-required direction, not a claim that this enforcement already exists.
+The implementation now stores structured acceptance criteria on Plan Actions,
+validates them at finalization/start, and snapshots the checklist into each Round.
+Required results are matched by ID; missing, duplicate or unevidenced passing
+results cannot satisfy a criterion. Additional results render separately. Explicit
+user decisions are stored separately and do not rewrite actual check evidence.
+Legacy rounds without a checklist cannot establish new-checklist acceptance.
 
 Early Draft creation also needs a published branch with a real diff. Existing Git
 hooks and required publication gates must be reconciled with the new ordering;
@@ -90,15 +92,60 @@ judges whether an additional observation is an error worth addressing. A diagnos
 method failing does not negate a criterion established by another sufficient,
 verified method. Preserve both pieces of evidence without conflating their roles.
 
-Only an explicit user decision can add a new mandatory criterion or change an
-existing one. Record a new checklist version for the next Round; do not rewrite
-an executing Round's standard or relabel historical results. Full and explicitly
-limited user acceptance remain distinguishable decisions with preserved limitations.
+The Agent drafts the detailed checklist during planning. Plan adjustment rounds
+may revise it; finalization locks it for execution and all subsequent Rounds.
+Round feedback does not reopen that list. A user decision may override the effective
+verdict of a named required item, including explicitly treating it as passed. Record
+the user's instruction, affected criterion, checklist version and time separately;
+preserve the actual failed or missing check evidence. Show "passed by user decision"
+rather than claiming a command succeeded. The Agent cannot grant itself an override.
+Full and explicitly limited user acceptance remain distinguishable decisions with
+preserved limitations.
 
-The system must eventually validate required-ID coverage and keep required results
-separate from non-blockers. Until the current free-text validation schema and
-post-hoc checks are upgraded, this remains an agreed contract awaiting enforcement,
-not a claim that the existing implementation can already guarantee it.
+A one-time user-authorized migration can attach a missing checklist to a legacy,
+unaccepted Action. It cannot replace an existing list or rewrite historical Rounds.
+The user can record a named-item override using their feedback and the explicit
+per-item decision control; free-text feedback alone is not silently interpreted as
+authorization to turn arbitrary failures into passes.
+
+### Dependency-aware stopping and bounded repair — confirmed direction
+
+A Round executes only its current Action, not every Action in the Plan. Before
+execution, identify required prerequisites and the work that depends on them.
+When a prerequisite fails, stop dependent work and report the cause immediately.
+Independent work may continue only when it produces useful partial output; state
+why it remains valid and do not imply the Action is ready for acceptance.
+
+Attempt a bounded repair that targets the observed cause. Retry only when there
+is a relevant change in code, configuration, permissions, environment or evidence,
+or a justified transient-failure policy with an explicit attempt/time limit. When
+the repair budget is exhausted, preserve the work and report blocked. Do not keep
+trying alternative platforms or rerunning the same failing command without a
+reason it can now succeed. The execution instruction allows one cause-directed repair per unchanged failure
+per Round unless the user explicitly asks for further investigation. This is an
+Agent instruction, not a host-enforced command interceptor; actual compliance must
+still be observed in live trials.
+
+Before publishing, inspect the actual publication gates. If a required pre-push
+hook will repeat a known failing prerequisite, do not invoke push merely to wait
+for the same failure again. Existing mandatory hooks remain authoritative; no
+`--no-verify`, silent hook replacement or fabricated pass is permitted. Reconcile
+the gate policy explicitly before claiming Draft-first delivery works.
+
+The intended order is: establish a safe publication path, publish an inspectable
+work-branch diff and Draft PR, perform the frozen required self-checks, then mark
+Ready for review when all required items pass or have explicit user overrides.
+Publication safety checks must be distinguished from full acceptance checks. The
+current shared hook policy may prevent that order; until reconciled, expose a
+Draft-publication blocker and a local handoff rather than claiming a Draft exists.
+Changing shared hooks is separate scoped work, not authorized implicitly by this
+workflow document. Neither Draft nor Ready means automatic user acceptance or merge.
+
+Additional diagnostics remain non-blockers. Stop collecting redundant probes once
+the required condition has sufficient evidence. On a later Round, reuse evidence
+only when its source revision and relevant environment remain applicable; rerun
+invalidated checks and all checks required by actual gates. A new Round must report
+the complete checklist, distinguishing reused evidence from new execution.
 
 ## Purpose and boundary — settled
 
@@ -730,3 +777,13 @@ cross-domain execution engine, or a new storage architecture in this docs round.
 The [HereItIsV2 rolling review](JUST_DO_IT_DOGFOOD_REVIEW.md) records verified
 workflow findings while the user completes the Card. It is not final product
 acceptance or authorization to expand implementation scope.
+
+### Opt-in publication implementation
+
+Shared infrastructure PR #63 introduces `pre_push_tests=deferred` for explicitly
+configured projects only. In that mode the hook allows only AgentManager Card refs
+and requires the executable acceptance entry. Other projects retain the default
+testing hook. HereItIs opts in and runs `./scripts/acceptance-tests.sh` after Draft
+publication; that entry never skips scheme tests based on upstream equality and
+rejects no-target and zero-test results. This is not remote branch protection or
+a host-enforced Ready transition: the executing Agent still owns the Ready write.

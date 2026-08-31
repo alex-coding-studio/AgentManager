@@ -521,20 +521,16 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
                     {Boolean(card.execution?.runs.length) && (
                       <p className="mt-2 text-xs text-muted-foreground">
                         {t(
-                          'Plan editing is locked after execution starts. Rollback is not connected yet.',
+                          'Plan and acceptance criteria are locked after confirmation. User decisions remain separate.',
                         )}
                       </p>
                     )}
                   </div>
                   <div className="flex gap-2">
                     {finalized ? (
-                      <Button
-                        variant="outline"
-                        disabled={busy || Boolean(card.execution?.runs.length)}
-                        onClick={() => command('reopen')}
-                      >
-                        {t('Reopen plan')}
-                      </Button>
+                      <span className="text-xs text-muted-foreground">
+                        {t('Confirmed checklist locked')}
+                      </span>
                     ) : (
                       <>
                         <Button

@@ -1,3 +1,8 @@
+import {
+  validateAcceptanceCriteria,
+  assessRequiredChecks,
+  type AcceptanceCriterion,
+} from './just-do-it-checklist.ts';
 import { getGitHubRepositoryUrl } from './project-registry.ts';
 import {
   ensureCardWorkspace,
@@ -262,7 +267,7 @@ export function createExecutionService(
         ]);
         files['result.json'] = JSON.stringify(result);
         files['output.md'] =
-          `# Action output\n\n${result.summary}\n\nOutcome: ${result.outcome}\n\n## Observed changes\n${refs.map((ref) => `- ${ref}`).join('\n')}\n\n## Agent-reported checks\n${result.checks.map((check) => `- ${check.status}: ${check.summary}`).join('\n')}\n\n## Remaining\n${result.remaining.map((item) => `- ${item}`).join('\n')}`;
+          `# Action output\n\n${result.summary}\n\nOutcome: ${result.outcome}\n\n## Observed changes\n${refs.map((ref) => `- ${ref}`).join('\n')}\n\n## Required self-checks\n${result.checks.map((check) => `- ${check.status}: ${check.summary}`).join('\n')}\n\n## Additional checks (non-blocker)\n${(result.additionalChecks ?? []).map((check) => `- ${check.status}: ${check.summary}`).join('\n')}\n\n## Remaining\n${result.remaining.map((item) => `- ${item}`).join('\n')}`;
         await commit(
           project,
           replaceRun(card, nextRun),
@@ -367,6 +372,18 @@ export function createExecutionService(
         throw new Error('Card changed. Reload before trying again.');
       if (card.run?.status === 'running')
         throw new Error('Stop planning before executing.');
+      const selectedAction = card.actions.find(
+        (action) => action.id === input.actionId,
+      );
+      const criteria = validateAcceptanceCriteria(
+        selectedAction?.acceptanceCriteria,
+      );
+      const acceptanceChecklist = {
+        version: createHash('sha256')
+          .update(JSON.stringify(criteria))
+          .digest('hex'),
+        items: structuredClone(criteria),
+      };
       const dependencyResources: Array<{ ref: string; description: string }> =
         [];
       for (const id of card.source.dependsOn) {
@@ -444,6 +461,9 @@ export function createExecutionService(
           goal: `${card.source.title}\n${card.source.summary}\nUser requirements: ${card.requirements}`,
           moduleInstructions: await readPlanningInstructions(project),
           skills: [],
+          acceptanceChecklist,
+          acceptanceOverrides:
+            card.execution?.acceptanceOverrides?.[input.actionId] ?? {},
           resources,
           handoffMarkdown: log.handoffMarkdown,
           plan: card.plan,
@@ -508,6 +528,7 @@ export function createExecutionService(
         observedRefs: [],
         outputRef: null,
         parentCommit: git.head,
+        acceptanceChecklist,
       };
       const prompt = `${buildCardHarnessPrompt(request)}\n\nExecution runtime: work only in ${baseline.root}. This is the Card-owned worktree on branch ${workspace?.branch ?? 'legacy'}. Keep all Actions and Rounds on this branch. The primary checkout ${project.codePath ?? project.rootPath} is not your editing directory. Never switch this worktree to main, reset the primary checkout, or merge into main. Repository commits and pushes belong on this Card branch; only the agreed PR delivery process may merge to main. The planning store ${project.planningPath} is host-owned; do not edit it or call AgentManager mutation APIs. Preserve pre-existing user changes. The host has prepared the local repository and Card branch. Do not reinitialize Git or create a replacement branch. Creating a GitHub repository or publishing branches still requires the signed-off Action or explicit user instruction. A local empty baseline does not authorize pushing the default branch to GitHub. If initializing or publishing a project repository, exclude .agent-manager/ before staging; never publish the host-owned planning store or its private Git history. No automatic merge, rollback, acceptance, or next Action. Use file:relative/path for changed files, deleted:relative/path for removals, or git:full-commit-hash for a commit newly reachable from the final project HEAD in artifactRefs. Command descriptions and external URLs may be included in check evidenceRefs, but remain Agent-reported unless independently verified. Real GitHub repository or PR URLs may appear in artifactRefs; the host verifies the current origin and remote identity, and requires PR HEAD to match this output. A repository link identifies the delivery location, not proof of new files or completed work. The host checks these against before/after snapshots. artifactRefs identify the resulting deliverable or version, not a list of new changes. You may cite an existing file inside this workspace or a commit reachable from the output HEAD when validating or publishing existing work; state clearly when no code changed. Do not cite unrelated input resources, missing files or invented URLs. The host records actual changes separately. Include actual PR URLs in the output summary when PRs were produced; the host queries GitHub to verify their state. Checks are your reported evidence, not user acceptance. The host records a new local Git checkpoint for this round. You may reference checkpoint:${request.requestId} as this round's workspace snapshot when reporting checks without file changes; explicitly state that no code changed and do not invent completed functionality. If permissions prevent an operation, report blocked; never bypass sandbox restrictions. Return the required JSON, not a Markdown envelope.`;
       const saved = await commit(
@@ -679,6 +700,16 @@ export function createExecutionService(
       !run.observedRefs.length
     )
       throw new Error('An observed output is required for acceptance.');
+    if (
+      !assessRequiredChecks(
+        run.acceptanceChecklist,
+        run.result.checks,
+        card.execution?.acceptanceOverrides?.[run.actionId],
+      ).passed
+    )
+      throw new Error(
+        'Required acceptance checks are incomplete or failed. Record an explicit user decision for any waived item.',
+      );
     const accepted = card.execution!.acceptedActionIds;
     if (
       card.actions.find((item) => !accepted.includes(item.id))?.id !==
@@ -701,6 +732,114 @@ export function createExecutionService(
         event: 'user-accepted',
         text: `User accepted output ${run.id}. Agent-reported checks and remaining limitations remain recorded. No GitHub merge was inferred.`,
         refs: run.outputRef ? [run.outputRef] : [],
+      },
+    );
+  }
+
+  async function bindLegacyChecklist(
+    project: Project,
+    cardId: string,
+    expectedRevision: number,
+    actionId: string,
+    criteria: AcceptanceCriterion[],
+    note: string,
+  ) {
+    assertCardUuid(cardId);
+    const card = await store.read(project, cardId);
+    if (card.revision !== expectedRevision)
+      throw new Error('Card changed. Reload before trying again.');
+    const action = card.actions.find((item) => item.id === actionId);
+    if (
+      card.plan?.status !== 'finalized' ||
+      !action ||
+      action.acceptanceCriteria?.length ||
+      active.has(project.rootPath) ||
+      card.execution?.runs.at(-1)?.status === 'running' ||
+      card.execution?.acceptedActionIds.includes(actionId)
+    )
+      throw new Error(
+        'Only a legacy unaccepted Action without a checklist can be upgraded.',
+      );
+    validateAcceptanceCriteria(criteria);
+    if (typeof note !== 'string' || !note.trim())
+      throw new Error(
+        'Record the explicit user authorization for this upgrade.',
+      );
+    const upgrade = (item: typeof action) =>
+      item.id === actionId
+        ? { ...item, acceptanceCriteria: structuredClone(criteria) }
+        : item;
+    return commit(
+      project,
+      {
+        ...card,
+        actions: card.actions.map(upgrade),
+        plan: { ...card.plan, steps: card.plan.steps.map(upgrade) },
+      },
+      {
+        kind: 'user-input',
+        stage: 'execution',
+        actionId,
+        text: `User authorized a one-time legacy checklist upgrade. ${note} Historical rounds remain unchanged.`,
+      },
+    );
+  }
+
+  async function overrideRequiredCheck(
+    project: Project,
+    cardId: string,
+    expectedRevision: number,
+    criterionId: string,
+    note: string,
+  ) {
+    assertCardUuid(cardId);
+    const card = await store.read(project, cardId);
+    if (card.revision !== expectedRevision)
+      throw new Error('Card changed. Reload before trying again.');
+    const run = card.execution?.runs.at(-1);
+    if (
+      !run?.acceptanceChecklist ||
+      run.status === 'running' ||
+      active.has(project.rootPath) ||
+      card.execution!.acceptedActionIds.includes(run.actionId)
+    )
+      throw new Error(
+        'User decisions require a finished, unaccepted Round with a fixed checklist.',
+      );
+    if (
+      !run.acceptanceChecklist.items.some((item) => item.id === criterionId) ||
+      typeof note !== 'string' ||
+      !note.trim() ||
+      note.length > 4000
+    )
+      throw new Error(
+        'Select a required criterion and record the user decision.',
+      );
+    const decision = {
+      note,
+      recordedAt: new Date().toISOString(),
+      checklistVersion: run.acceptanceChecklist.version,
+    };
+    return commit(
+      project,
+      {
+        ...card,
+        execution: {
+          ...card.execution!,
+          acceptanceOverrides: {
+            ...card.execution?.acceptanceOverrides,
+            [run.actionId]: {
+              ...card.execution?.acceptanceOverrides?.[run.actionId],
+              [criterionId]: decision,
+            },
+          },
+        },
+      },
+      {
+        kind: 'user-input',
+        stage: 'execution',
+        actionId: run.actionId,
+        text: `User accepts required criterion ${criterionId} as passed for checklist ${decision.checklistVersion}. ${note} Actual check results remain unchanged.`,
       },
     );
   }
@@ -918,7 +1057,7 @@ export function createExecutionService(
             versions,
             external,
           }),
-          'output.md': `# Rechecked Action output\n\n${result.summary}\n\nOutcome: ${result.outcome}\n\nNo Agent commands were rerun. Reported checks and remaining limitations are unchanged.\n\n## Agent-reported checks\n${result.checks.map((check) => `- ${check.status}: ${check.summary}`).join('\n')}\n\n## Remaining\n${result.remaining.map((item) => `- ${item}`).join('\n')}`,
+          'output.md': `# Rechecked Action output\n\n${result.summary}\n\nOutcome: ${result.outcome}\n\nNo Agent commands were rerun. Reported checks and remaining limitations are unchanged.\n\n## Required self-checks\n${result.checks.map((check) => `- ${check.status}: ${check.summary}`).join('\n')}\n\n## Additional checks (non-blocker)\n${(result.additionalChecks ?? []).map((check) => `- ${check.status}: ${check.summary}`).join('\n')}\n\n## Remaining\n${result.remaining.map((item) => `- ${item}`).join('\n')}`,
         },
       );
     } finally {
@@ -1045,6 +1184,8 @@ export function createExecutionService(
     refreshGitHub,
     resetWorkspace,
     recheckOutput,
+    overrideRequiredCheck,
+    bindLegacyChecklist,
   };
 }
 
@@ -1072,7 +1213,7 @@ function unverifiedCheckRefs(
   ]);
   return [
     ...new Set(
-      result.checks
+      [...result.checks, ...(result.additionalChecks ?? [])]
         .flatMap((check) => check.evidenceRefs)
         .filter((ref) => !known.has(ref)),
     ),

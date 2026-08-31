@@ -179,6 +179,14 @@ function result(request: CardHarnessRequest) {
           input: '当前项目',
           output: '本地可运行网站',
           validation: '打开首页',
+          acceptanceCriteria: [
+            {
+              id: 'AC-01',
+              criterion: 'Working output',
+              passCondition: 'The expected output is readable',
+              evidence: 'Output reference',
+            },
+          ],
         },
         {
           id: step2,
@@ -186,6 +194,14 @@ function result(request: CardHarnessRequest) {
           input: '已有页面',
           output: '可选择卡片',
           validation: '实际选择',
+          acceptanceCriteria: [
+            {
+              id: 'AC-01',
+              criterion: 'Working output',
+              passCondition: 'The expected output is readable',
+              evidence: 'Output reference',
+            },
+          ],
         },
       ],
       handoffSummary:
@@ -255,10 +271,12 @@ void test('real planning transport input, validated draft and exact finalized Ac
   assert.equal(card.plan?.status, 'finalized');
   const fresh = createPlanningService(undefined, new Map());
   assert.deepEqual((await fresh.read(project, uid)).actions, card.actions);
-  await assert.rejects(() => service.start(project, input(card)), /Reopen/);
-  card = await service.update(project, uid, card.revision, 'reopen');
-  assert.equal(card.plan?.status, 'draft');
-  assert.deepEqual(card.actions, []);
+  await assert.rejects(() => service.start(project, input(card)), /locked/);
+  await assert.rejects(
+    () => service.update(project, uid, card.revision, 'reopen'),
+    /locked/,
+  );
+  assert.equal((await service.read(project, uid)).plan?.status, 'finalized');
 });
 
 void test('cancel rejects late results and retains the previous Plan for retry', async (t) => {

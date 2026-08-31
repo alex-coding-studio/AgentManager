@@ -66,6 +66,14 @@ async function fixture(
     input: 'Current project',
     output: 'A working file',
     validation: 'Read its contents',
+    acceptanceCriteria: [
+      {
+        id: 'AC-01',
+        criterion: 'Working output',
+        passCondition: 'The expected output is readable',
+        evidence: 'Output reference',
+      },
+    ],
   }));
   const card: PlanningCard = {
     schemaVersion: 1,
@@ -187,7 +195,12 @@ function delivered(
       summary: 'The module is ready for user validation.',
       artifactRefs: refs,
       checks: [
-        { summary: 'Read the file', status: 'passed', evidenceRefs: refs },
+        {
+          criterionId: 'AC-01',
+          summary: 'Read the file',
+          status: 'passed',
+          evidenceRefs: refs,
+        },
       ],
       remaining: [],
     }),
@@ -1131,4 +1144,106 @@ void test('recheck preserves captured branch evidence for implicit PR discovery'
   );
   assert.equal(fixed.execution?.runs[0].github?.outputBranch, 'feature');
   assert.equal(fixed.execution?.runs[0].github?.pullRequests[0].number, 7);
+});
+
+void test('required failure blocks acceptance; explicit user decision preserves failure and unlocks acceptance', async (t) => {
+  const { project, store, service, calls, input } = await fixture(t);
+  await service.start(project, input);
+  await writeFile(path.join(project.rootPath, 'module.txt'), 'delivered');
+  const response = delivered(calls[0].request);
+  const report = JSON.parse(response.finalOutput);
+  report.checks[0].status = 'failed';
+  report.additionalChecks = [
+    { summary: 'Optional probe', status: 'failed', evidenceRefs: [] },
+  ];
+  calls[0].resolve({ ...response, finalOutput: JSON.stringify(report) });
+  let card = await settled(store, project);
+  await assert.rejects(
+    () =>
+      service.update(
+        project,
+        id,
+        card.revision,
+        'accept',
+        card.execution!.runs[0].id,
+      ),
+    /Required acceptance/,
+  );
+  await assert.rejects(
+    () =>
+      service.overrideRequiredCheck(
+        project,
+        id,
+        card.revision,
+        'unknown',
+        'accept',
+      ),
+    /Select a required/,
+  );
+  card = await service.overrideRequiredCheck(
+    project,
+    id,
+    card.revision,
+    'AC-01',
+    'I explicitly accept this limitation.',
+  );
+  assert.equal(card.execution!.runs[0].result!.checks[0].status, 'failed');
+  card = await service.update(
+    project,
+    id,
+    card.revision,
+    'accept',
+    card.execution!.runs[0].id,
+  );
+  assert.deepEqual(card.execution!.acceptedActionIds, [one]);
+  await assert.rejects(
+    () =>
+      service.overrideRequiredCheck(
+        project,
+        id,
+        card.revision,
+        'AC-01',
+        'accept',
+      ),
+    /finished, unaccepted/,
+  );
+});
+
+void test('legacy checklist upgrade is one-time and cannot rewrite historical runs', async (t) => {
+  const { project, store, service, input, card } = await fixture(t);
+  const file = path.join(
+    project.planningPath,
+    `implementation/cards/${id}/00000001/planning-state.json`,
+  );
+  const criteria = card.actions[0].acceptanceCriteria!;
+  for (const action of card.actions)
+    delete (action as Partial<typeof action>).acceptanceCriteria;
+  await writeFile(file, JSON.stringify(card));
+  await assert.rejects(
+    () => service.start(project, input),
+    /Define the required/,
+  );
+  const upgraded = await service.bindLegacyChecklist(
+    project,
+    id,
+    1,
+    one,
+    criteria,
+    'User approved upgrade.',
+  );
+  assert.equal(upgraded.actions[0].acceptanceCriteria!.length, 1);
+  await assert.rejects(
+    () =>
+      service.bindLegacyChecklist(
+        project,
+        id,
+        upgraded.revision,
+        one,
+        criteria,
+        'Again',
+      ),
+    /Only a legacy/,
+  );
+  const saved = await store.read(project, id);
+  assert.equal(saved.execution?.runs.length ?? 0, 0);
 });

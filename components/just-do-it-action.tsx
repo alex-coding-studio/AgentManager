@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { assessRequiredChecks, splitChecks } from '@/lib/just-do-it-checklist';
 import { LoaderCircle, Check } from 'lucide-react';
 import { AgentProfileSelector } from '@/components/agent-profile-selector';
 import {
@@ -62,9 +63,11 @@ export function JustDoItAction({
       | 'cancel'
       | 'accept'
       | 'refresh-github'
-      | 'recheck-output',
+      | 'recheck-output'
+      | 'override-check',
     outputId = latest?.id,
     initializeRepository = false,
+    criterionId?: string,
   ) {
     setPending(true);
     setError('');
@@ -81,6 +84,8 @@ export function JustDoItAction({
           profile,
           outputId,
           initializeRepository,
+          criterionId,
+          note: instruction,
         }),
       });
       const data = await response.json();
@@ -126,7 +131,16 @@ export function JustDoItAction({
     }
   }
 
-  const stage = accepted ? 2 : latest?.status === 'succeeded' ? 1 : 0;
+  const requiredPassed = assessRequiredChecks(
+    latest?.acceptanceChecklist,
+    latest?.result?.checks ?? [],
+    card.execution?.acceptanceOverrides?.[action.id],
+  ).passed;
+  const stage = accepted
+    ? 2
+    : latest?.status === 'succeeded' && requiredPassed
+      ? 1
+      : 0;
   return (
     <section className="mt-6 space-y-4 border-t border-border pt-5">
       <div className="grid grid-cols-3 gap-2 text-xs">
@@ -198,7 +212,16 @@ export function JustDoItAction({
                         ? 'Canceled'
                         : run.status === 'failed'
                           ? 'Execution failed'
-                          : run.result?.outcome === 'delivered'
+                          : run.result &&
+                              assessRequiredChecks(
+                                run.acceptanceChecklist,
+                                run.result.checks,
+                                run.id === latest?.id
+                                  ? card.execution?.acceptanceOverrides?.[
+                                      action.id
+                                    ]
+                                  : undefined,
+                              ).passed
                             ? 'Ready to verify'
                             : 'Needs your input',
                 )}
@@ -362,21 +385,108 @@ export function JustDoItAction({
                   <p className="mt-3 whitespace-pre-wrap text-sm leading-7">
                     {run.result.summary}
                   </p>
-                  {run.result.checks.length > 0 && (
-                    <div className="mt-4 space-y-2">
-                      <h4 className="text-xs text-muted-foreground">
-                        {t('Agent-reported checks')}
-                      </h4>
-                      {run.result.checks.map((check, i) => (
-                        <p
-                          key={i}
-                          className={`text-sm ${check.status === 'failed' ? 'text-destructive' : ''}`}
-                        >
+                  <div className="mt-4 space-y-3">
+                    <h4 className="text-sm font-medium">
+                      {t('Agent-reported checks')}
+                    </h4>
+                    <h5 className="text-xs font-semibold">
+                      {t('Required checks')}
+                    </h5>
+                    {!run.acceptanceChecklist && (
+                      <p className="text-xs text-muted-foreground">
+                        {t(
+                          'Historical report without a fixed checklist; rerun against confirmed criteria.',
+                        )}
+                      </p>
+                    )}
+                    {assessRequiredChecks(
+                      run.acceptanceChecklist,
+                      run.result.checks,
+                      run.id === latest?.id
+                        ? card.execution?.acceptanceOverrides?.[action.id]
+                        : undefined,
+                    ).items.map((item) => (
+                      <div
+                        key={item.criterion.id}
+                        className="space-y-1 rounded border border-border p-2 text-sm"
+                      >
+                        <p>
+                          {item.criterion.id} · {item.criterion.criterion}
+                        </p>
+                        <p>
+                          {t('Pass condition')}: {item.criterion.passCondition}
+                        </p>
+                        <p>
+                          {t('Observed result')}:{' '}
+                          {t(item.observed?.status ?? 'not-run')} ·{' '}
+                          {item.observed?.summary}
+                        </p>
+                        {item.observed?.evidenceRefs.map((ref, i) => (
+                          <p
+                            key={i}
+                            className="break-all text-xs text-muted-foreground"
+                          >
+                            {ref}
+                          </p>
+                        ))}
+                        {item.override && (
+                          <p>
+                            {t('Passed by user decision')}: {item.override.note}{' '}
+                            · {item.override.recordedAt}
+                          </p>
+                        )}
+                        {item.status !== 'passed' &&
+                          run.id === latest?.id &&
+                          !accepted &&
+                          run.status !== 'running' && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={!enabled || !instruction.trim()}
+                              onClick={() =>
+                                void send(
+                                  'override-check',
+                                  run.id,
+                                  false,
+                                  item.criterion.id,
+                                )
+                              }
+                            >
+                              {t(
+                                'Use feedback as user decision to pass this item',
+                              )}
+                            </Button>
+                          )}
+                      </div>
+                    ))}
+                    <h5 className="text-xs font-semibold">
+                      {run.acceptanceChecklist
+                        ? `${t('Additional checks')} · non-blocker`
+                        : t('Historical checks (not classified)')}
+                    </h5>
+                    {(run.acceptanceChecklist
+                      ? splitChecks(
+                          run.acceptanceChecklist,
+                          run.result.checks,
+                          run.result.additionalChecks,
+                        ).additional
+                      : [
+                          ...run.result.checks,
+                          ...(run.result.additionalChecks ?? []),
+                        ]
+                    ).map((check, i) => (
+                      <div key={i} className="text-sm text-muted-foreground">
+                        <p>
                           {t(check.status)} · {check.summary}
                         </p>
-                      ))}
-                    </div>
-                  )}
+                        {check.evidenceRefs.map((ref, j) => (
+                          <p key={j} className="break-all text-xs">
+                            {ref}
+                          </p>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
                   {run.result.remaining.length > 0 && (
                     <div className="mt-4">
                       <h4 className="text-xs text-muted-foreground">
@@ -477,7 +587,7 @@ export function JustDoItAction({
               latest.observedRefs.length > 0 && (
                 <Button
                   variant="outline"
-                  disabled={!enabled}
+                  disabled={!enabled || !requiredPassed}
                   onClick={() => void send('accept')}
                 >
                   <Check />

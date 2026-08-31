@@ -60,6 +60,14 @@ async function fixture(
     input: 'Workspace',
     output: 'Working file',
     validation: 'Check file',
+    acceptanceCriteria: [
+      {
+        id: 'AC-01',
+        criterion: 'Working output',
+        passCondition: 'The expected output is readable',
+        evidence: 'Output reference',
+      },
+    ],
   }));
   const card: PlanningCard = {
     schemaVersion: 1,
@@ -189,7 +197,14 @@ function delivered(request: CardHarnessRequest): LocalAgentResult {
       outcome: 'delivered',
       summary: 'File written in Card worktree',
       artifactRefs: ['file:app.txt'],
-      checks: [],
+      checks: [
+        {
+          criterionId: 'AC-01',
+          summary: 'Read app',
+          status: 'passed',
+          evidenceRefs: ['file:app.txt'],
+        },
+      ],
       remaining: [],
     }),
   };

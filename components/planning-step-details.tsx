@@ -6,7 +6,10 @@ import { useUiText } from '@/components/ui-language-provider';
 export function PlanningStepDetails({
   step,
 }: {
-  step: Pick<ActionContract, 'input' | 'output' | 'validation'>;
+  step: Pick<
+    ActionContract,
+    'input' | 'output' | 'validation' | 'acceptanceCriteria'
+  >;
 }) {
   const { t } = useUiText();
   return (
@@ -25,6 +28,28 @@ export function PlanningStepDetails({
           <p className="whitespace-pre-wrap text-sm leading-7">{content}</p>
         </section>
       ))}
+      <section>
+        <h3 className="mb-2 text-xs font-semibold">{t('Required checks')}</h3>
+        {step.acceptanceCriteria?.length ? (
+          step.acceptanceCriteria.map((item) => (
+            <div key={item.id} className="mb-3 text-sm">
+              <p>
+                {item.id} · {item.criterion}
+              </p>
+              <p>
+                {t('Pass condition')}: {item.passCondition}
+              </p>
+              <p className="text-muted-foreground">
+                {t('Evidence')}: {item.evidence}
+              </p>
+            </div>
+          ))
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            {t('No fixed checklist. Define it before execution.')}
+          </p>
+        )}
+      </section>
     </div>
   );
 }

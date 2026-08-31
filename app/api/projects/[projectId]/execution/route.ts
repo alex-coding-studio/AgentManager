@@ -35,6 +35,16 @@ export async function POST(
         ),
       );
     }
+    if (input.action === 'override-check')
+      return Response.json({
+        card: await executionService.overrideRequiredCheck(
+          project,
+          input.cardId,
+          input.expectedRevision,
+          input.criterionId,
+          input.note,
+        ),
+      });
     if (input.action === 'start')
       return Response.json(
         { card: await executionService.start(project, input) },

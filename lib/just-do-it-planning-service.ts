@@ -1,3 +1,4 @@
+import { validateAcceptanceCriteria } from './just-do-it-checklist.ts';
 import { randomUUID } from 'node:crypto';
 import {
   readdir,
@@ -420,7 +421,9 @@ export function createPlanningService(
     if (card.run?.status === 'running')
       throw new Error('This Card already has a running Agent.');
     if (card.plan?.status === 'finalized')
-      throw new Error('Reopen the Plan before adjusting it.');
+      throw new Error(
+        'The finalized Plan and acceptance checklist are locked.',
+      );
     const { log } = await load(project, input.cardId);
     if (
       input.targetId &&
@@ -672,7 +675,13 @@ export function createPlanningService(
         'Execution has started. Clean rollback is required before changing the Plan; rollback is not connected yet.',
       );
     if (!card.plan) throw new Error('Generate a Plan first.');
+    if (action === 'reopen')
+      throw new Error(
+        'The finalized Plan and acceptance checklist are locked.',
+      );
     if (action === 'finalize') {
+      for (const step of card.plan.steps)
+        validateAcceptanceCriteria(step.acceptanceCriteria);
       if (card.run?.status !== 'succeeded')
         throw new Error('Only a successful current Plan can be finalized.');
       return commit(
@@ -756,5 +765,5 @@ export async function savePlanningInstructions(
 }
 
 function renderPlan(plan: ExecutionPlan) {
-  return `# Plan\n\n${plan.overview}\n\n${plan.steps.map((step) => `## ${step.title}\n\nID: ${step.id}\n\n### Input\n${step.input}\n\n### Output\n${step.output}\n\n### Validation\n${step.validation}`).join('\n\n')}\n`;
+  return `# Plan\n\n${plan.overview}\n\n${plan.steps.map((step) => `## ${step.title}\n\nID: ${step.id}\n\n### Input\n${step.input}\n\n### Output\n${step.output}\n\n### Validation\n${step.validation}\n\n### Required acceptance checklist\n${(step.acceptanceCriteria ?? []).map((item) => `- ${item.id}: ${item.criterion}\n  Pass: ${item.passCondition}\n  Evidence: ${item.evidence}`).join('\n')}`).join('\n\n')}\n`;
 }

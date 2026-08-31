@@ -121,6 +121,22 @@ export const chineseUi: Record<string, string> = {
   'Accept earlier Actions before starting this step.':
     '请先验收前面的步骤，再开始这一步。',
   'Your input': '你的输入',
+  'Historical checks (not classified)': '历史检查（未分类）',
+  'Confirmed checklist locked': '已确认清单已锁定',
+  'Plan and acceptance criteria are locked after confirmation. User decisions remain separate.':
+    '计划与验收标准确认后锁定，用户裁决单独记录。',
+  'Required checks': '必查项',
+  'Additional checks': '附加项',
+  'Pass condition': '通过条件',
+  Evidence: '验收证据',
+  'Observed result': '实际检查结果',
+  'Passed by user decision': '用户裁决通过',
+  'Use feedback as user decision to pass this item':
+    '用当前反馈明确裁决此项通过',
+  'No fixed checklist. Define it before execution.':
+    '尚无固定验收清单，请在执行前补齐。',
+  'Historical report without a fixed checklist; rerun against confirmed criteria.':
+    '本历史轮次没有固定清单，不能据此判定新清单通过。',
   'Agent-reported checks': 'Agent 自检结果',
   'Remaining work': '尚未完成',
   'Observed file and Git changes': '已检测到的文件与 Git 变更',

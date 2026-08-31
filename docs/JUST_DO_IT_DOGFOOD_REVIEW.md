@@ -34,12 +34,12 @@ remote repositories were not deleted.
 The following Rounds are the active Card's worktree-based retry sequence. Times are
 America/Los_Angeles on 2026-08-30.
 
-| Round | Time and duration | Intended change | Verified result and failure boundary |
-|---|---|---|---|
-| 1 | 20:03:58–20:21:12; 17m14s | Build the initial project using the installed iOS setup workflow | Skills were available; code stayed in the Card worktree. Scaffold and generic iOS build were produced. Device-service access blocked simulator/pre-push checks. Agent reported `blocked`; the structured report was retained. |
-| 2 | 20:22:24–20:31:39; 9m15s | Correct publication to the private organization repository | Organization repository was created and origin changed. Lint cache writes and simulator access failed under the old sandbox. Normal push was blocked by its hook. The host additionally rejected the repository URL as an artifact. |
-| 3 | 20:44:15–20:48:08; 3m53s | Reuse the existing project, rerun gates and push the Card branch | Full Access was actually loaded. Lint, simulator XCTest and pre-push passed; Git transport confirmed the branch. Agent REST checks used the old personal repository and reported HTTP 409. Its report also cited that wrong repository and an existing commit. |
-| 4 | 20:57:35–21:04:47; 7m13s | Publish the explicitly authorized empty main baseline and correct verification | Remote main and default-branch setting were corrected. Exact main/Card commit and tree identities matched. A direct empty-tree expansion returned 404; alternative exact-object verification established the baseline. Host rejected existing commit references as if they had to be new commits. |
+| Round | Time and duration         | Intended change                                                                | Verified result and failure boundary                                                                                                                                                                                                                                                              |
+| ----- | ------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1     | 20:03:58–20:21:12; 17m14s | Build the initial project using the installed iOS setup workflow               | Skills were available; code stayed in the Card worktree. Scaffold and generic iOS build were produced. Device-service access blocked simulator/pre-push checks. Agent reported `blocked`; the structured report was retained.                                                                     |
+| 2     | 20:22:24–20:31:39; 9m15s  | Correct publication to the private organization repository                     | Organization repository was created and origin changed. Lint cache writes and simulator access failed under the old sandbox. Normal push was blocked by its hook. The host additionally rejected the repository URL as an artifact.                                                               |
+| 3     | 20:44:15–20:48:08; 3m53s  | Reuse the existing project, rerun gates and push the Card branch               | Full Access was actually loaded. Lint, simulator XCTest and pre-push passed; Git transport confirmed the branch. Agent REST checks used the old personal repository and reported HTTP 409. Its report also cited that wrong repository and an existing commit.                                    |
+| 4     | 20:57:35–21:04:47; 7m13s  | Publish the explicitly authorized empty main baseline and correct verification | Remote main and default-branch setting were corrected. Exact main/Card commit and tree identities matched. A direct empty-tree expansion returned 404; alternative exact-object verification established the baseline. Host rejected existing commit references as if they had to be new commits. |
 
 Round record revisions: 10/11, 12/13, 14/15 and 16/17 respectively. Revision 18
 rechecks the saved fourth-Round report without a model call, code change or remote
@@ -48,20 +48,20 @@ unchanged. The empty-tree query failure remains in the original report as eviden
 
 ## Findings and disposition
 
-| ID | Finding | Evidence and impact | Current disposition |
-|---|---|---|---|
-| JDI-DF-01 | Installed plugin Skills were absent from the execution Session | Initial worker ignored user config, received an empty harness Skills field, searched legacy paths and claimed the iOS plugin was unavailable. The plugin was installed. | Native `skills/list` discovery and metadata injection implemented in `444cbaf`; Round 1 visibly read `ios-dev-agent:setup` and its references. Listing does not force invocation. |
-| JDI-DF-02 | Submitted adjustment text leaked into the next step's input | Card-wide feedback state was not cleared after successful submission and was initialized from the previous submitted run. | Input starts empty and clears on accepted submission; rejection retains the draft. Browser fixtures verified cross-step and retry behavior. Included in `444cbaf`. |
-| JDI-DF-03 | User Full Access differed from the worker's effective permissions | Host queries succeeded, but equivalent worker-profile queries failed. Denial logs identified CoreSimulator/CoreDevice Mach/XPC lookup blocks and cache/log writes. | Explicit local Full Access/read-only choice is honored for execution in `03e0eea`; planning stays read-only. Simulator query and isolated XCTest smoke passed. This restores usability but does not establish the proposed safer Auto path. |
-| JDI-DF-04 | Lint tool failure looked like a source-code defect | SwiftFormat reported 0/4 files needing formatting; SwiftLint exited because it could not write a cache plist. The same project lint entry passed with no code edits under permitted access. | Immediate permission issue addressed. Environment diagnosis must distinguish tool/cache failures from rule violations before proposing code changes. |
-| JDI-DF-05 | Initial execution had no isolated recovery boundary | The pre-worktree attempt wrote into the primary directory. Canceling or failing preserved those effects, but there was no convenient return to the starting state. | One persistent branch/worktree per Card and backup-first restart implemented in `444cbaf`. Actions/Rounds reuse it; no auto-reset or main merge. Legacy local state was separately backed up and reset by user instruction. |
-| JDI-DF-06 | Artifact references were conflated with newly changed artifacts | Intermediate commits, repository URLs and later existing commit/file references repeatedly caused host rejection even when the report described verification/publication rather than new code. | Intermediate history and remote identity checks were added; `d56145e` separates observed changes from verified version/external references and adds saved-report recheck. Missing files, unreachable commits, foreign targets and identity/schema errors remain rejected. |
-| JDI-DF-07 | GitHub verification used a different repository from the push | Round 3 pushed through organization origin but hardcoded `xiaocq203/HereItIs` in REST commands and final links. Correct organization ref/tree queries succeeded. | Cause confirmed; wrong references remain invalid. A single host-supplied canonical target for operation, verification and reporting is still a prevention requirement in the environment proposal. Do not call this eventual consistency. |
-| JDI-DF-08 | The first remote Card push happened before a remote main baseline existed | The Card branch became the remote default. A local empty main did not by itself create remote main. | User explicitly authorized bootstrap in Round 4; remote state is now correct. Publication preflight must detect this before future first pushes; never infer default-branch write authorization from Plan confirmation. |
-| JDI-DF-09 | A failed diagnostic attempt was presented beside successful validation without explaining its role | Round 4 retained a failed direct empty-tree GET while exact remote commit/tree SHA plus local empty-tree content proved the requested baseline. | Verification facts are confirmed. Diagnostic-attempt versus required-validation classification remains a UI/schema design item; no failed historical command is relabeled as successful. |
-| JDI-DF-10 | Small feedback caused broad repeated setup work | Round 2 requested an organization/private-repository correction but reread setup/context, regenerated the project, rebuilt and waited on known unavailable simulator paths before/inside push gates. | Record for final efficiency review. Reuse relevant evidence and narrow the feedback scope, while preserving required hooks. No claim that all repeated checks were unnecessary. |
-| JDI-DF-11 | Running-state visibility was insufficient | The user needed external transcript inspection to learn which Skill was loaded, which permissions were effective, what command was running and why it was waiting. Effective access is recorded only after successful transport completion. | Open. Expose bounded progress and actual runtime facts without injecting whole transcripts or private reasoning into the UI. |
-| JDI-DF-12 | Recovery/handoff summaries could lag authoritative state | Early handoff prose still called the Plan a draft after finalization. Later ownership corrections competed with older repository references. | Current host stage/Plan/Action facts are now explicit in the execution prompt; reset events override stale summary state. Canonical GitHub target propagation still needs stronger ownership. |
+| ID        | Finding                                                                                            | Evidence and impact                                                                                                                                                                                                                         | Current disposition                                                                                                                                                                                                                                                       |
+| --------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| JDI-DF-01 | Installed plugin Skills were absent from the execution Session                                     | Initial worker ignored user config, received an empty harness Skills field, searched legacy paths and claimed the iOS plugin was unavailable. The plugin was installed.                                                                     | Native `skills/list` discovery and metadata injection implemented in `444cbaf`; Round 1 visibly read `ios-dev-agent:setup` and its references. Listing does not force invocation.                                                                                         |
+| JDI-DF-02 | Submitted adjustment text leaked into the next step's input                                        | Card-wide feedback state was not cleared after successful submission and was initialized from the previous submitted run.                                                                                                                   | Input starts empty and clears on accepted submission; rejection retains the draft. Browser fixtures verified cross-step and retry behavior. Included in `444cbaf`.                                                                                                        |
+| JDI-DF-03 | User Full Access differed from the worker's effective permissions                                  | Host queries succeeded, but equivalent worker-profile queries failed. Denial logs identified CoreSimulator/CoreDevice Mach/XPC lookup blocks and cache/log writes.                                                                          | Explicit local Full Access/read-only choice is honored for execution in `03e0eea`; planning stays read-only. Simulator query and isolated XCTest smoke passed. This restores usability but does not establish the proposed safer Auto path.                               |
+| JDI-DF-04 | Lint tool failure looked like a source-code defect                                                 | SwiftFormat reported 0/4 files needing formatting; SwiftLint exited because it could not write a cache plist. The same project lint entry passed with no code edits under permitted access.                                                 | Immediate permission issue addressed. Environment diagnosis must distinguish tool/cache failures from rule violations before proposing code changes.                                                                                                                      |
+| JDI-DF-05 | Initial execution had no isolated recovery boundary                                                | The pre-worktree attempt wrote into the primary directory. Canceling or failing preserved those effects, but there was no convenient return to the starting state.                                                                          | One persistent branch/worktree per Card and backup-first restart implemented in `444cbaf`. Actions/Rounds reuse it; no auto-reset or main merge. Legacy local state was separately backed up and reset by user instruction.                                               |
+| JDI-DF-06 | Artifact references were conflated with newly changed artifacts                                    | Intermediate commits, repository URLs and later existing commit/file references repeatedly caused host rejection even when the report described verification/publication rather than new code.                                              | Intermediate history and remote identity checks were added; `d56145e` separates observed changes from verified version/external references and adds saved-report recheck. Missing files, unreachable commits, foreign targets and identity/schema errors remain rejected. |
+| JDI-DF-07 | GitHub verification used a different repository from the push                                      | Round 3 pushed through organization origin but hardcoded `xiaocq203/HereItIs` in REST commands and final links. Correct organization ref/tree queries succeeded.                                                                            | Cause confirmed; wrong references remain invalid. A single host-supplied canonical target for operation, verification and reporting is still a prevention requirement in the environment proposal. Do not call this eventual consistency.                                 |
+| JDI-DF-08 | The first remote Card push happened before a remote main baseline existed                          | The Card branch became the remote default. A local empty main did not by itself create remote main.                                                                                                                                         | User explicitly authorized bootstrap in Round 4; remote state is now correct. Publication preflight must detect this before future first pushes; never infer default-branch write authorization from Plan confirmation.                                                   |
+| JDI-DF-09 | A failed diagnostic attempt was presented beside successful validation without explaining its role | Round 4 retained a failed direct empty-tree GET while exact remote commit/tree SHA plus local empty-tree content proved the requested baseline.                                                                                             | Verification facts are confirmed. Diagnostic-attempt versus required-validation classification remains a UI/schema design item; no failed historical command is relabeled as successful.                                                                                  |
+| JDI-DF-10 | Small feedback caused broad repeated setup work                                                    | Round 2 requested an organization/private-repository correction but reread setup/context, regenerated the project, rebuilt and waited on known unavailable simulator paths before/inside push gates.                                        | Record for final efficiency review. Reuse relevant evidence and narrow the feedback scope, while preserving required hooks. No claim that all repeated checks were unnecessary.                                                                                           |
+| JDI-DF-11 | Running-state visibility was insufficient                                                          | The user needed external transcript inspection to learn which Skill was loaded, which permissions were effective, what command was running and why it was waiting. Effective access is recorded only after successful transport completion. | Open. Expose bounded progress and actual runtime facts without injecting whole transcripts or private reasoning into the UI.                                                                                                                                              |
+| JDI-DF-12 | Recovery/handoff summaries could lag authoritative state                                           | Early handoff prose still called the Plan a draft after finalization. Later ownership corrections competed with older repository references.                                                                                                | Current host stage/Plan/Action facts are now explicit in the execution prompt; reset events override stale summary state. Canonical GitHub target propagation still needs stronger ownership.                                                                             |
 
 ## Action readiness gap surfaced after report recheck
 
@@ -98,11 +98,11 @@ rejected push with an incomplete branch name before using HEAD; this is part of 
 observed execution inefficiency, not a separate GitHub failure.
 
 | Round | Reported input tokens | Cached input tokens | Reported output tokens |
-|---|---:|---:|---:|
-| 1 | 5,841,565 | 5,624,832 | 45,353 |
-| 2 | 1,287,349 | 1,202,688 | 21,744 |
-| 3 | 702,133 | 641,024 | 10,583 |
-| 4 | 648,924 | 592,640 | 21,511 |
+| ----- | --------------------: | ------------------: | ---------------------: |
+| 1     |             5,841,565 |           5,624,832 |                 45,353 |
+| 2     |             1,287,349 |           1,202,688 |                 21,744 |
+| 3     |               702,133 |             641,024 |                 10,583 |
+| 4     |               648,924 |             592,640 |                 21,511 |
 
 These are the provider usage aggregates stored on each Run, not a single context
 window size or a monetary bill. Cached input is a subset, not an additional charge
@@ -215,3 +215,77 @@ extra acceptance probes are allowed only as non-blockers and cannot block user
 acceptance. This is the confirmed resolution direction for JDI-DF-09/13/14, recorded
 in the product workflow. Its data/schema/UI enforcement remains pending; existing
 Plan text and historical reports are not retroactively presented as a frozen list.
+
+## Dependency-aware stopping review after Rounds 1–5
+
+JDI-DF-16: Round 1 did not fail fast after an unavailable prerequisite was known.
+The original Session `01a055c6-1123-73e3-9e99-8f918d3a496e` records simulator access
+failure at approximately 03:06 UTC, a failed simulator test by 03:15, a push at
+03:16:48 whose hook repeated that unavailable test, and Mac fallback attempts at
+03:18. It ended at 03:21:12, after 17m14s. It created the initial shell but did not
+implement the later persistence or registration Actions. The defect is continued
+work and repeated dependent checks within Action 1, not execution of the whole Plan.
+Round 2 also reports lint/simulator failures followed by a blocked pre-push test.
+Independent build/signing evidence was useful partial output; not every operation
+after the first failure was waste. The repeated unchanged simulator prerequisite
+and unbounded search for alternative execution paths are the prevention target.
+
+Confirmed direction: identify prerequisite dependencies, stop affected downstream
+work, allow explicitly justified independent progress, and bound cause-directed
+repair. Do not retry an unchanged known failure or invoke a hook known to repeat
+it without a relevant change. Preserve partial output and report blocked promptly.
+Optional diagnostic failures remain non-blockers. Evidence reuse requires matching
+revision and relevant environment; it never waives a mandatory gate.
+
+JDI-DF-17: the Draft-first ruling conflicts with the current full-test pre-push
+hook. A prompt asking for an early Draft cannot publish a branch when that hook
+requires the unavailable simulator first. Separate safe publication prerequisites
+from acceptance checks in the eventual design; reconcile the actual hook policy
+explicitly, never bypass it. Until implemented, show the publication blocker and
+local takeover artifact. No shared hook was changed by this documentation update.
+
+The checklist is drafted and adjustable during Plan, then locked at finalization.
+A later explicit user ruling can pass a named item for workflow purposes while
+retaining the actual test result and recording the override separately. It does
+not silently rewrite the frozen criterion or historical evidence.
+
+### Coverage required for the subsequent workflow review
+
+After the complete Card trial, review Plan confirmation, prerequisites, repair,
+publication, required checks, additional diagnostics, user override, Ready,
+acceptance and the next Action as one flow. Unit tests alone did not establish
+that a human could inspect a Draft or recover from a real permission failure.
+Add deterministic regressions for dependency stopping, unchanged-failure retry
+suppression, evidence invalidation and override provenance. Also exercise a real
+hook-blocked publication, partial-output takeover, retry and Draft-to-Ready flow.
+Report automated checks and observed end-to-end behavior separately. These are
+required validation scenarios, not tests or live trials completed by this update.
+
+## Implementation checkpoint before Round 6
+
+Structured Plan criteria, finalization/start validation, per-Round snapshots,
+required-ID coverage and explicit user overrides are implemented. The UI separates
+required and additional checks; unclassified historical results remain historical.
+The first Action received six detailed criteria through an append-only one-time
+user-authorized migration (Card revision 22). Its five earlier Rounds and acceptance
+state are unchanged. The canonical project checklist is `docs/acceptance/SETUP.md`.
+
+Shared infrastructure PR #63 was independently reviewed and merged at `00c5b3d`.
+An explicit HereItIs configuration now separates Card branch publication from
+full acceptance tests; non-opted-in projects retain their current hook behavior.
+Three hook regression groups verify ref restrictions and required test outcomes.
+The new acceptance entry rejects no-target and zero-test success. No hook bypass
+or default-branch publication was used.
+
+Dependency-aware stopping and a one-repair limit are now in the execution prompt.
+They are not a deterministic host command gate. Likewise Ready remains an Agent
+operation, not remote branch protection. The full Card trial must verify these
+behaviors; neither unit tests nor this preflight certify the next Round or Action.
+
+Preflight verification: AgentManager planning tests (24), harness tests (27),
+execution/checklist/worktree/GitHub tests (40), lint, typecheck and production build
+passed during this change. The real HereItIs acceptance entry executed one simulator
+test successfully. A normal Card push then used the explicit publication policy
+without rerunning simulator tests; PR #1 remains Draft at `e51b451`. Browser
+inspection confirmed the six criteria, historical-report labeling and disabled
+acceptance for the old output. Round 6 was not started and no Action was accepted.
