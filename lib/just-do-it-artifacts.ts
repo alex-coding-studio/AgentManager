@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import { createReadStream } from 'node:fs';
-import { lstat, readdir, realpath, readlink } from 'node:fs/promises';
+import { createReadStream, constants } from 'node:fs';
+import { lstat, readdir, realpath, readlink, open } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import path from 'node:path';
@@ -173,4 +173,76 @@ export async function verifiedOutputVersionRefs(
       ...(await verifiedGitVersionRefs(snapshot, claimed)),
     ]),
   ];
+}
+
+export async function captureLocalAcceptanceArtifacts(
+  snapshot: WorkspaceSnapshot,
+  claimed: string[],
+  completedAt: string,
+) {
+  const refs = [...new Set(claimed)].filter((ref) =>
+    /^file:build\/acceptance\/[a-zA-Z0-9_.-]+\.(png|jpg|jpeg|txt|log|json)$/.test(
+      ref,
+    ),
+  );
+  if (refs.length > 20) return [];
+  const artifacts: Array<{
+    ref: string;
+    sha256: string;
+    bytes: number;
+    base64: string;
+  }> = [];
+  let total = 0;
+  for (const ref of refs) {
+    const relative = ref.slice(5);
+    if (relative.split('/').some((part) => part === '..' || part === '.'))
+      continue;
+    let current = snapshot.root;
+    let valid = true;
+    for (const part of relative.split('/')) {
+      current = path.join(current, part);
+      const stat = await lstat(current).catch(() => null);
+      if (!stat || stat.isSymbolicLink()) {
+        valid = false;
+        break;
+      }
+    }
+    if (!valid) continue;
+    const stat = await lstat(current);
+    if (
+      !stat.isFile() ||
+      stat.size > 1_400_000 ||
+      stat.mtimeMs > Date.parse(completedAt)
+    )
+      continue;
+    const resolved = await realpath(current);
+    if (!resolved.startsWith(snapshot.root + path.sep)) continue;
+    const handle = await open(
+      current,
+      constants.O_RDONLY | constants.O_NOFOLLOW,
+    );
+    try {
+      const before = await handle.stat();
+      if (before.ino !== stat.ino || before.dev !== stat.dev) continue;
+      const data = await handle.readFile();
+      const after = await handle.stat();
+      if (
+        before.mtimeMs !== after.mtimeMs ||
+        before.size !== after.size ||
+        after.mtimeMs > Date.parse(completedAt)
+      )
+        continue;
+      total += data.length;
+      if (data.length > 1_400_000 || total > 1_400_000) continue;
+      artifacts.push({
+        ref,
+        sha256: createHash('sha256').update(data).digest('hex'),
+        bytes: data.length,
+        base64: data.toString('base64'),
+      });
+    } finally {
+      await handle.close();
+    }
+  }
+  return artifacts;
 }

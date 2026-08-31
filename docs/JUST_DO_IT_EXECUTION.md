@@ -220,3 +220,14 @@ Draft publication uses the explicitly opted-in shared hook policy; the Agent own
 the later Ready transition.
 See [the rolling review](JUST_DO_IT_DOGFOOD_REVIEW.md) for the observed Round 1
 sequence and the real-flow validation still required.
+
+## Generated acceptance attachments
+
+Source snapshots still exclude build trees. Claimed regular files directly under
+`build/acceptance/` with png/jpg/jpeg/txt/log/json extensions can be verified
+separately, with a 20-file and 1.4 MB total raw-content limit. Traversal, symlinks
+and files modified after Round completion are rejected. The host archives bytes
+and SHA-256 in `local-artifacts.json` in the append-only output record, rather than
+committing build artifacts into the project. Capture during saved-report recovery
+is explicitly timestamped as recovery-time verification, not an original snapshot.
+Missing, excluded or oversized attachments remain unverified claims.

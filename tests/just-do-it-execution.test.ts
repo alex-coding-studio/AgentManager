@@ -6,6 +6,7 @@ import {
   readFile,
   rm,
   symlink,
+  utimes,
 } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
@@ -27,6 +28,7 @@ import {
 } from '../lib/just-do-it-planning-service.ts';
 import { appendCardWorkRecord } from '../lib/just-do-it-worklog.ts';
 import {
+  captureLocalAcceptanceArtifacts,
   observedChanges,
   snapshotWorkspace,
 } from '../lib/just-do-it-artifacts.ts';
@@ -1246,4 +1248,85 @@ void test('legacy checklist upgrade is one-time and cannot rewrite historical ru
   );
   const saved = await store.read(project, id);
   assert.equal(saved.execution?.runs.length ?? 0, 0);
+});
+
+void test('ignored acceptance attachments are archived and escaped or later-modified files are rejected', async (t) => {
+  const { project } = await fixture(t);
+  await mkdir(path.join(project.rootPath, 'build/acceptance'), {
+    recursive: true,
+  });
+  const attachment = path.join(project.rootPath, 'build/acceptance/home.png');
+  await writeFile(attachment, 'screenshot bytes');
+  const completedAt = new Date(Date.now() + 1000).toISOString();
+  const snapshot = await snapshotWorkspace(project);
+  assert.equal(snapshot.files['build/acceptance/home.png'], undefined);
+  const captured = await captureLocalAcceptanceArtifacts(
+    snapshot,
+    ['file:build/acceptance/home.png'],
+    completedAt,
+  );
+  assert.equal(captured.length, 1);
+  assert.equal(
+    Buffer.from(captured[0].base64, 'base64').toString(),
+    'screenshot bytes',
+  );
+  assert.match(captured[0].sha256, /^[0-9a-f]{64}$/);
+  await symlink(
+    attachment,
+    path.join(project.rootPath, 'build/acceptance/link.png'),
+  );
+  assert.deepEqual(
+    await captureLocalAcceptanceArtifacts(
+      snapshot,
+      [
+        'file:build/acceptance/link.png',
+        'file:build/acceptance/../../secret.txt',
+        'file:build/secret.png',
+      ],
+      completedAt,
+    ),
+    [],
+  );
+  await utimes(attachment, new Date(), new Date(Date.now() + 10000));
+  assert.deepEqual(
+    await captureLocalAcceptanceArtifacts(
+      snapshot,
+      ['file:build/acceptance/home.png'],
+      completedAt,
+    ),
+    [],
+  );
+});
+
+void test('an ignored screenshot does not reject otherwise valid delivery and is retained outside the source repository', async (t) => {
+  const { project, store, service, calls, input } = await fixture(t);
+  await service.start(project, input);
+  await mkdir(path.join(project.rootPath, 'build/acceptance'), {
+    recursive: true,
+  });
+  await writeFile(
+    path.join(project.rootPath, 'build/acceptance/home.png'),
+    'image',
+  );
+  calls[0].resolve(
+    delivered(calls[0].request, ['file:build/acceptance/home.png']),
+  );
+  const card = await settled(store, project);
+  const run = card.execution!.runs[0];
+  assert.equal(run.status, 'succeeded', run.error ?? '');
+  const archived = JSON.parse(
+    await readFile(
+      path.join(
+        project.planningPath,
+        path.dirname(run.outputRef!),
+        'local-artifacts.json',
+      ),
+      'utf8',
+    ),
+  );
+  assert.equal(archived.artifacts[0].ref, 'file:build/acceptance/home.png');
+  assert.equal(
+    archived.artifacts[0].base64,
+    Buffer.from('image').toString('base64'),
+  );
 });

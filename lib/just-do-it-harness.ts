@@ -358,7 +358,7 @@ export class ExecutionEvidenceError extends Error {
   constructor(
     result: Extract<CardHarnessResult, { stage: 'execution' }>,
     references: string[],
-    message = 'Unobserved delivery: input references are not new output evidence.',
+    message = 'Delivery references could not be verified.',
   ) {
     super(`${message} Unverified: ${references.join(', ')}`);
     this.result = result;

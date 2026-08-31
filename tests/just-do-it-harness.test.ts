@@ -369,7 +369,7 @@ void test('an input document or an earlier output cannot masquerade as a new del
         { ...response(req), artifactRefs: ['source/output.md'], checks: [] },
         req,
       ),
-    /input references/,
+    /Delivery references could not be verified/,
   );
   const ctx = context();
   ctx.plan!.status = 'finalized';
@@ -382,7 +382,7 @@ void test('an input document or an earlier output cannot masquerade as a new del
   );
   assert.throws(
     () => parse({ ...response(correction), checks: [] }, correction),
-    /input references/,
+    /Delivery references could not be verified/,
   );
   assert.equal(
     parse(response(correction), correction, 0, [artifact]).stage,

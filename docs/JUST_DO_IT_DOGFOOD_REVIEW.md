@@ -289,3 +289,35 @@ test successfully. A normal Card push then used the explicit publication policy
 without rerunning simulator tests; PR #1 remains Draft at `e51b451`. Browser
 inspection confirmed the six criteria, historical-report labeling and disabled
 acceptance for the old output. Round 6 was not started and no Action was accepted.
+
+## Round 6 result and attachment recovery
+
+Round 6 (`b43ad544-a0ee-4f88-8f3c-f8d47bf785d5`) ran from 05:15:31.975 to
+05:21:28.694 UTC, 5m57s. All six SETUP criteria passed against `e51b451`; one
+simulator test actually executed. The Agent verified the dual-entry home with a
+screenshot and changed existing PR #1 from Draft to Ready without merging. An
+unsupported `gh pr diff --stat` attempt remained an additional non-blocker; supported
+diff commands established the required condition. No project code changed.
+
+JDI-DF-18: the host initially rejected `file:build/acceptance/home.png` because
+workspace snapshots deliberately exclude build directories. A real generated
+acceptance attachment was conflated with unverified output. The fix captures only
+bounded named files under `build/acceptance/`, rejects traversal, symlinks and files
+modified after the Round ended, and retains bytes plus SHA-256 in an append-only
+Card artifact record. Generated evidence stays out of the source repository.
+Existing source/version validation remains unchanged; the error text now says
+references could not be verified rather than implying every failure reuses input.
+
+The saved report was rechecked through the UI at revision 25; Round 6 is succeeded,
+all six required items pass, PR #1 is associated and Ready, and the acceptance
+button is enabled. The original rejected report at revision 24 is preserved.
+No Agent rerun occurred; the Card still has six Rounds and zero accepted Actions.
+The screenshot was captured into the archive at recheck time, not falsely described
+as part of the original workspace snapshot. Execution regression coverage now has
+42 passing tests, including attachment retention and unsafe/stale path rejection.
+
+This establishes the first Action's handoff, not acceptance of the complete Card.
+The remaining legacy Actions still need detailed standards before they can execute.
+Host-level command interception for bounded repair and remote Ready/merge gates
+remain distinct future mechanisms; this trial did not encounter a required-check
+failure after the new instructions, so it does not prove fail-fast behavior.

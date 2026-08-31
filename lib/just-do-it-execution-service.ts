@@ -47,6 +47,7 @@ import {
   type LocalAgentRun,
 } from './local-agent-transport.ts';
 import {
+  captureLocalAcceptanceArtifacts,
   observedChanges,
   observedGitCommits,
   verifiedOutputVersionRefs,
@@ -218,6 +219,16 @@ export function createExecutionService(
             snapshot,
             error.result.artifactRefs,
           );
+          const attachments = await captureLocalAcceptanceArtifacts(
+            snapshot,
+            error.result.artifactRefs,
+            nextRun.endedAt!,
+          );
+          files['local-artifacts.json'] = JSON.stringify({
+            capturedAt: new Date().toISOString(),
+            artifacts: attachments,
+          });
+          versions.push(...attachments.map((item) => item.ref));
           const verified = await verifiedGitHubArtifactRefs(
             workingProject,
             error.result.artifactRefs,
@@ -983,6 +994,7 @@ export function createExecutionService(
       let result;
       let versions: string[] = [];
       let external: string[] = [];
+      let localArtifacts = JSON.stringify({ artifacts: [] });
       try {
         result = parseCardHarnessResult(
           raw,
@@ -996,6 +1008,18 @@ export function createExecutionService(
           recorded,
           error.result.artifactRefs,
         );
+        const attachments = await captureLocalAcceptanceArtifacts(
+          recorded,
+          error.result.artifactRefs,
+          run.endedAt!,
+        );
+        localArtifacts = JSON.stringify({
+          capturedAt: new Date().toISOString(),
+          meaning:
+            'Captured at report recheck; not proof of an original snapshot.',
+          artifacts: attachments,
+        });
+        versions.push(...attachments.map((item) => item.ref));
         external = await verifiedGitHubArtifactRefs(
           workingProject,
           error.result.artifactRefs,
@@ -1057,6 +1081,7 @@ export function createExecutionService(
             versions,
             external,
           }),
+          'local-artifacts.json': localArtifacts,
           'output.md': `# Rechecked Action output\n\n${result.summary}\n\nOutcome: ${result.outcome}\n\nNo Agent commands were rerun. Reported checks and remaining limitations are unchanged.\n\n## Required self-checks\n${result.checks.map((check) => `- ${check.status}: ${check.summary}`).join('\n')}\n\n## Additional checks (non-blocker)\n${(result.additionalChecks ?? []).map((check) => `- ${check.status}: ${check.summary}`).join('\n')}\n\n## Remaining\n${result.remaining.map((item) => `- ${item}`).join('\n')}`,
         },
       );
