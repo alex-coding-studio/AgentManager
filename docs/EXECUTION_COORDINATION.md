@@ -211,3 +211,7 @@ The [final trial statistics](evals/2026-08-31-hereitis-final-trial-statistics.md
 are the baseline, not a matched model benchmark. Select concrete dispatch schemas,
 provider/session behavior, failure recovery and rollout tasks only after this role
 and flow proposal is reviewed; those technical choices are not settled here.
+
+Protocol refinement and proposed implementation slices are documented separately
+in [the protocol outline](EXECUTION_COORDINATION_PROTOCOL.md). That outline remains
+a proposal and does not activate runtime changes.
