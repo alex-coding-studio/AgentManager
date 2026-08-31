@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Input } from '@/components/ui/input';
+import { LocalAgentProfile } from '@/components/local-agent-profile';
 import {
   Dialog,
   DialogContent,
@@ -286,61 +286,12 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
         disabled={busy}
         accept=".md,.markdown,.txt"
       />
-      <fieldset disabled={busy} className="grid gap-3 sm:grid-cols-3">
-        <label className="text-xs">
-          Agent
-          <select
-            className="mt-2 h-9 w-full rounded-lg border border-border bg-background px-2"
-            value={draft.profile.agent}
-            onChange={(event) =>
-              patchDraft(card.id, {
-                profile: {
-                  agent: event.target.value as PlanningProfile['agent'],
-                  model: '',
-                  effort: '',
-                },
-              })
-            }
-          >
-            <option value="codex">Codex</option>
-            <option value="claude">Claude</option>
-          </select>
-        </label>
-        <label className="text-xs">
-          {t('Model ID (optional)')}
-          <Input
-            className="mt-2 h-9"
-            value={draft.profile.model}
-            placeholder={t('Agent default')}
-            onChange={(event) =>
-              patchDraft(card.id, {
-                profile: { ...draft.profile, model: event.target.value },
-              })
-            }
-          />
-        </label>
-        <label className="text-xs">
-          {t('Reasoning effort')}
-          <select
-            className="mt-2 h-9 w-full rounded-lg border border-border bg-background px-2"
-            value={draft.profile.effort}
-            onChange={(event) =>
-              patchDraft(card.id, {
-                profile: {
-                  ...draft.profile,
-                  effort: event.target.value as PlanningProfile['effort'],
-                },
-              })
-            }
-          >
-            {['', 'low', 'medium', 'high', 'xhigh'].map((value) => (
-              <option key={value} value={value}>
-                {value || t('Agent default')}
-              </option>
-            ))}
-          </select>
-        </label>
-      </fieldset>
+      <LocalAgentProfile
+        key={card.id}
+        value={draft.profile}
+        disabled={busy}
+        onChange={(profile) => patchDraft(card.id, { profile })}
+      />
       <p className="text-xs text-muted-foreground">
         {t(
           'Uses your local Agent login. Unsupported model settings return an error, without silently changing models.',

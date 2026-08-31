@@ -279,9 +279,20 @@ This is a shared invocation capability for all three workspaces. Real integratio
 must validate provider/account capabilities and record requested configuration
 and actual model information when available. It must not silently substitute
 models or imply that changing provider can resume another provider's session.
-Exact model catalogs, defaults, cost reporting, and continuation behavior remain
-to be designed. Current selectors are explicitly fictional demo profiles and
-do not change local CLI settings or invoke providers.
+Live Planning reads model catalogs from the local Codex app-server `model/list`
+endpoint and Claude CLI initialization response. The model dropdown uses provider
+IDs and display names, and its effort options follow the selected model's reported
+capabilities. Changing Agent or selecting another model resets effort to the
+provider default; reading a catalog does not silently change a saved selection.
+Agent default and explicit custom-model entry remain available when discovery
+fails or a model is absent from the catalog. A returned catalog is not a guarantee
+that a later request will be authorized or succeed.
+
+Discovery sends initialization/catalog requests only, never a user prompt or
+generation turn. It has bounded output, pagination and timeout, cleans up its
+child process, and shares a short per-Agent cache. It does not modify local CLI
+configuration. Preview selectors remain fictional demo profiles. Per-role
+defaults, full cost reporting, and continuation behavior remain future work.
 
 ## Manual execution and validation loop — settled
 
