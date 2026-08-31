@@ -1036,6 +1036,13 @@ export function JustDoItAction({
                 </ul>
               </section>
             )}
+            {latest?.evidenceErrors && (
+              <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-amber-700 dark:text-amber-400">
+                {t(
+                  'Artifact verification notes do not block acceptance when required checks pass.',
+                )}
+              </p>
+            )}
             <section className="space-y-1">
               <h4 className="font-medium">PR</h4>
               {latest?.github?.pullRequests.length ? (
@@ -1063,13 +1070,6 @@ export function JustDoItAction({
                 'Nothing starts automatically. Acceptance does not merge a PR.',
               )}
             </p>
-            {latest?.evidenceErrors && (
-              <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-amber-700 dark:text-amber-400">
-                {t(
-                  'Artifact verification notes do not block acceptance when required checks pass.',
-                )}
-              </p>
-            )}
             {!requiredPassed && (
               <p className="text-amber-700 dark:text-amber-400">
                 {t(
