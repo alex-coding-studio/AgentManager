@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { CheckDetails } from '@/components/check-details';
 import { assessRequiredChecks, splitChecks } from '@/lib/just-do-it-checklist';
 import { LoaderCircle, Check } from 'lucide-react';
 import { AgentProfileSelector } from '@/components/agent-profile-selector';
@@ -141,16 +142,36 @@ export function JustDoItAction({
     : latest?.status === 'succeeded' && requiredPassed
       ? 1
       : 0;
+  const currentStatus = accepted
+    ? 'Verified'
+    : latest?.status === 'running'
+      ? 'Agent running'
+      : latest?.status === 'failed'
+        ? 'Execution failed'
+        : stage === 1
+          ? 'Ready to verify'
+          : latest
+            ? 'Needs your input'
+            : 'Ready to start';
   return (
     <section className="mt-6 space-y-4 border-t border-border pt-5">
+      <output className="block text-sm font-medium">
+        {t('Current status')}: {t(currentStatus)}
+      </output>
       <div className="grid grid-cols-3 gap-2 text-xs">
         {['Ready to start', 'Ready to verify', 'Verified'].map(
           (label, index) => (
             <div
               key={label}
-              className={`border-t-2 pt-2 ${accepted || index < stage ? 'border-emerald-500 text-emerald-500' : index === stage ? 'border-foreground text-foreground' : 'border-border text-muted-foreground'}`}
+              aria-current={index === stage ? 'step' : undefined}
+              className={`flex items-center gap-1.5 border-t-2 px-2 py-2 ${index === stage ? 'border-emerald-500 bg-emerald-500/10 font-semibold text-emerald-600 dark:text-emerald-400' : 'border-border text-muted-foreground'}`}
             >
-              {String(index + 1).padStart(2, '0')} · {t(label)}
+              {index < stage ? (
+                <Check aria-hidden="true" className="size-3.5 shrink-0" />
+              ) : (
+                String(index + 1).padStart(2, '0')
+              )}{' '}
+              · {t(label)}
             </div>
           ),
         )}
@@ -406,12 +427,13 @@ export function JustDoItAction({
                         ? card.execution?.acceptanceOverrides?.[action.id]
                         : undefined,
                     ).items.map((item) => (
-                      <div
+                      <CheckDetails
                         key={item.criterion.id}
-                        className="space-y-1 rounded border border-border p-2 text-sm"
+                        title={item.criterion.criterion}
+                        status={item.status}
                       >
-                        <p>
-                          {item.criterion.id} · {item.criterion.criterion}
+                        <p className="text-xs text-muted-foreground">
+                          {item.criterion.id}
                         </p>
                         <p>
                           {t('Pass condition')}: {item.criterion.passCondition}
@@ -457,7 +479,7 @@ export function JustDoItAction({
                               )}
                             </Button>
                           )}
-                      </div>
+                      </CheckDetails>
                     ))}
                     <h5 className="text-xs font-semibold">
                       {run.acceptanceChecklist
@@ -475,16 +497,29 @@ export function JustDoItAction({
                           ...(run.result.additionalChecks ?? []),
                         ]
                     ).map((check, i) => (
-                      <div key={i} className="text-sm text-muted-foreground">
+                      <CheckDetails
+                        key={i}
+                        title={check.summary}
+                        status={check.status}
+                        nonBlocking={Boolean(run.acceptanceChecklist)}
+                      >
                         <p>
-                          {t(check.status)} · {check.summary}
+                          {t('Observed result')}: {t(check.status)}
                         </p>
+                        {run.acceptanceChecklist && (
+                          <p className="text-xs text-muted-foreground">
+                            non-blocker
+                          </p>
+                        )}
                         {check.evidenceRefs.map((ref, j) => (
-                          <p key={j} className="break-all text-xs">
+                          <p
+                            key={j}
+                            className="break-all text-xs text-muted-foreground"
+                          >
                             {ref}
                           </p>
                         ))}
-                      </div>
+                      </CheckDetails>
                     ))}
                   </div>
                   {run.result.remaining.length > 0 && (

@@ -343,3 +343,19 @@ Action 2 Round 1 (`1c251ca4-5227-4e5b-9475-2c98ca8f43eb`) started at
 inspection confirmed running state and an empty post-submit input. Implementation
 results are not yet claimed by this launch record. Full registration flows remain
 Actions 3 and 4; Action 2 must not auto-accept, merge or start Action 3.
+
+## Compact checks and unambiguous current stage
+
+User feedback after Action 2: expanded required-check metadata overwhelmed the
+execution page, and the green completed preparation stage looked like the current
+stage while awaiting acceptance. Required and additional checks now default to
+collapsed title/status rows. Details retain conditions, evidence and user decisions.
+Additional non-passing checks use an amber minus rather than a red failure cross.
+The current stage is explicitly labeled and highlighted; earlier stages use muted
+checkmarks. No acceptance verdict or user-acceptance state was changed.
+
+Browser verification on the real Action 2 output found eight required rows and one
+additional row collapsed by default, successful expansion of both types, an amber
+minus for the additional failed attempt, and current stage “Ready to verify”.
+Typecheck and lint passed. This verifies presentation, not independent acceptance
+of Action 2 implementation or authorization to merge its PR.
