@@ -829,8 +829,14 @@ export function createExecutionService(
       if (
         current.root !== recorded.root ||
         current.head !== recorded.head ||
-        JSON.stringify(Object.entries(current.files).sort()) !==
-          JSON.stringify(Object.entries(recorded.files).sort())
+        JSON.stringify(
+          Object.entries(current.files).sort(([a], [b]) => a.localeCompare(b)),
+        ) !==
+          JSON.stringify(
+            Object.entries(recorded.files).sort(([a], [b]) =>
+              a.localeCompare(b),
+            ),
+          )
       )
         throw new Error(
           'Workspace changed since this report. Rechecking cannot certify a different output.',
