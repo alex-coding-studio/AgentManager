@@ -256,7 +256,22 @@ void test('environment-variable secret forms are redacted in Host diagnostics', 
     ['AWS_SECRET_ACCESS_KEY=secretvalue', 'AWS_SECRET_ACCESS_KEY=[redacted]'],
     ['GITHUB_TOKEN=ghp_realistic_value_here', 'GITHUB_TOKEN=[redacted]'],
     ['my_api_key: swordfish', 'my_api_key: [redacted]'],
+    ['api-key=secretvalue', 'api-key=[redacted]'],
+    ['access-key=secretvalue', 'access-key=[redacted]'],
+    ['private-key=secretvalue', 'private-key=[redacted]'],
+    ['client-secret=secretvalue', 'client-secret=[redacted]'],
+    ['{"password":"hunter2"}', '{"password":"[redacted]"}'],
+    ['{"access_token":"abc123secret"}', '{"access_token":"[redacted]"}'],
+    ["DB_PASSWORD='two words'", 'DB_PASSWORD=[redacted]'],
+    ['--api-key secretvalue', '--api-key [redacted]'],
   ];
+
+  for (const unrelated of [
+    'tokenizer=ordinary-value',
+    'secretary=ordinary-value',
+    'keystore=ordinary-value',
+  ])
+    assert.equal(redactSecrets(unrelated), unrelated, unrelated);
   for (const [input, expected] of cases)
     assert.equal(redactSecrets(input), expected, input);
 
@@ -430,9 +445,6 @@ function catchBlocks(source: string) {
   return blocks;
 }
 
-// Conservative rule: an API catch block may not read error.message at all,
-// except inside a branch already narrowed to a known error class. No data-flow
-// tracing, so no alias depth, template interpolation or field name can bypass it.
 function narrowedRanges(body: string) {
   const ranges: Array<[number, number]> = [];
   NARROWING.lastIndex = 0;

@@ -20,9 +20,8 @@ export function publicError(message: string, status = 400, code?: string) {
 }
 
 const SECRET_WORDS =
-  'authorization|token|password|passwd|secret|credential|credentials|apikey|api_key|access_key|private_key|client_secret|session_key';
+  'authorization|token|password|passwd|secret|credential|credentials|apikey|api[_-]key|access[_-]key|private[_-]key|client[_-]secret|session[_-]key';
 
-// A secret key is a delimited segment, so `tokenizer` and `secretary` do not match.
 const KEY_NAME = `(?:[A-Za-z0-9]+[_.-])*(?:${SECRET_WORDS})(?:[_.-][A-Za-z0-9]+)*`;
 
 const SECRET_PATTERNS: Array<[RegExp, string]> = [
@@ -34,8 +33,6 @@ const SECRET_PATTERNS: Array<[RegExp, string]> = [
     '[redacted-jwt]',
   ],
   [/\b(bearer)\s+\S+/gi, '$1 [redacted]'],
-  // Quoted JSON or shell values are replaced whole, so a value with spaces
-  // cannot leak its remainder.
   [new RegExp(`("${KEY_NAME}"\\s*:\\s*)"[^"]*"`, 'gi'), '$1"[redacted]"'],
   [new RegExp(`('${KEY_NAME}'\\s*:\\s*)'[^']*'`, 'gi'), "$1'[redacted]'"],
   [
