@@ -317,7 +317,7 @@ void test('Source-only Product Design Completion exposes an explicit zero-Featur
         instruction:
           'Define how a user records the first location relationship.',
         intention: 'product-design-completion',
-        motion: 'converge',
+        motion: 'unspecified',
       }),
     );
     const request = JSON.parse(
@@ -335,8 +335,9 @@ void test('Source-only Product Design Completion exposes an explicit zero-Featur
       sourceNodeId: input.sourceNodeIds[0],
       featureNodeIds: [],
     });
-    assert.match(request.prompt, /request for the first Feature/);
+    assert.match(request.prompt, /first Product Design pass/);
     assert.match(request.prompt, /return one bounded clarification/);
+    assert.equal(completion.result.candidates.length, 2);
   }));
 
 void test('Product Design Completion injects the Source and accepted Product Design as primary Context', async () =>

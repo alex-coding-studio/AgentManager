@@ -73,7 +73,7 @@ export async function POST(
           : undefined,
       motion:
         typeof motion === 'string' && motion
-          ? (motion as 'diverge' | 'converge')
+          ? (motion as 'unspecified' | 'diverge' | 'converge')
           : undefined,
       revisionRunId:
         typeof revisionRunId === 'string' && revisionRunId

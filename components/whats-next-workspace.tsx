@@ -1021,7 +1021,7 @@ function WhatsNextCanvas({
                   const next = event.target.value as WhatsNextIntention;
                   setIntention(next);
                   if (next === 'product-design-completion') {
-                    setMotion('converge');
+                    setMotion('unspecified');
                     if (sharedSourceId) setCombineIds([sharedSourceId]);
                   }
                 }}
@@ -1045,6 +1045,7 @@ function WhatsNextCanvas({
                 }
                 className="h-9 w-full rounded-lg border border-border bg-background px-2 text-xs text-foreground"
               >
+                <option value="unspecified">{t('Unspecified')}</option>
                 <option value="diverge">{t('Diverge')}</option>
                 <option value="converge">{t('Converge')}</option>
               </select>
