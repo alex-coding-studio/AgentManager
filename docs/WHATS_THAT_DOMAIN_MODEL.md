@@ -400,6 +400,12 @@ details control. Fields, Constraints, provenance and revision stay in the proper
 Relationship labels show concise meaning; self-containment remains visible rather than
 hidden in Markdown.
 
+The Card uses the compact variant of the shared
+[Canvas Node Card Frame](CANVAS_NODE_CARD_FRAME.md). It reuses the established selection,
+focus and details grammar without inheriting Task Graph fields. The first implementation
+keeps the shared width and reduces vertical density; real Entity Canvas inspection decides
+whether compact width should later change.
+
 Renaming preserves stable identity. Removing an Entity or relationship is also a model
 operation: the Agent identifies affected references and derived views, applies the deletion
 atomically and provides restore. It must not leave dangling edges or silently delete
