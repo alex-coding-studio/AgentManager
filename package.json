@@ -27,7 +27,7 @@
     "test:boundary": "node --experimental-strip-types --import ./tests/helpers/register-alias.mjs --test tests/api-request-boundary.test.ts",
     "test:registry": "node --experimental-strip-types --test tests/project-registry-atomicity.test.ts",
     "test:api-errors": "node --experimental-strip-types --import ./tests/helpers/register-alias.mjs --test tests/api-error-safety.test.ts",
-    "test": "npm run test:graph && npm run test:task-graph-failures && npm run test:dependency-audit && npm run test:planning-paths && npm run test:canvas-frame && npm run test:harness && npm run test:runs && npm run test:decomposition-concurrency && npm run test:whats-next && npm run test:markdown && npm run test:settings && npm run test:boundary && npm run test:registry && npm run test:api-errors && npm run test:implementation-demo && npm run test:implementation-harness && npm run test:implementation-planning && npm run test:implementation-execution",
+    "test": "npm run test:graph && npm run test:task-graph-failures && npm run test:context-publication && npm run test:dependency-audit && npm run test:planning-paths && npm run test:canvas-frame && npm run test:harness && npm run test:runs && npm run test:decomposition-concurrency && npm run test:whats-next && npm run test:markdown && npm run test:settings && npm run test:boundary && npm run test:registry && npm run test:api-errors && npm run test:implementation-demo && npm run test:implementation-harness && npm run test:implementation-planning && npm run test:implementation-execution",
     "test:ci": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run build",
     "test:implementation-demo": "node --experimental-strip-types --test tests/just-do-it-demo.test.ts",
     "test:implementation-harness": "node --experimental-strip-types --test tests/just-do-it-harness.test.ts",
@@ -42,7 +42,8 @@
     "format:check": "oxfmt --check .",
     "audit:runtime-dependencies": "node --experimental-strip-types scripts/audit-runtime-dependencies.ts",
     "test:decomposition-concurrency": "node --experimental-strip-types --experimental-test-module-mocks --test-timeout=20000 --test tests/task-decomposition-acceptance-concurrency.test.ts",
-    "test:task-graph-failures": "node --experimental-strip-types --experimental-test-module-mocks --import ./tests/helpers/register-alias.mjs --test-timeout=20000 --test tests/task-graph-failure-boundary.test.ts"
+    "test:task-graph-failures": "node --experimental-strip-types --experimental-test-module-mocks --import ./tests/helpers/register-alias.mjs --test-timeout=20000 --test tests/task-graph-failure-boundary.test.ts",
+    "test:context-publication": "node --experimental-strip-types --experimental-test-module-mocks --import ./tests/helpers/register-alias.mjs --test-timeout=20000 --test tests/context-import-publication.test.ts"
   },
   "dependencies": {
     "@base-ui/react": "1.7.0",

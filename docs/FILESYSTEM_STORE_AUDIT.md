@@ -75,27 +75,27 @@ they share a source file.
 
 ## Summary
 
-| write unit                       | class                           | owner                                         | publication boundary                      | serialization                          | priority     |
-| -------------------------------- | ------------------------------- | --------------------------------------------- | ----------------------------------------- | -------------------------------------- | ------------ |
-| project registry                 | canonical                       | `lib/project-registry.ts`                     | shared helper, `wx` temp + rename         | promise chain, per file                | no migration |
-| app settings                     | canonical                       | `lib/app-settings.ts`                         | `wx` temp + rename                        | promise chain, per file                | no migration |
-| worklog revision history         | canonical, append-only evidence | `lib/just-do-it-worklog.ts`                   | complete pending directory + rename       | rename is the compare-and-swap         | no migration |
-| worklog HANDOFF / INDEX / refs   | derived materialization         | `lib/just-do-it-worklog.ts`                   | inside the same revision directory        | inherited from the revision            | no migration |
-| Task Graph node creation         | canonical                       | `lib/task-graph.ts` `createStartNode`         | unique temp directory + rename            | none                                   | P3           |
-| Task Graph node update           | canonical                       | `lib/task-graph.ts` `updateStartNode`         | staged resources + `node.json` rename     | **none**                               | **P2**       |
-| Task Graph listing normalization | derived materialization         | `lib/task-graph.ts` `listTaskGraphNodes`      | `wx` temp + rename, on the read path      | none, idempotent                       | P3           |
-| Break It Down Runs               | canonical                       | `lib/task-decomposition-runs.ts`              | `wx` temp + rename per artifact           | process-local chain, per planning path | no migration |
-| What's Next Runs                 | canonical                       | `lib/whats-next-runs.ts`                      | `wx` temp + rename per artifact           | promise chain, per planning path       | P3           |
-| Run context workspace            | immutable Run-input evidence    | `lib/task-decomposition-context-workspace.ts` | **none**                                  | none                                   | P3           |
-| Break It Down context            | canonical                       | `lib/task-decomposition-context.ts`           | `wx` per attachment; settings create-once | none                                   | P3           |
-| Context Library documents        | canonical                       | `lib/product-context.ts`                      | `wx` per document; section rename         | none                                   | P3           |
-| What's Next instructions         | canonical                       | `lib/whats-next-context.ts`                   | `wx` temp + rename                        | none                                   | P3           |
-| Just Do It planning instructions | canonical                       | `lib/just-do-it-planning-service.ts`          | `wx` temp + rename                        | none                                   | P3           |
-| Card environment manifest        | canonical                       | `lib/card-host-operations.ts` `atomicJson`    | `wx` temp + rename                        | none                                   | P3           |
-| Card workspace record            | canonical                       | `lib/just-do-it-worktree.ts`                  | `wx` temp + rename                        | none                                   | P3           |
-| host job status record           | canonical, mutable              | `lib/host-job-broker.ts`                      | temp + rename, **no `wx`**, overwritten   | none                                   | P3           |
-| host job output log              | derived output                  | `lib/host-job-broker.ts`                      | written once at completion                | none                                   | no migration |
-| system validation result         | cache                           | `lib/system-validation-runner.ts`             | `wx` temp + rename                        | **`mkdir` lock, cross-process**        | no migration |
+| write unit                       | class                           | owner                                         | publication boundary                                                      | serialization                          | priority             |
+| -------------------------------- | ------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------- | -------------------------------------- | -------------------- |
+| project registry                 | canonical                       | `lib/project-registry.ts`                     | shared helper, `wx` temp + rename                                         | promise chain, per file                | no migration         |
+| app settings                     | canonical                       | `lib/app-settings.ts`                         | `wx` temp + rename                                                        | promise chain, per file                | no migration         |
+| worklog revision history         | canonical, append-only evidence | `lib/just-do-it-worklog.ts`                   | complete pending directory + rename                                       | rename is the compare-and-swap         | no migration         |
+| worklog HANDOFF / INDEX / refs   | derived materialization         | `lib/just-do-it-worklog.ts`                   | inside the same revision directory                                        | inherited from the revision            | no migration         |
+| Task Graph node creation         | canonical                       | `lib/task-graph.ts` `createStartNode`         | unique temp directory + rename                                            | none                                   | P3                   |
+| Task Graph node update           | canonical                       | `lib/task-graph.ts` `updateStartNode`         | staged resources + `node.json` rename                                     | **none**                               | **P2**               |
+| Task Graph listing normalization | derived materialization         | `lib/task-graph.ts` `listTaskGraphNodes`      | `wx` temp + rename, on the read path                                      | none, idempotent                       | P3                   |
+| Break It Down Runs               | canonical                       | `lib/task-decomposition-runs.ts`              | `wx` temp + rename per artifact                                           | process-local chain, per planning path | no migration         |
+| What's Next Runs                 | canonical                       | `lib/whats-next-runs.ts`                      | `wx` temp + rename per artifact                                           | promise chain, per planning path       | P3                   |
+| Run context workspace            | immutable Run-input evidence    | `lib/task-decomposition-context-workspace.ts` | **none**                                                                  | none                                   | P3                   |
+| Break It Down context            | canonical                       | `lib/task-decomposition-context.ts`           | `wx` per attachment, batch compensation; settings create-once             | none                                   | P3, concurrency only |
+| Context Library documents        | canonical                       | `lib/product-context.ts`                      | `wx` batch with compensation; staged rename for overwrite; section rename | none                                   | P3, concurrency only |
+| What's Next instructions         | canonical                       | `lib/whats-next-context.ts`                   | `wx` temp + rename                                                        | none                                   | P3                   |
+| Just Do It planning instructions | canonical                       | `lib/just-do-it-planning-service.ts`          | `wx` temp + rename                                                        | none                                   | P3                   |
+| Card environment manifest        | canonical                       | `lib/card-host-operations.ts` `atomicJson`    | `wx` temp + rename                                                        | none                                   | P3                   |
+| Card workspace record            | canonical                       | `lib/just-do-it-worktree.ts`                  | `wx` temp + rename                                                        | none                                   | P3                   |
+| host job status record           | canonical, mutable              | `lib/host-job-broker.ts`                      | temp + rename, **no `wx`**, overwritten                                   | none                                   | P3                   |
+| host job output log              | derived output                  | `lib/host-job-broker.ts`                      | written once at completion                                                | none                                   | no migration         |
+| system validation result         | cache                           | `lib/system-validation-runner.ts`             | `wx` temp + rename                                                        | **`mkdir` lock, cross-process**        | no migration         |
 
 Class totals: 14 canonical — 12 plain, one also append-only, one a mutable two-state record —
 plus 2 derived materialization, 1 derived output, 1 immutable Run-input evidence and 1 cache,
@@ -364,19 +364,94 @@ the orphan path.
 
 ### Break It Down context — canonical
 
-`lib/task-decomposition-context.ts` writes each attachment with `flag: 'wx'` and, on failure,
-unlinks every path it created in that call (`lib/task-decomposition-context.ts:151-157`). That
+`lib/task-decomposition-context.ts` `importTaskDecompositionAttachments` validates its input,
+rejects duplicate and already-attached names as public `409` conflicts, then writes each
+attachment with `flag: 'wx'` and, on failure, unlinks every path it created in that call. That
 is genuine multi-file compensation, scoped to one call. `settings.json` is written with `wx`
-and an explicit `EEXIST` tolerance (`lib/task-decomposition-context.ts:210-215`), making it
-create-once rather than republishable.
+and an explicit `EEXIST` tolerance, making it create-once rather than republishable.
+`ensureFeatureContext` runs before the conflict check, so a request that ends in a conflict
+still initializes the feature context.
+
+Deterministic failure injection in `tests/context-import-publication.test.ts` confirmed the
+compensation: a failure writing the second of two attachments removes the first, a fresh read
+lists only the pre-existing attachment, its bytes are identical, and a retry succeeds. Two gaps
+were demonstrated on the same path and corrected:
+
+- **Cleanup failures were discarded.** The compensation used `unlink(...).catch(() => undefined)`,
+  so a cleanup failure never reached Host diagnostics. Every unlink outcome is now collected and
+  attached as the primary error's `cause` through `retainCleanupFailures` in `lib/api-errors.ts`
+  — one error, or a bounded `AggregateError` — and the Route's diagnostic carries both messages
+  through the same redaction. The response still carries only the fallback text and a
+  correlation id. When cleanup fails, the orphan remains as a valid attachment: a retry of the
+  same batch answers `409` naming it, and the user removes it before adding a replacement, which
+  is what the existing UI message already says.
+- **A listing ran after publication.** The function re-read the whole context after its writes,
+  so an injected `stat` failure on a pre-existing attachment turned a committed batch into a
+  `500`. The context is now read once, before the conflict check, and the response is that
+  result plus the attachments just written, with sizes computed from the written content; a
+  fresh read returns the identical value. Nothing fallible runs after the last write.
+
+Invalid JSON in a `.json` attachment is still thrown as an internal `Error` rather than a
+`PublicApiError`, so the client sees the generic fallback. That predates this work and is
+unchanged.
 
 ### Context Library documents — canonical
 
-`lib/product-context.ts` treats each document as its own unit, created with `flag: 'wx'`
-through `writeIfMissing` and `writeUniqueMarkdown`, so a name collision fails rather than
-silently overwriting. The one `rename` is `renameContextSection`, which renames a section
-directory. There is no read-modify-write cycle to protect. `importContextDocuments` writes
-several documents in one call with no cross-document rollback.
+`lib/product-context.ts` treats each document as its own unit for creation, using
+`flag: 'wx'` through `writeIfMissing` and `writeUniqueMarkdown`, so a name collision fails
+rather than silently overwriting. The one section-level `rename` is `renameContextSection`.
+There is no read-modify-write cycle to protect.
+
+`importContextDocuments` is one batch, on the evidence of its contract: the Route answers
+`201` with `created` and `sections` or `409` with every conflict, and
+`components/product-context-workspace.tsx` offers one overwrite confirmation for the whole
+selection and selects `created[0]` on success. Nothing in that surface can express a partial
+result, so partial publication is a defect rather than a product model. Failure injection
+demonstrated three:
+
+- **Create batch.** With `overwrite = false`, a failure writing the second of two documents left
+  the first on disk, and a retry then met a `409` naming the file the failed request had
+  created. Creation now records every path it created and unlinks them on failure, with unlink
+  failures retained as the primary error's `cause`. After a normally caught failure the section
+  is byte-identical to its prior state, and a retry succeeds.
+- **Overwrite batch.** With `overwrite = true`, replacements were written directly over
+  canonical files with `flag: 'w'`; a failure on the second document left the first holding
+  replacement bytes while the second still held its original, and there was no publication
+  boundary at all to fail at. Replacement is now staged: the original bytes of every document
+  to be replaced are read first, each replacement is written to a `<name>.<uuid>.tmp` sibling
+  with `wx`, and only then is each temporary file renamed onto its destination. A failure while
+  staging removes the temporaries and touches no document. A failure while publishing restores
+  every already-published document from the captured bytes through a further staged rename, and
+  removes a document that had no original. Restore failures are retained as `cause`. The `.tmp`
+  siblings are invisible to `readProductContext`, `readContextBrowser` and name allocation, all
+  of which admit only `.md` and `.markdown`.
+- **Refresh after publication.** The function re-read the whole context after writing, so an
+  injected read failure on an unrelated document turned a committed batch into a `500` inviting
+  a retry. The read now happens once, before any write, and the response merges the imported
+  documents into that result using the reader's own title, summary and ordering rules. A read
+  failure therefore fails the request before anything is committed, and a committed batch is
+  always answered with `201`.
+
+The multipart branch of `POST /api/projects/[projectId]/context/documents` was unreachable:
+the handler ran `guardJsonRequest` before inspecting the content type, so every `FormData`
+import — the only form the UI sends — was answered `415` before `importContextDocuments` ran.
+The handler now applies `guardRequest` first and `guardJsonRequest` inside its JSON branch
+only. Validation and conflicts remain public `400` and `409` responses with no diagnostic;
+filesystem failures remain a generic `500` with a correlation id and no file name or path.
+
+**Retry behavior for both imports.** After a failure whose cleanup succeeded, a retry succeeds.
+After a failure whose cleanup failed, the orphan is a real document: a Context retry answers
+`409` and the UI offers overwrite; a Break It Down retry answers `409` and the user removes the
+attachment first. A failed overwrite restore leaves the replacement in place for that one
+document and is reported only in Host diagnostics.
+
+**Crash and concurrency boundaries.** A process kill between a staged write and its rename
+leaves a `<name>.<uuid>.tmp` sibling that readers ignore and nothing reclaims; a kill between
+two publication renames leaves the batch half-replaced with no record of the originals.
+Neither import serializes, in-process or across processes: two overlapping imports into one
+section or one attachments directory both pass the name preflight and `wx` creation then
+decides the loser, while two overlapping overwrites of one document publish last-writer-wins.
+No test exercises those paths; they remain untested, as before.
 
 ### What's Next instructions — canonical
 
@@ -493,15 +568,16 @@ this codebase.
 
 ## Multi-file publication and rollback findings
 
-| operation                                | boundary             | rollback                                        |
-| ---------------------------------------- | -------------------- | ----------------------------------------------- |
-| `appendCardWorkRecord`                   | one directory rename | pending directory removed in `finally`          |
-| `createStartNode`                        | one directory rename | temporary directory removed on failure          |
-| `updateStartNode`                        | **only `node.json`** | compensation for attachments; none for the idea |
-| `writeTaskDecompositionContextWorkspace` | **none**             | none; failure orphans an unregistered directory |
-| `importTaskDecompositionAttachments`     | per file             | unlinks every path created in the call          |
-| `importContextDocuments`                 | per file             | none across documents                           |
-| `createProject`                          | shared helper        | restores the prior bytes                        |
+| operation                                | boundary                   | rollback                                                                     |
+| ---------------------------------------- | -------------------------- | ---------------------------------------------------------------------------- |
+| `appendCardWorkRecord`                   | one directory rename       | pending directory removed in `finally`                                       |
+| `createStartNode`                        | one directory rename       | temporary directory removed on failure                                       |
+| `updateStartNode`                        | **only `node.json`**       | compensation for attachments; none for the idea                              |
+| `writeTaskDecompositionContextWorkspace` | **none**                   | none; failure orphans an unregistered directory                              |
+| `importTaskDecompositionAttachments`     | per file                   | unlinks every path created in the call; cleanup failures retained as `cause` |
+| `importContextDocuments` create          | per file                   | unlinks every path created in the call; cleanup failures retained as `cause` |
+| `importContextDocuments` overwrite       | staged rename per document | restores captured originals, removes documents that had none                 |
+| `createProject`                          | shared helper              | restores the prior bytes                                                     |
 
 A single-file atomic write does not make a multi-file operation transactional. Only the first
 two rows publish a multi-file record through one boundary.
@@ -526,6 +602,12 @@ Mechanically tested:
   both invocation orders with clean retry, Candidate revision start racing acceptance and discard,
   per-project isolation and queue release after a rejected mutation —
   `tests/task-decomposition-acceptance-concurrency.test.ts`
+- Context Library and Break It Down import batches under injected filesystem faults: create
+  compensation, overwrite staging with exact original-byte preservation at both the staging
+  write and the publication rename, attachment compensation and retry, cleanup failures
+  retained in redacted Host diagnostics with nothing internal in the response, no fallible read
+  after publication, pre-existing files byte-identical, and public conflicts distinct from
+  internal failures — `tests/context-import-publication.test.ts`
 
 The repository also has product-rule, provider, cancel and trash failure tests for several of
 these modules — `tests/whats-next-harness.test.ts` rejects contradictory advice, unknown origin
@@ -535,8 +617,10 @@ content selection and manifest structure. Those prove input validation and produ
 **The evidence this audit needs, and does not find, is narrower:** no deterministic test exercises
 concurrent filesystem publication, and no test injects a filesystem failure to observe rollback
 or cleanup, for What's Next Runs, the Run
-context workspace, Context Library imports, or Just Do It planning instructions. Their publication
-behavior under contention and partial failure is argued from code shape, not demonstrated.
+context workspace, or Just Do It planning instructions. Their publication behavior under
+contention and partial failure is argued from code shape, not demonstrated. Context Library
+and Break It Down imports now have the failure half of that evidence; their behavior under
+contention remains argued from code shape.
 
 ## Confirmed risks and remaining unknowns
 
@@ -582,8 +666,13 @@ No store is marked unknown for not having been read.
 2. ~~**Task Graph create and update failure-boundary tests.**~~ Done. Creation needed two
    error-handling corrections and keeps its directory-rename boundary; update needed immutable
    resource staging so that nothing the record references changes before the record does.
-3. **Context Library and Break It Down attachment publication investigation.** Both write
-   several files per call with per-file rather than per-call boundaries.
+3. ~~**Context Library and Break It Down attachment publication investigation.**~~ Done.
+   Failure injection demonstrated partial creation and partial overwrite for Context imports, a
+   swallowed cleanup failure and a post-publication listing for attachments, a post-publication
+   read for Context imports, and a multipart Context Route answered `415` before the import
+   ran. Creation now compensates, overwrite is staged and restored from captured bytes, cleanup
+   failures reach Host diagnostics, neither import reads after publication, and the Route
+   accepts the form the UI sends. Concurrent imports remain untested and are not queued here.
 4. **Document the process-local boundary** for `app-settings`, `graph-identity-store` and
    `whats-next-runs`, matching `docs/PROJECT_REGISTRY.md`, and record the
    `system-validation-runner` `mkdir` lock as the available cross-process option.

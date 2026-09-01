@@ -1,6 +1,6 @@
 import { getProject } from '@/lib/project-registry';
 import { apiErrorResponse } from '@/lib/api-errors';
-import { guardJsonRequest } from '@/lib/request-boundary';
+import { guardJsonRequest, guardRequest } from '@/lib/request-boundary';
 import {
   ContextDocumentConflictError,
   createContextDocument,
@@ -14,7 +14,7 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ projectId: string }> },
 ) {
-  const denied = guardJsonRequest(request);
+  const denied = guardRequest(request);
   if (denied) return denied;
   const { projectId } = await params;
   const project = await getProject(projectId);
@@ -52,6 +52,8 @@ export async function POST(
       return Response.json(result, { status: 201 });
     }
 
+    const jsonDenied = guardJsonRequest(request);
+    if (jsonDenied) return jsonDenied;
     const payload = (await request.json()) as {
       section?: string;
       title?: string;

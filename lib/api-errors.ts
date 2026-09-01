@@ -90,6 +90,24 @@ export function recordUnexpectedApiError(
   );
 }
 
+const MAX_RETAINED_CLEANUP_FAILURES = 4;
+
+export function retainCleanupFailures(
+  error: unknown,
+  failures: unknown[],
+  summary: string,
+) {
+  if (failures.length === 0) return;
+  if (!(error instanceof Error) || error.cause !== undefined) return;
+  error.cause =
+    failures.length === 1
+      ? failures[0]
+      : new AggregateError(
+          failures.slice(0, MAX_RETAINED_CLEANUP_FAILURES),
+          summary,
+        );
+}
+
 export function isCancellationError(error: unknown) {
   return (
     error instanceof Error &&
