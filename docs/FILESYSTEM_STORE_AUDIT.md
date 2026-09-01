@@ -203,14 +203,14 @@ Three corrections came out of that exercise:
 
 - **A failing cleanup no longer replaces the failure it was cleaning up after.** The `rm` in the
   catch cannot throw over the original error, and the cleanup failure is attached as that error's
-  `cause`, so `recordUnexpectedApiError` keeps both for Host diagnostics while the response still
-  carries only the generic message and a correlation id.
+  `cause`, and `recordUnexpectedApiError` keeps both: its diagnostic formatting walks the `cause`
+  chain to a bounded depth with cycle protection, through the same redaction the primary error
+  passes. The response still carries only the generic message and a correlation id.
 - **Nothing fallible runs after publication.** The function returns the already-loaded graph plus
   the node it just committed rather than re-listing from disk, so a read fault cannot make a
-  committed node look uncommitted. A `published` flag still guards the cleanup, but with the
-  re-list gone there is no reachable path that reaches the catch after the rename — bypassing that
-  guard changes no test, which is the evidence that the post-publication window is closed rather
-  than merely handled.
+  committed node look uncommitted. With the re-list gone there is no fallible operation between
+  the publication rename and the return, so the catch handles pre-publication failures only and no
+  unreachable guard remains.
 - **The Route reflects that.** `POST /api/projects/[projectId]/nodes` answers `201` with the
   committed node even when a subsequent read would fail, and a duplicate retry meets the existing
   `This Canvas already has a Start node.` rule.

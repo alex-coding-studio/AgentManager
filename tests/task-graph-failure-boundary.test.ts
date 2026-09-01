@@ -106,6 +106,17 @@ const { createStartNode, updateStartNode, listTaskGraphNodes } =
   await import('../lib/task-graph.ts');
 const { PublicApiError } = await import('../lib/api-errors.ts');
 
+const managerHome = await mkdtemp(path.join(os.tmpdir(), 'am-tg-home-'));
+process.env.AGENT_MANAGER_HOME = managerHome;
+
+async function registerProject(project: RegisteredProject) {
+  await realFs.writeFile(
+    path.join(managerHome, 'config.json'),
+    `${JSON.stringify({ schemaVersion: 1, projects: [project] }, null, 2)}\n`,
+  );
+  return import('../app/api/projects/[projectId]/nodes/route.ts');
+}
+
 async function makeProject() {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'am-tg-fail-'));
   const project: RegisteredProject = {
@@ -924,8 +935,6 @@ void test('a retry after a failed post-commit cleanup does not collide with the 
 });
 
 void test('the create Route reports a committed node as success, not a retryable failure', async () => {
-  const managerHome = await mkdtemp(path.join(os.tmpdir(), 'am-tg-home-'));
-  process.env.AGENT_MANAGER_HOME = managerHome;
   const { project, cleanup } = await makeProject();
   try {
     await realFs.writeFile(
@@ -978,6 +987,7 @@ void test('the create Route reports a committed node as success, not a retryable
         body: (() => {
           const again = new FormData();
           again.set('title', 'Routed start');
+          again.set('idea', 'a second routed idea');
           return again;
         })(),
       }),
@@ -985,14 +995,111 @@ void test('the create Route reports a committed node as success, not a retryable
     );
     assert.equal(
       retry.status,
-      400,
-      'a duplicate retry is refused by the product rule',
+      409,
+      'the duplicate-Start rule answers 409, not the 400 of an earlier input check',
+    );
+    assert.equal(
+      ((await retry.json()) as { error: string }).error,
+      'This Canvas already has a Start node.',
     );
     assert.equal((await nodeDirectories(project)).published.length, 1);
   } finally {
     resetInjections();
-    delete process.env.AGENT_MANAGER_HOME;
     await cleanup();
-    await rm(managerHome, { recursive: true, force: true });
+  }
+});
+
+void test('a failed create keeps both causes in Host diagnostics and neither in the response', async () => {
+  const { project, cleanup } = await makeProject();
+  const captured: string[] = [];
+  const realError = console.error;
+  console.error = (...args: unknown[]) => {
+    captured.push(args.map((entry) => String(entry)).join(' '));
+  };
+  try {
+    const { POST } = await registerProject(project);
+
+    resetInjections();
+    const primary = fsError('EIO', 'record');
+    primary.message =
+      'EIO: record write failed with token=ghp_abcdefghijklmnop01';
+    const cleanupFailure = fsError('EACCES', 'cleanup');
+    cleanupFailure.message =
+      'EACCES: cleanup denied for ghp_zyxwvutsrqponml9876';
+    injections.push({
+      op: 'writeFile',
+      match: (t) => t.endsWith('node.json'),
+      error: primary,
+      remaining: 1,
+      skip: 0,
+    });
+    injections.push({
+      op: 'rm',
+      match: () => true,
+      error: cleanupFailure,
+      remaining: 1,
+      skip: 0,
+    });
+
+    const body = new FormData();
+    body.set('title', 'Diagnosed start');
+    body.set('idea', 'a diagnosed idea');
+    const response = await POST(
+      new Request('http://localhost:3000/api/projects/PROJECT-0001/nodes', {
+        method: 'POST',
+        headers: { host: 'localhost:3000' },
+        body,
+      }),
+      { params: Promise.resolve({ projectId: project.id }) },
+    );
+
+    assert.equal(response.status, 500);
+    const payload = (await response.json()) as Record<string, unknown>;
+    assert.deepEqual(Object.keys(payload).sort(), ['correlationId', 'error']);
+    assert.equal(payload.error, 'Could not create the start node.');
+    assert.match(String(payload.correlationId), /^[0-9a-f]{12}$/);
+    const serialized = JSON.stringify(payload);
+    assert.ok(
+      !serialized.includes('EIO'),
+      'no internal code reaches the client',
+    );
+    assert.ok(!serialized.includes('EACCES'));
+    assert.ok(
+      !serialized.includes(project.planningPath),
+      'no path reaches the client',
+    );
+
+    const diagnostic = captured.find((line) =>
+      line.includes(String(payload.correlationId)),
+    );
+    assert.ok(diagnostic, 'the failure is captured for Host diagnostics');
+    assert.match(
+      diagnostic,
+      /EIO: record write failed/,
+      'the primary cause is kept',
+    );
+    assert.match(
+      diagnostic,
+      /EACCES: cleanup denied/,
+      'the cleanup cause is kept',
+    );
+    assert.match(diagnostic, /caused by/);
+    assert.ok(
+      !diagnostic.includes('ghp_abcdefghijklmnop01'),
+      'a secret in the primary cause is redacted',
+    );
+    assert.ok(
+      !diagnostic.includes('ghp_zyxwvutsrqponml9876'),
+      'a secret in the attached cause is redacted too',
+    );
+    assert.equal(
+      (diagnostic.match(/gh_\[redacted\]/g) ?? []).length,
+      2,
+      'both secrets pass through the same redaction',
+    );
+  } finally {
+    console.error = realError;
+    resetInjections();
+    await cleanup();
   }
 });

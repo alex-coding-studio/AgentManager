@@ -606,3 +606,62 @@ void test('the leak assertion rejects every publication form including multi-hop
   assert.deepEqual(leakingHandlers(narrowed, 'narrowed'), []);
   assert.deepEqual(leakingHandlers(clean, 'clean'), []);
 });
+
+void test('an unexpected error keeps its cause chain in diagnostics, bounded and redacted', () => {
+  const root = new Error('primary failed with ghp_aaaaaaaaaaaaaaaa11');
+  const middle = new Error('middle failed with ghp_bbbbbbbbbbbbbbbb22');
+  const leaf = new Error('leaf failed');
+  root.cause = middle;
+  middle.cause = leaf;
+
+  const { result, captured } = captureDiagnostics(() =>
+    apiErrorResponse(root, 'Could not do the thing.', 'POST /api/things'),
+  );
+
+  assert.equal(result.status, 500);
+  const diagnostic = captured.join('\n');
+  assert.match(diagnostic, /primary failed/);
+  assert.match(diagnostic, /middle failed/);
+  assert.match(diagnostic, /leaf failed/);
+  assert.equal((diagnostic.match(/caused by/g) ?? []).length, 2);
+  assert.ok(!diagnostic.includes('ghp_aaaaaaaaaaaaaaaa11'));
+  assert.ok(!diagnostic.includes('ghp_bbbbbbbbbbbbbbbb22'));
+  assert.ok(
+    (diagnostic.match(/gh_\[redacted\]/g) ?? []).length >= 2,
+    'both secrets pass through the same redaction, in message and stack alike',
+  );
+});
+
+void test('a cyclic cause chain terminates instead of recursing', () => {
+  const first = new Error('first');
+  const second = new Error('second');
+  first.cause = second;
+  second.cause = first;
+
+  const { captured } = captureDiagnostics(() =>
+    apiErrorResponse(first, 'Could not do the thing.', 'POST /api/things'),
+  );
+
+  const diagnostic = captured.join('\n');
+  assert.match(diagnostic, /first/);
+  assert.match(diagnostic, /second/);
+  assert.match(diagnostic, /<cause cycle>/);
+});
+
+void test('a deep cause chain is truncated rather than printed without bound', () => {
+  let deepest = new Error('level-9');
+  for (let level = 8; level >= 0; level -= 1) {
+    const next = new Error(`level-${level}`);
+    next.cause = deepest;
+    deepest = next;
+  }
+
+  const { captured } = captureDiagnostics(() =>
+    apiErrorResponse(deepest, 'Could not do the thing.', 'POST /api/things'),
+  );
+
+  const diagnostic = captured.join('\n');
+  assert.match(diagnostic, /level-0/);
+  assert.match(diagnostic, /level-4/);
+  assert.ok(!diagnostic.includes('level-9'), 'the chain stops at its bound');
+});

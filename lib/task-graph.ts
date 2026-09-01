@@ -177,7 +177,6 @@ export async function createStartNode(
   );
   const nodePath = path.join(nodesPath, id);
   const temporaryNodePath = path.join(nodesPath, `.${id}-${randomUUID()}.tmp`);
-  let published = false;
   await mkdir(temporaryNodePath);
   const uploadedResources: TaskGraphNode['resources'] = [];
 
@@ -242,20 +241,17 @@ export async function createStartNode(
       { flag: 'wx' },
     );
     await rename(temporaryNodePath, nodePath);
-    published = true;
     return { node, nodes: [...existingNodes, node] };
   } catch (error) {
-    if (!published) {
-      const cleanupFailure = await rm(temporaryNodePath, {
-        recursive: true,
-        force: true,
-      }).then(
-        () => null,
-        (failure: unknown) => failure,
-      );
-      if (cleanupFailure && error instanceof Error && error.cause === undefined)
-        error.cause = cleanupFailure;
-    }
+    const cleanupFailure = await rm(temporaryNodePath, {
+      recursive: true,
+      force: true,
+    }).then(
+      () => null,
+      (failure: unknown) => failure,
+    );
+    if (cleanupFailure && error instanceof Error && error.cause === undefined)
+      error.cause = cleanupFailure;
     throw error;
   }
 }
