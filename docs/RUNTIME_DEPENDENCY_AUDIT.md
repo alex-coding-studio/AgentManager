@@ -5,7 +5,7 @@
 |                                          |                                                                    |
 | ---------------------------------------- | ------------------------------------------------------------------ |
 | base commit                              | `45b5e2b20967629f21d519d026e636643984a39a`                         |
-| analyzer input fingerprint               | `ce5348ebd19c19118a7a8df84bf8fb02091792870e56518df3b4182efa287175` |
+| analyzer input fingerprint               | `08d7bed3533d1ad41118855c81e02bdb3fcb1d9f62159f5e679eb97fe647a3ef` |
 | command                                  | `npm run audit:runtime-dependencies`                               |
 | Node runtime                             | v26.5.1, also verified on v22.13.0                                 |
 | TypeScript                               | 5.9.3, already a repository dependency                             |
@@ -112,8 +112,8 @@ the audit exit non-zero, because an incomplete graph cannot support a claim abou
 
 | metric                                      | value |
 | ------------------------------------------- | ----- |
-| owned modules                               | 205   |
-| runtime edges                               | 484   |
+| owned modules                               | 203   |
+| runtime edges                               | 483   |
 | type-only edges excluded                    | 110   |
 | unresolved internal imports                 | 0     |
 | internal imports outside the analyzed graph | 0     |
@@ -199,8 +199,6 @@ If module coupling is later judged a readability or navigation problem, that is 
 argument requiring its own evidence — not a dependency-cycle argument.
 
 ## Suitability as a CI gate
-
-This delivery adds `lib/filesystem-store-scan.ts` and `scripts/audit-filesystem-stores.ts`, which are inside the analyzed roots. The module and edge counts moved from 203/483 to 205/484 and the fingerprint changed accordingly; the zero-cycle conclusion is unaffected. The fingerprint test caught the staleness, which is what it exists for.
 
 The result is a defensible baseline: zero runtime components, zero unresolved imports,
 deterministic output. A future task could assert `components.length === 0` as a gate.

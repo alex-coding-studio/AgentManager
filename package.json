@@ -17,7 +17,6 @@
     "format": "oxfmt",
     "test:graph": "node --experimental-strip-types --test tests/task-graph-layout.test.ts tests/task-graph-rules.test.ts tests/graph-identity.test.ts tests/uuid-alias-migration.test.mjs tests/graph-node-card.test.ts tests/goal-picker-graph.test.ts",
     "test:dependency-audit": "node --experimental-strip-types --test tests/runtime-dependency-audit.test.ts",
-    "test:store-audit": "node --experimental-strip-types --test tests/filesystem-store-audit.test.ts",
     "test:planning-paths": "node --experimental-strip-types --test tests/planning-paths.test.ts",
     "test:canvas-frame": "node --experimental-strip-types --import ./tests/helpers/register-alias.mjs --test tests/canvas-node-card-frame.test.ts",
     "test:harness": "node --experimental-strip-types --test tests/task-decomposition-harness.test.ts",
@@ -28,7 +27,7 @@
     "test:boundary": "node --experimental-strip-types --import ./tests/helpers/register-alias.mjs --test tests/api-request-boundary.test.ts",
     "test:registry": "node --experimental-strip-types --test tests/project-registry-atomicity.test.ts",
     "test:api-errors": "node --experimental-strip-types --import ./tests/helpers/register-alias.mjs --test tests/api-error-safety.test.ts",
-    "test": "npm run test:graph && npm run test:dependency-audit && npm run test:store-audit && npm run test:planning-paths && npm run test:canvas-frame && npm run test:harness && npm run test:runs && npm run test:whats-next && npm run test:markdown && npm run test:settings && npm run test:boundary && npm run test:registry && npm run test:api-errors && npm run test:implementation-demo && npm run test:implementation-harness && npm run test:implementation-planning && npm run test:implementation-execution",
+    "test": "npm run test:graph && npm run test:dependency-audit && npm run test:planning-paths && npm run test:canvas-frame && npm run test:harness && npm run test:runs && npm run test:whats-next && npm run test:markdown && npm run test:settings && npm run test:boundary && npm run test:registry && npm run test:api-errors && npm run test:implementation-demo && npm run test:implementation-harness && npm run test:implementation-planning && npm run test:implementation-execution",
     "test:ci": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run build",
     "test:implementation-demo": "node --experimental-strip-types --test tests/just-do-it-demo.test.ts",
     "test:implementation-harness": "node --experimental-strip-types --test tests/just-do-it-harness.test.ts",
@@ -41,8 +40,7 @@
     "typecheck": "tsc --noEmit",
     "test:appserver-code-smoke": "node --experimental-strip-types scripts/smoke-app-server-code.ts",
     "format:check": "oxfmt --check .",
-    "audit:runtime-dependencies": "node --experimental-strip-types scripts/audit-runtime-dependencies.ts",
-    "audit:filesystem-stores": "node --experimental-strip-types scripts/audit-filesystem-stores.ts"
+    "audit:runtime-dependencies": "node --experimental-strip-types scripts/audit-runtime-dependencies.ts"
   },
   "dependencies": {
     "@base-ui/react": "1.7.0",
