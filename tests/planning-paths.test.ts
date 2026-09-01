@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { mkdtempSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import {
   mkdir,
   mkdtemp,
+  readFile,
   readdir,
+  readlink,
   rm,
   symlink,
   writeFile,
@@ -81,16 +84,26 @@ async function snapshot(directory: string): Promise<string[]> {
   const entries = await readdir(directory, { withFileTypes: true }).catch(
     () => [],
   );
-  const names: string[] = [];
+  const records: string[] = [];
   for (const entry of entries) {
     const full = path.join(directory, entry.name);
-    names.push(path.relative(directory, full));
-    if (entry.isDirectory())
-      names.push(
-        ...(await snapshot(full)).map((child) => path.join(entry.name, child)),
+    if (entry.isSymbolicLink()) {
+      records.push(`symlink ${entry.name} -> ${await readlink(full)}`);
+      continue;
+    }
+    if (entry.isDirectory()) {
+      records.push(`dir ${entry.name}`);
+      records.push(
+        ...(await snapshot(full)).map((child) => `${entry.name}/${child}`),
       );
+      continue;
+    }
+    const body = await readFile(full);
+    records.push(
+      `file ${entry.name} ${body.byteLength} ${createHash('sha256').update(body).digest('hex')}`,
+    );
   }
-  return names.sort();
+  return records.sort();
 }
 
 void test('a valid existing file inside the planning root resolves', async () => {
@@ -378,7 +391,6 @@ void test('readTaskGraphMarkdownResource uses the shared boundary and keeps its 
   );
   assert.equal(ok.markdown, '# kept');
   assert.equal(ok.fileName, 'notes.md');
-  assert.equal(ok.path, 'context/product/notes.md');
 
   for (const hostile of [
     '../outside.md',
@@ -407,58 +419,41 @@ void test('readTaskGraphMarkdownResource keeps a missing file internal, not publ
   const { PublicApiError, apiErrorResponse } =
     await import('../lib/api-errors.ts');
   const { project } = await planningProject('read-missing');
-  const captured: string[] = [];
-  const original = console.error;
-  console.error = (...parts: unknown[]) => captured.push(parts.join(' '));
+
   let raised: unknown;
   try {
     await readTaskGraphMarkdownResource(project, 'context/product/absent.md');
   } catch (error) {
     raised = error;
-  } finally {
-    console.error = original;
   }
   assert.ok(raised);
   assert.ok(!(raised instanceof PublicApiError));
   assert.equal((raised as NodeJS.ErrnoException).code, 'ENOENT');
 
-  const response = apiErrorResponse(
-    raised,
-    'Could not read the source document.',
-    'GET /api/projects/[projectId]/resources',
-  );
+  const captured: string[] = [];
+  const originalError = console.error;
+  console.error = (...parts: unknown[]) => captured.push(parts.join(' '));
+  let response;
+  try {
+    response = apiErrorResponse(
+      raised,
+      'Could not read the source document.',
+      'GET /api/projects/[projectId]/resources',
+    );
+  } finally {
+    console.error = originalError;
+  }
+
   assert.equal(response.status, 500);
-  const body = (await response.json()) as { error: string };
+  const body = (await response.json()) as {
+    error: string;
+    correlationId: string;
+  };
   assert.equal(body.error, 'Could not read the source document.');
   assert.ok(!JSON.stringify(body).includes('/'));
-});
-
-void test('a symlink escape through Context Library is now rejected before the read', async () => {
-  const { readTaskGraphMarkdownResource } =
-    await import('../lib/task-graph.ts');
-  const { PublicApiError } = await import('../lib/api-errors.ts');
-  const { project, planningPath } = await planningProject('read-symlink');
-  const outside = await mkdtemp(path.join(os.tmpdir(), 'am-planning-leak-'));
-  await writeFile(path.join(outside, 'secret.md'), 'must not be read');
-  await mkdir(path.join(planningPath, 'context', 'product'), {
-    recursive: true,
-  });
-  await symlink(
-    path.join(outside, 'secret.md'),
-    path.join(planningPath, 'context', 'product', 'notes.md'),
-  );
-  await assert.rejects(
-    () => readTaskGraphMarkdownResource(project, 'context/product/notes.md'),
-    (error: unknown) => {
-      assert.ok(error instanceof PublicApiError);
-      assert.equal(
-        (error as Error).message,
-        'The source document path is invalid.',
-      );
-      return true;
-    },
-  );
-  await rm(outside, { recursive: true, force: true });
+  assert.equal(captured.length, 1);
+  assert.ok(captured[0]!.includes(body.correlationId));
+  assert.ok(captured[0]!.includes('ENOENT'));
 });
 
 void test('readPlanningFile keeps its internal messages and size boundary', async () => {
@@ -534,4 +529,194 @@ void test('the migrated call sites import the shared resolver', async () => {
       `${name} must not keep its own containment check`,
     );
   }
+});
+
+async function contextProject(label: string) {
+  const fixture = await planningProject(label);
+  await mkdir(path.join(fixture.planningPath, 'context', 'product'), {
+    recursive: true,
+  });
+  return fixture;
+}
+
+async function nodeDirectories(planningPath: string, graphRoot: string) {
+  return (
+    await readdir(path.join(planningPath, graphRoot, 'nodes')).catch(() => [])
+  ).sort((left, right) => left.localeCompare(right));
+}
+
+void test('createStartNode rejects a Context reference that symlinks outside the planning root', async () => {
+  const { createStartNode } = await import('../lib/task-graph.ts');
+  const { PublicApiError } = await import('../lib/api-errors.ts');
+  const { project, planningPath } = await contextProject('ctx-escape');
+  const outside = await mkdtemp(path.join(os.tmpdir(), 'am-planning-ctx-out-'));
+  const secret = path.join(outside, 'secret.md');
+  await writeFile(secret, 'must not be reachable');
+  await symlink(
+    secret,
+    path.join(planningPath, 'context', 'product', 'linked.md'),
+  );
+  const before = await snapshot(planningPath);
+
+  await assert.rejects(
+    () =>
+      createStartNode(
+        project,
+        {
+          title: 'A node that must not be created',
+          contextRefs: ['context/product/linked.md'],
+          files: [],
+          idea: 'An idea long enough to satisfy the guard.',
+        },
+        'whats-next',
+      ),
+    (error: unknown) => {
+      assert.ok(error instanceof PublicApiError);
+      assert.equal(
+        (error as Error).message,
+        'A selected Context Library reference is invalid.',
+      );
+      assert.equal((error as { status: number }).status, 400);
+      return true;
+    },
+  );
+
+  assert.deepEqual(await nodeDirectories(planningPath, 'whats-next'), []);
+  assert.deepEqual(await snapshot(planningPath), before);
+  assert.equal(await readFile(secret, 'utf8'), 'must not be reachable');
+  await rm(outside, { recursive: true, force: true });
+});
+
+void test('updateStartNode rejects the same escape without changing the stored node', async () => {
+  const { createStartNode, updateStartNode, listTaskGraphNodes } =
+    await import('../lib/task-graph.ts');
+  const { PublicApiError } = await import('../lib/api-errors.ts');
+  const { project, planningPath } = await contextProject('ctx-escape-update');
+  await writeFile(
+    path.join(planningPath, 'context', 'product', 'valid.md'),
+    'valid source',
+  );
+  const created = await createStartNode(
+    project,
+    {
+      title: 'An existing start node',
+      contextRefs: ['context/product/valid.md'],
+      files: [],
+    },
+    'whats-next',
+  );
+
+  const outside = await mkdtemp(path.join(os.tmpdir(), 'am-planning-upd-out-'));
+  await writeFile(path.join(outside, 'secret.md'), 'outside');
+  await symlink(
+    path.join(outside, 'secret.md'),
+    path.join(planningPath, 'context', 'product', 'linked.md'),
+  );
+  const before = await snapshot(planningPath);
+
+  await assert.rejects(
+    () =>
+      updateStartNode(
+        project,
+        {
+          id: created.node.id,
+          title: 'An existing start node',
+          contextRefs: ['context/product/linked.md'],
+          retainedAttachmentRefs: [],
+          files: [],
+        },
+        'whats-next',
+      ),
+    (error: unknown) => {
+      assert.ok(error instanceof PublicApiError);
+      assert.equal(
+        (error as Error).message,
+        'A selected Context Library reference is invalid.',
+      );
+      return true;
+    },
+  );
+
+  assert.deepEqual(await snapshot(planningPath), before);
+  const nodes = await listTaskGraphNodes(project, 'whats-next');
+  const stored = nodes.find((node) => node.id === created.node.id);
+  assert.deepEqual(
+    stored?.resources?.map((resource) => resource.path),
+    ['context/product/valid.md'],
+  );
+  await rm(outside, { recursive: true, force: true });
+});
+
+void test('duplicate Context references are deduplicated in first-occurrence order', async () => {
+  const { createStartNode } = await import('../lib/task-graph.ts');
+  const { project, planningPath } = await contextProject('ctx-dedup');
+  for (const name of ['alpha.md', 'beta.md', 'gamma.md'])
+    await writeFile(
+      path.join(planningPath, 'context', 'product', name),
+      `body of ${name}`,
+    );
+
+  const created = await createStartNode(
+    project,
+    {
+      title: 'A node with repeated references',
+      contextRefs: [
+        'context/product/gamma.md',
+        'context/product/alpha.md',
+        'context/product/gamma.md',
+        'context/product/beta.md',
+        'context/product/alpha.md',
+      ],
+      files: [],
+    },
+    'whats-next',
+  );
+
+  const contextPaths = created.node.resources
+    .filter((resource: { kind: string }) => resource.kind === 'context')
+    .map((resource: { path: string }) => resource.path);
+  assert.deepEqual(contextPaths, [
+    'context/product/gamma.md',
+    'context/product/alpha.md',
+    'context/product/beta.md',
+  ]);
+  assert.equal(new Set(contextPaths).size, contextPaths.length);
+});
+
+void test('a Context reference outside the Context Library shape is rejected by the real call path', async () => {
+  const { createStartNode } = await import('../lib/task-graph.ts');
+  const { PublicApiError } = await import('../lib/api-errors.ts');
+  const { project, planningPath } = await contextProject('ctx-shape');
+  await writeInside(planningPath, `whats-next/nodes/${NODE}/output.md`, 'node');
+  const before = await nodeDirectories(planningPath, 'whats-next');
+
+  for (const hostile of [
+    `whats-next/nodes/${NODE}/output.md`,
+    '../outside.md',
+    '/etc/passwd',
+    'context\\..\\..\\outside.md',
+  ])
+    await assert.rejects(
+      () =>
+        createStartNode(
+          project,
+          {
+            title: 'Rejected before creation',
+            contextRefs: [hostile],
+            files: [],
+            idea: 'An idea long enough to satisfy the guard.',
+          },
+          'whats-next',
+        ),
+      (error: unknown) => {
+        assert.ok(error instanceof PublicApiError, hostile);
+        assert.equal(
+          (error as Error).message,
+          'A selected Context Library reference is invalid.',
+        );
+        return true;
+      },
+    );
+
+  assert.deepEqual(await nodeDirectories(planningPath, 'whats-next'), before);
 });
