@@ -20,14 +20,16 @@ therefore tested at the selector/stage contract rather than inferred from prompt
 
 ## What’s Next boundary
 
-| Intention                 | Owns                                                                 | Must not do                                              | First output risk                           |
-| ------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------- | ------------------------------------------- |
-| MVP Exploration           | discover several falsifiable user-value directions                   | formalize a Feature or implementation                    | plausible but untestable directions         |
-| Feature Synthesis         | turn selected Discovery evidence into a formal Feature               | insert an intermediate Discovery Feature                 | losing evidence or combining unrelated MVPs |
-| Product Design Completion | judge and fill a product gap using Source plus all accepted Features | require an MVP detour or manufacture a duplicate Feature | creating a Card merely to answer            |
+| Intention                 | Owns                                                                          | Must not do                                              | First output risk                           |
+| ------------------------- | ----------------------------------------------------------------------------- | -------------------------------------------------------- | ------------------------------------------- |
+| MVP Exploration           | discover several falsifiable user-value directions                            | formalize a Feature or implementation                    | plausible but untestable directions         |
+| Feature Synthesis         | turn selected Discovery evidence into a formal Feature                        | insert an intermediate Discovery Feature                 | losing evidence or combining unrelated MVPs |
+| Product Design Completion | start from Source and judge a product gap using all accepted Feature siblings | require an MVP detour or manufacture a duplicate Feature | creating a Card merely to answer            |
 
 Product Design Completion may return a Feature, no-change or one clarification. A missing
 rule inside an existing Feature is a refinement recommendation, not a new Feature.
+Its primary graph lineage is always Product Source to Feature; sibling interaction does not
+create another visual depth level.
 
 ## Just Do It audit
 

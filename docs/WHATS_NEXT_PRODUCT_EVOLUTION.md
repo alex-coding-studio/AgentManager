@@ -209,12 +209,15 @@ The first What’s Next intentions are:
 | Feature Synthesis         | Product Design | Features synthesized from selected Discovery proof |
 | Product Design Completion | Product Design | a justified missing Feature or an honest no-change |
 
-Product Design Completion starts after the product goal is coherent. The Product Source
-and every accepted Product Design Feature are implicit primary Context. The user's
-Instruction identifies a possible product gap; selected nodes only focus the request. The
+Product Design Completion starts after the product goal is coherent. Selecting the Product
+Source triggers the operation; it is not a manual Context boundary. The Product Source and
+every accepted Product Design Feature sibling are implicit primary Context. The user's
+Instruction identifies a possible product gap. The
 Harness first decides whether the concern deserves a separate Feature. Existing coverage
 returns no-change, a missing rule inside one Feature routes to refinement, and material
 ambiguity returns one clarification. It must not create a nominal Feature merely to answer.
+Every Product Design Feature remains a direct child of the Product Source. Interactions
+with sibling Features belong in Markdown; only true prerequisites become dependencies.
 
 Document synthesis may later create a Product Context candidate, but direct repository
 document writes remain outside What’s Next.

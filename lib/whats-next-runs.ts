@@ -213,14 +213,11 @@ async function startWhatsNextRunUnlocked(
     throw new Error('Feature Synthesis currently accepts Discovery sources.');
   if (
     intention === 'product-design-completion' &&
-    sourceNodes.some(
-      (node) =>
-        node.role !== 'start' &&
-        (node.layer ?? 'discovery') !== 'product-design',
-    )
+    !input.revisionCandidateId &&
+    (sourceNodes.length !== 1 || sourceNodes[0]?.role !== 'start')
   )
     throw new Error(
-      'Product Design Completion accepts the Source or Product Design Features.',
+      'Product Design Completion must start from the Product Source.',
     );
   const revisionTarget = await resolveRevisionTarget(project, input);
   if (revisionTarget && input.feedback?.length) {
@@ -661,6 +658,10 @@ export async function recoverWhatsNextRunResult(
       knownCandidates: await collectLatestUnacceptedCandidates(project),
       intention: record.intention,
       motion: record.motion,
+      productSourceNodeId:
+        record.intention === 'product-design-completion'
+          ? record.sourceNodeIds[0]
+          : undefined,
     },
     parseWhatsNextHarnessResult,
     revisionTarget ?? undefined,
@@ -973,6 +974,10 @@ async function finishWhatsNextRun(
         revisionTarget,
         intention: record.intention,
         motion: record.motion,
+        productSourceNodeId:
+          record.intention === 'product-design-completion'
+            ? record.sourceNodeIds[0]
+            : undefined,
       },
       parseWhatsNextHarnessResult,
       revisionTarget,
