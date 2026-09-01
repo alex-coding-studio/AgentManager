@@ -129,3 +129,42 @@ void test('promotes an explicitly selected duplicate Resource to primary', async
   assert.equal(workspace.manifest.related.length, 0);
   assert.equal(workspace.manifest.primary[0]?.kind, 'run-context');
 });
+
+void test('keeps inherited outputs from one related Node collision-free', async () => {
+  const runPath = await mkdtemp(path.join(tmpdir(), 'agent-manager-context-'));
+  const nodeId = 'NODE-eef14eef';
+  const workspace = await writeTaskDecompositionContextWorkspace(runPath, [
+    {
+      role: 'related',
+      kind: 'node-output',
+      logicalPath: 'whats-next/nodes/NODE-4bd7bb2c/output.md',
+      content: 'first inherited output',
+      nodeId,
+    },
+    {
+      role: 'related',
+      kind: 'node-output',
+      logicalPath: 'whats-next/nodes/NODE-8706750c/output.md',
+      content: 'second inherited output',
+      nodeId,
+    },
+    {
+      role: 'related',
+      kind: 'node-output',
+      logicalPath: `whats-next/nodes/${nodeId}/output.md`,
+      content: 'related node output',
+      nodeId,
+    },
+  ]);
+
+  assert.equal(workspace.manifest.related.length, 3);
+  const workspacePaths = workspace.manifest.related.map(
+    (entry) => entry.workspacePath,
+  );
+  assert.equal(new Set(workspacePaths).size, 3);
+  assert.ok(workspacePaths.includes(`related/nodes/${nodeId}.md`));
+  assert.equal(
+    workspacePaths.filter((entry) => entry.includes(`${nodeId}-`)).length,
+    2,
+  );
+});

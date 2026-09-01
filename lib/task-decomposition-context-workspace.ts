@@ -136,17 +136,26 @@ function chooseWorkspacePath(input: ContextWorkspaceInput, index: number) {
     );
   }
   if (input.nodeId) {
-    return path.posix.join('related', 'nodes', `${input.nodeId}.md`);
+    const ownOutput = input.logicalPath.endsWith(
+      `/nodes/${input.nodeId}/output.md`,
+    );
+    return path.posix.join(
+      'related',
+      'nodes',
+      ownOutput
+        ? `${input.nodeId}.md`
+        : `${input.nodeId}-${logicalPathFingerprint(input.logicalPath)}-${safeFileName(input.logicalPath)}`,
+    );
   }
-  const fingerprint = createHash('sha256')
-    .update(input.logicalPath)
-    .digest('hex')
-    .slice(0, 10);
   return path.posix.join(
     'related',
     'resources',
-    `${fingerprint}-${safeFileName(input.logicalPath)}`,
+    `${logicalPathFingerprint(input.logicalPath)}-${safeFileName(input.logicalPath)}`,
   );
+}
+
+function logicalPathFingerprint(logicalPath: string) {
+  return createHash('sha256').update(logicalPath).digest('hex').slice(0, 10);
 }
 
 function safeFileName(logicalPath: string) {
