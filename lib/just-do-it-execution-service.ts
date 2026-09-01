@@ -1,3 +1,4 @@
+import { PublicApiError } from './api-errors.ts';
 import {
   startCoordinatedExecution,
   CoordinationRunError,
@@ -435,9 +436,12 @@ export function createExecutionService(
       typeof input.instruction !== 'string' ||
       input.instruction.length > 20000
     )
-      throw new Error('Invalid execution input.');
+      throw new PublicApiError('Invalid execution input.', 400);
     if (active.has(project.rootPath))
-      throw new Error('This project already has a running Action.');
+      throw new PublicApiError(
+        'This project already has a running Action.',
+        400,
+      );
     const reservation: Active = {
       id: randomUUID(),
       cardId: input.cardId,
@@ -450,13 +454,19 @@ export function createExecutionService(
       for (const item of cards) {
         const current = await refresh(project, item);
         if (current.execution?.runs.at(-1)?.status === 'running')
-          throw new Error('This project already has a running Action.');
+          throw new PublicApiError(
+            'This project already has a running Action.',
+            400,
+          );
       }
       let card = await store.read(project, input.cardId);
       if (card.revision !== input.expectedRevision)
-        throw new Error('Card changed. Reload before trying again.');
+        throw new PublicApiError(
+          'Card changed. Reload before trying again.',
+          409,
+        );
       if (card.run?.status === 'running')
-        throw new Error('Stop planning before executing.');
+        throw new PublicApiError('Stop planning before executing.', 400);
       const dependencyReview = await store.dependencyReview(project, card);
       if (dependencyReview.length)
         throw new Error(
@@ -829,12 +839,16 @@ export function createExecutionService(
     assertCardUuid(outputId);
     const card = await refresh(project, await store.read(project, cardId));
     if (card.revision !== expectedRevision)
-      throw new Error('Card changed. Reload before trying again.');
+      throw new PublicApiError(
+        'Card changed. Reload before trying again.',
+        409,
+      );
     const run = card.execution?.runs.at(-1);
     if (!run || run.id !== outputId)
-      throw new Error('The current Action output changed.');
+      throw new PublicApiError('The current Action output changed.', 409);
     if (action === 'cancel') {
-      if (run.status !== 'running') throw new Error('No execution is running.');
+      if (run.status !== 'running')
+        throw new PublicApiError('No execution is running.', 400);
       const handle = active.get(project.rootPath);
       if (handle?.id !== run.id)
         throw new Error('Execution is owned by another server.');
@@ -929,8 +943,9 @@ export function createExecutionService(
       }
     }
     if (action !== 'accept' || !hasReviewableReport(run) || !run.result)
-      throw new Error(
+      throw new PublicApiError(
         'A valid current Action report is required for acceptance.',
+        400,
       );
     if (
       !assessRequiredChecks(
@@ -939,15 +954,16 @@ export function createExecutionService(
         card.execution?.acceptanceOverrides?.[run.actionId],
       ).passed
     )
-      throw new Error(
+      throw new PublicApiError(
         'Required acceptance checks are incomplete or failed. Record an explicit user decision for any waived item.',
+        400,
       );
     const accepted = card.execution!.acceptedActionIds;
     if (
       card.actions.find((item) => !accepted.includes(item.id))?.id !==
       run.actionId
     )
-      throw new Error('Only the current Action can be accepted.');
+      throw new PublicApiError('Only the current Action can be accepted.', 400);
     const outputRef = reference(card, 'output.md');
     return commit(
       project,
@@ -1026,7 +1042,10 @@ export function createExecutionService(
     assertCardUuid(cardId);
     const card = await store.read(project, cardId);
     if (card.revision !== expectedRevision)
-      throw new Error('Card changed. Reload before trying again.');
+      throw new PublicApiError(
+        'Card changed. Reload before trying again.',
+        409,
+      );
     const action = card.actions.find((item) => item.id === actionId);
     if (
       card.plan?.status !== 'finalized' ||
@@ -1041,8 +1060,9 @@ export function createExecutionService(
       );
     validateAcceptanceCriteria(criteria);
     if (typeof note !== 'string' || !note.trim())
-      throw new Error(
+      throw new PublicApiError(
         'Record the explicit user authorization for this upgrade.',
+        400,
       );
     const upgrade = (item: typeof action) =>
       item.id === actionId
@@ -1072,9 +1092,13 @@ export function createExecutionService(
     assertCardUuid(cardId);
     const card = await store.read(project, cardId);
     if (card.revision !== expectedRevision)
-      throw new Error('Card changed. Reload before trying again.');
+      throw new PublicApiError(
+        'Card changed. Reload before trying again.',
+        409,
+      );
     const workspace = card.execution?.workspace;
-    if (!workspace) throw new Error('This Card has no workspace yet.');
+    if (!workspace)
+      throw new PublicApiError('This Card has no workspace yet.', 400);
     await verifyCardWorkspace(workspace);
     const command =
       process.platform === 'darwin'
@@ -1085,7 +1109,10 @@ export function createExecutionService(
             ? 'xdg-open'
             : null;
     if (!command)
-      throw new Error('Opening the system file manager is unsupported.');
+      throw new PublicApiError(
+        'Opening the system file manager is unsupported.',
+        400,
+      );
     await promisify(execFile)(command, [workspace.path], { timeout: 10000 });
     return card;
   }
@@ -1100,7 +1127,10 @@ export function createExecutionService(
     assertCardUuid(cardId);
     const card = await store.read(project, cardId);
     if (card.revision !== expectedRevision)
-      throw new Error('Card changed. Reload before trying again.');
+      throw new PublicApiError(
+        'Card changed. Reload before trying again.',
+        409,
+      );
     const run = card.execution?.runs.at(-1);
     if (
       !run?.acceptanceChecklist ||
@@ -1108,8 +1138,9 @@ export function createExecutionService(
       active.has(project.rootPath) ||
       card.execution!.acceptedActionIds.includes(run.actionId)
     )
-      throw new Error(
+      throw new PublicApiError(
         'User decisions require a finished, unaccepted Round with a fixed checklist.',
+        400,
       );
     if (
       !run.acceptanceChecklist.items.some((item) => item.id === criterionId) ||
@@ -1117,8 +1148,9 @@ export function createExecutionService(
       !note.trim() ||
       note.length > 4000
     )
-      throw new Error(
+      throw new PublicApiError(
         'Select a required criterion and record the user decision.',
+        400,
       );
     const decision = {
       note,
@@ -1159,12 +1191,21 @@ export function createExecutionService(
     assertCardUuid(outputId);
     const card = await store.read(project, cardId);
     if (card.revision !== expectedRevision)
-      throw new Error('Card changed. Reload before trying again.');
+      throw new PublicApiError(
+        'Card changed. Reload before trying again.',
+        409,
+      );
     if (card.execution?.runs.at(-1)?.status === 'running')
-      throw new Error('Wait for execution to finish before refreshing GitHub.');
+      throw new PublicApiError(
+        'Wait for execution to finish before refreshing GitHub.',
+        400,
+      );
     const run = card.execution?.runs.find((item) => item.id === outputId);
     if (!run?.github)
-      throw new Error('No captured GitHub delivery for this output.');
+      throw new PublicApiError(
+        'No captured GitHub delivery for this output.',
+        400,
+      );
     const github = await refreshGitHubDelivery(run.github, reader);
     return commit(
       project,
@@ -1200,8 +1241,9 @@ export function createExecutionService(
     assertCardUuid(cardId);
     assertCardUuid(outputId);
     if (active.has(project.rootPath))
-      throw new Error(
+      throw new PublicApiError(
         'Wait for project execution to finish before rechecking.',
+        400,
       );
     const reservation: Active = {
       id: randomUUID(),
@@ -1213,7 +1255,10 @@ export function createExecutionService(
     try {
       const card = await store.read(project, cardId);
       if (card.revision !== expectedRevision)
-        throw new Error('Card changed. Reload before trying again.');
+        throw new PublicApiError(
+          'Card changed. Reload before trying again.',
+          409,
+        );
       const run = card.execution?.runs.at(-1);
       if (
         !run ||
@@ -1222,8 +1267,9 @@ export function createExecutionService(
         !run.evidenceErrors ||
         card.execution!.acceptedActionIds.includes(run.actionId)
       )
-        throw new Error(
+        throw new PublicApiError(
           'Only the latest unaccepted report rejected for evidence can be rechecked.',
+          400,
         );
       if (hasUnsupportedAppArtifact(run))
         throw new Error(
@@ -1272,7 +1318,7 @@ export function createExecutionService(
       if (!request || !raw || !recorded)
         throw new Error('Original report evidence is unavailable.');
       if (JSON.stringify(card.plan) !== JSON.stringify(request.context.plan))
-        throw new Error('Plan changed since this report.');
+        throw new PublicApiError('Plan changed since this report.', 409);
       const current = await snapshotWorkspace(workingProject);
       if (
         current.root !== recorded.root ||
@@ -1286,8 +1332,9 @@ export function createExecutionService(
             ),
           )
       )
-        throw new Error(
+        throw new PublicApiError(
           'Workspace changed since this report. Rechecking cannot certify a different output.',
+          400,
         );
       let result;
       let versions: string[] = [];
@@ -1397,7 +1444,10 @@ export function createExecutionService(
   ) {
     assertCardUuid(cardId);
     if (active.has(project.rootPath))
-      throw new Error('Stop project execution before resetting a Card.');
+      throw new PublicApiError(
+        'Stop project execution before resetting a Card.',
+        400,
+      );
     const reservation: Active = {
       id: randomUUID(),
       cardId,
@@ -1408,7 +1458,10 @@ export function createExecutionService(
     try {
       const card = await store.read(project, cardId);
       if (card.revision !== expectedRevision)
-        throw new Error('Card changed. Reload before trying again.');
+        throw new PublicApiError(
+          'Card changed. Reload before trying again.',
+          409,
+        );
       const workspace = card.execution?.workspace;
       const last = card.execution?.runs.at(-1);
       if (
@@ -1418,8 +1471,9 @@ export function createExecutionService(
         card.run?.status === 'running' ||
         !['failed', 'canceled', 'succeeded'].includes(last.status)
       )
-        throw new Error(
+        throw new PublicApiError(
           'Only unaccepted Cards with a completed Round can restart from their base.',
+          400,
         );
       await verifyCardWorkspace(workspace);
       const snapshot = await snapshotWorkspace(
@@ -1434,8 +1488,9 @@ export function createExecutionService(
           workspace.branch,
         );
         if (prs.some((pr) => pr.state === 'MERGED'))
-          throw new Error(
+          throw new PublicApiError(
             'This Card branch has a merged PR. Use a revert PR instead of a local restart.',
+            400,
           );
       }
       const token = createHash('sha256')
@@ -1452,7 +1507,10 @@ export function createExecutionService(
       };
       if (confirmation === undefined) return { preview };
       if (confirmation !== token)
-        throw new Error('Workspace changed. Preview the reset again.');
+        throw new PublicApiError(
+          'Workspace changed. Preview the reset again.',
+          409,
+        );
       const restarted = await restartCardWorkspace(project, card);
       try {
         const saved = await commit(

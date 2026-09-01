@@ -1,4 +1,5 @@
 import { getProject } from '@/lib/project-registry';
+import { apiErrorResponse } from '@/lib/api-errors';
 import { guardJsonRequest, guardRequest } from '@/lib/request-boundary';
 import {
   assertGraphRoot,
@@ -6,10 +7,7 @@ import {
   deleteTaskGraphNode,
   updateStartNode,
 } from '@/lib/task-graph';
-import {
-  CanvasStartConflictError,
-  NodeReferencedError,
-} from '@/lib/task-graph-rules';
+import { NodeReferencedError } from '@/lib/task-graph-rules';
 
 export const runtime = 'nodejs';
 
@@ -53,13 +51,10 @@ export async function POST(
     );
     return Response.json(result, { status: 201 });
   } catch (error) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : 'Could not create the start node.';
-    return Response.json(
-      { error: message },
-      { status: error instanceof CanvasStartConflictError ? 409 : 400 },
+    return apiErrorResponse(
+      error,
+      'Could not create the start node.',
+      'POST /api/projects/[projectId]/nodes',
     );
   }
 }
@@ -110,11 +105,11 @@ export async function PATCH(
     );
     return Response.json(result);
   } catch (error) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : 'Could not update the start node.';
-    return Response.json({ error: message }, { status: 400 });
+    return apiErrorResponse(
+      error,
+      'Could not update the start node.',
+      'PATCH /api/projects/[projectId]/nodes',
+    );
   }
 }
 
@@ -146,17 +141,15 @@ export async function DELETE(
       ),
     );
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : 'Could not delete the node.';
-    return Response.json(
-      {
-        error: message,
-        blockerNodeIds:
-          error instanceof NodeReferencedError
-            ? error.blockerNodeIds
-            : undefined,
-      },
-      { status: error instanceof NodeReferencedError ? 409 : 400 },
+    if (error instanceof NodeReferencedError)
+      return Response.json(
+        { error: error.message, blockerNodeIds: error.blockerNodeIds },
+        { status: error.status },
+      );
+    return apiErrorResponse(
+      error,
+      'Could not delete the node.',
+      'DELETE /api/projects/[projectId]/nodes',
     );
   }
 }

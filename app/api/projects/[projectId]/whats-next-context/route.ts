@@ -1,4 +1,5 @@
 import { getProject } from '@/lib/project-registry';
+import { apiErrorResponse } from '@/lib/api-errors';
 import { guardJsonRequest } from '@/lib/request-boundary';
 import {
   readWhatsNextInstructions,
@@ -48,13 +49,9 @@ export async function PATCH(
 }
 
 function failure(error: unknown) {
-  return Response.json(
-    {
-      error:
-        error instanceof Error
-          ? error.message
-          : 'Could not update Instructions.',
-    },
-    { status: 400 },
+  return apiErrorResponse(
+    error,
+    'Could not update Instructions.',
+    '/api/projects/[projectId]/whats-next-context',
   );
 }

@@ -1,3 +1,4 @@
+import { PublicApiError } from './api-errors.ts';
 import { randomUUID } from 'node:crypto';
 import {
   mkdir,
@@ -32,11 +33,11 @@ type TaskDecompositionSettings = {
   attachmentsDirectory: 'attachments';
 };
 
-export class TaskDecompositionAttachmentConflictError extends Error {
+export class TaskDecompositionAttachmentConflictError extends PublicApiError {
   conflicts: string[];
 
   constructor(conflicts: string[]) {
-    super('One or more context attachments already exist.');
+    super('One or more context attachments already exist.', 409);
     this.name = 'TaskDecompositionAttachmentConflictError';
     this.conflicts = conflicts;
   }
@@ -75,7 +76,10 @@ export async function saveTaskDecompositionInstructions(
   instructions: string,
 ) {
   if (instructions.length > 100_000) {
-    throw new Error('Decomposition instructions must be 100 KB or smaller.');
+    throw new PublicApiError(
+      'Decomposition instructions must be 100 KB or smaller.',
+      400,
+    );
   }
   const contextPath = await ensureFeatureContext(project);
   await writeAtomically(
@@ -90,17 +94,23 @@ export async function importTaskDecompositionAttachments(
   files: File[],
 ) {
   if (files.length === 0) {
-    throw new Error('Select at least one context attachment.');
+    throw new PublicApiError('Select at least one context attachment.', 400);
   }
   if (files.length > 20) {
-    throw new Error('Add no more than 20 context attachments at once.');
+    throw new PublicApiError(
+      'Add no more than 20 context attachments at once.',
+      400,
+    );
   }
 
   const prepared = await Promise.all(
     files.map(async (file) => {
       const fileName = validateAttachmentName(file.name);
       if (file.size > 2 * 1024 * 1024) {
-        throw new Error('Each context attachment must be 2 MB or smaller.');
+        throw new PublicApiError(
+          'Each context attachment must be 2 MB or smaller.',
+          400,
+        );
       }
       const content = await file.text();
       if (/\.json$/i.test(fileName)) {
@@ -164,7 +174,7 @@ export async function deleteTaskDecompositionAttachment(
     await unlink(attachmentPath);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      throw new Error('The context attachment was not found.');
+      throw new PublicApiError('The context attachment was not found.', 400);
     }
     throw error;
   }
@@ -268,8 +278,9 @@ function validateAttachmentName(value: string) {
     fileName.includes('\n') ||
     !/\.(md|markdown|json)$/i.test(fileName)
   ) {
-    throw new Error(
+    throw new PublicApiError(
       'Only named Markdown or JSON context attachments are supported.',
+      400,
     );
   }
   return fileName;

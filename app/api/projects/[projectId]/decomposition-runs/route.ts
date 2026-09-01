@@ -1,4 +1,5 @@
 import { getProject } from '@/lib/project-registry';
+import { apiErrorResponse } from '@/lib/api-errors';
 import { guardJsonRequest, guardRequest } from '@/lib/request-boundary';
 import { readAgentProfile } from '@/lib/agent-profile';
 import {
@@ -71,11 +72,10 @@ export async function POST(
     });
     return Response.json({ run }, { status: 202 });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : 'Could not start the Agent Run.';
-    return Response.json(
-      { error: message },
-      { status: /already has an active Agent Run/.test(message) ? 409 : 400 },
+    return apiErrorResponse(
+      error,
+      'Could not start the Agent Run.',
+      'POST /api/projects/[projectId]/decomposition-runs',
     );
   }
 }
@@ -100,12 +100,15 @@ export async function GET(
       run: await readTaskDecompositionRun(project, runId),
     });
   } catch (error) {
-    const nodeError = error as NodeJS.ErrnoException;
-    const message =
-      error instanceof Error ? error.message : 'Could not read the Agent Run.';
-    return Response.json(
-      { error: message },
-      { status: nodeError.code === 'ENOENT' ? 404 : 400 },
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT')
+      return Response.json(
+        { error: 'Agent Run was not found.' },
+        { status: 404 },
+      );
+    return apiErrorResponse(
+      error,
+      'Could not read the Agent Run.',
+      'GET /api/projects/[projectId]/decomposition-runs',
     );
   }
 }
@@ -133,11 +136,11 @@ export async function DELETE(
       run: await cancelTaskDecompositionRun(project, payload.runId),
     });
   } catch (error) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : 'Could not cancel the Agent Run.';
-    return Response.json({ error: message }, { status: 400 });
+    return apiErrorResponse(
+      error,
+      'Could not cancel the Agent Run.',
+      'DELETE /api/projects/[projectId]/decomposition-runs',
+    );
   }
 }
 
@@ -182,11 +185,11 @@ export async function PATCH(
           ),
     );
   } catch (error) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : 'Could not update the Candidate.';
-    return Response.json({ error: message }, { status: 400 });
+    return apiErrorResponse(
+      error,
+      'Could not update the Candidate.',
+      'PATCH /api/projects/[projectId]/decomposition-runs',
+    );
   }
 }
 

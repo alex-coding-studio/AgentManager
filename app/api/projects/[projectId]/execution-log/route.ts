@@ -1,4 +1,5 @@
 import { readFile, realpath, stat } from 'node:fs/promises';
+import { apiErrorResponse } from '@/lib/api-errors';
 import path from 'node:path';
 import { getProject } from '@/lib/project-registry';
 import { planningService } from '@/lib/just-do-it-planning-service';
@@ -60,12 +61,10 @@ export async function GET(
       },
     });
   } catch (error) {
-    return Response.json(
-      {
-        error:
-          error instanceof Error ? error.message : 'Could not read the log.',
-      },
-      { status: 400 },
+    return apiErrorResponse(
+      error,
+      'Could not read the log.',
+      'GET /api/projects/[projectId]/execution-log',
     );
   }
 }

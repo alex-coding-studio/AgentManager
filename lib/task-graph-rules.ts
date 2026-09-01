@@ -1,6 +1,8 @@
-export class CanvasStartConflictError extends Error {
+import { PublicApiError } from './api-errors.ts';
+
+export class CanvasStartConflictError extends PublicApiError {
   constructor() {
-    super('This Canvas already has a Start node.');
+    super('This Canvas already has a Start node.', 409);
     this.name = 'CanvasStartConflictError';
   }
 }
@@ -17,12 +19,13 @@ type RelationshipNode = {
   dependsOn: string[];
 };
 
-export class NodeReferencedError extends Error {
+export class NodeReferencedError extends PublicApiError {
   blockerNodeIds: string[];
 
   constructor(nodeId: string, blockerNodeIds: string[]) {
     super(
       `${nodeId} is still referenced by ${blockerNodeIds.length === 1 ? 'another node' : 'other nodes'}.`,
+      409,
     );
     this.name = 'NodeReferencedError';
     this.blockerNodeIds = blockerNodeIds;

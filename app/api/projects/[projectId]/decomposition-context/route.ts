@@ -1,4 +1,5 @@
 import { getProject } from '@/lib/project-registry';
+import { apiErrorResponse } from '@/lib/api-errors';
 import { guardJsonRequest, guardRequest } from '@/lib/request-boundary';
 import {
   deleteTaskDecompositionAttachment,
@@ -32,11 +33,11 @@ export async function GET(
       await readTaskDecompositionAttachment(project, fileName),
     );
   } catch (error) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : 'Could not read the context attachment.';
-    return Response.json({ error: message }, { status: 400 });
+    return apiErrorResponse(
+      error,
+      'Could not read the context attachment.',
+      'GET /api/projects/[projectId]/decomposition-context',
+    );
   }
 }
 
@@ -64,11 +65,11 @@ export async function PATCH(
       await saveTaskDecompositionInstructions(project, payload.instructions),
     );
   } catch (error) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : 'Could not save Decomposition instructions.';
-    return Response.json({ error: message }, { status: 400 });
+    return apiErrorResponse(
+      error,
+      'Could not save Decomposition instructions.',
+      'PATCH /api/projects/[projectId]/decomposition-context',
+    );
   }
 }
 
@@ -100,11 +101,11 @@ export async function POST(
         { status: 409 },
       );
     }
-    const message =
-      error instanceof Error
-        ? error.message
-        : 'Could not add the context attachments.';
-    return Response.json({ error: message }, { status: 400 });
+    return apiErrorResponse(
+      error,
+      'Could not add the context attachments.',
+      'POST /api/projects/[projectId]/decomposition-context',
+    );
   }
 }
 
@@ -132,10 +133,10 @@ export async function DELETE(
       await deleteTaskDecompositionAttachment(project, payload.fileName),
     );
   } catch (error) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : 'Could not remove the context attachment.';
-    return Response.json({ error: message }, { status: 400 });
+    return apiErrorResponse(
+      error,
+      'Could not remove the context attachment.',
+      'DELETE /api/projects/[projectId]/decomposition-context',
+    );
   }
 }

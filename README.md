@@ -129,6 +129,7 @@ npm run test:runs
 npm run test:whats-next
 npm run test:boundary
 npm run test:registry
+npm run test:api-errors
 npm run test:implementation-execution
 ```
 

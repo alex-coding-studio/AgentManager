@@ -1,3 +1,4 @@
+import { PublicApiError } from './api-errors.ts';
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { realpathSync } from 'node:fs';
@@ -120,17 +121,23 @@ export async function createProject(input: {
   rootPath?: string;
 }) {
   if (!input.rootPath?.trim()) {
-    throw new Error('A local project directory is required.');
+    throw new PublicApiError('A local project directory is required.', 400);
   }
   const rootPath = path.resolve(expandHome(input.rootPath.trim()));
   const directory = await stat(rootPath).catch(() => null);
   if (!directory?.isDirectory()) {
-    throw new Error('The project path must be an existing directory.');
+    throw new PublicApiError(
+      'The project path must be an existing directory.',
+      400,
+    );
   }
 
   return registryStore.update<RegisteredProject>(async (registry) => {
     if (registry.projects.some((project) => project.rootPath === rootPath)) {
-      throw new Error('This project directory is already registered.');
+      throw new PublicApiError(
+        'This project directory is already registered.',
+        409,
+      );
     }
 
     const planningPath = path.join(rootPath, '.agent-manager');

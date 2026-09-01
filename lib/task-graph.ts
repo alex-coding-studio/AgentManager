@@ -1,3 +1,4 @@
+import { PublicApiError } from './api-errors.ts';
 import { randomUUID } from 'node:crypto';
 import {
   mkdir,
@@ -28,7 +29,7 @@ export type GraphRoot = 'task-graph' | 'whats-next';
 export function assertGraphRoot(value: unknown): GraphRoot {
   if (value === 'whats-next') return 'whats-next';
   if (value === undefined || value === 'task-graph') return 'task-graph';
-  throw new Error('The graph is invalid.');
+  throw new PublicApiError('The graph is invalid.', 400);
 }
 
 export type TaskGraphNode = GraphIdentityFields & {
@@ -124,24 +125,37 @@ export async function createStartNode(
   graphRoot: GraphRoot = 'task-graph',
 ) {
   const title = input.title.trim();
-  if (!title) throw new Error('A start-node title is required.');
+  if (!title) throw new PublicApiError('A start-node title is required.', 400);
   if (title.length > 160) {
-    throw new Error('Start-node title must be 160 characters or fewer.');
+    throw new PublicApiError(
+      'Start-node title must be 160 characters or fewer.',
+      400,
+    );
   }
   const idea = input.idea?.trim() ?? '';
   if (idea.length > 4_000) {
-    throw new Error('The starting idea must be 4,000 characters or fewer.');
+    throw new PublicApiError(
+      'The starting idea must be 4,000 characters or fewer.',
+      400,
+    );
   }
   if (input.contextRefs.length + input.files.length === 0 && !idea) {
-    throw new Error(
+    throw new PublicApiError(
       'Write a starting idea, or select or upload at least one source document.',
+      400,
     );
   }
   if (input.contextRefs.length > 50) {
-    throw new Error('Select no more than 50 Context Library documents.');
+    throw new PublicApiError(
+      'Select no more than 50 Context Library documents.',
+      400,
+    );
   }
   if (input.files.length > 20) {
-    throw new Error('Upload no more than 20 Markdown files at once.');
+    throw new PublicApiError(
+      'Upload no more than 20 Markdown files at once.',
+      400,
+    );
   }
 
   const contextRefs = await validateContextRefs(project, input.contextRefs);
@@ -242,22 +256,34 @@ export async function updateStartNode(
   graphRoot: GraphRoot = 'task-graph',
 ) {
   if (!/^NODE-[0-9a-f]{8,32}$/.test(input.id)) {
-    throw new Error('The start node is invalid.');
+    throw new PublicApiError('The start node is invalid.', 400);
   }
   const title = input.title.trim();
-  if (!title) throw new Error('A start-node title is required.');
+  if (!title) throw new PublicApiError('A start-node title is required.', 400);
   if (title.length > 160) {
-    throw new Error('Start-node title must be 160 characters or fewer.');
+    throw new PublicApiError(
+      'Start-node title must be 160 characters or fewer.',
+      400,
+    );
   }
   if (input.contextRefs.length > 50) {
-    throw new Error('Select no more than 50 Context Library documents.');
+    throw new PublicApiError(
+      'Select no more than 50 Context Library documents.',
+      400,
+    );
   }
   if (input.files.length > 20) {
-    throw new Error('Upload no more than 20 Markdown files at once.');
+    throw new PublicApiError(
+      'Upload no more than 20 Markdown files at once.',
+      400,
+    );
   }
   const idea = input.idea?.trim() ?? '';
   if (idea.length > 4_000) {
-    throw new Error('The starting idea must be 4,000 characters or fewer.');
+    throw new PublicApiError(
+      'The starting idea must be 4,000 characters or fewer.',
+      400,
+    );
   }
 
   const nodePath = path.join(
@@ -287,7 +313,8 @@ export async function updateStartNode(
   const retainedAttachmentRefs = [...new Set(input.retainedAttachmentRefs)];
   const retainedAttachments = retainedAttachmentRefs.map((ref) => {
     const resource = existingAttachments.get(ref);
-    if (!resource) throw new Error('A retained attachment is invalid.');
+    if (!resource)
+      throw new PublicApiError('A retained attachment is invalid.', 400);
     return resource;
   });
   const ideaResource = node.resources.find(
@@ -299,8 +326,9 @@ export async function updateStartNode(
     !idea &&
     !ideaResource
   ) {
-    throw new Error(
+    throw new PublicApiError(
       'Write a starting idea, or select or upload at least one source document.',
+      400,
     );
   }
 
@@ -386,12 +414,12 @@ export async function deleteTaskGraphNode(
   graphRoot: GraphRoot = 'task-graph',
 ) {
   if (!/^NODE-[0-9a-f]{8,32}$/.test(nodeId)) {
-    throw new Error('The node is invalid.');
+    throw new PublicApiError('The node is invalid.', 400);
   }
 
   const nodes = await listTaskGraphNodes(project, graphRoot);
   if (!nodes.some((node) => node.id === nodeId)) {
-    throw new Error('The node could not be found.');
+    throw new PublicApiError('The node could not be found.', 400);
   }
   assertTaskGraphNodeCanBeDeleted(nodes, nodeId);
 
@@ -430,7 +458,7 @@ export async function readTaskGraphMarkdownResource(
       resourcePath,
     )
   ) {
-    throw new Error('The source document path is invalid.');
+    throw new PublicApiError('The source document path is invalid.', 400);
   }
 
   const planningRoot = await realpath(project.planningPath);
@@ -438,7 +466,7 @@ export async function readTaskGraphMarkdownResource(
     path.resolve(project.planningPath, resourcePath),
   );
   if (!absolutePath.startsWith(`${planningRoot}${path.sep}`)) {
-    throw new Error('The source document path is invalid.');
+    throw new PublicApiError('The source document path is invalid.', 400);
   }
   return {
     fileName: path.basename(resourcePath),
@@ -456,11 +484,17 @@ async function validateContextRefs(project: RegisteredProject, refs: string[]) {
         ref,
       )
     ) {
-      throw new Error('A selected Context Library reference is invalid.');
+      throw new PublicApiError(
+        'A selected Context Library reference is invalid.',
+        400,
+      );
     }
     const absolutePath = path.resolve(project.planningPath, ref);
     if (!absolutePath.startsWith(`${contextRoot}${path.sep}`)) {
-      throw new Error('A selected Context Library reference is invalid.');
+      throw new PublicApiError(
+        'A selected Context Library reference is invalid.',
+        400,
+      );
     }
     try {
       await readFile(absolutePath, 'utf8');
@@ -487,12 +521,16 @@ async function prepareUploads(files: File[]) {
   return Promise.all(
     files.map(async (file) => {
       if (!/\.(md|markdown)$/i.test(file.name)) {
-        throw new Error(
+        throw new PublicApiError(
           'Only Markdown source files can be uploaded right now.',
+          400,
         );
       }
       if (file.size > 2 * 1024 * 1024) {
-        throw new Error('Each Markdown source file must be 2 MB or smaller.');
+        throw new PublicApiError(
+          'Each Markdown source file must be 2 MB or smaller.',
+          400,
+        );
       }
       return {
         baseName: slugify(path.parse(path.basename(file.name)).name),

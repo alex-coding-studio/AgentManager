@@ -1,3 +1,4 @@
+import { PublicApiError } from './api-errors.ts';
 import {
   access,
   mkdir,
@@ -46,11 +47,11 @@ export type ContextBrowserEntry =
       title: string;
     };
 
-export class ContextDocumentConflictError extends Error {
+export class ContextDocumentConflictError extends PublicApiError {
   conflicts: string[];
 
   constructor(conflicts: string[]) {
-    super('One or more Markdown files already exist.');
+    super('One or more Markdown files already exist.', 409);
     this.name = 'ContextDocumentConflictError';
     this.conflicts = conflicts;
   }
@@ -405,7 +406,10 @@ export async function createContextSection(
     await mkdir(path.join(contextPath, slug));
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
-      throw new Error('A context folder with this name already exists.');
+      throw new PublicApiError(
+        'A context folder with this name already exists.',
+        409,
+      );
     }
     throw error;
   }
@@ -425,7 +429,10 @@ export async function renameContextSection(
   const destinationPath = path.join(project.planningPath, 'context', slug);
   try {
     await access(destinationPath);
-    throw new Error('A context folder with this name already exists.');
+    throw new PublicApiError(
+      'A context folder with this name already exists.',
+      409,
+    );
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
@@ -449,10 +456,16 @@ export async function importContextDocuments(
   const imports = await Promise.all(
     files.map(async (file) => {
       if (!/\.(md|markdown)$/i.test(file.name)) {
-        throw new Error('Only Markdown files can be imported right now.');
+        throw new PublicApiError(
+          'Only Markdown files can be imported right now.',
+          400,
+        );
       }
       if (file.size > 2 * 1024 * 1024) {
-        throw new Error('Each Markdown file must be 2 MB or smaller.');
+        throw new PublicApiError(
+          'Each Markdown file must be 2 MB or smaller.',
+          400,
+        );
       }
       const baseName = path.parse(path.basename(file.name)).name;
       const requestedName = `${slugify(baseName)}.md`;
@@ -468,8 +481,9 @@ export async function importContextDocuments(
     entry.requestedName.toLowerCase(),
   );
   if (new Set(requestedNames).size !== requestedNames.length) {
-    throw new Error(
+    throw new PublicApiError(
       'The import contains multiple files with the same destination name.',
+      400,
     );
   }
   const conflicts = imports
@@ -500,7 +514,7 @@ export async function deleteContextDocument(
     path.basename(fileName) !== fileName ||
     !/^[a-zA-Z0-9][a-zA-Z0-9._-]*\.(md|markdown)$/i.test(fileName)
   ) {
-    throw new Error('Markdown document name is invalid.');
+    throw new PublicApiError('Markdown document name is invalid.', 400);
   }
   await unlink(path.join(sectionPath, fileName));
   return { sections: await readProductContext(project) };
@@ -508,11 +522,11 @@ export async function deleteContextDocument(
 
 async function resolveSectionPath(project: RegisteredProject, section: string) {
   if (!/^[a-z0-9][a-z0-9-]*$/.test(section)) {
-    throw new Error('Context section is invalid.');
+    throw new PublicApiError('Context section is invalid.', 400);
   }
   const sectionPath = path.join(project.planningPath, 'context', section);
   const entries = await readdir(sectionPath).catch(() => null);
-  if (!entries) throw new Error('Context section was not found.');
+  if (!entries) throw new PublicApiError('Context section was not found.', 404);
   return sectionPath;
 }
 

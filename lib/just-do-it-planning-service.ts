@@ -1,3 +1,4 @@
+import { PublicApiError } from './api-errors.ts';
 import { validateAcceptanceCriteria } from './just-do-it-checklist.ts';
 import { randomUUID } from 'node:crypto';
 import {
@@ -131,7 +132,7 @@ function key(project: RegisteredProject, cardId: string) {
 }
 function assertRevision(value: number) {
   if (!Number.isSafeInteger(value) || value < 1)
-    throw new Error('Invalid expected revision.');
+    throw new PublicApiError('Invalid expected revision.', 400);
 }
 
 export function validatePlanningProfile(profile: PlanningProfile) {
@@ -147,7 +148,8 @@ export function createPlanningService(
   async function load(project: RegisteredProject, cardId: string) {
     await checkStorageRoot(project);
     const log = await readCardWorklog(root(project), cardId);
-    if (!log.revision) throw new Error('Planning Card not found.');
+    if (!log.revision)
+      throw new PublicApiError('Planning Card not found.', 400);
     const card = JSON.parse(
       await readCardWorkDocument(
         root(project),
@@ -323,19 +325,30 @@ export function createPlanningService(
     assertCardUuid(sourceUid);
     assertRevision(expectedRevision);
     if (!['dependency', 'lineage-only'].includes(decision))
-      throw new Error('Invalid dependency decision.');
+      throw new PublicApiError('Invalid dependency decision.', 400);
     const card = await read(project, cardId);
     if (card.revision !== expectedRevision)
-      throw new Error('Card changed. Reload before trying again.');
+      throw new PublicApiError(
+        'Card changed. Reload before trying again.',
+        409,
+      );
     if (card.run?.status === 'running')
-      throw new Error('Stop the Planning Agent before reviewing dependencies.');
+      throw new PublicApiError(
+        'Stop the Planning Agent before reviewing dependencies.',
+        400,
+      );
     if (card.plan?.status === 'finalized' || card.execution?.runs.length)
-      throw new Error(
+      throw new PublicApiError(
         'Dependency review is locked after execution is confirmed.',
+        400,
       );
     const pending = await dependencyReview(project, card);
     const source = pending.find((item) => item.uid === sourceUid);
-    if (!source) throw new Error('Dependency candidate is no longer pending.');
+    if (!source)
+      throw new PublicApiError(
+        'Dependency candidate is no longer pending.',
+        400,
+      );
     const next: PlanningCard = {
       ...card,
       source: {
@@ -375,16 +388,23 @@ export function createPlanningService(
     assertRevision(expectedRevision);
     const card = await read(project, cardId);
     if (card.revision !== expectedRevision)
-      throw new Error('Card changed. Reload before trying again.');
+      throw new PublicApiError(
+        'Card changed. Reload before trying again.',
+        409,
+      );
     if (card.run?.status === 'running')
-      throw new Error('Stop the Planning Agent before deleting this Card.');
+      throw new PublicApiError(
+        'Stop the Planning Agent before deleting this Card.',
+        400,
+      );
     if (
       card.plan?.status === 'finalized' ||
       card.actions.length ||
       card.execution?.runs.length
     )
-      throw new Error(
+      throw new PublicApiError(
         'Only a Card without a confirmed Plan or execution may be deleted.',
+        400,
       );
     const directory = path.join(root(project), cardId);
     const actualRoot = await realpath(root(project));
@@ -406,7 +426,7 @@ export function createPlanningService(
     uid: string,
   ) {
     if (!['whats-next', 'task-graph'].includes(module))
-      throw new Error('Unknown source module.');
+      throw new PublicApiError('Unknown source module.', 400);
     assertCardUuid(uid);
     await checkStorageRoot(project);
     const existing = await readCardWorklog(root(project), uid);
@@ -566,19 +586,24 @@ export function createPlanningService(
       !Array.isArray(input.retainRefs) ||
       (input.targetId !== null && typeof input.targetId !== 'string')
     )
-      throw new Error('Invalid planning input.');
+      throw new PublicApiError('Invalid planning input.', 400);
     const card = await read(project, input.cardId);
     if (card.revision !== input.expectedRevision)
-      throw new Error('Card changed. Reload before trying again.');
+      throw new PublicApiError(
+        'Card changed. Reload before trying again.',
+        409,
+      );
     if (card.execution?.runs.length)
-      throw new Error(
+      throw new PublicApiError(
         'Execution has started. Clean rollback is required before changing the Plan; rollback is not connected yet.',
+        400,
       );
     if (card.run?.status === 'running')
-      throw new Error('This Card already has a running Agent.');
+      throw new PublicApiError('This Card already has a running Agent.', 409);
     if (card.plan?.status === 'finalized')
-      throw new Error(
+      throw new PublicApiError(
         'The finalized Plan and acceptance checklist are locked.',
+        400,
       );
     await assertDependencyReview(project, card);
     const { log } = await load(project, input.cardId);
@@ -590,8 +615,9 @@ export function createPlanningService(
         input.retainRefs.length !== card.resources.length ||
         card.resources.some((item) => !input.retainRefs.includes(item.ref)))
     ) {
-      throw new Error(
+      throw new PublicApiError(
         'Single-step feedback cannot change shared requirements or resources.',
+        400,
       );
     }
     const retained = card.resources.filter((item) =>
@@ -602,9 +628,9 @@ export function createPlanningService(
         (ref) => !card.resources.some((item) => item.ref === ref),
       )
     )
-      throw new Error('Unknown retained resource.');
+      throw new PublicApiError('Unknown retained resource.', 400);
     if (retained.length + input.files.length + input.contextRefs.length > 5)
-      throw new Error('Attach no more than five resources.');
+      throw new PublicApiError('Attach no more than five resources.', 400);
     const uploads = input.files.map((file) => {
       if (
         !file ||
@@ -613,7 +639,10 @@ export function createPlanningService(
         typeof file.content !== 'string' ||
         Buffer.byteLength(file.content) > 262_144
       )
-        throw new Error('Invalid resource; use text/Markdown up to 256 KB.');
+        throw new PublicApiError(
+          'Invalid resource; use text/Markdown up to 256 KB.',
+          400,
+        );
       return { ...file };
     });
     for (const ref of new Set(input.contextRefs)) {
@@ -621,7 +650,7 @@ export function createPlanningService(
         typeof ref !== 'string' ||
         !/^context\/[a-zA-Z0-9/_.-]+\.(md|markdown)$/i.test(ref)
       )
-        throw new Error('Invalid library resource.');
+        throw new PublicApiError('Invalid library resource.', 400);
       uploads.push({
         name: path.basename(ref),
         content: await readPlanningFile(project, ref),
@@ -633,7 +662,8 @@ export function createPlanningService(
     );
     for (const resource of retained)
       size += Buffer.byteLength(await readPlanningFile(project, resource.ref));
-    if (size > 1_048_576) throw new Error('Resources exceed 1 MB.');
+    if (size > 1_048_576)
+      throw new PublicApiError('Resources exceed 1 MB.', 400);
     const files: Record<string, string> = {};
     const resources = [...retained];
     for (const file of uploads) {
@@ -712,7 +742,7 @@ export function createPlanningService(
     const prompt = `${buildCardHarnessPrompt(request)}\nPlanning-only runtime: read relevant source and selected resources. Never write project files, run implementation, create Issues/PRs, or execute shell commands with external side effects. Return all user-facing plan text in the language of the user's goal and feedback. The host persists the Plan. Use UUID-form step IDs. Project directory: ${project.rootPath}`;
     const runKey = key(project, card.id);
     if (active.has(runKey))
-      throw new Error('This Card already has a running Agent.');
+      throw new PublicApiError('This Card already has a running Agent.', 409);
     active.set(runKey, { id: request.requestId, handle: null, timer: null });
     let saved: PlanningCard;
     try {
@@ -793,11 +823,14 @@ export function createPlanningService(
     action: 'finalize' | 'reopen' | 'cancel',
   ) {
     if (!['finalize', 'reopen', 'cancel'].includes(action))
-      throw new Error('Unknown Planning operation.');
+      throw new PublicApiError('Unknown Planning operation.', 400);
     assertRevision(expectedRevision);
     const card = await read(project, cardId);
     if (card.revision !== expectedRevision)
-      throw new Error('Card changed. Reload before trying again.');
+      throw new PublicApiError(
+        'Card changed. Reload before trying again.',
+        409,
+      );
     if (action === 'cancel') {
       if (card.run?.status !== 'running') return card;
       const running = active.get(key(project, cardId));
@@ -826,22 +859,30 @@ export function createPlanningService(
       return saved;
     }
     if (card.run?.status === 'running')
-      throw new Error('Stop the current Agent before changing Plan state.');
-    if (card.execution?.runs.length)
-      throw new Error(
-        'Execution has started. Clean rollback is required before changing the Plan; rollback is not connected yet.',
+      throw new PublicApiError(
+        'Stop the current Agent before changing Plan state.',
+        400,
       );
-    if (!card.plan) throw new Error('Generate a Plan first.');
+    if (card.execution?.runs.length)
+      throw new PublicApiError(
+        'Execution has started. Clean rollback is required before changing the Plan; rollback is not connected yet.',
+        400,
+      );
+    if (!card.plan) throw new PublicApiError('Generate a Plan first.', 400);
     if (action === 'reopen')
-      throw new Error(
+      throw new PublicApiError(
         'The finalized Plan and acceptance checklist are locked.',
+        400,
       );
     if (action === 'finalize') {
       await assertDependencyReview(project, card);
       for (const step of card.plan.steps)
         validateAcceptanceCriteria(step.acceptanceCriteria);
       if (card.run?.status !== 'succeeded')
-        throw new Error('Only a successful current Plan can be finalized.');
+        throw new PublicApiError(
+          'Only a successful current Plan can be finalized.',
+          400,
+        );
       return commit(
         project,
         card.revision,
@@ -914,7 +955,7 @@ export async function readPlanningInstructions(project: RegisteredProject) {
       80_000,
     );
     if (value.length > 20_000)
-      throw new Error('Instructions exceed 20000 characters.');
+      throw new PublicApiError('Instructions exceed 20000 characters.', 400);
     return value;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return '';
@@ -927,7 +968,10 @@ export async function savePlanningInstructions(
   value: string,
 ) {
   if (typeof value !== 'string' || value.length > 20_000)
-    throw new Error('Instructions must contain at most 20000 characters.');
+    throw new PublicApiError(
+      'Instructions must contain at most 20000 characters.',
+      400,
+    );
   const directory = path.join(project.planningPath, 'implementation');
   await mkdir(directory, { recursive: true });
   const actual = await realpath(directory);
