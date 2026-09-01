@@ -1,0 +1,537 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { mkdtempSync } from 'node:fs';
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import {
+  ANY_PLANNING_RELATIVE_PATH,
+  CONTEXT_LIBRARY_MARKDOWN,
+  PlanningPathEscapeError,
+  PlanningPathKindError,
+  PlanningPathShapeError,
+  PlanningPathSizeError,
+  TASK_GRAPH_MARKDOWN_SHAPES,
+  resolvePlanningPath,
+} from '../lib/planning-paths.ts';
+import type { RegisteredProject } from '../lib/project-registry.ts';
+
+const HOME = mkdtempSync(path.join(os.tmpdir(), 'am-planning-paths-home-'));
+process.env.AGENT_MANAGER_HOME = HOME;
+
+const RUN = 'RUN-11111111-2222-4333-8444-555555555555';
+const CANDIDATE = 'CANDIDATE-abcdef12';
+const NODE = 'NODE-abcdef12';
+
+const SUPPORTED_SHAPES: Array<[string, string]> = [
+  ['Context Library Markdown', 'context/product/notes.md'],
+  ['Context Library nested folder', 'context/product/sub-area/notes.markdown'],
+  ['Task Graph node resource', `task-graph/nodes/${NODE}/resources/a.md`],
+  ['What’s Next node resource', `whats-next/nodes/${NODE}/resources/a.md`],
+  ['Task Graph node output', `task-graph/nodes/${NODE}/output.md`],
+  ['What’s Next node output', `whats-next/nodes/${NODE}/output.md`],
+  [
+    'Break It Down Candidate output',
+    `task-decomposition/runs/${RUN}/candidates/${CANDIDATE}/output.md`,
+  ],
+  [
+    'What’s Next Candidate output',
+    `whats-next/runs/${RUN}/candidates/${CANDIDATE}/output.md`,
+  ],
+  ['What’s Next reflection', `whats-next/runs/${RUN}/reflection.md`],
+  ['What’s Next response', `whats-next/runs/${RUN}/response.md`],
+  ['What’s Next Run resource', `whats-next/runs/${RUN}/resources/a.md`],
+];
+
+async function planningProject(label: string) {
+  const root = await mkdtemp(path.join(os.tmpdir(), `am-planning-${label}-`));
+  const planningPath = path.join(root, '.agent-manager');
+  await mkdir(planningPath, { recursive: true });
+  return {
+    project: {
+      id: 'p',
+      kind: 'standalone',
+      name: label,
+      description: '',
+      rootPath: root,
+      codePath: null,
+      planningPath,
+      createdAt: '2026-09-01T00:00:00.000Z',
+    } as RegisteredProject,
+    root,
+    planningPath,
+  };
+}
+
+async function writeInside(planningPath: string, relative: string, body = 'x') {
+  const file = path.join(planningPath, relative);
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, body);
+  return file;
+}
+
+async function snapshot(directory: string): Promise<string[]> {
+  const entries = await readdir(directory, { withFileTypes: true }).catch(
+    () => [],
+  );
+  const names: string[] = [];
+  for (const entry of entries) {
+    const full = path.join(directory, entry.name);
+    names.push(path.relative(directory, full));
+    if (entry.isDirectory())
+      names.push(
+        ...(await snapshot(full)).map((child) => path.join(entry.name, child)),
+      );
+  }
+  return names.sort();
+}
+
+void test('a valid existing file inside the planning root resolves', async () => {
+  const { project, planningPath } = await planningProject('valid');
+  const file = await writeInside(planningPath, 'context/product/notes.md');
+  const resolved = await resolvePlanningPath(
+    project,
+    'context/product/notes.md',
+    { shapes: TASK_GRAPH_MARKDOWN_SHAPES, require: 'file' },
+  );
+  assert.equal(resolved.absolutePath, await realpathOf(file));
+  assert.equal(resolved.relativePath, 'context/product/notes.md');
+  assert.equal(resolved.size, 1);
+});
+
+async function realpathOf(file: string) {
+  const { realpath } = await import('node:fs/promises');
+  return realpath(file);
+}
+
+void test('every supported Task Graph Markdown shape is accepted', async () => {
+  const { project, planningPath } = await planningProject('shapes');
+  for (const [label, relative] of SUPPORTED_SHAPES) {
+    await writeInside(planningPath, relative);
+    const resolved = await resolvePlanningPath(project, relative, {
+      shapes: TASK_GRAPH_MARKDOWN_SHAPES,
+    });
+    assert.equal(resolved.relativePath, relative, label);
+  }
+});
+
+void test('an unrelated shape is rejected', async () => {
+  const { project, planningPath } = await planningProject('unrelated');
+  await writeInside(planningPath, 'runtime/jobs/output.log');
+  await assert.rejects(
+    () =>
+      resolvePlanningPath(project, 'runtime/jobs/output.log', {
+        shapes: TASK_GRAPH_MARKDOWN_SHAPES,
+      }),
+    PlanningPathShapeError,
+  );
+});
+
+void test('absolute and drive-qualified paths are rejected', async () => {
+  const { project } = await planningProject('absolute');
+  for (const hostile of [
+    '/etc/passwd',
+    '/tmp/elsewhere.md',
+    'C:\\Windows\\system.ini',
+    'c:/Windows/system.ini',
+    '\\\\server\\share\\file.md',
+    '\\etc\\passwd',
+  ])
+    await assert.rejects(
+      () => resolvePlanningPath(project, hostile),
+      PlanningPathShapeError,
+      hostile,
+    );
+});
+
+void test('POSIX, backslash and normalized traversal are rejected', async () => {
+  const { project } = await planningProject('traversal');
+  for (const hostile of [
+    '../outside.md',
+    '../../etc/passwd',
+    'context/../../outside.md',
+    '..\\outside.md',
+    'context\\..\\..\\outside.md',
+    'context/product/../../../outside.md',
+  ])
+    await assert.rejects(
+      () => resolvePlanningPath(project, hostile),
+      PlanningPathShapeError,
+      hostile,
+    );
+});
+
+void test('a sibling directory sharing the string prefix is rejected', async () => {
+  const { project, root, planningPath } = await planningProject('prefix');
+  const sibling = `${planningPath}-other`;
+  await mkdir(sibling, { recursive: true });
+  await writeFile(path.join(sibling, 'notes.md'), 'outside');
+  await symlink(
+    path.join(sibling, 'notes.md'),
+    path.join(planningPath, 'linked.md'),
+  );
+  await assert.rejects(
+    () => resolvePlanningPath(project, 'linked.md'),
+    PlanningPathEscapeError,
+  );
+  assert.ok(root.length > 0);
+});
+
+void test('a symlinked file pointing outside the planning root is rejected', async () => {
+  const { project, planningPath } = await planningProject('symlink-file');
+  const outside = await mkdtemp(path.join(os.tmpdir(), 'am-planning-outside-'));
+  const secret = path.join(outside, 'secret.md');
+  await writeFile(secret, 'outside content');
+  await mkdir(path.join(planningPath, 'context', 'product'), {
+    recursive: true,
+  });
+  await symlink(
+    secret,
+    path.join(planningPath, 'context', 'product', 'notes.md'),
+  );
+  await assert.rejects(
+    () =>
+      resolvePlanningPath(project, 'context/product/notes.md', {
+        shapes: TASK_GRAPH_MARKDOWN_SHAPES,
+      }),
+    PlanningPathEscapeError,
+  );
+});
+
+void test('a symlinked directory pointing outside the planning root is rejected', async () => {
+  const { project, planningPath } = await planningProject('symlink-dir');
+  const outside = await mkdtemp(path.join(os.tmpdir(), 'am-planning-outdir-'));
+  await mkdir(path.join(outside, 'product'), { recursive: true });
+  await writeFile(path.join(outside, 'product', 'notes.md'), 'outside');
+  await symlink(outside, path.join(planningPath, 'context'));
+  await assert.rejects(
+    () =>
+      resolvePlanningPath(project, 'context/product/notes.md', {
+        shapes: TASK_GRAPH_MARKDOWN_SHAPES,
+      }),
+    PlanningPathEscapeError,
+  );
+});
+
+void test('a symlink resolving to another path inside the root is accepted', async () => {
+  const { project, planningPath } = await planningProject('symlink-inside');
+  const real = await writeInside(
+    planningPath,
+    `whats-next/nodes/${NODE}/output.md`,
+    'inside',
+  );
+  await mkdir(path.join(planningPath, 'context', 'product'), {
+    recursive: true,
+  });
+  await symlink(
+    real,
+    path.join(planningPath, 'context', 'product', 'notes.md'),
+  );
+  const resolved = await resolvePlanningPath(
+    project,
+    'context/product/notes.md',
+    { shapes: TASK_GRAPH_MARKDOWN_SHAPES },
+  );
+  assert.equal(resolved.absolutePath, await realpathOf(real));
+});
+
+void test('a directory is rejected when a regular file is required', async () => {
+  const { project, planningPath } = await planningProject('kind-file');
+  await mkdir(path.join(planningPath, 'context', 'product', 'notes.md'), {
+    recursive: true,
+  });
+  await assert.rejects(
+    () =>
+      resolvePlanningPath(project, 'context/product/notes.md', {
+        shapes: TASK_GRAPH_MARKDOWN_SHAPES,
+        require: 'file',
+      }),
+    PlanningPathKindError,
+  );
+});
+
+void test('a file is rejected when a directory is required', async () => {
+  const { project, planningPath } = await planningProject('kind-dir');
+  await writeInside(planningPath, 'context/product/notes.md');
+  await assert.rejects(
+    () =>
+      resolvePlanningPath(project, 'context/product/notes.md', {
+        shapes: TASK_GRAPH_MARKDOWN_SHAPES,
+        require: 'directory',
+      }),
+    PlanningPathKindError,
+  );
+});
+
+void test('a file over the size limit is rejected and the limit is the caller’s', async () => {
+  const { project, planningPath } = await planningProject('size');
+  await writeInside(planningPath, 'context/product/notes.md', 'x'.repeat(64));
+  await assert.rejects(
+    () =>
+      resolvePlanningPath(project, 'context/product/notes.md', {
+        shapes: TASK_GRAPH_MARKDOWN_SHAPES,
+        maxBytes: 16,
+      }),
+    PlanningPathSizeError,
+  );
+  const allowed = await resolvePlanningPath(
+    project,
+    'context/product/notes.md',
+    { shapes: TASK_GRAPH_MARKDOWN_SHAPES, maxBytes: 128 },
+  );
+  assert.equal(allowed.size, 64);
+});
+
+void test('a missing target surfaces ENOENT so callers keep deciding', async () => {
+  const { project } = await planningProject('missing');
+  await assert.rejects(
+    () =>
+      resolvePlanningPath(project, 'context/product/absent.md', {
+        shapes: TASK_GRAPH_MARKDOWN_SHAPES,
+      }),
+    (error: NodeJS.ErrnoException) => {
+      assert.equal(error.code, 'ENOENT');
+      assert.ok(!(error instanceof PlanningPathShapeError));
+      assert.ok(!(error instanceof PlanningPathEscapeError));
+      return true;
+    },
+  );
+});
+
+void test('a rejected path mutates neither the planning store nor anything outside', async () => {
+  const { project, planningPath } = await planningProject('no-mutation');
+  const outside = await mkdtemp(path.join(os.tmpdir(), 'am-planning-guard-'));
+  await writeFile(path.join(outside, 'secret.md'), 'untouched');
+  await writeInside(planningPath, 'context/product/notes.md', 'kept');
+  const before = await snapshot(planningPath);
+  const outsideBefore = await snapshot(outside);
+
+  for (const hostile of [
+    '../outside.md',
+    '/etc/passwd',
+    'C:\\Windows\\system.ini',
+    'context\\..\\..\\outside.md',
+    'runtime/jobs/output.log',
+  ])
+    await assert.rejects(() =>
+      resolvePlanningPath(project, hostile, {
+        shapes: TASK_GRAPH_MARKDOWN_SHAPES,
+      }),
+    );
+
+  assert.deepEqual(await snapshot(planningPath), before);
+  assert.deepEqual(await snapshot(outside), outsideBefore);
+  await rm(outside, { recursive: true, force: true });
+});
+
+void test('the permissive shape still refuses traversal and absolute input', async () => {
+  const { project, planningPath } = await planningProject('permissive');
+  await writeInside(planningPath, 'runtime/jobs/output.log');
+  const resolved = await resolvePlanningPath(
+    project,
+    'runtime/jobs/output.log',
+    {
+      shapes: [ANY_PLANNING_RELATIVE_PATH],
+    },
+  );
+  assert.match(resolved.absolutePath, /runtime\/jobs\/output\.log$/);
+  for (const hostile of ['../x', '/etc/passwd', 'a\\..\\..\\b'])
+    await assert.rejects(
+      () =>
+        resolvePlanningPath(project, hostile, {
+          shapes: [ANY_PLANNING_RELATIVE_PATH],
+        }),
+      PlanningPathShapeError,
+    );
+});
+
+void test('the Context Library shape is narrower than the Task Graph set', async () => {
+  const { project, planningPath } = await planningProject('context-narrow');
+  await writeInside(planningPath, `whats-next/nodes/${NODE}/output.md`);
+  await assert.rejects(
+    () =>
+      resolvePlanningPath(project, `whats-next/nodes/${NODE}/output.md`, {
+        shapes: [CONTEXT_LIBRARY_MARKDOWN],
+        within: 'context',
+      }),
+    PlanningPathShapeError,
+  );
+});
+
+void test('readTaskGraphMarkdownResource uses the shared boundary and keeps its public message', async () => {
+  const { readTaskGraphMarkdownResource } =
+    await import('../lib/task-graph.ts');
+  const { PublicApiError } = await import('../lib/api-errors.ts');
+  const { project, planningPath } = await planningProject('read-resource');
+  await writeInside(planningPath, 'context/product/notes.md', '# kept');
+
+  const ok = await readTaskGraphMarkdownResource(
+    project,
+    'context/product/notes.md',
+  );
+  assert.equal(ok.markdown, '# kept');
+  assert.equal(ok.fileName, 'notes.md');
+  assert.equal(ok.path, 'context/product/notes.md');
+
+  for (const hostile of [
+    '../outside.md',
+    '/etc/passwd',
+    'C:\\Windows\\system.ini',
+    'context\\..\\..\\outside.md',
+    'runtime/jobs/output.log',
+  ])
+    await assert.rejects(
+      () => readTaskGraphMarkdownResource(project, hostile),
+      (error: unknown) => {
+        assert.ok(error instanceof PublicApiError, hostile);
+        assert.equal(
+          (error as Error).message,
+          'The source document path is invalid.',
+        );
+        assert.equal((error as { status: number }).status, 400);
+        return true;
+      },
+    );
+});
+
+void test('readTaskGraphMarkdownResource keeps a missing file internal, not public', async () => {
+  const { readTaskGraphMarkdownResource } =
+    await import('../lib/task-graph.ts');
+  const { PublicApiError, apiErrorResponse } =
+    await import('../lib/api-errors.ts');
+  const { project } = await planningProject('read-missing');
+  const captured: string[] = [];
+  const original = console.error;
+  console.error = (...parts: unknown[]) => captured.push(parts.join(' '));
+  let raised: unknown;
+  try {
+    await readTaskGraphMarkdownResource(project, 'context/product/absent.md');
+  } catch (error) {
+    raised = error;
+  } finally {
+    console.error = original;
+  }
+  assert.ok(raised);
+  assert.ok(!(raised instanceof PublicApiError));
+  assert.equal((raised as NodeJS.ErrnoException).code, 'ENOENT');
+
+  const response = apiErrorResponse(
+    raised,
+    'Could not read the source document.',
+    'GET /api/projects/[projectId]/resources',
+  );
+  assert.equal(response.status, 500);
+  const body = (await response.json()) as { error: string };
+  assert.equal(body.error, 'Could not read the source document.');
+  assert.ok(!JSON.stringify(body).includes('/'));
+});
+
+void test('a symlink escape through Context Library is now rejected before the read', async () => {
+  const { readTaskGraphMarkdownResource } =
+    await import('../lib/task-graph.ts');
+  const { PublicApiError } = await import('../lib/api-errors.ts');
+  const { project, planningPath } = await planningProject('read-symlink');
+  const outside = await mkdtemp(path.join(os.tmpdir(), 'am-planning-leak-'));
+  await writeFile(path.join(outside, 'secret.md'), 'must not be read');
+  await mkdir(path.join(planningPath, 'context', 'product'), {
+    recursive: true,
+  });
+  await symlink(
+    path.join(outside, 'secret.md'),
+    path.join(planningPath, 'context', 'product', 'notes.md'),
+  );
+  await assert.rejects(
+    () => readTaskGraphMarkdownResource(project, 'context/product/notes.md'),
+    (error: unknown) => {
+      assert.ok(error instanceof PublicApiError);
+      assert.equal(
+        (error as Error).message,
+        'The source document path is invalid.',
+      );
+      return true;
+    },
+  );
+  await rm(outside, { recursive: true, force: true });
+});
+
+void test('readPlanningFile keeps its internal messages and size boundary', async () => {
+  const { readPlanningFile } =
+    await import('../lib/just-do-it-planning-sources.ts');
+  const { PublicApiError } = await import('../lib/api-errors.ts');
+  const { project, planningPath } = await planningProject('planning-file');
+  await writeInside(planningPath, 'runtime/notes.txt', 'body');
+
+  assert.equal(await readPlanningFile(project, 'runtime/notes.txt'), 'body');
+
+  await assert.rejects(
+    () => readPlanningFile(project, '../outside.md'),
+    (error: unknown) => {
+      assert.ok(!(error instanceof PublicApiError));
+      assert.equal((error as Error).message, 'Invalid planning file path.');
+      return true;
+    },
+  );
+
+  await mkdir(path.join(planningPath, 'runtime', 'folder'), {
+    recursive: true,
+  });
+  await assert.rejects(
+    () => readPlanningFile(project, 'runtime/folder'),
+    (error: unknown) => {
+      assert.equal(
+        (error as Error).message,
+        'Planning resource is missing or too large.',
+      );
+      return true;
+    },
+  );
+
+  await assert.rejects(
+    () => readPlanningFile(project, 'runtime/notes.txt', 2),
+    (error: unknown) => {
+      assert.equal(
+        (error as Error).message,
+        'Planning resource is missing or too large.',
+      );
+      return true;
+    },
+  );
+
+  const outside = await mkdtemp(path.join(os.tmpdir(), 'am-planning-esc-'));
+  await writeFile(path.join(outside, 'x.md'), 'outside');
+  await symlink(path.join(outside, 'x.md'), path.join(planningPath, 'link.md'));
+  await assert.rejects(
+    () => readPlanningFile(project, 'link.md'),
+    (error: unknown) => {
+      assert.equal(
+        (error as Error).message,
+        'Planning resource escapes the project.',
+      );
+      return true;
+    },
+  );
+  await rm(outside, { recursive: true, force: true });
+});
+
+void test('the migrated call sites import the shared resolver', async () => {
+  const { readFile } = await import('node:fs/promises');
+  for (const name of ['task-graph.ts', 'just-do-it-planning-sources.ts']) {
+    const source = await readFile(
+      new URL(`../lib/${name}`, import.meta.url),
+      'utf8',
+    );
+    assert.match(source, /from '\.\/planning-paths\.ts'/, name);
+    assert.match(source, /resolvePlanningPath\(/, name);
+    assert.ok(
+      !/startsWith\(`\$\{[a-zA-Z]+Root\}\$\{path\.sep\}`\)/.test(source),
+      `${name} must not keep its own containment check`,
+    );
+  }
+});
