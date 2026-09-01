@@ -218,6 +218,9 @@ returns no-change, a missing rule inside one Feature routes to refinement, and m
 ambiguity returns one clarification. It must not create a nominal Feature merely to answer.
 Every Product Design Feature remains a direct child of the Product Source. Interactions
 with sibling Features belong in Markdown; only true prerequisites become dependencies.
+When no accepted Product Design Feature exists, Completion may create the first Feature
+only from a coherent Source plus one concrete requested problem or capability. A broad
+request to complete the whole product returns clarification rather than a generated suite.
 
 Document synthesis may later create a Product Context candidate, but direct repository
 document writes remain outside What’s Next.

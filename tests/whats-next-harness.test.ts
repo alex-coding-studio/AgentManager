@@ -129,6 +129,13 @@ void test('Product Design Completion judges whether a new Feature is warranted',
     /Product Source and every current Product Design Feature/,
   );
   assert.match(prompt, /selected Product Source is the trigger/);
+  assert.match(prompt, /zero current Product Design Features/);
+  assert.match(prompt, /request for the first Feature/);
+  assert.match(prompt, /Source establishes a coherent product goal/);
+  assert.match(
+    prompt,
+    /Never turn a broad request.*into a suite of invented Features/,
+  );
   assert.match(
     prompt,
     /First judge whether the concern deserves an independent Feature/,

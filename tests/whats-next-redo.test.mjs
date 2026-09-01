@@ -198,7 +198,7 @@ process.stdin.resume();process.stdin.on('end',()=>setTimeout(()=>{
  const candidateBase=packet.intention==='feature-synthesis'?1000:packet.intention==='product-design-completion'?2000:0;
  const candidates=Array.from({length:packet.revisionTarget?1:(packet.motion==='converge'?1:(packet.proposalCorrection?3:2))},(_,i)=>({candidateId:packet.revisionTarget?.candidateId||('CANDIDATE-'+String(candidateBase+i+1).padStart(4,'0')),revision:packet.revisionTarget?.requiredRevision||1,type:packet.destination.artifactKind,layer:packet.destination.layer,artifactKind:packet.destination.artifactKind,title:'Direction '+(i+1),summary:'A concrete next direction.',derivedFrom:packet.origins.map(n=>n.id),dependsOn:[],resources:packet.resources.filter(r=>r.kind==='previous-proposal').map(r=>({kind:r.kind,path:r.path})),typeTemplateRef:null,metadata:{},presentation:{},assumptions:[],outputMarkdown:'# Direction '+(i+1)+'\\n\\nA concrete next direction.\\n\\n## Why this direction\\n\\n- Resolve the current uncertainty.\\n- Keep the next step bounded.\\n\\n## Assumptions\\n\\n- None'}));
  if(process.env.REDO_TEST_MODE==='invalid-result')candidates[0].outputMarkdown='# Direction 1\\n\\nMissing required sections.';
- const result={schemaVersion:1,harness:{id:'agent-manager.whats-next',revision:6},request:packet.request,outcome:'proposal',reflection:{markdown:'The previous directions misunderstood the user.',continuationAdvice:{action:'continue',recommendedFocus:'compare',reason:'Compare the corrected choices.'}},exploration:{consideredNodeIds:packet.origins.map(n=>n.id),notes:[]},candidates};
+ const result={schemaVersion:1,harness:{id:'agent-manager.whats-next',revision:7},request:packet.request,outcome:'proposal',reflection:{markdown:'The previous directions misunderstood the user.',continuationAdvice:{action:'continue',recommendedFocus:'compare',reason:'Compare the corrected choices.'}},exploration:{consideredNodeIds:packet.origins.map(n=>n.id),notes:[]},candidates};
  console.log(JSON.stringify({type:'thread.started',thread_id:'fixture-session'}));console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:JSON.stringify(result)}}));console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:0,output_tokens:0}}));
 },process.env.REDO_TEST_MODE==='slow'?10000:80));
 }
@@ -306,6 +306,37 @@ void test('What’s Next persists the requested model, forwards CLI flags, and i
       () => startWhatsNextRun(project, { ...input, model: 'bad;model' }),
       /configuration/,
     );
+  }));
+
+void test('Source-only Product Design Completion exposes an explicit zero-Feature readiness state', async () =>
+  fixture(async ({ project, input }) => {
+    const completion = await finished(
+      project,
+      await startWhatsNextRun(project, {
+        ...input,
+        instruction:
+          'Define how a user records the first location relationship.',
+        intention: 'product-design-completion',
+        motion: 'converge',
+      }),
+    );
+    const request = JSON.parse(
+      await readFile(
+        path.join(
+          project.planningPath,
+          'whats-next/runs',
+          completion.runId,
+          'request.json',
+        ),
+        'utf8',
+      ),
+    );
+    assert.deepEqual(request.packet.implicitProductDesignContext, {
+      sourceNodeId: input.sourceNodeIds[0],
+      featureNodeIds: [],
+    });
+    assert.match(request.prompt, /request for the first Feature/);
+    assert.match(request.prompt, /return one bounded clarification/);
   }));
 
 void test('Product Design Completion injects the Source and accepted Product Design as primary Context', async () =>
