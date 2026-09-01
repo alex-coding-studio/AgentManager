@@ -43,6 +43,24 @@ async function save(root: string, file: string, value: unknown) {
   await writeFile(target, JSON.stringify(value));
 }
 
+void test('identity scans ignore incomplete Run directories without hiding Node corruption', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'graph-orphan-run-'));
+  try {
+    await mkdir(path.join(root, 'whats-next/runs/RUN-incomplete'), {
+      recursive: true,
+    });
+    await ensureGraphIdentities(root, 'whats-next', true);
+    assert.equal(
+      JSON.parse(
+        await readFile(path.join(root, 'whats-next/identities.json'), 'utf8'),
+      ).schemaVersion,
+      1,
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 async function json(root: string, file: string) {
   return JSON.parse(await readFile(path.join(root, file), 'utf8'));
 }
