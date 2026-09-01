@@ -731,3 +731,123 @@ void test('public validation and conflict responses stay distinct from internal 
     await cleanup();
   }
 });
+
+const missingProjectParams = {
+  params: Promise.resolve({ projectId: 'PROJECT-MISSING' }),
+};
+
+function jsonCreateRequest(
+  body: unknown,
+  headers: Record<string, string> = {},
+  url = 'http://localhost:3000/api/projects/PROJECT-0001/context/documents',
+) {
+  return new Request(url, {
+    method: 'POST',
+    headers: { host: HOST, 'content-type': 'application/json', ...headers },
+    body: JSON.stringify(body),
+  });
+}
+
+void test('the Context Route selects one guard before any project work', async () => {
+  const { project, cleanup } = await makeProject();
+  try {
+    const { POST } = await contextRoute();
+
+    const imported = await POST(
+      contextImportRequest([
+        new File([FIRST_ORIGINAL], 'routed-one.md', { type: 'text/markdown' }),
+      ]),
+      routeParams,
+    );
+    assert.equal(imported.status, 201, 'valid multipart still reaches import');
+    assert.ok(
+      (await productDocumentNames(project)).includes('routed-one.md'),
+      'the imported document is published',
+    );
+
+    const created = await POST(
+      jsonCreateRequest({ section: 'product', title: 'Routed JSON' }),
+      routeParams,
+    );
+    assert.equal(created.status, 201, 'valid JSON creation still works');
+
+    const unsupported = await POST(
+      new Request(
+        'http://localhost:3000/api/projects/PROJECT-0001/context/documents',
+        {
+          method: 'POST',
+          headers: { host: HOST, 'content-type': 'text/plain' },
+          body: 'section=product',
+        },
+      ),
+      routeParams,
+    );
+    assert.equal(
+      unsupported.status,
+      415,
+      'an unsupported Content-Type is rejected at the boundary',
+    );
+
+    const unsupportedMissingProject = await POST(
+      new Request(
+        'http://localhost:3000/api/projects/PROJECT-MISSING/context/documents',
+        {
+          method: 'POST',
+          headers: { host: HOST, 'content-type': 'text/plain' },
+          body: 'section=product',
+        },
+      ),
+      missingProjectParams,
+    );
+    assert.equal(
+      unsupportedMissingProject.status,
+      415,
+      'the guard runs before the project lookup, so a missing project still answers 415',
+    );
+
+    const hostileHost = await POST(
+      jsonCreateRequest(
+        { section: 'product', title: 'Hostile' },
+        { host: 'evil.example.com' },
+      ),
+      routeParams,
+    );
+    assert.equal(
+      hostileHost.status,
+      421,
+      'a hostile Host is rejected before any body parse',
+    );
+    const hostileMultipart = await POST(
+      new Request(
+        'http://localhost:3000/api/projects/PROJECT-0001/context/documents',
+        {
+          method: 'POST',
+          headers: { host: HOST, origin: 'https://evil.example.com' },
+          body: (() => {
+            const form = new FormData();
+            form.set('section', 'product');
+            form.append(
+              'files',
+              new File([FIRST_ORIGINAL], 'hostile.md', {
+                type: 'text/markdown',
+              }),
+            );
+            return form;
+          })(),
+        },
+      ),
+      routeParams,
+    );
+    assert.equal(
+      hostileMultipart.status,
+      403,
+      'a hostile Origin is rejected on the multipart branch too',
+    );
+    assert.ok(
+      !(await productDocumentNames(project)).includes('hostile.md'),
+      'a rejected request never reaches the import',
+    );
+  } finally {
+    await cleanup();
+  }
+});
