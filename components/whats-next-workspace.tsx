@@ -211,6 +211,8 @@ function WhatsNextCanvas({
     (node) =>
       node.role === 'start' || (node.layer ?? 'discovery') === activeLayer,
   );
+  const visibleNodeIds = new Set(visibleNodes.map((node) => node.id));
+  const sharedSourceId = nodes.find((node) => node.role === 'start')?.id ?? '';
   const selectedNode = nodes.find((node) => node.id === inspectorId) ?? null;
   const deletionBlockers = selectedNode
     ? (() => {
@@ -235,12 +237,24 @@ function WhatsNextCanvas({
       node.provenance?.candidateId ? [node.provenance.candidateId] : [],
     ),
   );
-  const visiblePreviews = previews.filter(
-    (item) =>
-      (item.layer ?? 'discovery') === activeLayer &&
-      (item.kind !== 'candidate' ||
-        !acceptedCandidateIds.has(item.candidate?.candidateId ?? '')),
-  );
+  const visiblePreviews = previews
+    .filter(
+      (item) =>
+        (item.layer ?? 'discovery') === activeLayer &&
+        (item.kind !== 'candidate' ||
+          !acceptedCandidateIds.has(item.candidate?.candidateId ?? '')),
+    )
+    .map((item) =>
+      item.kind === 'run' &&
+      sharedSourceId &&
+      !(item.derivedFrom ?? []).some((nodeId) => visibleNodeIds.has(nodeId))
+        ? {
+            ...item,
+            sourceNodeId: sharedSourceId,
+            derivedFrom: [sharedSourceId],
+          }
+        : item,
+    );
   const hasGraph = nodes.length > 0;
   const latestResponse = [...runs]
     .reverse()
@@ -489,7 +503,7 @@ function WhatsNextCanvas({
   }
 
   async function submitCombine() {
-    if (combineIds.length < 1) return;
+    if (combineIds.length < 1 || !combineInstruction.trim()) return;
     setError('');
     try {
       await startRun({
@@ -1001,15 +1015,19 @@ function WhatsNextCanvas({
             ))}
           </div>
 
-          <Textarea
-            value={combineInstruction}
-            onChange={(event) => setCombineInstruction(event.target.value)}
-            rows={3}
-            maxLength={1_000}
-            placeholder={t('Optional guidance for the Agent')}
-            className="mt-3 resize-none text-sm"
-            aria-label={t('What to do with the selected cards')}
-          />
+          <label className="mt-3 block text-[10px] font-medium text-muted-foreground">
+            {t('Instruction')} · {t('required')}
+            <Textarea
+              value={combineInstruction}
+              onChange={(event) => setCombineInstruction(event.target.value)}
+              rows={3}
+              maxLength={1_000}
+              required
+              placeholder={t('Describe the result you want from these cards.')}
+              className="mt-1 resize-none text-sm"
+              aria-label={t('What to do with the selected cards')}
+            />
+          </label>
 
           <div className="mt-3 flex flex-col items-stretch gap-3">
             <AgentProfileSelector
@@ -1019,7 +1037,7 @@ function WhatsNextCanvas({
             />
             <Button
               size="sm"
-              disabled={developmentPreview}
+              disabled={!combineInstruction.trim() || developmentPreview}
               onClick={() => void submitCombine()}
             >
               <Sparkles className="size-3.5" />
