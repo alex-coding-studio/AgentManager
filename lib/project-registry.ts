@@ -5,12 +5,13 @@ import {
   appendFile,
   mkdir,
   readFile,
-  rename,
+  rm,
   stat,
   writeFile,
 } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
+import { createJsonStore } from './atomic-json-store.ts';
 
 export type ProjectKind = 'standalone' | 'repository';
 
@@ -39,28 +40,12 @@ function emptyRegistry(): Registry {
   return { schemaVersion: 1, projects: [] };
 }
 
+const registryStore = createJsonStore<Registry>(registryPath, emptyRegistry);
+
 function expandHome(value: string) {
   if (value === '~') return homedir();
   if (value.startsWith('~/')) return path.join(homedir(), value.slice(2));
   return value;
-}
-
-async function readRegistry() {
-  try {
-    return JSON.parse(await readFile(registryPath, 'utf8')) as Registry;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return emptyRegistry();
-    }
-    throw error;
-  }
-}
-
-async function writeRegistry(registry: Registry) {
-  await mkdir(managerHome, { recursive: true });
-  const temporaryPath = `${registryPath}.${randomUUID()}.tmp`;
-  await writeFile(temporaryPath, `${JSON.stringify(registry, null, 2)}\n`);
-  await rename(temporaryPath, registryPath);
 }
 
 async function ensureLocalGitExclusion(codePath: string) {
@@ -86,7 +71,7 @@ async function ensureLocalGitExclusion(codePath: string) {
 }
 
 export async function listProjects() {
-  return (await readRegistry()).projects;
+  return (await registryStore.read()).projects;
 }
 
 export async function getProject(projectId: string) {
@@ -141,7 +126,6 @@ export async function createProject(input: {
   description: string;
   rootPath?: string;
 }) {
-  const registry = await readRegistry();
   if (!input.rootPath?.trim()) {
     throw new Error('A local project directory is required.');
   }
@@ -150,31 +134,36 @@ export async function createProject(input: {
   if (!directory?.isDirectory()) {
     throw new Error('The project path must be an existing directory.');
   }
-  if (registry.projects.some((project) => project.rootPath === rootPath)) {
-    throw new Error('This project directory is already registered.');
-  }
 
-  const planningPath = path.join(rootPath, '.agent-manager');
-  await mkdir(planningPath, { recursive: true });
-  await ensureLocalGitExclusion(rootPath);
-  const codePath = input.kind === 'repository' ? rootPath : null;
+  return registryStore.update<RegisteredProject>(async (registry) => {
+    if (registry.projects.some((project) => project.rootPath === rootPath)) {
+      throw new Error('This project directory is already registered.');
+    }
 
-  const project: RegisteredProject = {
-    id: randomUUID(),
-    kind: input.kind,
-    name: input.name,
-    description: input.description,
-    rootPath,
-    codePath,
-    planningPath,
-    createdAt: new Date().toISOString(),
-  };
+    const planningPath = path.join(rootPath, '.agent-manager');
+    const project: RegisteredProject = {
+      id: randomUUID(),
+      kind: input.kind,
+      name: input.name,
+      description: input.description,
+      rootPath,
+      codePath: input.kind === 'repository' ? rootPath : null,
+      planningPath,
+      createdAt: new Date().toISOString(),
+    };
+    const projectFile = path.join(planningPath, 'project.json');
 
-  await writeFile(
-    path.join(planningPath, 'project.json'),
-    `${JSON.stringify({ schemaVersion: 1, ...project }, null, 2)}\n`,
-  );
-  registry.projects.unshift(project);
-  await writeRegistry(registry);
-  return project;
+    await mkdir(planningPath, { recursive: true });
+    await ensureLocalGitExclusion(rootPath);
+    await writeFile(
+      projectFile,
+      `${JSON.stringify({ schemaVersion: 1, ...project }, null, 2)}\n`,
+    );
+
+    return {
+      next: { ...registry, projects: [project, ...registry.projects] },
+      result: project,
+      rollback: () => rm(projectFile, { force: true }),
+    };
+  });
 }

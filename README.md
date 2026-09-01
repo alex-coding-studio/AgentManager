@@ -82,7 +82,9 @@ details.
 ## Local data
 
 The machine registry is stored at `~/.agent-manager/config.json`. Each project
-stores its own metadata in `<project-root>/.agent-manager/project.json`.
+stores its own metadata in `<project-root>/.agent-manager/project.json`. Registry
+updates are serialized within one server process; see
+[Project Registry Updates](docs/PROJECT_REGISTRY.md) for that boundary.
 
 When the selected directory belongs to a Git repository, AgentManager adds
 `.agent-manager/` to that clone's `.git/info/exclude`. It does not modify the
@@ -117,6 +119,7 @@ npm run typecheck
 npm run lint
 npm run test:settings
 npm run test:boundary
+npm run test:registry
 npm run build
 ```
 
