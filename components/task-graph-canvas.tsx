@@ -52,6 +52,7 @@ export function TaskGraphCanvas({
   plusLabel,
   edgeAlignedOverlays = false,
   avoidBottomRightPanel = false,
+  projectedRootId,
   readOnly = false,
   selectionEnabled = false,
   onMultiSelect,
@@ -70,6 +71,7 @@ export function TaskGraphCanvas({
   plusLabel?: string;
   edgeAlignedOverlays?: boolean;
   avoidBottomRightPanel?: boolean;
+  projectedRootId?: string;
   readOnly?: boolean;
   selectionEnabled?: boolean;
   onMultiSelect?: (nodeId: string) => void;
@@ -109,6 +111,7 @@ export function TaskGraphCanvas({
         readOnly,
         selectionEnabled,
         onToggleSelection,
+        projectedRootId,
       ),
     [
       focusedNodeId,
@@ -124,6 +127,7 @@ export function TaskGraphCanvas({
       readOnly,
       selectionEnabled,
       onToggleSelection,
+      projectedRootId,
     ],
   );
   const [flowNodes, setFlowNodes, onNodesChange] = useNodesState(graph.nodes);
@@ -316,8 +320,9 @@ function buildFlowGraph(
   readOnly = false,
   selectionEnabled = false,
   onToggleSelection?: (nodeId: string) => void,
+  projectedRootId?: string,
 ) {
-  const layout = buildTaskGraphLayout(nodes, previews);
+  const layout = buildTaskGraphLayout(nodes, previews, projectedRootId);
   const focusedNodeId =
     layout.nodes.find(
       (entry) =>
@@ -368,6 +373,7 @@ function buildFlowGraph(
         status: preview?.status,
         agentLabel: preview?.agentLabel,
         runId: preview?.runId,
+        startedAt: preview?.startedAt,
         revision: preview?.candidate?.revision,
         color:
           node?.presentation?.color ??

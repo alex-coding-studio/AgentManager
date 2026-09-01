@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import {
   CheckCircle2,
   Circle,
@@ -30,6 +31,7 @@ export type GraphNodeCardData = Record<string, unknown> & {
   status?: string;
   agentLabel?: string;
   runId?: string;
+  startedAt?: string;
   relationshipCount: number;
   dependenciesFocused?: boolean;
   onFocusDependencies: (nodeId: string) => void;
@@ -56,6 +58,7 @@ export function GraphNodeCard({
   const runningLabel = t('{agent} is running', {
     agent: data.agentLabel?.trim() || 'Agent',
   });
+  const elapsed = useRunElapsed(data.startedAt, running);
   return (
     <div
       aria-busy={running}
@@ -185,6 +188,11 @@ export function GraphNodeCard({
       </h2>
       {data.description || running ? (
         <div className="mt-1.5">
+          {running && elapsed ? (
+            <p className="mb-0.5 text-[10px] leading-4 font-medium text-foreground tabular-nums">
+              {t('Running time: {duration}', { duration: elapsed })}
+            </p>
+          ) : null}
           <p className="line-clamp-3 text-[11px] leading-5 text-muted-foreground">
             {data.description}
           </p>
@@ -235,4 +243,24 @@ export function GraphNodeCard({
       ) : null}
     </div>
   );
+}
+
+function useRunElapsed(startedAt: string | undefined, running: boolean) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!running || !startedAt) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, [running, startedAt]);
+  if (!running || !startedAt) return '';
+  const seconds = Math.max(
+    0,
+    Math.floor((now - new Date(startedAt).getTime()) / 1_000),
+  );
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const remaining = seconds % 60;
+  return hours > 0
+    ? `${hours}:${String(minutes % 60).padStart(2, '0')}:${String(remaining).padStart(2, '0')}`
+    : `${minutes}:${String(remaining).padStart(2, '0')}`;
 }

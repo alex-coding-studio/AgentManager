@@ -87,6 +87,54 @@ void test('places a preview beside its source with a temporary edge', () => {
   assert.equal(graph.edges[0]?.relation, 'request');
 });
 
+void test('projects hidden cross-Layer Candidate lineage onto the visible Source', () => {
+  const source = node('NODE-00000001');
+  source.uid = 'source-uid';
+  const graph = buildTaskGraphLayout(
+    [source],
+    [
+      {
+        id: 'CANDIDATE-0001',
+        sourceNodeId: 'NODE-hidden',
+        instruction: 'Synthesize one Feature',
+        inheritedResourceCount: 3,
+        additionalResourceCount: 0,
+        kind: 'candidate',
+        candidate: {
+          candidateId: 'CANDIDATE-0001',
+          uid: 'candidate-uid',
+          relations: { derivedFrom: ['hidden-discovery-uid'], dependsOn: [] },
+          revision: 1,
+          type: 'feature',
+          title: 'Unified Search',
+          summary: 'One Product Design Feature.',
+          derivedFrom: ['NODE-hidden'],
+          dependsOn: [],
+          resources: [],
+          typeTemplateRef: null,
+          metadata: {},
+          presentation: {},
+          assumptions: [],
+          outputMarkdown:
+            '# Unified Search\n\nOne Product Design Feature.\n\n## Why this direction\n\n- One.\n- Two.\n\n## Assumptions\n\n- None',
+          layer: 'product-design',
+          artifactKind: 'feature',
+        },
+      },
+    ],
+    source.id,
+  );
+
+  assert.deepEqual(graph.edges, [
+    {
+      id: 'derived:NODE-00000001:CANDIDATE-0001',
+      source: 'NODE-00000001',
+      target: 'CANDIDATE-0001',
+      relation: 'request',
+    },
+  ]);
+});
+
 void test('keeps every sibling lineage edge while one Candidate is refining', () => {
   const graph = buildTaskGraphLayout(
     [node('NODE-00000001')],

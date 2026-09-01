@@ -28,6 +28,7 @@ export type TaskGraphPreview = GraphIdentityFields & {
   runId?: string;
   revisionOf?: string;
   layer?: 'discovery' | 'product-design';
+  startedAt?: string;
 };
 
 export type TaskGraphLayoutNode = {
@@ -52,6 +53,7 @@ const nodeHeight = TASK_GRAPH_NODE_MIN_HEIGHT;
 export function buildTaskGraphLayout(
   nodes: TaskGraphNode[],
   previews: TaskGraphPreview[],
+  projectedRootId?: string,
 ) {
   const nodeUid = (node: TaskGraphNode) =>
     node.uid ?? node.provenance?.candidateId ?? node.id;
@@ -98,16 +100,24 @@ export function buildTaskGraphLayout(
       id: node.id,
       uid: nodeUid(node),
       kind: 'formal' as const,
-      derivedFrom: references(node, 'derivedFrom', node.derivedFrom ?? []),
+      derivedFrom: projectedLineage(
+        node.id,
+        references(node, 'derivedFrom', node.derivedFrom ?? []),
+        projectedRootId,
+      ),
     })),
     ...visiblePreviews.map((preview) => ({
       id: preview.id,
       uid: previewUid(preview),
       kind: 'preview' as const,
-      derivedFrom: references(
-        preview.candidate ?? preview,
-        'derivedFrom',
-        preview.derivedFrom ?? [preview.sourceNodeId],
+      derivedFrom: projectedLineage(
+        preview.id,
+        references(
+          preview.candidate ?? preview,
+          'derivedFrom',
+          preview.derivedFrom ?? [preview.sourceNodeId],
+        ),
+        projectedRootId,
       ),
     })),
   ];
@@ -188,6 +198,21 @@ export function buildTaskGraphLayout(
     nodes: positionedNodes,
     edges: [...lineageEdges, ...dependencyEdges],
   };
+}
+
+function projectedLineage(
+  entityId: string,
+  visibleOrigins: string[],
+  projectedRootId?: string,
+) {
+  if (
+    visibleOrigins.length === 0 &&
+    projectedRootId &&
+    entityId !== projectedRootId
+  ) {
+    return [projectedRootId];
+  }
+  return visibleOrigins;
 }
 
 function horizontalOffset(id: string) {
