@@ -20,6 +20,25 @@ creates three limitations once a product has validated useful MVP behavior:
 The desired model keeps What’s Next useful throughout product discovery and formalization
 without turning it into a mandatory pipeline for every project.
 
+## Scope discipline
+
+AgentManager is personal-first. Broader applicability should emerge from repeated real use,
+not from prebuilding organization-scale process. Product evolution follows these rules:
+
+- solve one observed, repeated workflow cost at a time;
+- keep the ordinary path smaller than the advanced path;
+- add a persistent module only after a lightweight operation repeatedly proves insufficient;
+- hide optional sophistication until the user explicitly needs it;
+- protect the usability of What’s Next, Break It Down and Just Do It before expanding their
+  scope;
+- generalize a mechanism only after it succeeds across several concrete Cards or projects;
+- measure whether each addition reduces user effort, Agent time or delivery risk;
+- stop or remove an abstraction that creates more state than value.
+
+The Layers and later phases in this document are a coherent design direction, not a promise
+to implement every surface. Near-term work should remain a thin, testable slice, be used in
+real product development, and earn the next increment through evidence.
+
 ## Core model
 
 ### One global Source
@@ -44,9 +63,10 @@ The agreed long-term Layers are:
 - Product Design
 - Domain Model
 
-Technical Design is deliberately not a Graph Layer. It is a Card workspace that aggregates
-multiple graph sources, project context and user decisions into one revisable design
-document.
+Technical decisions are not a default Graph Layer or mandatory standalone module. For a
+personal app, straightforward implementation remains Agent-owned. A lightweight
+Implementation Approach appears only when one material, durable technical choice needs user
+input.
 
 Break It Down and Just Do It remain independent modules rather than mandatory downstream
 steps.
@@ -184,8 +204,8 @@ The Layer can explore alternative models, such as:
 - current state plus a separate Activity history.
 
 Each Domain node owns its definition, properties, invariants, relationships and unresolved
-questions. The accepted Domain Model gives Technical Design stable product semantics while
-leaving storage technology open.
+questions. The accepted Domain Model gives implementation Agents stable product semantics while
+leaving storage technology open until a material choice actually matters.
 
 ## Intentions
 
@@ -202,9 +222,6 @@ Initial What’s Next intentions should include:
 | Product Design                 | Product Design | one formal Product Design document |
 | Domain Model exploration       | Domain Model   | alternative concepts or models     |
 | Domain Model synthesis         | Domain Model   | one accepted conceptual model      |
-
-Technical Design is an intention that creates a Technical Design Card workspace rather
-than a graph node in a Technical Design Layer.
 
 Document synthesis may later create a Product Context candidate, but direct repository
 document writes remain outside What’s Next.
@@ -323,152 +340,78 @@ Just Do It dependency review now detects unfinished formal origins in
 execution. That delivered guard remains independent from the future What’s Next Harness
 improvements.
 
-## Technical Design Card workspace
+## Lightweight implementation bridge
 
-Technical Design combines Product Design, Domain Model, Discovery evidence, current code
-and project constraints. Its natural representation is one aggregate, revisable Card rather
-than another graph projection.
-
-### Sources
-
-A Technical Design Card may retain:
-
-- Product Design nodes;
-- Domain Model nodes;
-- validated Discovery evidence;
-- repository and code context;
-- current Project documents;
-- platform constraints and user instructions.
-
-### Document
-
-The Card owns one Technical Design Markdown document with sections such as:
-
-```markdown
-# Technical Design
-
-## Goal and source product behavior
-
-## Current implementation
-
-## Technical constraints
-
-## Decisions
-
-## Domain-to-storage mapping
-
-## Module boundaries
-
-## Data and control flow
-
-## Persistence and migration
-
-## Error handling
-
-## Performance boundary
-
-## Validation strategy
-
-## Delivery and rollout
-
-## Risks
-
-## Open decisions
-```
-
-### Conversation and revision
-
-The workspace reuses appropriate Card-shell interactions:
-
-- whole-document feedback;
-- inline Markdown annotations;
-- section-scoped revisions;
-- source additions;
-- Agent/model settings;
-- exact revision history;
-- delete before confirmation;
-- explicit confirmation.
-
-It uses a dedicated Technical Design Harness. The Agent reads project code and sources but
-does not modify repository files.
-
-The Agent separates current facts, options, recommendations and user decisions. For a
-local-first persistence choice, it must not treat the current JSON MVP as a permanent
-decision. It should compare relevant options such as JSON, SwiftData and SQLite against
-relationships, querying, migration, portability and testing. The user may explicitly
-choose SwiftData while retaining JSON export, and the decision becomes part of the next
-revision.
-
-### State
+AgentManager is designed for one person working with Agents. It should not require a large
+Technical Design document before ordinary feature delivery. The default path is:
 
 ```text
-Collecting Sources
-→ Drafting
-→ Needs Decisions
-→ Draft Ready
-→ Confirmed
+Discovery → Product Design → EXPERIENCE → Agent implementation and user UI acceptance
 ```
 
-A design with unresolved material choices remains Needs Decisions. Confirmation freezes
-one exact revision for downstream use.
+Domain Model is an optional input when product concepts or relationships need explicit
+clarification. Existing projects may start directly from their Product Design, EXPERIENCE,
+Project context and codebase.
 
-## Technical translation and delivery readiness
+### Implementation Readiness Check
 
-Product Design answers what the product should do. Domain Model answers what concepts mean
-and how they relate. Technical Design maps both into the current codebase, persistence,
-queries, modules, migrations and validation strategy.
+Before Just Do It confirms a Plan, the Coordinator performs a bounded readiness check. It
+asks whether one unresolved technical decision would materially change persistence, public
+interfaces, migration, synchronization, concurrency, security or several future features.
 
-Technical Design may still be larger than one delivery. A Delivery Contract or
-Implementation Brief provides the final executable boundary:
+If no such decision exists, planning continues immediately. The execution Agent owns local
+implementation choices.
 
-```markdown
-# Deliver Unified Search v1
+If one exists, the system opens a lightweight Implementation Approach discussion. This is
+not a new default module and does not require a fixed document structure. It records only
+what the current feature needs, commonly:
 
-## Product outcome
+- objective and current constraint;
+- alternatives that materially differ;
+- chosen approach and user ruling;
+- migration, risk or validation notes when applicable.
 
-## Inputs and confirmed design revisions
+A simple note may be only a few paragraphs. For example, a local-first persistence decision
+may compare retaining JSON with adopting SwiftData, record the user preference for
+SwiftData plus portable JSON export, and then return to planning. It does not need generic
+sections for module boundaries, performance, rollout or error handling when those topics are
+not material.
 
-## Repository and current baseline
+### Triggers
 
-## Scope
+The optional discussion is appropriate when:
 
-## Required checks
+- persistence or schema migration has durable consequences;
+- a shared package or public API changes;
+- synchronization, concurrency, security or destructive data behavior is involved;
+- several plausible approaches have significantly different future costs;
+- the user explicitly asks to compare implementation approaches.
 
-## User UI acceptance
+It is skipped for straightforward local features, ordinary UI work and decisions that an
+implementation Agent can safely make and validate inside one delivery.
 
-## Migration boundary
+### Handoff to execution
 
-## Non-goals
-```
+Product Design and EXPERIENCE remain the normal product contract. Domain Model and a
+lightweight Implementation Approach are attached only when relevant. Just Do It then creates
+its existing concrete Plan, Action contracts and required checks. A separate Delivery
+Contract is not mandatory for ordinary personal-app work.
 
-Nodes and documents can expose an execution-readiness classification:
-
-- non-executable;
-- needs-product-design;
-- needs-domain-model;
-- needs-technical-design;
-- needs-delivery-contract;
-- delivery-ready.
-
-Just Do It should consume delivery-ready artifacts. If a user imports a high-level Feature,
-Product Design or Domain Model, the system should offer the missing transformation instead
-of requiring an execution Agent to invent product, domain and technical decisions after
-starting work.
-
-Simple work may generate a Delivery Contract directly from Product Design and repository
-facts. Complex work may use Technical Design and optionally Break It Down first.
+Complex work may still be sent to Break It Down before execution. That is a user choice, not
+a required pipeline stage.
 
 ## Break It Down remains independent
 
 Break It Down accepts any sufficiently complete input, including an existing project,
-Project JSON, Product Design, Technical Design, Delivery Contract or direct user request.
+Project JSON, Product Design, EXPERIENCE, an optional Implementation Approach or a direct
+user request.
 It is not coupled to What’s Next.
 
 The same Intention and Motion vocabulary may later make decomposition more focused:
 
 - decompose for understanding;
 - decompose for Product Design;
-- decompose for Technical Design;
+- decompose for an implementation approach;
 - decompose for delivery;
 - decompose for risk analysis.
 
@@ -495,23 +438,24 @@ That reuse does not create a mandatory pipeline.
 - Location
 - accepted relationship model
 
-### Technical Design Card
+### Optional Implementation Approach
 
-- map current BoxRecord JSON to accepted concepts;
-- compare JSON, SwiftData and relational persistence;
-- define query normalization and result mapping;
-- design migration and portable export;
-- identify module and UI integration boundaries.
+Only if the persistence choice is material:
 
-### Delivery Contract
+- compare retaining JSON with adopting SwiftData;
+- record the chosen primary store and portable export boundary;
+- note the one-time migration and validation requirements.
 
-- implement Unified Search v1 against exact confirmed revisions;
-- preserve existing records;
-- cover item-name and container-note search;
-- keep optional UI regression separate from required code acceptance;
-- retain user UI acceptance as the final product verdict.
+### Execution
+
+Just Do It uses the Product Design, EXPERIENCE, current repository and any relevant Domain
+Model or decision note. Required code checks stay separate from user UI acceptance.
 
 ## Proposed implementation sequence
+
+Only Phase 1 is a plausible near-term product change, and it still requires focused design
+agreement and real-use validation. Later phases remain optional directions rather than a
+committed roadmap. Each phase should stop for dogfooding before another begins.
 
 ### Phase 0: dependency and Card safety
 
@@ -544,17 +488,11 @@ Delivered:
 - support Domain Model divergence and convergence;
 - persist artifact kind and execution-readiness metadata.
 
-### Phase 4: Technical Design Card workspace
+### Phase 4: lightweight implementation bridge and module reuse
 
-- add the aggregate source model and Card shell;
-- add Markdown revision and inline feedback;
-- add open-decision records and user rulings;
-- add Technical Design confirmation and exact revision handoff.
-
-### Phase 5: delivery bridge and broader module reuse
-
-- generate Delivery Contracts;
-- gate Just Do It imports on execution readiness;
+- add a bounded Implementation Readiness Check before Plan confirmation;
+- surface only material technical decisions as a short, revisable note;
+- keep straightforward implementation choices Agent-owned;
 - allow optional Break It Down routing;
 - evaluate shared Intention/Motion concepts inside Break It Down;
 - support Product Context document candidates without direct repository writes.
@@ -569,10 +507,9 @@ The following remain intentionally unresolved for focused follow-up discussion:
 3. Whether Domain concepts always use individual nodes or may remain one aggregate proposal
    before convergence.
 4. How the cross-Layer selection basket behaves when source nodes conflict.
-5. Whether execution-readiness is manually confirmed, mechanically inferred or assessed by
-   a bounded Agent operation.
-6. Where confirmed Technical Design Markdown is mirrored in Product Context.
-7. Which Intention/Motion concepts should be shared with Break It Down in its first update.
+5. Which concrete conditions trigger a lightweight Implementation Approach instead of
+   immediate planning.
+6. Which Intention/Motion concepts should be shared with Break It Down in its first update.
 
 ## Evaluation
 
@@ -583,7 +520,9 @@ The redesign is successful when:
   aggregate;
 - a validated Discovery Feature can become a rich but visually simple Product Design node;
 - Domain Model explains concepts without prematurely choosing storage technology;
-- Technical Design supports real user/Agent decision dialogue and exact revisions;
-- high-level nodes cannot silently enter code execution without required design translation;
+- straightforward personal-app work reaches execution without a mandatory technical-design
+  document;
+- material, durable technical choices receive one bounded user/Agent decision before
+  execution;
 - existing projects and direct Break It Down use remain valid;
 - Canvas projections remain readable even as the global Product Graph grows.
