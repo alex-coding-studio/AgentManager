@@ -1022,6 +1022,7 @@ function WhatsNextCanvas({
                   setIntention(next);
                   if (next === 'product-design-completion') {
                     setMotion('converge');
+                    if (sharedSourceId) setCombineIds([sharedSourceId]);
                   }
                 }}
                 className="h-9 w-full rounded-lg border border-border bg-background px-2 text-xs text-foreground"

@@ -373,6 +373,17 @@ void test('Product Design Completion injects the Source and accepted Product Des
         `whats-next/nodes/${acceptedFeature.node.id}/output.md`,
       ),
     );
+    await assert.rejects(
+      () =>
+        startWhatsNextRun(project, {
+          ...input,
+          sourceNodeIds: [acceptedFeature.node.id],
+          instruction: 'Complete the product from one Feature.',
+          intention: 'product-design-completion',
+          motion: 'converge',
+        }),
+      /must start from the Product Source/,
+    );
     const independent = await finished(
       project,
       await startWhatsNextRun(project, {

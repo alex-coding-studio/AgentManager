@@ -128,6 +128,7 @@ void test('Product Design Completion judges whether a new Feature is warranted',
     prompt,
     /Product Source and every current Product Design Feature/,
   );
+  assert.match(prompt, /selected Product Source is the trigger/);
   assert.match(
     prompt,
     /First judge whether the concern deserves an independent Feature/,
@@ -138,6 +139,7 @@ void test('Product Design Completion judges whether a new Feature is warranted',
     /only a missing rule or edge case inside an existing Feature/,
   );
   assert.match(prompt, /Never manufacture a duplicate or nominal Feature/);
+  assert.match(prompt, /Product Design has one primary lineage level/);
   assert.match(
     prompt,
     /do not require an MVP or prototype detour when the product goal is already clear/,
@@ -193,6 +195,7 @@ void test('Product Design Completion shares the Product Design destination contr
     ...context,
     intention: 'product-design-completion' as const,
     motion: 'converge' as const,
+    productSourceNodeId: 'NODE-00000001',
   };
   const feature = candidate('CANDIDATE-0001', {
     type: 'feature',
@@ -203,6 +206,21 @@ void test('Product Design Completion shares the Product Design destination contr
     validateWhatsNextHarnessResult(proposal([feature]), completionContext)
       .outcome,
     'proposal',
+  );
+  assert.throws(
+    () =>
+      validateWhatsNextHarnessResult(
+        proposal([
+          candidate('CANDIDATE-0001', {
+            type: 'feature',
+            layer: 'product-design',
+            artifactKind: 'feature',
+            derivedFrom: ['NODE-00000002'],
+          }),
+        ]),
+        completionContext,
+      ),
+    /Product Source as its only lineage parent/,
   );
   const value = baseResult();
   value.reflection.continuationAdvice = {
