@@ -1,4 +1,5 @@
-import { PublicApiError } from './api-errors.ts';
+import { PublicApiError, retainCleanupFailures } from './api-errors.ts';
+import { randomUUID } from 'node:crypto';
 import {
   access,
   mkdir,
@@ -256,39 +257,48 @@ export async function readProductContext(project: RegisteredProject) {
           (entry) => entry.isFile() && /\.(md|markdown)$/i.test(entry.name),
         )
         .map((entry) => entry.name)
-        .sort((left, right) => {
-          if (left.toLowerCase() === 'readme.md') return -1;
-          if (right.toLowerCase() === 'readme.md') return 1;
-          return left.localeCompare(right);
-        });
+        .sort(compareDocumentNames);
       const documents = await Promise.all(
-        fileNames.map(async (fileName) => {
-          const markdown = await readFile(
-            path.join(sectionPath, fileName),
-            'utf8',
-          );
-          return {
+        fileNames.map(async (fileName) =>
+          documentFromMarkdown(
             fileName,
-            title: readTitle(markdown, path.parse(fileName).name),
-            summary: readSummary(markdown),
-            markdown,
-          } satisfies ContextDocument;
-        }),
+            await readFile(path.join(sectionPath, fileName), 'utf8'),
+          ),
+        ),
       );
-      const readme = documents.find(
-        (document) => document.fileName.toLowerCase() === 'readme.md',
-      );
-      return {
-        slug: directory.name,
-        title: readme?.title ?? readTitle('', directory.name),
-        summary: readme?.summary ?? 'No section guidance yet.',
-        markdown: readme?.markdown ?? '',
-        documents,
-      } satisfies ContextSection;
+      return buildSection(directory.name, documents);
     }),
   );
 
   return sections;
+}
+
+function compareDocumentNames(left: string, right: string) {
+  if (left.toLowerCase() === 'readme.md') return -1;
+  if (right.toLowerCase() === 'readme.md') return 1;
+  return left.localeCompare(right);
+}
+
+function documentFromMarkdown(fileName: string, markdown: string) {
+  return {
+    fileName,
+    title: readTitle(markdown, path.parse(fileName).name),
+    summary: readSummary(markdown),
+    markdown,
+  } satisfies ContextDocument;
+}
+
+function buildSection(slug: string, documents: ContextDocument[]) {
+  const readme = documents.find(
+    (document) => document.fileName.toLowerCase() === 'readme.md',
+  );
+  return {
+    slug,
+    title: readme?.title ?? readTitle('', slug),
+    summary: readme?.summary ?? 'No section guidance yet.',
+    markdown: readme?.markdown ?? '',
+    documents,
+  } satisfies ContextSection;
 }
 
 export async function readContextBrowser(project: RegisteredProject) {
@@ -493,15 +503,135 @@ export async function importContextDocuments(
     throw new ContextDocumentConflictError(conflicts);
   }
 
-  for (const entry of imports) {
-    await writeFile(path.join(sectionPath, entry.fileName), entry.content, {
-      flag: overwrite ? 'w' : 'wx',
-    });
-  }
+  const sections = await readProductContext(project);
+  if (overwrite) await replaceDocuments(sectionPath, imports);
+  else await createDocuments(sectionPath, imports);
+
+  const importedDocuments = imports.map((entry) =>
+    documentFromMarkdown(entry.fileName, entry.content),
+  );
+  const replaced = new Set(imports.map((entry) => entry.fileName));
+  const target = sections.find((current) => current.slug === section);
+  const merged = buildSection(
+    section,
+    [
+      ...(target?.documents ?? []).filter(
+        (document) => !replaced.has(document.fileName),
+      ),
+      ...importedDocuments,
+    ].sort((left, right) =>
+      compareDocumentNames(left.fileName, right.fileName),
+    ),
+  );
   return {
     created: imports.map((entry) => entry.fileName),
-    sections: await readProductContext(project),
+    sections: target
+      ? sections.map((current) => (current === target ? merged : current))
+      : [...sections, merged],
   };
+}
+
+type PreparedImport = { fileName: string; content: string };
+
+async function createDocuments(sectionPath: string, imports: PreparedImport[]) {
+  const createdPaths: string[] = [];
+  try {
+    for (const entry of imports) {
+      const destination = path.join(sectionPath, entry.fileName);
+      await writeFile(destination, entry.content, { flag: 'wx' });
+      createdPaths.push(destination);
+    }
+  } catch (error) {
+    retainCleanupFailures(
+      error,
+      await removeAll(createdPaths),
+      'Cleanup after a failed import did not complete.',
+    );
+    throw error;
+  }
+}
+
+async function replaceDocuments(
+  sectionPath: string,
+  imports: PreparedImport[],
+) {
+  const originals = new Map<string, Buffer>();
+  for (const entry of imports) {
+    const destination = path.join(sectionPath, entry.fileName);
+    const original = await readFile(destination).catch(
+      (error: NodeJS.ErrnoException) => {
+        if (error.code !== 'ENOENT') throw error;
+        return null;
+      },
+    );
+    if (original) originals.set(destination, original);
+  }
+
+  const staged: Array<{ temporaryPath: string; destination: string }> = [];
+  const published: string[] = [];
+  try {
+    for (const entry of imports) {
+      const destination = path.join(sectionPath, entry.fileName);
+      const temporaryPath = stagingPath(destination);
+      staged.push({ temporaryPath, destination });
+      await writeFile(temporaryPath, entry.content, { flag: 'wx' });
+    }
+    for (const { temporaryPath, destination } of staged) {
+      await rename(temporaryPath, destination);
+      published.push(destination);
+    }
+  } catch (error) {
+    const unpublished = staged
+      .slice(published.length)
+      .map((entry) => entry.temporaryPath);
+    retainCleanupFailures(
+      error,
+      [
+        ...(await removeAll(unpublished, true)),
+        ...(await restoreAll(published, originals)),
+      ],
+      'Restoring the previous documents after a failed import did not complete.',
+    );
+    throw error;
+  }
+}
+
+function stagingPath(destination: string) {
+  return `${destination}.${randomUUID()}.tmp`;
+}
+
+async function removeAll(paths: string[], tolerateMissing = false) {
+  const outcomes = await Promise.all(
+    paths.map((filePath) =>
+      unlink(filePath).then(
+        () => null,
+        (failure: NodeJS.ErrnoException) =>
+          tolerateMissing && failure.code === 'ENOENT' ? null : failure,
+      ),
+    ),
+  );
+  return outcomes.filter((failure) => failure !== null);
+}
+
+async function restoreAll(published: string[], originals: Map<string, Buffer>) {
+  const outcomes = await Promise.all(
+    published.map(async (destination) => {
+      const original = originals.get(destination);
+      try {
+        if (original === undefined) {
+          await unlink(destination);
+        } else {
+          const temporaryPath = stagingPath(destination);
+          await writeFile(temporaryPath, original, { flag: 'wx' });
+          await rename(temporaryPath, destination);
+        }
+        return null;
+      } catch (failure) {
+        return failure;
+      }
+    }),
+  );
+  return outcomes.filter((failure) => failure !== null);
 }
 
 export async function deleteContextDocument(

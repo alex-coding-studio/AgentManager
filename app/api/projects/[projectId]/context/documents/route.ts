@@ -1,6 +1,6 @@
 import { getProject } from '@/lib/project-registry';
 import { apiErrorResponse } from '@/lib/api-errors';
-import { guardJsonRequest } from '@/lib/request-boundary';
+import { guardJsonRequest, guardRequest } from '@/lib/request-boundary';
 import {
   ContextDocumentConflictError,
   createContextDocument,
@@ -14,7 +14,12 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ projectId: string }> },
 ) {
-  const denied = guardJsonRequest(request);
+  const isMultipart = (request.headers.get('content-type') ?? '').includes(
+    'multipart/form-data',
+  );
+  const denied = isMultipart
+    ? guardRequest(request)
+    : guardJsonRequest(request);
   if (denied) return denied;
   const { projectId } = await params;
   const project = await getProject(projectId);
@@ -23,8 +28,7 @@ export async function POST(
   }
 
   try {
-    const contentType = request.headers.get('content-type') ?? '';
-    if (contentType.includes('multipart/form-data')) {
+    if (isMultipart) {
       const formData = await request.formData();
       const section = formData.get('section');
       const files = formData

@@ -1,4 +1,4 @@
-import { PublicApiError } from './api-errors.ts';
+import { PublicApiError, retainCleanupFailures } from './api-errors.ts';
 import { randomUUID } from 'node:crypto';
 import {
   mkdir,
@@ -134,8 +134,9 @@ export async function importTaskDecompositionAttachments(
 
   const contextPath = await ensureFeatureContext(project);
   const attachmentsPath = path.join(contextPath, settings.attachmentsDirectory);
+  const context = await readTaskDecompositionContext(project);
   const existingNames = new Set(
-    (await listAttachments(project)).map((attachment) => attachment.fileName),
+    context.attachments.map((attachment) => attachment.fileName),
   );
   const conflicts = prepared
     .map((file) => file.fileName)
@@ -152,12 +153,32 @@ export async function importTaskDecompositionAttachments(
       createdPaths.push(destinationPath);
     }
   } catch (error) {
-    await Promise.all(
-      createdPaths.map((filePath) => unlink(filePath).catch(() => undefined)),
+    const cleanupFailures = (
+      await Promise.all(
+        createdPaths.map((filePath) =>
+          unlink(filePath).then(
+            () => null,
+            (failure: unknown) => failure,
+          ),
+        ),
+      )
+    ).filter((failure) => failure !== null);
+    retainCleanupFailures(
+      error,
+      cleanupFailures,
+      'Cleanup after a failed attachment import did not complete.',
     );
     throw error;
   }
-  return readTaskDecompositionContext(project);
+  return {
+    ...context,
+    attachments: [
+      ...context.attachments,
+      ...prepared.map((file) =>
+        attachmentRecord(file.fileName, Buffer.byteLength(file.content)),
+      ),
+    ].sort((left, right) => left.fileName.localeCompare(right.fileName)),
+  };
 }
 
 export async function deleteTaskDecompositionAttachment(
@@ -232,16 +253,22 @@ async function listAttachments(project: RegisteredProject) {
     .map((entry) => entry.name)
     .sort((left, right) => left.localeCompare(right));
   return Promise.all(
-    fileNames.map(async (fileName) => {
-      const fileStat = await stat(path.join(attachmentsPath, fileName));
-      return {
+    fileNames.map(async (fileName) =>
+      attachmentRecord(
         fileName,
-        path: `task-decomposition/attachments/${fileName}`,
-        format: attachmentFormat(fileName),
-        size: fileStat.size,
-      } satisfies TaskDecompositionAttachment;
-    }),
+        (await stat(path.join(attachmentsPath, fileName))).size,
+      ),
+    ),
   );
+}
+
+function attachmentRecord(fileName: string, size: number) {
+  return {
+    fileName,
+    path: `task-decomposition/attachments/${fileName}`,
+    format: attachmentFormat(fileName),
+    size,
+  } satisfies TaskDecompositionAttachment;
 }
 
 async function writeAtomically(filePath: string, content: string) {
