@@ -82,7 +82,7 @@ they share a source file.
 | worklog revision history         | canonical, append-only evidence | `lib/just-do-it-worklog.ts`                   | complete pending directory + rename       | rename is the compare-and-swap         | no migration |
 | worklog HANDOFF / INDEX / refs   | derived materialization         | `lib/just-do-it-worklog.ts`                   | inside the same revision directory        | inherited from the revision            | no migration |
 | Task Graph node creation         | canonical                       | `lib/task-graph.ts` `createStartNode`         | unique temp directory + rename            | none                                   | P3           |
-| Task Graph node update           | canonical                       | `lib/task-graph.ts` `updateStartNode`         | **`node.json` only; other effects live**  | none                                   | **P2**       |
+| Task Graph node update           | canonical                       | `lib/task-graph.ts` `updateStartNode`         | staged resources + `node.json` rename     | none                                   | no migration |
 | Task Graph listing normalization | derived materialization         | `lib/task-graph.ts` `listTaskGraphNodes`      | `wx` temp + rename, on the read path      | none, idempotent                       | P3           |
 | Break It Down Runs               | canonical                       | `lib/task-decomposition-runs.ts`              | `wx` temp + rename per artifact           | process-local chain, per planning path | no migration |
 | What's Next Runs                 | canonical                       | `lib/whats-next-runs.ts`                      | `wx` temp + rename per artifact           | promise chain, per planning path       | P3           |
@@ -193,65 +193,59 @@ same rename boundary. They are reproducible from `event.json` and are not indepe
 
 ### Task Graph node creation — canonical
 
-`lib/task-graph.ts` `createStartNode`.
-
-**Write path.** After validation, it creates `.<id>-<uuid>.tmp` inside the nodes directory,
+`createStartNode` validates its input, creates `.<id>-<uuid>.tmp` inside the nodes directory,
 writes resources and `node.json` into it, and publishes with one directory rename
-(`lib/task-graph.ts:179-243`).
+(`lib/task-graph.ts:179-244`). Failure injection at the idea write, at an attachment write, at the
+record write and at the rename itself each leaves no published node, no listed node and no
+temporary directory.
 
-**Failure path.** The `catch` removes the temporary directory recursively and with `force`,
-so a pre-publication failure leaves no partial node.
+Two corrections came out of that exercise, both mutation-checked:
 
-**Crash boundary.** A kill between the last write and the rename leaves a dot-prefixed
-temporary directory. Listing reads `node.json` under each entry it enumerates, so a leftover
-directory is inert only because it is never enumerated as a node; nothing reclaims it.
+- **A failing cleanup no longer replaces the failure it was cleaning up after.** The `rm` in the
+  catch tolerates its own error, so the injected cause stays primary. The temporary directory then
+  remains, which the tests assert rather than hide.
+- **A failure after the rename no longer runs rollback cleanup.** The publication is tracked with
+  a `published` flag, so a fault in the listing that follows the rename leaves the committed node
+  alone. The node is present and complete, the caller still receives the error, and a retry meets
+  the existing `This Canvas already has a Start node.` rule rather than creating a second node.
 
-**Post-rename behavior.** Publication is a single directory rename, so a reader either sees no
-node or the complete node. The rename target is a fresh id, so it cannot replace an existing
-node.
+**Crash boundary.** A process kill between the last write and the rename leaves a dot-prefixed
+temporary directory. Listing ignores it because it is not a node directory, and nothing reclaims
+it; the tests assert both halves. Repairing that needs a recovery pass over every store and stays
+out of scope here.
 
-**Concurrency reachability.** Two creations use distinct ids and distinct temporary names, so
-they do not contend.
+### Task Graph node update — canonical
 
-**Not proven.** No test exercises the failure path or the crash boundary.
+`lib/task-graph.ts` `updateStartNode` publishes through one boundary: the `node.json` rename at
+`lib/task-graph.ts:402`. Resources reach that boundary as staged, unreferenced files.
 
-### Task Graph node update — canonical, P2
+New attachments are written into the live resources directory with `flag: 'wx'` under names that
+cannot collide with an existing resource, and a changed idea is written to a **new** unique
+resource path rather than over the file the current record references
+(`lib/task-graph.ts:369-378`). Nothing the live `node.json` points at is modified before the
+rename. The rename publishes the new resource references; only after it commits is the superseded
+idea resource removed, as cleanup whose failure leaves an orphan without invalidating any
+reference.
 
-`lib/task-graph.ts` `updateStartNode` is **not one transaction**. It performs five distinct
-effects, and only one of them has a publication boundary:
+A pre-commit failure removes every staged path, each removal tolerating its own error so the
+original failure stays primary. When that cleanup cannot run, the staged files remain as
+unreferenced orphans and the record is untouched.
 
-1. **New attachments** are written with `flag: 'wx'` directly into the live
-   `resources` directory (`lib/task-graph.ts:354-360`), not into a temporary location.
-2. **The idea document is rewritten in place** — `writeFile` onto the existing resource path
-   with no `wx`, no temporary file and no rename (`lib/task-graph.ts:362-367`).
-3. **`node.json` is published** through a temporary file and one rename, after which
-   `committed` is set (`lib/task-graph.ts:384-391`).
-4. **Pre-commit cleanup**: if the operation throws while `committed` is false, the newly
-   written attachments are unlinked, each with its error swallowed
-   (`lib/task-graph.ts:405-410`).
-5. **Post-commit deletion**: attachments no longer retained are unlinked after the commit,
-   each with its error swallowed (`lib/task-graph.ts:393-398`).
+**This replaced an in-place overwrite.** Before the change, a changed idea was written directly
+over the referenced file, so an injected failure at the temporary-record write, at the rename, or
+during cleanup left the idea document holding the new title while `node.json` still described the
+previous state. `tests/task-graph-failure-boundary.test.ts` demonstrates that contradiction
+deterministically; restoring the in-place write turns six of its tests red.
 
-Effects 1 and 2 mutate live canonical state **before** effect 3 publishes the record that
-describes it. A crash between them leaves the idea document rewritten while `node.json` still
-describes the previous state — contradictory canonical state that no compensation addresses,
-because effect 4 only removes attachments and only when the throw is observed.
-
-Effect 4 is compensation, not rollback: it cannot restore the overwritten idea document, and
-it ignores its own failures. Effect 5 runs after the commit, so a crash there leaves orphaned
-attachment files, which is untidy but not contradictory.
-
-**Priority P2, not P1.** The contradictory state is visible in the code path but has not been
-demonstrated by a test, and the reachability of an interleaved second writer has not been
-established. Item 6 should write the failure-boundary test that decides between P1 and no
-change before any code moves.
+Post-commit removal of dropped attachments already tolerated its own failure and still does: an
+orphan may remain, and the tests assert that every path the record references still exists.
 
 ### Task Graph listing normalization — derived
 
 `listTaskGraphNodes` validates each node on read and throws on a malformed record. For the
 `whats-next` graph root only, a node missing `layer` or `artifactKind` is given defaults and
 **written back on the read path** through a `wx` temporary file and a rename
-(`lib/task-graph.ts:105-114`).
+(`lib/task-graph.ts:107-114`).
 
 This makes listing a mutating operation. Two concurrent listings each write their own uniquely
 named temporary file and rename it, producing the same content, so the outcome is idempotent
@@ -507,6 +501,11 @@ Mechanically tested:
   foreign identities, symlinked Cards, bounded handoff and index —
   `tests/just-do-it-harness.test.ts:483-675`
 - planning path containment — `tests/planning-paths.test.ts`
+- Task Graph create and update failure boundaries under injected filesystem faults: no publication
+  from a pre-publication failure, cleanup that cannot hide the primary error, no rollback after the
+  publication rename, staged resources that never precede the record, orphan behavior on both
+  cleanup paths, and clean retry —
+  `tests/task-graph-failure-boundary.test.ts`
 - Break It Down Candidate acceptance under concurrency: same-Candidate idempotency, sibling
   independence, accept-versus-discard coherence in both invocation orders, dependency ordering in
   both invocation orders with clean retry, Candidate revision start racing acceptance and discard,
@@ -520,7 +519,7 @@ content selection and manifest structure. Those prove input validation and produ
 
 **The evidence this audit needs, and does not find, is narrower:** no deterministic test exercises
 concurrent filesystem publication, and no test injects a filesystem failure to observe rollback
-or cleanup, for Task Graph node creation or update, What's Next Runs, the Run
+or cleanup, for What's Next Runs, the Run
 context workspace, Context Library imports, or Just Do It planning instructions. Their publication
 behavior under contention and partial failure is argued from code shape, not demonstrated.
 
@@ -529,13 +528,15 @@ behavior under contention and partial failure is argued from code shape, not dem
 No P0 and no P1. Nothing in this inventory demonstrates corruption, a path escape, an unsafe
 external effect, or a lost update that has been shown to occur.
 
-**P2 — credible reachable risk with incomplete mechanical protection:**
+**No P2 remains open.** Both entries have been demonstrated and closed:
 
-- `updateStartNode` mutates live canonical state before publishing the record that describes it,
-  with compensation that cannot restore an overwritten idea document.
-- Break It Down Run acceptance previously performed a read-modify-write with no serializer.
-  Both demonstrated races are now closed by a process-local chain over acceptance and discard,
-  and the deterministic tests fail if it is removed.
+- `updateStartNode` mutated live canonical state before publishing the record that described it.
+  Failure injection reproduced an idea document holding the new title while `node.json` still held
+  the previous one. Resources are now staged and published through the record rename, and the
+  tests fail if the in-place write returns.
+- Break It Down Run acceptance performed a read-modify-write with no serializer. Both demonstrated
+  races are closed by a process-local chain over acceptance, discard and Run start, and the
+  deterministic tests fail if it is removed.
 
 **P3 — evidence or documentation gap without demonstrated incorrect state:** the Run context
 workspace leaving unreferenced orphan directories with no cleanup and no failure test, Task Graph
@@ -556,8 +557,9 @@ No store is marked unknown for not having been read.
 1. ~~**Deterministic concurrency test for Break It Down Run acceptance.**~~ Done. The tests
    demonstrated an idempotency failure and an accept-versus-discard contradiction, which
    justified the process-local chain now covering both operations.
-2. **Task Graph create and update failure-boundary tests.** Establish what a crash leaves
-   behind before choosing between serialization, a real publication boundary, or no change.
+2. ~~**Task Graph create and update failure-boundary tests.**~~ Done. Creation needed two
+   error-handling corrections and keeps its directory-rename boundary; update needed immutable
+   resource staging so that nothing the record references changes before the record does.
 3. **Context Library and Break It Down attachment publication investigation.** Both write
    several files per call with per-file rather than per-call boundaries.
 4. **Document the process-local boundary** for `app-settings`, `graph-identity-store` and

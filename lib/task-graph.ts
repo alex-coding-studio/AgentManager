@@ -177,6 +177,7 @@ export async function createStartNode(
   );
   const nodePath = path.join(nodesPath, id);
   const temporaryNodePath = path.join(nodesPath, `.${id}-${randomUUID()}.tmp`);
+  let published = false;
   await mkdir(temporaryNodePath);
   const uploadedResources: TaskGraphNode['resources'] = [];
 
@@ -241,9 +242,13 @@ export async function createStartNode(
       { flag: 'wx' },
     );
     await rename(temporaryNodePath, nodePath);
+    published = true;
     return { node, nodes: await listTaskGraphNodes(project, graphRoot) };
   } catch (error) {
-    await rm(temporaryNodePath, { recursive: true, force: true });
+    if (!published)
+      await rm(temporaryNodePath, { recursive: true, force: true }).catch(
+        () => undefined,
+      );
     throw error;
   }
 }
@@ -343,8 +348,10 @@ export async function updateStartNode(
   const usedNames = new Set(
     [...existingAttachments.keys()].map((ref) => path.basename(ref)),
   );
+  if (ideaResource) usedNames.add(path.basename(ideaResource.path));
   const newAttachments: TaskGraphNode['resources'] = [];
   const newAttachmentPaths: string[] = [];
+  let stagedIdea: TaskGraphNode['resources'][number] | null = null;
   let committed = false;
 
   try {
@@ -360,10 +367,14 @@ export async function updateStartNode(
     }
 
     if (idea && ideaResource) {
-      await writeFile(
-        path.join(project.planningPath, ideaResource.path),
-        `# ${title}\n\n${idea}\n`,
-      );
+      const fileName = chooseUniqueName('idea', usedNames);
+      const absolutePath = path.join(resourcesPath, fileName);
+      await writeFile(absolutePath, `# ${title}\n\n${idea}\n`, { flag: 'wx' });
+      newAttachmentPaths.push(absolutePath);
+      stagedIdea = {
+        kind: 'idea',
+        path: `${graphRoot}/nodes/${input.id}/resources/${fileName}`,
+      };
     }
 
     const updatedNode: TaskGraphNode = {
@@ -371,7 +382,9 @@ export async function updateStartNode(
       title,
       updatedAt: new Date().toISOString(),
       resources: [
-        ...(ideaResource ? [ideaResource] : []),
+        ...((stagedIdea ?? ideaResource)
+          ? [(stagedIdea ?? ideaResource)!]
+          : []),
         ...contextRefs.map((ref) => ({ kind: 'context', path: ref })),
         ...retainedAttachments,
         ...newAttachments,
@@ -388,6 +401,11 @@ export async function updateStartNode(
     );
     await rename(temporaryJsonPath, nodeJsonPath);
     committed = true;
+
+    if (stagedIdea && ideaResource && ideaResource.path !== stagedIdea.path)
+      await unlink(path.join(project.planningPath, ideaResource.path)).catch(
+        () => undefined,
+      );
 
     const removedAttachments = [...existingAttachments.keys()].filter(
       (ref) => !retainedAttachmentRefs.includes(ref),
