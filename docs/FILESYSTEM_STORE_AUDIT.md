@@ -82,7 +82,7 @@ they share a source file.
 | worklog revision history         | canonical, append-only evidence | `lib/just-do-it-worklog.ts`                   | complete pending directory + rename       | rename is the compare-and-swap         | no migration |
 | worklog HANDOFF / INDEX / refs   | derived materialization         | `lib/just-do-it-worklog.ts`                   | inside the same revision directory        | inherited from the revision            | no migration |
 | Task Graph node creation         | canonical                       | `lib/task-graph.ts` `createStartNode`         | unique temp directory + rename            | none                                   | P3           |
-| Task Graph node update           | canonical                       | `lib/task-graph.ts` `updateStartNode`         | staged resources + `node.json` rename     | none                                   | no migration |
+| Task Graph node update           | canonical                       | `lib/task-graph.ts` `updateStartNode`         | staged resources + `node.json` rename     | **none**                               | **P2**       |
 | Task Graph listing normalization | derived materialization         | `lib/task-graph.ts` `listTaskGraphNodes`      | `wx` temp + rename, on the read path      | none, idempotent                       | P3           |
 | Break It Down Runs               | canonical                       | `lib/task-decomposition-runs.ts`              | `wx` temp + rename per artifact           | process-local chain, per planning path | no migration |
 | What's Next Runs                 | canonical                       | `lib/whats-next-runs.ts`                      | `wx` temp + rename per artifact           | promise chain, per planning path       | P3           |
@@ -201,8 +201,9 @@ temporary directory.
 
 Three corrections came out of that exercise:
 
-- **A failing cleanup no longer replaces the failure it was cleaning up after.** The `rm` in the
-  catch cannot throw over the original error, and the cleanup failure is attached as that error's
+- **Failing cleanup is retained on both paths.** Creation attaches its `rm` failure, and a failed
+  update attaches its temporary-record and staged-resource failures — one error, or a bounded
+  `AggregateError` — as the primary error's
   `cause`, and `recordUnexpectedApiError` keeps both: its diagnostic formatting walks the `cause`
   chain to a bounded depth with cycle protection, through the same redaction the primary error
   passes. The response still carries only the generic message and a correlation id.
@@ -214,6 +215,11 @@ Three corrections came out of that exercise:
 - **The Route reflects that.** `POST /api/projects/[projectId]/nodes` answers `201` with the
   committed node even when a subsequent read would fail, and a duplicate retry meets the existing
   `This Canvas already has a Start node.` rule.
+
+**Concurrency is not covered here.** Neither creation nor update serializes, in-process or
+across processes. Two overlapping updates to one node can both read the same record and publish
+last-writer-wins, and the one-Start Canvas check is not protected against a concurrent second
+creation. No test in this suite exercises either path; both are open P2 and Item 6 queue entry 5.
 
 **Crash boundary.** A process kill between the last write and the rename leaves a dot-prefixed
 temporary directory. Listing ignores it because it is not a node directory, and nothing reclaims
@@ -537,12 +543,19 @@ behavior under contention and partial failure is argued from code shape, not dem
 No P0 and no P1. Nothing in this inventory demonstrates corruption, a path escape, an unsafe
 external effect, or a lost update that has been shown to occur.
 
-**No P2 remains open.** Both entries have been demonstrated and closed:
+**One P2 remains open, and one entry moved.** The Task Graph failure and rollback boundaries are
+closed by demonstration; Task Graph _concurrency_ is not, and was never exercised by those tests:
 
 - `updateStartNode` mutated live canonical state before publishing the record that described it.
   Failure injection reproduced an idea document holding the new title while `node.json` still held
   the previous one. Resources are now staged and published through the record rename, and the
-  tests fail if the in-place write returns.
+  tests fail if the in-place write returns. **That closes the failure boundary, not concurrency.**
+  `updateStartNode` has no in-process serializer: two overlapping `PATCH` calls can both read the
+  same record and publish last-writer-wins, and no deterministic test exercises it. Likewise
+  `createStartNode` checks the one-Start Canvas rule before publication with no same-project
+  concurrency test — the suite's creation test uses two _separate_ projects and cannot speak to
+  Canvas uniqueness under contention. Both remain **P2**, untested same-process concurrency
+  risks.
 - Break It Down Run acceptance performed a read-modify-write with no serializer. Both demonstrated
   races are closed by a process-local chain over acceptance, discard and Run start, and the
   deterministic tests fail if it is removed.
@@ -574,6 +587,10 @@ No store is marked unknown for not having been read.
 4. **Document the process-local boundary** for `app-settings`, `graph-identity-store` and
    `whats-next-runs`, matching `docs/PROJECT_REGISTRY.md`, and record the
    `system-validation-runner` `mkdir` lock as the available cross-process option.
+5. **Deterministic same-process concurrency tests for Task Graph creation and update.** Two
+   overlapping `PATCH` calls against one node, and two overlapping creations in one Canvas. The
+   tests decide whether a serializer is warranted; do not add one first. Bounded to those two
+   paths — the failure and rollback boundaries are already closed.
 
 ## Explicit non-candidates
 

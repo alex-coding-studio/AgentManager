@@ -364,7 +364,7 @@ void test('an interrupted temporary directory is ignored by a fresh reader', asy
   }
 });
 
-void test('independent creations use distinct identities and temporary directories', async () => {
+void test('creations in separate projects use distinct identities and temporary directories', async () => {
   const one = await makeProject();
   const two = await makeProject();
   try {
@@ -1096,6 +1096,112 @@ void test('a failed create keeps both causes in Host diagnostics and neither in 
       (diagnostic.match(/gh_\[redacted\]/g) ?? []).length,
       2,
       'both secrets pass through the same redaction',
+    );
+  } finally {
+    console.error = realError;
+    resetInjections();
+    await cleanup();
+  }
+});
+
+void test('a failed update keeps its cleanup failures in Host diagnostics, redacted', async () => {
+  const { project, cleanup } = await makeProject();
+  const captured: string[] = [];
+  const realError = console.error;
+  try {
+    const seed = await seedNode(project);
+    const retained = seed.node.resources
+      .filter((resource) => resource.kind !== 'idea')
+      .map((resource) => resource.path);
+    const { PATCH } = await registerProject(project);
+
+    resetInjections();
+    const primary = fsError('EIO', 'record');
+    primary.message = 'EIO: record rename failed with ghp_cccccccccccccccc33';
+    const firstCleanup = fsError('EACCES', 'cleanup-a');
+    firstCleanup.message = 'EACCES: cleanup denied for ghp_dddddddddddddddd44';
+    const secondCleanup = fsError('EPERM', 'cleanup-b');
+    secondCleanup.message = 'EPERM: second cleanup denied';
+    injections.push({
+      op: 'rename',
+      match: (t) => t.endsWith('node.json'),
+      error: primary,
+      remaining: 1,
+      skip: 0,
+    });
+    injections.push({
+      op: 'unlink',
+      match: () => true,
+      error: firstCleanup,
+      remaining: 1,
+      skip: 0,
+    });
+    injections.push({
+      op: 'unlink',
+      match: () => true,
+      error: secondCleanup,
+      remaining: 1,
+      skip: 0,
+    });
+
+    console.error = (...args: unknown[]) => {
+      captured.push(args.map((entry) => String(entry)).join(' '));
+    };
+    const body = new FormData();
+    body.set('id', seed.node.id);
+    body.set('title', 'Diagnosed update');
+    body.set('idea', 'a diagnosed update idea');
+    for (const ref of retained) body.append('retainedAttachmentRefs', ref);
+    body.append('files', markdown('staged.md', '# staged\n'));
+    const response = await PATCH(
+      new Request('http://localhost:3000/api/projects/PROJECT-0001/nodes', {
+        method: 'PATCH',
+        headers: { host: 'localhost:3000' },
+        body,
+      }),
+      { params: Promise.resolve({ projectId: project.id }) },
+    );
+    console.error = realError;
+
+    assert.equal(response.status, 500);
+    const payload = (await response.json()) as Record<string, unknown>;
+    assert.deepEqual(Object.keys(payload).sort(), ['correlationId', 'error']);
+    assert.equal(payload.error, 'Could not update the start node.');
+    const serialized = JSON.stringify(payload);
+    for (const leak of ['EIO', 'EACCES', 'EPERM', project.planningPath])
+      assert.ok(!serialized.includes(leak), `the client never sees ${leak}`);
+
+    const diagnostic = captured.find((line) =>
+      line.includes(String(payload.correlationId)),
+    );
+    assert.ok(diagnostic, 'the failure reaches Host diagnostics');
+    assert.match(
+      diagnostic,
+      /EIO: record rename failed/,
+      'the primary cause is kept',
+    );
+    assert.match(
+      diagnostic,
+      /EACCES: cleanup denied/,
+      'the first cleanup failure is kept',
+    );
+    assert.match(
+      diagnostic,
+      /EPERM: second cleanup denied/,
+      'so is the second',
+    );
+    assert.ok(!diagnostic.includes('ghp_cccccccccccccccc33'));
+    assert.ok(!diagnostic.includes('ghp_dddddddddddddddd44'));
+    assert.ok(
+      (diagnostic.match(/gh_\[redacted\]/g) ?? []).length >= 2,
+      'every cause passes through the same redaction',
+    );
+
+    const after = await inspect(project, seed.node.id);
+    assert.equal(after.title, 'Original title', 'the record is untouched');
+    assert.ok(
+      after.unreferenced.length > 0,
+      'the orphans the cleanup could not remove remain',
     );
   } finally {
     console.error = realError;

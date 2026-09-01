@@ -65,9 +65,19 @@ function diagnosticText(
   if (seen.has(error)) return `${error.name}: <cause cycle>`;
   seen.add(error);
   const head = `${error.name}: ${error.message}${error.stack ? `\n${error.stack}` : ''}`;
+  if (depth >= MAX_CAUSE_DEPTH) return head;
+  const nested =
+    error instanceof AggregateError
+      ? error.errors
+          .slice(0, MAX_CAUSE_DEPTH)
+          .map((entry) => diagnosticText(entry, depth + 1, seen))
+      : [];
   const cause: unknown = error.cause;
-  if (cause === undefined || depth >= MAX_CAUSE_DEPTH) return head;
-  return `${head}\ncaused by ${diagnosticText(cause, depth + 1, seen)}`;
+  const chained =
+    cause === undefined ? [] : [diagnosticText(cause, depth + 1, seen)];
+  const parts = [...nested, ...chained];
+  if (parts.length === 0) return head;
+  return `${head}\n${parts.map((part) => `caused by ${part}`).join('\n')}`;
 }
 
 export function recordUnexpectedApiError(

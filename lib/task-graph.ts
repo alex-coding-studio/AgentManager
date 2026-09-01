@@ -6,6 +6,8 @@ import {
   resolvePlanningPath,
 } from './planning-paths.ts';
 import { randomUUID } from 'node:crypto';
+
+const MAX_REPORTED_CLEANUP_FAILURES = 4;
 import {
   mkdir,
   readFile,
@@ -423,13 +425,32 @@ export async function updateStartNode(
     };
   } catch (error) {
     if (!committed) {
-      if (temporaryJsonPath)
-        await unlink(temporaryJsonPath).catch(() => undefined);
-      await Promise.all(
-        newAttachmentPaths.map((filePath) =>
-          unlink(filePath).catch(() => undefined),
-        ),
-      );
+      const cleanupTargets = [
+        ...(temporaryJsonPath ? [temporaryJsonPath] : []),
+        ...newAttachmentPaths,
+      ];
+      const cleanupFailures = (
+        await Promise.all(
+          cleanupTargets.map((filePath) =>
+            unlink(filePath).then(
+              () => null,
+              (failure: unknown) => failure,
+            ),
+          ),
+        )
+      ).filter((failure): failure is unknown => failure !== null);
+      if (
+        cleanupFailures.length > 0 &&
+        error instanceof Error &&
+        error.cause === undefined
+      )
+        error.cause =
+          cleanupFailures.length === 1
+            ? cleanupFailures[0]
+            : new AggregateError(
+                cleanupFailures.slice(0, MAX_REPORTED_CLEANUP_FAILURES),
+                'Cleanup after a failed update did not complete.',
+              );
     }
     throw error;
   }
