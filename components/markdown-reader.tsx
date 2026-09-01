@@ -15,6 +15,7 @@ import {
   FolderOpen,
   Maximize2,
   MessageSquarePlus,
+  MessageSquareText,
   Minimize2,
   Trash2,
   X,
@@ -46,6 +47,8 @@ function MarkdownReaderContent({
   showFocusButton = true,
   deleting = false,
   onAddFeedback,
+  feedbackMarkers = [],
+  onEditFeedback,
   compact = false,
   className,
 }: {
@@ -58,6 +61,8 @@ function MarkdownReaderContent({
   showFocusButton?: boolean;
   deleting?: boolean;
   onAddFeedback?: (selection: MarkdownFeedbackSelection) => void;
+  feedbackMarkers?: MarkdownFeedbackMarker[];
+  onEditFeedback?: (feedbackId: string) => void;
   compact?: boolean;
   className?: string;
 }) {
@@ -297,7 +302,13 @@ function MarkdownReaderContent({
         </h3>
       ),
       p: ({ children, node }) => (
-        <div className="group/feedback relative">
+        <div
+          className={cn(
+            'group/feedback relative rounded-md',
+            feedbackForNode(node, feedbackMarkers).length > 0 &&
+              'bg-amber-500/8 ring-1 ring-amber-500/20',
+          )}
+        >
           <p
             {...sourcePosition(node)}
             className="my-3 pr-8 text-sm leading-7 text-foreground/78"
@@ -309,6 +320,8 @@ function MarkdownReaderContent({
               node={node}
               excerpt={childrenText(children)}
               onAddFeedback={onAddFeedback}
+              feedbackMarkers={feedbackForNode(node, feedbackMarkers)}
+              onEditFeedback={onEditFeedback}
             />
           ) : null}
         </div>
@@ -334,13 +347,22 @@ function MarkdownReaderContent({
         </a>
       ),
       li: ({ children, node }) => (
-        <li {...sourcePosition(node)} className="group/feedback relative pr-8">
+        <li
+          {...sourcePosition(node)}
+          className={cn(
+            'group/feedback relative rounded-md pr-8',
+            feedbackForNode(node, feedbackMarkers).length > 0 &&
+              'bg-amber-500/8 ring-1 ring-amber-500/20',
+          )}
+        >
           {children}
           {onAddFeedback && annotationsEnabled ? (
             <FeedbackButton
               node={node}
               excerpt={childrenText(children)}
               onAddFeedback={onAddFeedback}
+              feedbackMarkers={feedbackForNode(node, feedbackMarkers)}
+              onEditFeedback={onEditFeedback}
             />
           ) : null}
         </li>
@@ -377,7 +399,7 @@ function MarkdownReaderContent({
         <td className="border border-border px-3 py-2">{children}</td>
       ),
     }),
-    [annotationsEnabled, onAddFeedback],
+    [annotationsEnabled, feedbackMarkers, onAddFeedback, onEditFeedback],
   );
 
   const reader = (
@@ -585,6 +607,30 @@ export type MarkdownFeedbackSelection = {
   excerpt: string;
 };
 
+export type MarkdownFeedbackMarker = MarkdownFeedbackSelection & {
+  feedbackId: string;
+};
+
+function feedbackForNode(
+  node:
+    | {
+        position?: {
+          start: { line: number };
+          end: { line: number };
+        };
+      }
+    | undefined,
+  feedbackMarkers: MarkdownFeedbackMarker[],
+) {
+  const startLine = node?.position?.start.line;
+  const endLine = node?.position?.end.line;
+  if (!startLine || !endLine) return [];
+  return feedbackMarkers.filter(
+    (feedback) =>
+      feedback.startLine <= endLine && feedback.endLine >= startLine,
+  );
+}
+
 function sourcePosition(
   node:
     | {
@@ -613,6 +659,8 @@ function FeedbackButton({
   node,
   excerpt,
   onAddFeedback,
+  feedbackMarkers,
+  onEditFeedback,
 }: {
   node:
     | {
@@ -624,29 +672,56 @@ function FeedbackButton({
     | undefined;
   excerpt: string;
   onAddFeedback: (selection: MarkdownFeedbackSelection) => void;
+  feedbackMarkers: MarkdownFeedbackMarker[];
+  onEditFeedback?: (feedbackId: string) => void;
 }) {
   const { t } = useUiText();
   const startLine = node?.position?.start.line;
   const endLine = node?.position?.end.line;
   if (!startLine || !endLine || !excerpt.trim()) return null;
+  const existingFeedback = feedbackMarkers[0];
   return (
     <button
       type="button"
-      className="absolute top-1 right-0 grid size-7 place-items-center rounded-full text-muted-foreground opacity-60 transition hover:bg-secondary hover:text-foreground focus:opacity-100 sm:opacity-0 sm:group-hover/feedback:opacity-100"
-      aria-label={t('Add feedback for lines {start} to {end}', {
-        start: startLine,
-        end: endLine,
-      })}
-      title={t('Add feedback')}
-      onClick={() =>
+      className={cn(
+        'absolute top-1 right-0 grid size-7 place-items-center rounded-full transition focus:opacity-100',
+        existingFeedback
+          ? 'bg-amber-500/15 text-amber-700 opacity-100 dark:text-amber-300'
+          : 'text-muted-foreground opacity-60 hover:bg-secondary hover:text-foreground sm:opacity-0 sm:group-hover/feedback:opacity-100',
+      )}
+      aria-label={
+        existingFeedback
+          ? t('Edit feedback')
+          : t('Add feedback for lines {start} to {end}', {
+              start: startLine,
+              end: endLine,
+            })
+      }
+      title={existingFeedback ? t('Edit feedback') : t('Add feedback')}
+      onClick={() => {
+        if (existingFeedback && onEditFeedback) {
+          onEditFeedback(existingFeedback.feedbackId);
+          return;
+        }
         onAddFeedback({
           startLine,
           endLine,
           excerpt: excerpt.trim().slice(0, 1_200),
-        })
-      }
+        });
+      }}
     >
-      <MessageSquarePlus className="size-3.5" />
+      {existingFeedback ? (
+        <span className="relative">
+          <MessageSquareText className="size-3.5" />
+          {feedbackMarkers.length > 1 ? (
+            <span className="absolute -top-2 -right-2 text-[8px] font-semibold">
+              {feedbackMarkers.length}
+            </span>
+          ) : null}
+        </span>
+      ) : (
+        <MessageSquarePlus className="size-3.5" />
+      )}
     </button>
   );
 }

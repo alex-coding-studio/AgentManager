@@ -159,6 +159,7 @@ function WhatsNextCanvas({
   const [feedbackDraft, setFeedbackDraft] = useState<{
     selection: MarkdownFeedbackSelection;
     instruction: string;
+    feedbackId?: string;
   } | null>(null);
   const [pendingFeedback, setPendingFeedback] = useState<
     WhatsNextFeedbackAnchor[]
@@ -627,7 +628,7 @@ function WhatsNextCanvas({
     }
   }
 
-  async function addPendingFeedback() {
+  async function savePendingFeedback() {
     if (
       !feedbackDraft?.instruction.trim() ||
       !selectedCandidatePreview?.outputPath ||
@@ -635,24 +636,55 @@ function WhatsNextCanvas({
     )
       return;
     const excerptHash = await sha256(feedbackDraft.selection.excerpt);
-    setPendingFeedback((current) => [
-      ...current,
-      {
-        feedbackId: `FEEDBACK-${createBrowserUuid()}`,
-        path: selectedCandidatePreview.outputPath!,
-        baseRevision: selectedCandidate.revision,
-        startLine: feedbackDraft.selection.startLine,
-        endLine: feedbackDraft.selection.endLine,
-        excerpt: feedbackDraft.selection.excerpt,
-        excerptHash,
-        instruction: feedbackDraft.instruction.trim(),
-      },
-    ]);
+    const feedbackId =
+      feedbackDraft.feedbackId ?? `FEEDBACK-${createBrowserUuid()}`;
+    const feedback = {
+      feedbackId,
+      path: selectedCandidatePreview.outputPath!,
+      baseRevision: selectedCandidate.revision,
+      startLine: feedbackDraft.selection.startLine,
+      endLine: feedbackDraft.selection.endLine,
+      excerpt: feedbackDraft.selection.excerpt,
+      excerptHash,
+      instruction: feedbackDraft.instruction.trim(),
+    };
+    setPendingFeedback((current) =>
+      feedbackDraft.feedbackId
+        ? current.map((item) =>
+            item.feedbackId === feedbackId ? feedback : item,
+          )
+        : [...current, feedback],
+    );
     setRevisionTarget({
       runId: selectedCandidatePreview.runId!,
       candidateId: selectedCandidate.candidateId,
     });
     setFeedbackDraft(null);
+  }
+
+  function editPendingFeedback(feedbackId: string) {
+    const feedback = pendingFeedback.find(
+      (item) => item.feedbackId === feedbackId,
+    );
+    if (!feedback) return;
+    setFeedbackDraft({
+      feedbackId,
+      selection: {
+        startLine: feedback.startLine,
+        endLine: feedback.endLine,
+        excerpt: feedback.excerpt,
+      },
+      instruction: feedback.instruction,
+    });
+  }
+
+  function removePendingFeedback(feedbackId: string) {
+    setPendingFeedback((current) =>
+      current.filter((item) => item.feedbackId !== feedbackId),
+    );
+    setFeedbackDraft((current) =>
+      current?.feedbackId === feedbackId ? null : current,
+    );
   }
 
   async function saveStart() {
@@ -1429,9 +1461,11 @@ function WhatsNextCanvas({
                       : `# ${selectedCandidate.title}\n\n${selectedCandidate.summary}`
                   }
                   compact
+                  feedbackMarkers={pendingFeedback}
                   onAddFeedback={(selection) =>
                     setFeedbackDraft({ selection, instruction: '' })
                   }
+                  onEditFeedback={editPendingFeedback}
                 />
 
                 {selectedCandidatePreview?.previousOutputPath &&
@@ -1513,6 +1547,19 @@ function WhatsNextCanvas({
                           aria-label={t('Inline feedback')}
                         />
                         <div className="mt-2 flex justify-end gap-2">
+                          {feedbackDraft.feedbackId ? (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="mr-auto text-destructive hover:text-destructive"
+                              onClick={() =>
+                                removePendingFeedback(feedbackDraft.feedbackId!)
+                              }
+                            >
+                              {t('Delete feedback')}
+                            </Button>
+                          ) : null}
                           <Button
                             type="button"
                             variant="ghost"
@@ -1525,9 +1572,11 @@ function WhatsNextCanvas({
                             type="button"
                             size="sm"
                             disabled={!feedbackDraft.instruction.trim()}
-                            onClick={() => void addPendingFeedback()}
+                            onClick={() => void savePendingFeedback()}
                           >
-                            {t('Add feedback')}
+                            {feedbackDraft.feedbackId
+                              ? t('Save feedback')
+                              : t('Add feedback')}
                           </Button>
                         </div>
                       </div>
@@ -1545,7 +1594,14 @@ function WhatsNextCanvas({
                         key={feedback.feedbackId}
                         className="flex items-start gap-3 rounded-xl bg-secondary px-3 py-2.5"
                       >
-                        <div className="min-w-0 flex-1">
+                        <button
+                          type="button"
+                          className="min-w-0 flex-1 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+                          aria-label={t('Edit feedback')}
+                          onClick={() =>
+                            editPendingFeedback(feedback.feedbackId)
+                          }
+                        >
                           <p className="text-[10px] text-muted-foreground">
                             {t('Lines')}
                             {feedback.startLine}–{feedback.endLine}
@@ -1553,18 +1609,23 @@ function WhatsNextCanvas({
                           <p className="mt-1 text-xs leading-5">
                             {feedback.instruction}
                           </p>
-                        </div>
+                        </button>
+                        <button
+                          type="button"
+                          className="text-muted-foreground hover:text-foreground"
+                          aria-label={t('Edit feedback')}
+                          onClick={() =>
+                            editPendingFeedback(feedback.feedbackId)
+                          }
+                        >
+                          <Pencil className="size-3.5" />
+                        </button>
                         <button
                           type="button"
                           className="text-muted-foreground hover:text-foreground"
                           aria-label={t('Remove inline feedback')}
                           onClick={() =>
-                            setPendingFeedback((current) =>
-                              current.filter(
-                                (item) =>
-                                  item.feedbackId !== feedback.feedbackId,
-                              ),
-                            )
+                            removePendingFeedback(feedback.feedbackId)
                           }
                         >
                           <X className="size-3.5" />

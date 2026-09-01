@@ -55,10 +55,13 @@ export function GraphNodeCard({
   const id = data.displayId;
   const preview = data.kind === 'preview';
   const running = data.transientKind === 'run';
-  const runningLabel = t('{agent} is running', {
+  const elapsed = useRunElapsed(data.startedAt, running);
+  const runningBaseLabel = t('{agent} is running', {
     agent: data.agentLabel?.trim() || 'Agent',
   });
-  const elapsed = useRunElapsed(data.startedAt, running);
+  const runningLabel = elapsed
+    ? `${runningBaseLabel} (${elapsed})`
+    : runningBaseLabel;
   return (
     <div
       aria-busy={running}
@@ -188,11 +191,6 @@ export function GraphNodeCard({
       </h2>
       {data.description || running ? (
         <div className="mt-1.5">
-          {running && elapsed ? (
-            <p className="mb-0.5 text-[10px] leading-4 font-medium text-foreground tabular-nums">
-              {t('Running time: {duration}', { duration: elapsed })}
-            </p>
-          ) : null}
           <p className="line-clamp-3 text-[11px] leading-5 text-muted-foreground">
             {data.description}
           </p>
