@@ -232,6 +232,9 @@ function WhatsNextCanvas({
       (item) => item.id === inspectorId && item.kind === 'candidate',
     ) ?? null;
   const selectedCandidate = selectedCandidatePreview?.candidate ?? null;
+  const candidateRelationshipSections = selectedCandidate
+    ? buildRelationshipSections(selectedCandidate, nodes, sharedSourceId)
+    : [];
   const acceptedCandidateIds = new Set(
     nodes.flatMap((node) =>
       node.provenance?.candidateId ? [node.provenance.candidateId] : [],
@@ -777,6 +780,19 @@ function WhatsNextCanvas({
     setPreview({ title, path, markdown: payload.markdown });
   }
 
+  function locateGraphNode(nodeId: string) {
+    const targetLayer =
+      nodes.find((node) => node.id === nodeId)?.layer ??
+      previews.find((item) => item.id === nodeId)?.layer;
+    if (targetLayer) setActiveLayer(targetLayer);
+    setInspectorId('');
+    setFocusedNodeId(nodeId);
+    window.setTimeout(() => {
+      locateSequence.current += 1;
+      setLocateRequest({ nodeId, sequence: locateSequence.current });
+    }, 0);
+  }
+
   if (!hasGraph) {
     return (
       <div className="grid h-full place-items-center overflow-y-auto px-6 py-6">
@@ -867,6 +883,9 @@ function WhatsNextCanvas({
         selectedNodeIds={combineIds}
         edgeAlignedOverlays
         avoidBottomRightPanel={combineIds.length >= 1}
+        projectedRootId={
+          activeLayer === 'product-design' ? sharedSourceId : undefined
+        }
         selectionEnabled
         onToggleSelection={toggleSelection}
         onFocusNode={setFocusedNodeId}
@@ -1442,17 +1461,18 @@ function WhatsNextCanvas({
                   <summary className="cursor-pointer text-xs font-medium">
                     {t('Graph details')}
                   </summary>
-                  <div className="mt-3 grid gap-4 sm:grid-cols-2">
-                    <Fact
-                      label={t('Grew from')}
-                      value={selectedCandidate.derivedFrom.join(', ')}
-                    />
-                    <Fact
-                      label={t('Depends on')}
-                      value={
-                        selectedCandidate.dependsOn.join(', ') || 'Nothing'
-                      }
-                    />
+                  <div className="mt-3 space-y-3">
+                    {candidateRelationshipSections.map((section) => (
+                      <RelationshipColumns
+                        key={section.layer}
+                        title={t(layerLabel(section.layer))}
+                        leftLabel={t('Grew from')}
+                        leftIds={section.derivedFrom}
+                        rightLabel={t('Depends on')}
+                        rightIds={section.dependsOn}
+                        onSelect={locateGraphNode}
+                      />
+                    ))}
                   </div>
                 </details>
 
@@ -1857,6 +1877,124 @@ function Fact({ label, value }: { label: string; value: string }) {
   );
 }
 
+function buildRelationshipSections(
+  candidate: {
+    layer?: 'discovery' | 'product-design';
+    derivedFrom: string[];
+    dependsOn: string[];
+  },
+  nodes: TaskGraphNode[],
+  sharedSourceId: string,
+) {
+  type Layer = 'discovery' | 'product-design';
+  const currentLayer = candidate.layer ?? 'discovery';
+  const sections = new Map<
+    Layer,
+    { layer: Layer; derivedFrom: string[]; dependsOn: string[] }
+  >();
+  const section = (layer: Layer) => {
+    const existing = sections.get(layer);
+    if (existing) return existing;
+    const created = { layer, derivedFrom: [], dependsOn: [] };
+    sections.set(layer, created);
+    return created;
+  };
+  const layerFor = (nodeId: string): Layer =>
+    nodes.find((node) => node.id === nodeId)?.layer ?? 'discovery';
+
+  section(currentLayer);
+  if (currentLayer === 'product-design' && sharedSourceId) {
+    section(currentLayer).derivedFrom.push(sharedSourceId);
+  }
+  for (const nodeId of candidate.derivedFrom) {
+    section(layerFor(nodeId)).derivedFrom.push(nodeId);
+  }
+  for (const nodeId of candidate.dependsOn) {
+    section(layerFor(nodeId)).dependsOn.push(nodeId);
+  }
+  return [
+    section(currentLayer),
+    ...[...sections.values()].filter((entry) => entry.layer !== currentLayer),
+  ];
+}
+
+function layerLabel(layer: 'discovery' | 'product-design') {
+  return layer === 'product-design' ? 'Product Design' : 'Discovery';
+}
+
+function RelationshipColumns({
+  title,
+  leftLabel,
+  leftIds,
+  rightLabel,
+  rightIds,
+  onSelect,
+}: {
+  title: string;
+  leftLabel: string;
+  leftIds: string[];
+  rightLabel: string;
+  rightIds: string[];
+  onSelect: (nodeId: string) => void;
+}) {
+  const rowCount = Math.max(leftIds.length, rightIds.length, 1);
+  return (
+    <section>
+      <p className="mb-1.5 text-[10px] font-semibold tracking-wide text-foreground">
+        {title}
+      </p>
+      <div className="overflow-hidden rounded-lg border border-border">
+        <div className="grid grid-cols-2 border-b border-border bg-secondary/45 text-[10px] font-medium text-muted-foreground">
+          <p className="px-2.5 py-2">{leftLabel}</p>
+          <p className="border-l border-border px-2.5 py-2">{rightLabel}</p>
+        </div>
+        {Array.from({ length: rowCount }, (_, index) => (
+          <div
+            key={index}
+            className="grid grid-cols-2 border-b border-border/70 last:border-b-0"
+          >
+            <RelationshipCell nodeId={leftIds[index]} onSelect={onSelect} />
+            <RelationshipCell
+              nodeId={rightIds[index]}
+              onSelect={onSelect}
+              divided
+            />
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function RelationshipCell({
+  nodeId,
+  onSelect,
+  divided = false,
+}: {
+  nodeId?: string;
+  onSelect: (nodeId: string) => void;
+  divided?: boolean;
+}) {
+  return (
+    <div className={cn('min-w-0 p-1.5', divided && 'border-l border-border')}>
+      {nodeId ? (
+        <button
+          type="button"
+          className="w-full truncate rounded-md px-2 py-1.5 text-left font-mono text-[10px] text-foreground transition hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+          title={nodeId}
+          onClick={() => onSelect(nodeId)}
+        >
+          {nodeId}
+        </button>
+      ) : (
+        <span className="block px-2 py-1.5 text-[10px] text-muted-foreground">
+          —
+        </span>
+      )}
+    </div>
+  );
+}
+
 function toggle(current: string[], value: string) {
   return current.includes(value)
     ? current.filter((entry) => entry !== value)
@@ -2011,6 +2149,7 @@ function runToPreviews(run: WhatsNextRunRecord): TaskGraphPreview[] {
     inheritedResourceCount: run.input?.resourcePaths.length ?? 0,
     additionalResourceCount: 0,
     runId: run.runId,
+    startedAt: run.startedAt,
     derivedFrom: run.sourceNodeIds,
     layer:
       run.intention === 'feature-synthesis'
