@@ -1,14 +1,31 @@
 # Runtime Dependency Audit
 
-## Analyzed head
+## Evidence boundary
 
-|                                          |                                            |
-| ---------------------------------------- | ------------------------------------------ |
-| base and head commit                     | `45b5e2b20967629f21d519d026e636643984a39a` |
-| command                                  | `npm run audit:runtime-dependencies`       |
-| Node runtime                             | v26.5.1, also verified on v22.13.0         |
-| TypeScript                               | 5.9.3, already a repository dependency     |
-| network, Agent, browser or GitHub access | none                                       |
+|                                          |                                                                    |
+| ---------------------------------------- | ------------------------------------------------------------------ |
+| base commit                              | `45b5e2b20967629f21d519d026e636643984a39a`                         |
+| analyzer input fingerprint               | `08d7bed3533d1ad41118855c81e02bdb3fcb1d9f62159f5e679eb97fe647a3ef` |
+| command                                  | `npm run audit:runtime-dependencies`                               |
+| Node runtime                             | v26.5.1, also verified on v22.13.0                                 |
+| TypeScript                               | 5.9.3, already a repository dependency                             |
+| network, Agent, browser or GitHub access | none                                                               |
+
+`45b5e2b…` is the base this work started from, not the head that produced these numbers. A
+tracked file cannot state its own final commit without going stale the moment it is
+amended, so the exact delivery head lives where it is immutable: the pull request
+description and the merge record.
+
+What binds the counts below to a specific source state is the **input fingerprint** — a
+SHA-256 over every analyzed module's path and content hash, in sorted order. It covers the
+analyzer itself, since `lib/runtime-dependency-graph.ts` and
+`scripts/audit-runtime-dependencies.ts` are inside the analyzed roots. It does not cover
+this document, which is outside them, so recording the value here creates no self-reference.
+
+`npm run audit:runtime-dependencies` prints the fingerprint on its second line. If it
+matches the value above, the numbers in this report describe exactly the source set you are
+looking at. If it differs, the report is stale and the command output is authoritative.
+A test asserts the two agree.
 
 ## Why this audit exists
 

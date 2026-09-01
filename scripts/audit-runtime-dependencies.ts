@@ -60,6 +60,7 @@ export function formatAudit(graph: DependencyGraph) {
   const lines: string[] = [];
   lines.push('# Runtime dependency audit');
   lines.push('');
+  lines.push(`input fingerprint: ${graph.inputFingerprint}`);
   lines.push(`analyzed source roots: ${graph.sourceRoots.join(', ')}`);
   lines.push(`exclusions: ${graph.exclusions.join(', ')}`);
   lines.push(`owned modules: ${graph.modules.length}`);

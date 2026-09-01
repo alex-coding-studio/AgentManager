@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
@@ -66,6 +67,7 @@ export type StronglyConnectedComponent = {
 };
 
 export type DependencyGraph = {
+  inputFingerprint: string;
   sourceRoots: string[];
   exclusions: string[];
   modules: string[];
@@ -190,9 +192,14 @@ export function analyzeRuntimeDependencies(
   const assetImports: AssetImport[] = [];
   const externalSpecifiers = new Set<string>();
 
+  const fingerprint = createHash('sha256');
   for (const relativeFile of modules) {
     const absoluteFile = path.join(projectRoot, relativeFile);
     const text = readFileSync(absoluteFile, 'utf8');
+    fingerprint.update(relativeFile);
+    fingerprint.update('\0');
+    fingerprint.update(createHash('sha256').update(text).digest('hex'));
+    fingerprint.update('\n');
     const source = ts.createSourceFile(
       absoluteFile,
       text,
@@ -393,6 +400,7 @@ export function analyzeRuntimeDependencies(
   );
 
   return {
+    inputFingerprint: fingerprint.digest('hex'),
     sourceRoots,
     exclusions,
     modules,

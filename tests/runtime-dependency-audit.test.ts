@@ -249,6 +249,8 @@ void test('strongly connected components are stable under input permutation', ()
 void test('the real audit runs offline, is deterministic and matches its report', async () => {
   const first = runAudit(PROJECT_ROOT);
   const second = runAudit(PROJECT_ROOT);
+  assert.equal(first.inputFingerprint, second.inputFingerprint);
+  assert.match(first.inputFingerprint, /^[0-9a-f]{64}$/);
   assert.deepEqual(first.components, second.components);
   assert.deepEqual(first.runtimeEdges, second.runtimeEdges);
   assert.deepEqual(first.modules, second.modules);
@@ -288,7 +290,17 @@ void test('the real audit runs offline, is deterministic and matches its report'
     );
   }
 
+  assert.ok(
+    report.includes(first.inputFingerprint),
+    'the report must record the fingerprint of the source set it describes',
+  );
+  assert.ok(
+    !report.includes('base and head commit'),
+    'the report must not present the base commit as the analyzed head',
+  );
+
   const printed = formatAudit(first);
+  assert.ok(printed.includes(first.inputFingerprint));
   assert.match(printed, /owned modules: \d+/);
   assert.match(printed, /runtime strongly connected components: \d+/);
 });
@@ -412,4 +424,26 @@ void test('vendored UI modules are part of the analyzed runtime graph', () => {
     outgoing.length > 0,
     'components/ui imports owned modules, so it is not a graph leaf',
   );
+});
+
+void test('the fingerprint changes when an analyzed module changes and ignores the report', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'am-dep-print-'));
+  await writeFile(path.join(directory, 'a.ts'), 'export const a = 1;\n');
+  const options = { projectRoot: directory, sourceRoots: ['.'] };
+  const before = analyzeRuntimeDependencies(options).inputFingerprint;
+
+  await writeFile(path.join(directory, 'notes.md'), '# not analyzed\n');
+  assert.equal(
+    analyzeRuntimeDependencies(options).inputFingerprint,
+    before,
+    'a non-analyzed file must not move the fingerprint',
+  );
+
+  await writeFile(path.join(directory, 'a.ts'), 'export const a = 2;\n');
+  assert.notEqual(
+    analyzeRuntimeDependencies(options).inputFingerprint,
+    before,
+    'changing an analyzed module must move the fingerprint',
+  );
+  await rm(directory, { recursive: true, force: true });
 });
