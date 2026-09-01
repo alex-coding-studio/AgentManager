@@ -70,7 +70,9 @@ function MarkdownReaderContent({
   );
   const contentRef = useRef<HTMLDivElement>(null);
   const readerRef = useRef<HTMLElement>(null);
-  const [annotationsEnabled, setAnnotationsEnabled] = useState(false);
+  const [annotationsEnabled, setAnnotationsEnabled] = useState(
+    Boolean(onAddFeedback),
+  );
   const [feedbackPosition, setFeedbackPosition] = useState<{
     left: number;
     top: number;
@@ -199,7 +201,7 @@ function MarkdownReaderContent({
 
   function addSelectedFeedback(candidate = selection) {
     if (!candidate || !onAddFeedback) return;
-    onAddFeedback(candidate);
+    window.setTimeout(() => onAddFeedback(candidate), 0);
     window.getSelection()?.removeAllRanges();
     setSelection(null);
     setFeedbackPosition(null);
@@ -221,6 +223,11 @@ function MarkdownReaderContent({
   const repositionFeedback = useEffectEvent(() => {
     if (selectionRange.current) positionFeedback();
   });
+  const commitFeedbackSelection = useEffectEvent(() => {
+    const candidate = readFeedbackSelection();
+    if (candidate) addSelectedFeedback(candidate);
+    else refreshFeedback();
+  });
 
   useEffect(() => {
     if (!annotationsEnabled || !onAddFeedback) return;
@@ -241,7 +248,10 @@ function MarkdownReaderContent({
     };
     const up = () => {
       selecting = false;
-      refresh();
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        commitFeedbackSelection();
+      });
     };
     const scroll = () => {
       repositionFeedback();
