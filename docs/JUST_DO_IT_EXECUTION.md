@@ -219,8 +219,6 @@ checks, optional failures, overrides and legacy migration. Dependency stopping a
 the one-repair limit are execution instructions, not transport-level interception.
 Draft publication uses the explicitly opted-in shared hook policy; the Agent owns
 the later Ready transition.
-See [the rolling review](JUST_DO_IT_DOGFOOD_REVIEW.md) for the observed Round 1
-sequence and the real-flow validation still required.
 
 ## Generated acceptance attachments
 

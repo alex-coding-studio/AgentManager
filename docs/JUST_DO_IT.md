@@ -772,12 +772,6 @@ discussion, or assume it is already the selected implementation architecture.
 These are design questions, not authorization to add automation, a general
 cross-domain execution engine, or a new storage architecture in this docs round.
 
-## Active dogfooding review
-
-The [HereItIsV2 rolling review](JUST_DO_IT_DOGFOOD_REVIEW.md) records verified
-workflow findings while the user completes the Card. It is not final product
-acceptance or authorization to expand implementation scope.
-
 ### Opt-in publication implementation
 
 Shared infrastructure PR #63 introduces `pre_push_tests=deferred` for explicitly

@@ -106,6 +106,5 @@ Tests cover reload, exact finalization, reopening, failure, timeout, cancellatio
 late results, races, scoped patches, resource/instruction snapshots and CLI flags.
 They are not model-quality evaluations.
 
-See [live smoke evidence](../reports/just-do-it-harness/live-planning-smoke.md).
 The user's real Plan remains unconfirmed. Finalize/reopen is tested on isolated
 fixtures, not by accepting work on the user's behalf.

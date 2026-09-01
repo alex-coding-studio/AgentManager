@@ -1,4 +1,4 @@
-# Automation Audit Framework
+# Automation Guide
 
 Status: agreed cross-module audit method. It records how to decide whether repeated work
 belongs in code, a script, a Host operation, the Harness or the Agent. It does not authorize
