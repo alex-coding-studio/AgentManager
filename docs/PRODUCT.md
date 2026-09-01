@@ -46,7 +46,7 @@ AgentManager is not being designed for a multi-user organization. Team permissio
 10. AgentManager owns one fixed internal asset layout; users choose the project
     root but do not configure internal planning paths.
 
-The [Automation Audit Framework](AUTOMATION_AUDIT.md) applies these principles to repeated
+The [Automation Guide](AUTOMATION_GUIDE.md) applies these principles to repeated
 mechanical work across every module. It selects among code, scripts, Host operations,
 repository entrypoints, Harness rules and Agent judgment from observed evidence rather than
 assuming that more scripts mean more automation.

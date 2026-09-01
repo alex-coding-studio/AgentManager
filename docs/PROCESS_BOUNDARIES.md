@@ -9,8 +9,7 @@ difference matters — every one of the six queues orders work inside a single N
 and reading any of them as mutual exclusion over the data directory is wrong.
 
 `docs/PROJECT_REGISTRY.md` already states this for the registry. This document is the shared
-statement for every serializer, so the per-store sections of
-`docs/FILESYSTEM_STORE_AUDIT.md` do not repeat it.
+statement for every serializer.
 
 ## The process-local promise chains
 
@@ -103,5 +102,6 @@ implied by the fact that `mkdir` is atomic.
 
 ## What is therefore still unprotected
 
-Every store in `docs/FILESYSTEM_STORE_AUDIT.md` is unprotected against a second AgentManager
-process. The chains above narrow the exposure to the multi-process case; they do not remove it.
+The stores guarded by the process-local chains above remain unprotected against a second
+AgentManager process. The chains narrow the exposure to the multi-process case; they do not
+remove it.

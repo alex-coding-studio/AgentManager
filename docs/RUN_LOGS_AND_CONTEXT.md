@@ -147,10 +147,9 @@ handle an invalidated environment fact, and distinguish long-running work from
 missing updates. Keep token cost, elapsed time and user-visible usefulness separate.
 Do not infer architectural success from unit-test counts alone.
 
-Related records: [rolling dogfood review](JUST_DO_IT_DOGFOOD_REVIEW.md),
-[execution boundary](JUST_DO_IT_EXECUTION.md),
+Related project contracts: [execution boundary](JUST_DO_IT_EXECUTION.md),
 [environment validation and repair proposal](DEVELOPMENT_ENVIRONMENT.md), and the
-[cross-module Automation Audit Framework](AUTOMATION_AUDIT.md).
+[cross-module Automation Guide](AUTOMATION_GUIDE.md).
 
 ## Coordinator use and first-slice boundary
 

@@ -209,9 +209,7 @@ Session. Missing transport capabilities are not a reason to delay the first slic
   trial rather than claiming savings from lower worker-model cost alone.
 
 Use deterministic contract/state checks and at least one bounded real scenario.
-The [final trial statistics](evals/2026-08-31-hereitis-final-trial-statistics.md)
-are the baseline, not a matched model benchmark. Select concrete dispatch schemas,
-provider/session behavior, failure recovery and rollout tasks only after this role
+Select concrete dispatch schemas, provider/session behavior, failure recovery and rollout tasks only after this role
 and flow proposal is reviewed; those technical choices are not settled here.
 
 Protocol refinement and proposed implementation slices are documented separately
