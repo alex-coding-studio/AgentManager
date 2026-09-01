@@ -355,6 +355,19 @@ async function startTaskDecompositionRunUnlocked(
   return record;
 }
 
+async function readAvailableProposalRun(
+  project: RegisteredProject,
+  runId: string,
+) {
+  try {
+    return await readTaskDecompositionRun(project, runId);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT')
+      throw new PublicApiError('The Candidate proposal is unavailable.', 400);
+    throw error;
+  }
+}
+
 export async function readTaskDecompositionRun(
   project: RegisteredProject,
   runId: string,
@@ -442,7 +455,7 @@ async function acceptTaskDecompositionCandidateUnlocked(
       400,
     );
   }
-  const run = await readTaskDecompositionRun(project, runId);
+  const run = await readAvailableProposalRun(project, runId);
   if (run.result?.outcome !== 'proposal') {
     throw new PublicApiError('The Candidate proposal is unavailable.', 400);
   }
@@ -561,7 +574,7 @@ async function discardTaskDecompositionCandidateUnlocked(
       400,
     );
   }
-  const requestedRun = await readTaskDecompositionRun(project, runId);
+  const requestedRun = await readAvailableProposalRun(project, runId);
   if (requestedRun.result?.outcome !== 'proposal') {
     throw new PublicApiError('The Candidate proposal is unavailable.', 400);
   }

@@ -276,6 +276,12 @@ record had been discarded. Both are reproduced deterministically in
 `tests/task-decomposition-acceptance-concurrency.test.ts`, which fails on exactly those two
 scenarios when the serializer is bypassed.
 
+A third symptom of the same defect surfaced once the queue's ordering was asserted strictly: the
+caller that loses the race read a run directory the winner had already discarded and received a
+raw `ENOENT`. Acceptance and discard now read the run through a wrapper that converts that one
+case into the existing `The Candidate proposal is unavailable.`, leaving
+`readTaskDecompositionRun` and every other caller unchanged.
+
 The graph identity allocator already prevented the worse outcome: `reserveNodeIdentity` runs
 inside its own `serialized()` chain and returns the same `NODE-` id for one Candidate uid
 (`lib/graph-identity-store.ts:246-249`), so no duplicate Formal Node was ever created and no

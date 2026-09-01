@@ -254,7 +254,7 @@ async function makeProject(candidates: HarnessCandidate[]) {
         agentSessionId: null,
         sourceNodeId: SOURCE_NODE_ID,
         operation: 'propose',
-        status: 'completed',
+        status: 'proposal',
         transport: 'codex-cli',
         harness: {
           id: TASK_DECOMPOSITION_HARNESS_ID,
@@ -431,23 +431,23 @@ void test('a concurrent accept and discard settle into one legal ordering', asyn
       discardTaskDecompositionCandidate(project, runId, CANDIDATE_A),
     ]);
 
-    assert.notEqual(
-      accepted.status === 'fulfilled' && discarded.status === 'fulfilled',
-      true,
-      'a published Formal Node and a discarded source record cannot both stand',
+    assert.equal(
+      accepted.status,
+      'fulfilled',
+      'the first caller in the queue must win',
+    );
+    assert.equal(discarded.status, 'rejected');
+    assert.match(
+      (discarded as PromiseRejectedResult).reason.message,
+      /An accepted Candidate must be managed as a formal Node\./,
     );
 
     const nodes = await listTaskGraphNodes(project);
-    const published = nodes.filter(
-      (node) => node.provenance?.candidateId === CANDIDATE_A,
+    assert.equal(
+      nodes.filter((node) => node.provenance?.candidateId === CANDIDATE_A)
+        .length,
+      1,
     );
-    if (accepted.status === 'fulfilled') {
-      assert.equal(published.length, 1);
-      assert.equal(discarded.status, 'rejected');
-    } else {
-      assert.equal(published.length, 0);
-      assert.equal(discarded.status, 'fulfilled');
-    }
     assert.deepEqual(await temporaryNodeDirectories(project), []);
   } finally {
     await cleanup();
@@ -638,21 +638,23 @@ void test('discard invoked before accept settles into the other legal ordering',
       acceptTaskDecompositionCandidate(project, runId, CANDIDATE_A),
     ]);
 
-    assert.notEqual(
-      discarded.status === 'fulfilled' && accepted.status === 'fulfilled',
-      true,
+    assert.equal(
+      discarded.status,
+      'fulfilled',
+      'the first caller in the queue must win',
     );
+    assert.equal(accepted.status, 'rejected');
+    assert.match(
+      (accepted as PromiseRejectedResult).reason.message,
+      /The Candidate proposal is unavailable\./,
+    );
+
     const nodes = await listTaskGraphNodes(project);
-    const published = nodes.filter(
-      (node) => node.provenance?.candidateId === CANDIDATE_A,
+    assert.equal(
+      nodes.filter((node) => node.provenance?.candidateId === CANDIDATE_A)
+        .length,
+      0,
     );
-    if (discarded.status === 'fulfilled') {
-      assert.equal(published.length, 0);
-      assert.equal(accepted.status, 'rejected');
-    } else {
-      assert.equal(published.length, 1);
-      assert.equal(accepted.status, 'fulfilled');
-    }
     assert.deepEqual(await temporaryNodeDirectories(project), []);
   } finally {
     await cleanup();
