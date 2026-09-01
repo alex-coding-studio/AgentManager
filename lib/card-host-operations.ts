@@ -1,0 +1,468 @@
+import { createHash, randomUUID } from 'node:crypto';
+import { execFile } from 'node:child_process';
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { promisify } from 'node:util';
+import {
+  verifyCardWorkspace,
+  type CardWorkspace,
+} from './just-do-it-worktree.ts';
+
+const exec = promisify(execFile);
+
+export type CardExecutionRoles = {
+  commit: string;
+  delivery: string;
+  approval: string;
+  expectedGitHubLogin?: string;
+};
+
+export type CardEnvironmentManifest = {
+  version: 1;
+  environmentId: string;
+  revision: number;
+  cardId: string;
+  projectId: string;
+  workspace: CardWorkspace & {
+    headSha: string;
+    clean: boolean;
+  };
+  repository: {
+    remote: string | null;
+    remoteUrl: string | null;
+    defaultBranch: string | null;
+  };
+  git: {
+    authorName: string | null;
+    authorEmail: string | null;
+  };
+  roles: CardExecutionRoles;
+  createdAt: string;
+  verifiedAt: string;
+};
+
+export type PrepareCardEnvironmentRequest = {
+  cardId: string;
+  projectId: string;
+  workspace: CardWorkspace;
+  roles: CardExecutionRoles;
+  outputPath?: string;
+  fetch?: boolean;
+};
+
+export type CandidatePublishRequest = {
+  environment: CardEnvironmentManifest;
+  actionId: string;
+  roundId: string;
+  baseSha: string;
+  headSha: string;
+  title: string;
+  body: string;
+  draft: boolean;
+};
+
+export type CandidatePublication = {
+  version: 1;
+  candidateId: string;
+  environmentId: string;
+  environmentRevision: number;
+  actionId: string;
+  roundId: string;
+  baseSha: string;
+  headSha: string;
+  branch: string;
+  commitCount: number;
+  changedFiles: string[];
+  repository: string;
+  pullRequest: {
+    number: number;
+    url: string;
+    state: string;
+    draft: boolean;
+    headSha: string;
+  };
+  publishedAt: string;
+};
+
+export type HostCommandRunner = (
+  command: string,
+  arguments_: string[],
+  options?: { cwd?: string; env?: NodeJS.ProcessEnv },
+) => Promise<string>;
+
+const commandRunner: HostCommandRunner = async (command, arguments_, options) =>
+  (
+    await exec(command, arguments_, {
+      cwd: options?.cwd,
+      env: options?.env ?? process.env,
+      timeout: 30000,
+      maxBuffer: 2_000_000,
+    })
+  ).stdout.trim();
+
+function gitEnvironment() {
+  const environment = { ...process.env };
+  for (const key of Object.keys(environment))
+    if (key.startsWith('GIT_')) delete environment[key];
+  return environment;
+}
+
+async function git(
+  runner: HostCommandRunner,
+  workspace: string,
+  ...arguments_: string[]
+) {
+  return runner('git', ['-C', workspace, ...arguments_], {
+    env: gitEnvironment(),
+  });
+}
+
+async function optionalGit(
+  runner: HostCommandRunner,
+  workspace: string,
+  ...arguments_: string[]
+) {
+  try {
+    return (await git(runner, workspace, ...arguments_)) || null;
+  } catch {
+    return null;
+  }
+}
+
+export async function prepareCardEnvironment(
+  request: PrepareCardEnvironmentRequest,
+  runner: HostCommandRunner = commandRunner,
+): Promise<CardEnvironmentManifest> {
+  await verifyCardWorkspace(request.workspace);
+  if (request.fetch)
+    await git(runner, request.workspace.path, 'fetch', '--prune', 'origin');
+  const now = new Date().toISOString();
+  const previous = request.outputPath
+    ? await readManifest(request.outputPath)
+    : null;
+  if (
+    previous &&
+    (previous.cardId !== request.cardId ||
+      previous.projectId !== request.projectId)
+  )
+    throw new Error('Existing Environment Manifest belongs to another Card.');
+  const workspaceChanged = Boolean(
+    previous &&
+    (previous.workspace.path !== request.workspace.path ||
+      previous.workspace.branch !== request.workspace.branch),
+  );
+  const headSha = await git(
+    runner,
+    request.workspace.path,
+    'rev-parse',
+    'HEAD',
+  );
+  const branch = await git(
+    runner,
+    request.workspace.path,
+    'branch',
+    '--show-current',
+  );
+  if (branch !== request.workspace.branch)
+    throw new Error('Card branch changed before environment preparation.');
+  const status = await git(
+    runner,
+    request.workspace.path,
+    'status',
+    '--porcelain',
+    '--untracked-files=all',
+  );
+  const remoteUrl = await optionalGit(
+    runner,
+    request.workspace.path,
+    'remote',
+    'get-url',
+    'origin',
+  );
+  const originHead = await optionalGit(
+    runner,
+    request.workspace.path,
+    'symbolic-ref',
+    '--short',
+    'refs/remotes/origin/HEAD',
+  );
+  const manifest: CardEnvironmentManifest = {
+    version: 1,
+    environmentId: previous?.environmentId ?? randomUUID(),
+    revision: previous ? previous.revision + (workspaceChanged ? 1 : 0) : 1,
+    cardId: request.cardId,
+    projectId: request.projectId,
+    workspace: {
+      ...request.workspace,
+      headSha,
+      clean: !status,
+    },
+    repository: {
+      remote: remoteUrl ? 'origin' : null,
+      remoteUrl,
+      defaultBranch: originHead?.replace(/^origin\//, '') ?? null,
+    },
+    git: {
+      authorName: await optionalGit(
+        runner,
+        request.workspace.path,
+        'config',
+        '--get',
+        'user.name',
+      ),
+      authorEmail: await optionalGit(
+        runner,
+        request.workspace.path,
+        'config',
+        '--get',
+        'user.email',
+      ),
+    },
+    roles: request.roles,
+    createdAt: previous?.createdAt ?? now,
+    verifiedAt: now,
+  };
+  if (request.outputPath) await atomicJson(request.outputPath, manifest);
+  return manifest;
+}
+
+export async function publishCardCandidate(
+  request: CandidatePublishRequest,
+  runner: HostCommandRunner = commandRunner,
+): Promise<CandidatePublication> {
+  const { environment } = request;
+  await verifyCardWorkspace(environment.workspace);
+  const workspace = environment.workspace.path;
+  const headSha = await git(runner, workspace, 'rev-parse', 'HEAD');
+  const branch = await git(runner, workspace, 'branch', '--show-current');
+  const status = await git(
+    runner,
+    workspace,
+    'status',
+    '--porcelain',
+    '--untracked-files=all',
+  );
+  if (headSha !== request.headSha)
+    throw new Error('Candidate HEAD changed before publication.');
+  if (branch !== environment.workspace.branch)
+    throw new Error(
+      'Candidate branch does not match its Environment Manifest.',
+    );
+  if (status)
+    throw new Error('Candidate workspace must be clean before publication.');
+  await git(
+    runner,
+    workspace,
+    'merge-base',
+    '--is-ancestor',
+    request.baseSha,
+    request.headSha,
+  );
+  const changedFiles = (
+    await git(
+      runner,
+      workspace,
+      'diff',
+      '--name-only',
+      `${request.baseSha}..${request.headSha}`,
+    )
+  )
+    .split('\n')
+    .filter(Boolean);
+  if (!changedFiles.length)
+    throw new Error('Candidate has no changes to publish.');
+  if (changedFiles.some(forbiddenCandidatePath))
+    throw new Error(
+      'Candidate contains host-owned, generated or secret files.',
+    );
+  const commitCount = Number(
+    await git(
+      runner,
+      workspace,
+      'rev-list',
+      '--count',
+      `${request.baseSha}..${request.headSha}`,
+    ),
+  );
+  if (!Number.isSafeInteger(commitCount) || commitCount < 1)
+    throw new Error('Candidate commit range is invalid.');
+  const repository = githubRepository(environment.repository.remoteUrl);
+  const githubEnvironment = { ...process.env, GH_PROMPT_DISABLED: '1' };
+  const login = await runner('gh', ['api', 'user', '--jq', '.login'], {
+    cwd: workspace,
+    env: githubEnvironment,
+  });
+  if (
+    environment.roles.expectedGitHubLogin &&
+    login !== environment.roles.expectedGitHubLogin
+  )
+    throw new Error('Active GitHub identity does not match the Card role.');
+  const canPush = await runner(
+    'gh',
+    ['api', `repos/${repository}`, '--jq', '.permissions.push'],
+    { cwd: workspace, env: githubEnvironment },
+  );
+  if (canPush !== 'true')
+    throw new Error('GitHub push permission is unavailable.');
+  await git(
+    runner,
+    workspace,
+    'push',
+    '-u',
+    'origin',
+    `HEAD:refs/heads/${branch}`,
+  );
+  const existing = JSON.parse(
+    await runner(
+      'gh',
+      [
+        'pr',
+        'list',
+        '--repo',
+        repository,
+        '--head',
+        branch,
+        '--state',
+        'all',
+        '--limit',
+        '10',
+        '--json',
+        'number,url,state,isDraft,headRefOid',
+      ],
+      { cwd: workspace, env: githubEnvironment },
+    ),
+  ) as Array<{
+    number: number;
+    url: string;
+    state: string;
+    isDraft: boolean;
+    headRefOid: string;
+  }>;
+  if (!Array.isArray(existing) || existing.length > 1)
+    throw new Error('Candidate branch has ambiguous pull request state.');
+  let pr = existing[0];
+  if (!pr) {
+    const bodyPath = path.join(
+      workspace,
+      `.agentmanager-pr-${randomUUID()}.md`,
+    );
+    try {
+      await writeFile(bodyPath, request.body, { flag: 'wx' });
+      const arguments_ = [
+        'pr',
+        'create',
+        '--repo',
+        repository,
+        '--base',
+        environment.repository.defaultBranch ?? 'main',
+        '--head',
+        branch,
+        '--title',
+        request.title,
+        '--body-file',
+        bodyPath,
+      ];
+      if (request.draft) arguments_.push('--draft');
+      await runner('gh', arguments_, {
+        cwd: workspace,
+        env: githubEnvironment,
+      });
+    } finally {
+      await import('node:fs/promises').then((fs) =>
+        fs.rm(bodyPath, { force: true }),
+      );
+    }
+    const created = JSON.parse(
+      await runner(
+        'gh',
+        [
+          'pr',
+          'list',
+          '--repo',
+          repository,
+          '--head',
+          branch,
+          '--state',
+          'open',
+          '--limit',
+          '2',
+          '--json',
+          'number,url,state,isDraft,headRefOid',
+        ],
+        { cwd: workspace, env: githubEnvironment },
+      ),
+    ) as typeof existing;
+    if (created.length !== 1)
+      throw new Error('Created PR could not be resolved.');
+    pr = created[0];
+  }
+  if (pr.headRefOid !== request.headSha)
+    throw new Error('Pull request HEAD does not match the candidate.');
+  return {
+    version: 1,
+    candidateId: candidateId(environment.environmentId, request.headSha),
+    environmentId: environment.environmentId,
+    environmentRevision: environment.revision,
+    actionId: request.actionId,
+    roundId: request.roundId,
+    baseSha: request.baseSha,
+    headSha: request.headSha,
+    branch,
+    commitCount,
+    changedFiles,
+    repository,
+    pullRequest: {
+      number: pr.number,
+      url: pr.url,
+      state: pr.state,
+      draft: pr.isDraft,
+      headSha: pr.headRefOid,
+    },
+    publishedAt: new Date().toISOString(),
+  };
+}
+
+function forbiddenCandidatePath(file: string) {
+  return (
+    file === '.agent-manager' ||
+    file.startsWith('.agent-manager/') ||
+    file === 'build' ||
+    file.startsWith('build/') ||
+    file.includes('DerivedData') ||
+    /(^|\/)(?:\.env|credentials|secrets?)(?:\.|\/|$)/i.test(file)
+  );
+}
+
+function githubRepository(remoteUrl: string | null) {
+  const match = remoteUrl?.match(
+    /^(?:https:\/\/github\.com\/|git@github\.com:)([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+?)(?:\.git)?$/,
+  );
+  if (!match)
+    throw new Error('Candidate repository is not a supported GitHub remote.');
+  return match[1];
+}
+
+function candidateId(environmentId: string, headSha: string) {
+  return createHash('sha256')
+    .update(`${environmentId}:${headSha}`)
+    .digest('hex')
+    .slice(0, 24);
+}
+
+async function readManifest(file: string) {
+  try {
+    return JSON.parse(await readFile(file, 'utf8')) as CardEnvironmentManifest;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
+async function atomicJson(file: string, value: unknown) {
+  await mkdir(path.dirname(file), { recursive: true });
+  const temporary = `${file}.${randomUUID()}.tmp`;
+  await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, {
+    flag: 'wx',
+  });
+  await rename(temporary, file);
+}

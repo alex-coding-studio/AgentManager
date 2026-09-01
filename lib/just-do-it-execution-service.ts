@@ -74,6 +74,7 @@ import type {
   ActionRun,
   ExecuteActionInput,
 } from './just-do-it-execution-types.ts';
+import { prepareCardEnvironment } from './card-host-operations.ts';
 
 type Active = {
   id: string;
@@ -588,6 +589,24 @@ export function createExecutionService(
         input.initializeRepository === true,
       );
       const workingProject = workspaceProject(project, workspace);
+      const environment = workspace
+        ? await prepareCardEnvironment({
+            cardId: card.id,
+            projectId: project.id,
+            workspace,
+            roles: {
+              commit: 'agent-bot',
+              delivery: 'bot',
+              approval: 'user',
+            },
+            outputPath: path.join(
+              project.planningPath,
+              'implementation/cards',
+              card.id,
+              'environment.json',
+            ),
+          })
+        : undefined;
       const baseline = await snapshotWorkspace(workingProject);
       let git = card.execution?.git;
       if (!git) {
@@ -634,6 +653,7 @@ export function createExecutionService(
             profile: input.profile,
             coordinationSettings,
             workspace,
+            environment,
             runs: [...(card.execution?.runs ?? []), run],
             acceptedActionIds: card.execution?.acceptedActionIds ?? [],
             git,
@@ -677,6 +697,13 @@ export function createExecutionService(
           primaryRepositoryPath: workspace?.repository,
           gitWritePaths: workspace
             ? await cardGitWritePaths(workspace)
+            : undefined,
+          candidatePublication: environment
+            ? {
+                environment,
+                actionId: input.actionId,
+                roundId: request.requestId,
+              }
             : undefined,
           onActivity: (activity) =>
             recordProgress({
@@ -730,6 +757,7 @@ export function createExecutionService(
               (transport === startLocalAgentRun
                 ? startEventDrivenWorkerRun
                 : transport),
+            environment,
           });
         }
       } catch (error) {

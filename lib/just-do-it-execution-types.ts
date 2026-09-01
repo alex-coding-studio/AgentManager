@@ -13,6 +13,7 @@ import type { CardHarnessResult } from './just-do-it-harness.ts';
 import type { ExecutionAccess } from './local-agent-skills.ts';
 import type { LocalAgentUsage } from './local-agent-transport.ts';
 import type { GitHubDelivery } from './github-delivery.ts';
+import type { CardEnvironmentManifest } from './card-host-operations.ts';
 
 export type ActionOutput = Extract<CardHarnessResult, { stage: 'execution' }>;
 export type ActionRun = {
@@ -55,6 +56,7 @@ export type CardExecution = {
   acceptanceOverrides?: Record<string, Record<string, CheckOverride>>;
   verification?: Record<string, 'manual' | 'github-merge'>;
   git?: { baseline: string; head: string; firstTrackedRunId: string };
+  environment?: CardEnvironmentManifest;
 };
 export type ExecuteActionInput = {
   cardId: string;
