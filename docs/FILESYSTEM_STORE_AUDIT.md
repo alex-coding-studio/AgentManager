@@ -75,27 +75,27 @@ they share a source file.
 
 ## Summary
 
-| write unit                       | class                           | owner                                         | publication boundary                                 | serialization                    | priority     |
-| -------------------------------- | ------------------------------- | --------------------------------------------- | ---------------------------------------------------- | -------------------------------- | ------------ |
-| project registry                 | canonical                       | `lib/project-registry.ts`                     | shared helper, `wx` temp + rename                    | promise chain, per file          | no migration |
-| app settings                     | canonical                       | `lib/app-settings.ts`                         | `wx` temp + rename                                   | promise chain, per file          | no migration |
-| worklog revision history         | canonical, append-only evidence | `lib/just-do-it-worklog.ts`                   | complete pending directory + rename                  | rename is the compare-and-swap   | no migration |
-| worklog HANDOFF / INDEX / refs   | derived materialization         | `lib/just-do-it-worklog.ts`                   | inside the same revision directory                   | inherited from the revision      | no migration |
-| Task Graph node creation         | canonical                       | `lib/task-graph.ts` `createStartNode`         | unique temp directory + rename                       | none                             | P3           |
-| Task Graph node update           | canonical                       | `lib/task-graph.ts` `updateStartNode`         | **`node.json` only; other effects live**             | none                             | **P2**       |
-| Task Graph listing normalization | derived materialization         | `lib/task-graph.ts` `listTaskGraphNodes`      | `wx` temp + rename, on the read path                 | none, idempotent                 | P3           |
-| Break It Down Runs               | canonical                       | `lib/task-decomposition-runs.ts`              | `wx` temp + rename per artifact                      | **none**                         | **P2**       |
-| What's Next Runs                 | canonical                       | `lib/whats-next-runs.ts`                      | `wx` temp + rename per artifact                      | promise chain, per planning path | P3           |
-| Run context workspace            | immutable Run-input evidence    | `lib/task-decomposition-context-workspace.ts` | immutable Run-input evidence                         |
-| Break It Down context            | canonical                       | `lib/task-decomposition-context.ts`           | `wx` per attachment; settings create-once            | none                             | P3           |
-| Context Library documents        | canonical                       | `lib/product-context.ts`                      | `wx` per document; section rename                    | none                             | P3           |
-| What's Next instructions         | canonical                       | `lib/whats-next-context.ts`                   | `wx` temp + rename                                   | none                             | P3           |
-| Just Do It planning instructions | canonical                       | `lib/just-do-it-planning-service.ts`          | canonical — planning instructions                    |
-| Card environment manifest        | canonical                       | `lib/card-host-operations.ts`                 | canonical manifest; Git-backed candidate publication |
-| Card workspace record            | canonical                       | `lib/just-do-it-worktree.ts`                  | `wx` temp + rename                                   | none                             | P3           |
-| host job status record           | canonical, mutable              | `lib/host-job-broker.ts`                      | canonical mutable job status; derived output log     |
-| host job output log              | derived output                  | `lib/host-job-broker.ts`                      | written once at completion                           | none                             | no migration |
-| system validation result         | cache                           | `lib/system-validation-runner.ts`             | `wx` temp + rename                                   | **`mkdir` lock, cross-process**  | no migration |
+| write unit                       | class                           | owner                                         | publication boundary                      | serialization                    | priority     |
+| -------------------------------- | ------------------------------- | --------------------------------------------- | ----------------------------------------- | -------------------------------- | ------------ |
+| project registry                 | canonical                       | `lib/project-registry.ts`                     | shared helper, `wx` temp + rename         | promise chain, per file          | no migration |
+| app settings                     | canonical                       | `lib/app-settings.ts`                         | `wx` temp + rename                        | promise chain, per file          | no migration |
+| worklog revision history         | canonical, append-only evidence | `lib/just-do-it-worklog.ts`                   | complete pending directory + rename       | rename is the compare-and-swap   | no migration |
+| worklog HANDOFF / INDEX / refs   | derived materialization         | `lib/just-do-it-worklog.ts`                   | inside the same revision directory        | inherited from the revision      | no migration |
+| Task Graph node creation         | canonical                       | `lib/task-graph.ts` `createStartNode`         | unique temp directory + rename            | none                             | P3           |
+| Task Graph node update           | canonical                       | `lib/task-graph.ts` `updateStartNode`         | **`node.json` only; other effects live**  | none                             | **P2**       |
+| Task Graph listing normalization | derived materialization         | `lib/task-graph.ts` `listTaskGraphNodes`      | `wx` temp + rename, on the read path      | none, idempotent                 | P3           |
+| Break It Down Runs               | canonical                       | `lib/task-decomposition-runs.ts`              | `wx` temp + rename per artifact           | **none**                         | **P2**       |
+| What's Next Runs                 | canonical                       | `lib/whats-next-runs.ts`                      | `wx` temp + rename per artifact           | promise chain, per planning path | P3           |
+| Run context workspace            | immutable Run-input evidence    | `lib/task-decomposition-context-workspace.ts` | **none**                                  | none                             | P3           |
+| Break It Down context            | canonical                       | `lib/task-decomposition-context.ts`           | `wx` per attachment; settings create-once | none                             | P3           |
+| Context Library documents        | canonical                       | `lib/product-context.ts`                      | `wx` per document; section rename         | none                             | P3           |
+| What's Next instructions         | canonical                       | `lib/whats-next-context.ts`                   | `wx` temp + rename                        | none                             | P3           |
+| Just Do It planning instructions | canonical                       | `lib/just-do-it-planning-service.ts`          | `wx` temp + rename                        | none                             | P3           |
+| Card environment manifest        | canonical                       | `lib/card-host-operations.ts` `atomicJson`    | `wx` temp + rename                        | none                             | P3           |
+| Card workspace record            | canonical                       | `lib/just-do-it-worktree.ts`                  | `wx` temp + rename                        | none                             | P3           |
+| host job status record           | canonical, mutable              | `lib/host-job-broker.ts`                      | temp + rename, **no `wx`**, overwritten   | none                             | P3           |
+| host job output log              | derived output                  | `lib/host-job-broker.ts`                      | written once at completion                | none                             | no migration |
+| system validation result         | cache                           | `lib/system-validation-runner.ts`             | `wx` temp + rename                        | **`mkdir` lock, cross-process**  | no migration |
 
 Class totals: 14 canonical — 12 plain, one also append-only, one a mutable two-state record —
 plus 2 derived materialization, 1 derived output, 1 immutable Run-input evidence and 1 cache,
@@ -358,14 +358,6 @@ temporary-file rename described here does not cover it.
 ### Card environment manifest — canonical
 
 `lib/card-host-operations.ts` `atomicJson` writes a `wx` temporary file and renames
-(`lib/card-host-operations.ts:496-503`). `publishCardCandidate` writes the candidate body with
-`wx` and removes its temporary directory recursively on failure
-(`lib/card-host-operations.ts:382-404`). A missing manifest reads as `null` on `ENOENT`
-(`lib/card-host-operations.ts:487-492`).
-
-### Card environment manifest — canonical
-
-`lib/card-host-operations.ts` `atomicJson` writes a `wx` temporary file and renames
 (`lib/card-host-operations.ts:496-503`). A missing manifest reads as `null` on `ENOENT`
 (`lib/card-host-operations.ts:487-492`). That rename is the manifest's entire publication
 boundary.
@@ -549,32 +541,32 @@ No store is marked unknown for not having been read.
 
 Every module returned by the discovery commands, and where it went. Nothing is dropped.
 
-| module                                        | disposition                                       |
-| --------------------------------------------- | ------------------------------------------------- |
-| `lib/app-settings.ts`                         | canonical — app settings                          |
-| `lib/atomic-json-store.ts`                    | shared helper, owns no state                      |
-| `lib/card-host-operations.ts`                 | canonical — Card environment manifest; Git        |
-| `lib/graph-identity-store.ts`                 | canonical — graph identity index                  |
-| `lib/host-job-broker.ts`                      | append-only evidence — host job events            |
-| `lib/just-do-it-planning-service.ts`          | canonical — planning records                      |
-| `lib/just-do-it-worklog.ts`                   | canonical revision history; derived HANDOFF/INDEX |
-| `lib/just-do-it-worktree.ts`                  | canonical — workspace record; Git                 |
-| `lib/product-context.ts`                      | canonical — Context Library documents             |
-| `lib/project-registry.ts`                     | canonical — project registry; Git                 |
-| `lib/system-validation-runner.ts`             | cache — validation result; Git; `mkdir` lock      |
-| `lib/task-decomposition-context-workspace.ts` | derived-on-write, evidence thereafter             |
-| `lib/task-decomposition-context.ts`           | canonical — feature context and attachments       |
-| `lib/task-decomposition-runs.ts`              | canonical — Runs and candidates                   |
-| `lib/task-graph.ts`                           | canonical — nodes; derived listing normalization  |
-| `lib/whats-next-context.ts`                   | canonical — instructions                          |
-| `lib/whats-next-runs.ts`                      | canonical — Runs and candidates                   |
-| `scripts/migrate-uuid-aliases.mjs`            | one-shot migration utility, not a store           |
-| `scripts/preview-just-do-it-harness.ts`       | fixture generator, not a store                    |
-| `scripts/smoke-app-server-code.ts`            | smoke fixture, not a store                        |
-| `scripts/smoke-card-worktree.ts`              | smoke fixture, not a store                        |
-| `scripts/smoke-codex-simulator.ts`            | smoke fixture, not a store                        |
-| `scripts/smoke-coordination.ts`               | smoke fixture, not a store                        |
-| `scripts/smoke-just-do-it-execution.ts`       | `mkdtemp` only; no durable record, not a writer   |
+| module                                        | disposition                                          |
+| --------------------------------------------- | ---------------------------------------------------- |
+| `lib/app-settings.ts`                         | canonical — app settings                             |
+| `lib/atomic-json-store.ts`                    | shared helper, owns no state                         |
+| `lib/card-host-operations.ts`                 | canonical manifest; Git-backed candidate publication |
+| `lib/graph-identity-store.ts`                 | canonical — graph identity index                     |
+| `lib/host-job-broker.ts`                      | canonical mutable job status; derived output log     |
+| `lib/just-do-it-planning-service.ts`          | canonical — planning instructions                    |
+| `lib/just-do-it-worklog.ts`                   | canonical revision history; derived HANDOFF/INDEX    |
+| `lib/just-do-it-worktree.ts`                  | canonical — workspace record; Git                    |
+| `lib/product-context.ts`                      | canonical — Context Library documents                |
+| `lib/project-registry.ts`                     | canonical — project registry; Git                    |
+| `lib/system-validation-runner.ts`             | cache — validation result; Git; `mkdir` lock         |
+| `lib/task-decomposition-context-workspace.ts` | immutable Run-input evidence; P3 orphan-cleanup gap  |
+| `lib/task-decomposition-context.ts`           | canonical — feature context and attachments          |
+| `lib/task-decomposition-runs.ts`              | canonical — Runs and candidates                      |
+| `lib/task-graph.ts`                           | canonical — nodes; derived listing normalization     |
+| `lib/whats-next-context.ts`                   | canonical — instructions                             |
+| `lib/whats-next-runs.ts`                      | canonical — Runs and candidates                      |
+| `scripts/migrate-uuid-aliases.mjs`            | one-shot migration utility, not a store              |
+| `scripts/preview-just-do-it-harness.ts`       | fixture generator, not a store                       |
+| `scripts/smoke-app-server-code.ts`            | smoke fixture, not a store                           |
+| `scripts/smoke-card-worktree.ts`              | smoke fixture, not a store                           |
+| `scripts/smoke-codex-simulator.ts`            | smoke fixture, not a store                           |
+| `scripts/smoke-coordination.ts`               | smoke fixture, not a store                           |
+| `scripts/smoke-just-do-it-execution.ts`       | `mkdtemp` only; no durable record, not a writer      |
 
 Modules invoking `git` but performing no filesystem mutation — `lib/just-do-it-git.ts`,
 `lib/just-do-it-artifacts.ts`, `lib/github-delivery.ts` — own no write unit and appear only in
