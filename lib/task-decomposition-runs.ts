@@ -136,6 +136,15 @@ export async function startTaskDecompositionRun(
   project: RegisteredProject,
   input: RunRequest,
 ) {
+  return mutateTaskDecomposition(project, () =>
+    startTaskDecompositionRunUnlocked(project, input),
+  );
+}
+
+async function startTaskDecompositionRunUnlocked(
+  project: RegisteredProject,
+  input: RunRequest,
+) {
   validateRunRequest(input);
   const profile: AgentProfile = {
     agent: input.agent,
@@ -346,6 +355,24 @@ export async function startTaskDecompositionRun(
   return record;
 }
 
+async function readAvailableProposalRun(
+  project: RegisteredProject,
+  runId: string,
+) {
+  const recordPath = path.join(
+    taskDecompositionRunPath(project, runId),
+    'run.json',
+  );
+  try {
+    return await readTaskDecompositionRun(project, runId);
+  } catch (error) {
+    const failure = error as NodeJS.ErrnoException;
+    if (failure.code === 'ENOENT' && failure.path === recordPath)
+      throw new PublicApiError('The Candidate proposal is unavailable.', 400);
+    throw error;
+  }
+}
+
 export async function readTaskDecompositionRun(
   project: RegisteredProject,
   runId: string,
@@ -411,6 +438,16 @@ export async function acceptTaskDecompositionCandidate(
   runId: string,
   candidateId: string,
 ) {
+  return mutateTaskDecomposition(project, () =>
+    acceptTaskDecompositionCandidateUnlocked(project, runId, candidateId),
+  );
+}
+
+async function acceptTaskDecompositionCandidateUnlocked(
+  project: RegisteredProject,
+  runId: string,
+  candidateId: string,
+) {
   if (
     [...activeRuns.values()].some(
       (active) =>
@@ -423,7 +460,7 @@ export async function acceptTaskDecompositionCandidate(
       400,
     );
   }
-  const run = await readTaskDecompositionRun(project, runId);
+  const run = await readAvailableProposalRun(project, runId);
   if (run.result?.outcome !== 'proposal') {
     throw new PublicApiError('The Candidate proposal is unavailable.', 400);
   }
@@ -520,6 +557,16 @@ export async function discardTaskDecompositionCandidate(
   runId: string,
   candidateId: string,
 ) {
+  return mutateTaskDecomposition(project, () =>
+    discardTaskDecompositionCandidateUnlocked(project, runId, candidateId),
+  );
+}
+
+async function discardTaskDecompositionCandidateUnlocked(
+  project: RegisteredProject,
+  runId: string,
+  candidateId: string,
+) {
   if (
     [...activeRuns.values()].some(
       (active) =>
@@ -532,7 +579,7 @@ export async function discardTaskDecompositionCandidate(
       400,
     );
   }
-  const requestedRun = await readTaskDecompositionRun(project, runId);
+  const requestedRun = await readAvailableProposalRun(project, runId);
   if (requestedRun.result?.outcome !== 'proposal') {
     throw new PublicApiError('The Candidate proposal is unavailable.', 400);
   }
@@ -1050,6 +1097,29 @@ function validateRunId(runId: string) {
 
 function runKey(project: RegisteredProject, runId: string) {
   return `${project.id}:${runId}`;
+}
+
+const mutationRuntime = globalThis as typeof globalThis & {
+  taskDecompositionMutations?: Map<string, Promise<unknown>>;
+};
+const mutations = (mutationRuntime.taskDecompositionMutations ??= new Map<
+  string,
+  Promise<unknown>
+>());
+
+async function mutateTaskDecomposition<T>(
+  project: RegisteredProject,
+  work: () => Promise<T>,
+): Promise<T> {
+  const previous = mutations.get(project.planningPath) ?? Promise.resolve();
+  const next = previous.catch(() => undefined).then(work);
+  mutations.set(project.planningPath, next);
+  try {
+    return (await next) as T;
+  } finally {
+    if (mutations.get(project.planningPath) === next)
+      mutations.delete(project.planningPath);
+  }
 }
 
 function getActiveRuns() {
