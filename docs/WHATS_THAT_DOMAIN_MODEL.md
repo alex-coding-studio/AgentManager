@@ -90,17 +90,30 @@ infers to keep identity, persistence or lifecycle coherent.
 
 ```text
 Item
-├── title: required text                 user-specified
-├── note: optional text                  user-specified
-├── photos: zero or more attachments     user-specified
-├── id: stable identity                  Agent-inferred
-└── createdAt: creation time             Agent-inferred when justified
+├── Primary fields
+│   ├── title: required text
+│   ├── note: optional text
+│   └── photos: zero or more attachments
+├── Other fields · 2                     collapsed
+└── System fields                        hidden
 ```
 
 The Agent must not add a generic template of `id`, `createdAt`, `updatedAt`, soft-delete,
 sync and audit fields to every Entity merely for completeness. Each inferred field needs a
-concrete purpose in current product context. System fields stay collapsed on the Canvas
-and remain inspectable in Entity details.
+concrete purpose in current product context.
+
+Field data rules and display importance are separate. A field may be optional but still
+primary because the user cares about it. A technically required field may remain hidden
+because the Host owns it rather than the product experience.
+
+- primary business fields appear directly on the Entity card;
+- secondary business fields appear under one collapsed `Other fields · N` row;
+- system fields such as stable IDs, schema revision and storage coordination remain hidden
+  from the normal card and do not contribute to the secondary-field count.
+
+The Agent assigns display importance from the user's language and current product meaning.
+The user may correct that judgment in natural language, for example, "Quantity is important;
+show it as a primary Item field." The user does not maintain a presentation schema by hand.
 
 ### Relationship
 
@@ -127,7 +140,9 @@ and consistency checks.
 
 ## Natural-language-first interaction
 
-The persistent Canvas composer accepts instructions without requiring a selection:
+The first view is an empty Canvas with no onboarding Card, plus button, blank-Canvas creation
+gesture or manual Entity form. A persistent bottom-right Composer is the only creation
+entrypoint and accepts instructions without requiring a selection:
 
 ```text
 Describe an entity, field, relationship or rule to add or change…
@@ -138,6 +153,12 @@ for a concrete user request. One instruction may create one Entity or several En
 the user's wording exposes several clear domain boundaries. The Harness imposes no arbitrary
 one-to-five output count.
 
+While an Agent runs, the Composer becomes a compact control bar showing the Agent, objective
+elapsed time, current observable activity and cancel. The Canvas retains its last valid
+model and does not render a fake Domain Entity or partial generated model. A valid result
+appears atomically; clarification, failure and cancellation leave the Canvas unchanged and
+restore the Instruction.
+
 Selection narrows attention but is not an authorization boundary:
 
 | Selection        | Agent scope                                                       |
@@ -146,6 +167,24 @@ Selection narrows attention but is not an authorization boundary:
 | One Entity       | Focus on that Entity and inspect every relationship it may affect |
 | Several Entities | Focus on their shared meaning and relationships                   |
 | One Relationship | Revise that relationship and its attached constraints             |
+
+Entity cards reuse the neutral round-checkmark multi-selection pattern already validated in
+What’s Next. The checkmark adds an Entity to the discussion boundary; clicking the card body
+opens details. The Composer summarizes selected Entity names and lets the user clear one or
+all selections.
+
+Selection does not encode edge direction, dependency, inheritance or containment. Those
+meanings come from the user's Instruction and the Agent's supported interpretation. Two or
+more selected Entities define primary Context, not a user-drawn relationship.
+
+To keep Context cost bounded:
+
+- the model's compact identity, title, summary and relationship index is always available;
+- selected Entities, their full definitions and relationships among them are primary;
+- direct neighbors are related summaries available for on-demand reading;
+- unrelated full Entity definitions are not injected eagerly;
+- the Agent may read or update an unselected Entity only when model consistency requires it,
+  and the change summary must name that expansion.
 
 The Agent may update related elements outside the selection when the requested change
 requires model consistency. The resulting change summary names every affected element.
@@ -159,9 +198,10 @@ one operation and must not add nominal Entities merely to make the Canvas look c
 
 ## Entity editing
 
-Selecting an Entity opens details with its business description, business fields, collapsed
-system fields, relationships and constraints. The primary edit control remains natural
-language rather than a database property grid.
+Selecting an Entity opens details with its business description, primary and secondary
+business fields, relationships and constraints. The primary edit control remains natural
+language rather than a database property grid. System fields are not part of the ordinary
+details surface.
 
 For example:
 
@@ -174,16 +214,11 @@ slice.
 
 ## Relationship creation and editing
 
-Dragging a connection from one Entity to another expresses only an intent to discuss those
-two Entities. Releasing the connection opens a required natural-language input. It does not
-create an unlabeled edge.
-
-The input shows immutable endpoint context, for example:
+Relationship creation uses the same Composer and multi-selection model rather than a second
+drag-to-connect mode. The user may select Item and Container and write:
 
 ```text
-Container → Item
-
-Describe how these two things should be related…
+A Container is an Item with the additional ability to manage other Items.
 ```
 
 The Agent resolves semantic name, direction, inverse meaning, cardinality and relevant
@@ -191,10 +226,14 @@ constraints. If the instruction is sufficiently clear, the valid result becomes 
 current formal relationship immediately. If it is materially ambiguous, the Agent asks a
 clarifying question before changing the model.
 
-Clicking an existing edge reopens the same natural-language flow. The Agent revises the
-relationship in place and retains its stable identity when its conceptual meaning remains
-the same. Replacing one meaning with another creates an explicit relationship change in
-revision history.
+The selected pair or group narrows primary Context but does not predetermine who depends on
+whom. More than two Entities may participate in one modeling instruction. Clicking an
+existing edge focuses that relationship in the Composer. The Agent revises it in place and
+retains stable identity when its conceptual meaning remains the same. Replacing one meaning
+with another creates an explicit relationship change in revision history.
+
+Drag-to-connect, handles and a manual relationship-type picker remain deferred efficiency
+shortcuts. They are not part of the first slice.
 
 ## Whole-model instructions
 
@@ -264,7 +303,7 @@ recomputes its derived visual relationships atomically.
 ## Canvas and inspection
 
 The first implementation should reuse the installed React Flow foundation for pan, zoom,
-selection, custom nodes, handles and labeled edges. It should not extend `TaskGraphCanvas`
+selection, custom nodes and labeled edges. It should not extend `TaskGraphCanvas`
 with Domain semantics. A separate `DomainModelCanvas` may share low-level controls, theme
 tokens, run status, dialogs and inspector primitives.
 
@@ -278,9 +317,10 @@ can clarify a dense UML-like view. User positions persist as separate presentati
 Automatic layout remains available for the first arrangement, newly generated elements and
 an explicit reset; it must not overwrite a user arrangement on every model revision.
 
-An Entity card shows the name and a small set of meaningful business fields. System fields,
-full descriptions and rules remain in details. Relationship labels show semantic meaning
-and cardinality. Self-containment is visible rather than hidden in Markdown.
+An Entity card shows its name, one concise meaning and primary business fields. One collapsed
+row owns all secondary business fields. System fields stay hidden. Relationship labels show
+semantic meaning and cardinality. Self-containment is visible rather than hidden in
+Markdown.
 
 Source remains hidden by default. A compact context control reveals the Source, accepted
 Product Design Features and other evidence available to the current Agent operation.
@@ -290,17 +330,18 @@ operation: the Agent identifies affected references and derived views, applies t
 atomically and provides restore. It must not leave dangling edges or silently delete
 unrelated product meaning.
 
-## Conceptual and storage views
+## One model with progressive disclosure
 
-The first slice is a conceptual Domain view: product Entities, their meaning, fields,
-relationships and invariants. It must not require the user to choose SwiftData, JSON or a
-relational database.
+What’s That? has one Domain Canvas and one canonical Entity identity. Natural-language
+meaning and structured fields are two representations of the same Entity, not separate
+Conceptual and Storage Layers. The product does not duplicate nodes or ask the user to keep
+two projections synchronized.
 
-A later Storage or ERD projection may map the same model to persistence types, foreign keys,
-indexes, delete rules and migrations. It is a view or implementation mapping over the
-current domain meaning, not a second manually synchronized model. Storage choices that
-materially affect product behavior may use the existing lightweight Implementation Approach
-discussion before Just Do It.
+The structured model may include semantic field types and relationships useful to later
+implementation, but the normal Canvas remains product-facing. Storage-specific indexes,
+foreign keys, migrations or SwiftData choices appear in Entity details only when they
+materially affect product meaning, or in a lightweight Implementation Approach before Just
+Do It. They do not create another Layer.
 
 ## Agent Harness
 
@@ -330,6 +371,9 @@ enforces these high-level rules:
 14. Never silently rewrite Source or Product Design. When a Domain change exposes a conflict
     with upstream product meaning, apply only the requested Domain change and report the
     upstream inconsistency for explicit follow-up.
+15. Use the compact whole-model index for discovery, selected Entity definitions as primary
+    Context and related Entity bodies on demand. Selection narrows cost but never supplies
+    relationship semantics or blocks a required consistency update.
 
 The Host validates schema, referenced identifiers, base revision and atomicity before
 changing canonical state. A late result from an older base revision is stale and cannot
@@ -391,19 +435,20 @@ The first slice should prove one complete modeling loop:
 
 1. Open What’s That? as an independent project module.
 2. Load hidden Source and accepted Product Design context.
-3. Show an empty or existing Domain Canvas.
+3. Show an empty Canvas with only the persistent Composer when no model exists.
 4. Accept a required Canvas-level natural-language instruction with no selection.
 5. Run one Agent and display objective elapsed time.
 6. Validate and atomically apply generated Entities, fields, relationships and constraints.
 7. Render explicit relationships, inheritance and one derived self-containment loop.
 8. Allow the user to arrange Entities without changing semantic model facts.
-9. Select an Entity and revise it through natural language.
-10. Drag between two Entities, require relationship instruction and create the valid labeled
-    relationship.
-11. Preserve stable identity and revision history across both changes.
-12. Cancel or fail one Run without changing the current model.
-13. Restore the most recent successful model change.
-14. Pin one exact model revision in a downstream handoff.
+9. Show primary business fields, collapse secondary fields and hide system fields.
+10. Select one Entity and revise it through natural language.
+11. Select Item and Container through round checkmarks, describe their relationship in the
+    Composer and create the valid labeled relationship without drag direction.
+12. Preserve stable identity and revision history across both changes.
+13. Cancel or fail one Run without changing the current model.
+14. Restore the most recent successful model change.
+15. Pin one exact model revision in a downstream handoff.
 
 Use HereItIs as the first scenario: create Item and Container, make Container an Item with
 child-management capability, and express that a Container can contain both ordinary Items
@@ -421,7 +466,8 @@ The first slice does not require:
 - manual maintenance of every inferred system field;
 - What’s Next Intention or Motion controls;
 - Candidate acceptance or Finalize states;
-- several visual projections before the conceptual view is proven;
+- a second Conceptual, Storage or ERD Canvas;
+- blank-Canvas creation, plus buttons, drag-to-connect or manual relationship-type controls;
 - automatic synchronization from source code back into product meaning.
 
 ## Evaluation
@@ -429,8 +475,11 @@ The first slice does not require:
 The first slice succeeds when a user who does not maintain UML or database schemas can:
 
 - describe one Entity in ordinary language and receive a useful current model;
-- see requested business fields separately from justified Agent-inferred fields;
-- state a relationship without selecting nodes and see every relevant visual relationship;
+- see primary business fields directly, secondary business fields on demand and no normal
+  system-field noise;
+- optionally select several Entities to bound Context, then describe their relationship
+  without encoding direction in the UI;
+- state a relationship with no selection and see every relevant visual relationship;
 - express `Container is-a Item` and receive a coherent cross-model refactor;
 - see self-containment, inheritance, cardinality and constraints on the Canvas;
 - correct the model through another natural-language instruction without a Finalize flow;
@@ -446,6 +495,4 @@ expanding the product contract now:
 1. The smallest visual distinction between explicit, inferred and derived meaning that does
    not resemble acceptance status.
 2. The exact revision substrate before shared companion-repository Git versioning exists.
-3. Whether the first slice needs direct structured field correction in addition to natural
-   language.
-4. The measured topology threshold for replacing Dagre with ELK.
+3. The measured topology threshold for replacing Dagre with ELK.
