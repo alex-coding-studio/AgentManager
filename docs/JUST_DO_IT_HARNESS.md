@@ -31,12 +31,12 @@ The script prints the paths and never uses the registered project's data.
   references against the host-observed set. It returns data, never a lifecycle
   transition or an external write.
 
-| Stage | Agent response | Stop boundary |
-| --- | --- | --- |
-| Planning | Current Overview and step contracts | User reviews and finalizes the whole Plan |
-| Execution | Deliverable, blocked response, or error; evidence and remaining work | User inspects, requests review, or gives feedback |
-| Review | Ready/changes-needed recommendation, blocking findings, advisories and checks for one output | User chooses correction or acceptance |
-| Todo | Issue-ready draft or a concrete deferral decision request | Host handles authorized Issue creation separately |
+| Stage     | Agent response                                                                               | Stop boundary                                     |
+| --------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| Planning  | Current Overview and step contracts                                                          | User reviews and finalizes the whole Plan         |
+| Execution | Deliverable, blocked response, or error; evidence and remaining work                         | User inspects, requests review, or gives feedback |
+| Review    | Ready/changes-needed recommendation, blocking findings, advisories and checks for one output | User chooses correction or acceptance             |
+| Todo      | Issue-ready draft or a concrete deferral decision request                                    | Host handles authorized Issue creation separately |
 
 Inputs are semantic, not a required filename inventory. Outputs describe visible
 behavior with technical evidence available through references. Step counts are

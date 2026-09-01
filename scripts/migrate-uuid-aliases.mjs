@@ -114,7 +114,7 @@ export async function migrateUuidAliases(
           const mapped = plans.find((p) => p.scope === scope)?.aliases[alias];
           if (!mapped) return match;
           protectedPaths.push(`${scope}/nodes/${mapped}`);
-          return `\u0000PATH${protectedPaths.length - 1}\u0000`;
+          return `\uE000PATH${protectedPaths.length - 1}\uE000`;
         },
       );
       value = value.replace(
@@ -122,7 +122,7 @@ export async function migrateUuidAliases(
         (alias) => plan.aliases[alias] ?? alias,
       );
       return value.replace(
-        /\u0000PATH(\d+)\u0000/g,
+        /\uE000PATH(\d+)\uE000/g,
         (_, i) => protectedPaths[Number(i)],
       );
     };

@@ -58,16 +58,16 @@ implementation or silently change the accepted Plan.
 
 ## Required checks
 
-| Capability | Evidence required | When it gates work |
-|---|---|---|
-| Agent and Skills | Runtime starts; enabled catalog is available; selected entry points are readable | Before the relevant Session starts |
-| Card workspace | Recorded repository, worktree, branch and base match actual Git state | Before source writes or Git operations |
-| Files and caches | Required project and cache locations work under the selected execution permissions | Before tools using those locations |
-| Toolchain | Required CLI, Xcode and SDK are available and compatible with the project | Before the relevant build or test |
-| Simulator | The actual runner can query the device service and use the selected destination | Before simulator validation |
-| Physical device | Device-service access, connection and trust are sufficient | When the Action requires phone installation or acceptance |
-| GitHub publication | Current identity, canonical repository, visibility, permissions and branch target are verified | Immediately before remote writes |
-| Remote main baseline | Intended default branch exists with the approved baseline before Card publication | Before the first Card push or PR in a new remote |
+| Capability           | Evidence required                                                                              | When it gates work                                        |
+| -------------------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| Agent and Skills     | Runtime starts; enabled catalog is available; selected entry points are readable               | Before the relevant Session starts                        |
+| Card workspace       | Recorded repository, worktree, branch and base match actual Git state                          | Before source writes or Git operations                    |
+| Files and caches     | Required project and cache locations work under the selected execution permissions             | Before tools using those locations                        |
+| Toolchain            | Required CLI, Xcode and SDK are available and compatible with the project                      | Before the relevant build or test                         |
+| Simulator            | The actual runner can query the device service and use the selected destination                | Before simulator validation                               |
+| Physical device      | Device-service access, connection and trust are sufficient                                     | When the Action requires phone installation or acceptance |
+| GitHub publication   | Current identity, canonical repository, visibility, permissions and branch target are verified | Immediately before remote writes                          |
+| Remote main baseline | Intended default branch exists with the approved baseline before Card publication              | Before the first Card push or PR in a new remote          |
 
 Use Passed, Blocked, Not checked and Not applicable states. A project entry point
 that the first Action has not created yet is pending, not an unexplained failure.
