@@ -107,3 +107,75 @@ void test('one-time migration renames folders and live references without changi
     await rm(root, { recursive: true, force: true });
   }
 });
+
+void test('migration preserves user text that looks like an internal placeholder', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'uuid-migration-hostile-'));
+  try {
+    const planning = path.join(root, 'planning');
+    const uid = '20000000-0000-4000-8000-2222abcdef12';
+    const save = async (file, value) => {
+      const target = path.join(planning, file);
+      await mkdir(path.dirname(target), { recursive: true });
+      await writeFile(
+        target,
+        typeof value === 'string' ? value : JSON.stringify(value),
+      );
+    };
+    const NUL = String.fromCharCode(0);
+    const PUA = String.fromCharCode(0xe000);
+    const hostile = [
+      'private use literal: ' + PUA + ' and ' + PUA + 'icon',
+      'old NUL sentinel shape: ' + NUL + 'PATH0' + NUL,
+      'old PUA sentinel shape: ' + PUA + 'PATH0' + PUA,
+      'current placeholder shape: PATH-00000000-0000-4000-8000-000000000000-0-END',
+    ].join('\n');
+
+    await save('whats-next/identities.json', {
+      schemaVersion: 1,
+      aliases: { 'NODE-0001': uid },
+      formalAliases: ['NODE-0001'],
+    });
+    await save('whats-next/nodes/NODE-0001/node.json', {
+      id: 'NODE-0001',
+      uid,
+      title: hostile,
+      relations: { derivedFrom: [], dependsOn: [] },
+      resources: [{ path: 'whats-next/nodes/NODE-0001/output.md' }],
+    });
+    const markdown =
+      hostile + '\n\nsee whats-next/nodes/NODE-0001/output.md and NODE-0001\n';
+    await save('whats-next/nodes/NODE-0001/output.md', markdown);
+
+    await migrateUuidAliases(planning, path.join(root, 'backup'), true);
+
+    const migratedDirectory = (
+      await readdir(path.join(planning, 'whats-next/nodes'))
+    )[0];
+    const node = JSON.parse(
+      await readFile(
+        path.join(planning, 'whats-next/nodes', migratedDirectory, 'node.json'),
+        'utf8',
+      ),
+    );
+
+    assert.equal(node.title, hostile);
+    assert.equal(node.id, migratedDirectory);
+    assert.equal(node.uid, uid);
+
+    const migratedMarkdown = await readFile(
+      path.join(planning, 'whats-next/nodes', migratedDirectory, 'output.md'),
+      'utf8',
+    );
+    assert.ok(migratedMarkdown.startsWith(hostile));
+    assert.ok(
+      migratedMarkdown.includes(
+        'whats-next/nodes/' + migratedDirectory + '/output.md',
+      ),
+    );
+    assert.ok(migratedMarkdown.includes('and ' + migratedDirectory));
+    assert.ok(!migratedMarkdown.includes('undefined'));
+    assert.ok(!migratedMarkdown.includes('NODE-0001'));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

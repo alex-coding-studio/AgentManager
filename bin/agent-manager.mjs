@@ -5,7 +5,10 @@ import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
-const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const packageRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+);
 const args = process.argv.slice(2);
 if (args[0] === 'help' || args[0] === '--help' || args[0] === '-h') {
   printHelp();
@@ -19,13 +22,23 @@ if (command !== 'start' && command !== 'dev') {
   process.exit(1);
 }
 
-if (command === 'start' && !existsSync(path.join(packageRoot, '.next', 'BUILD_ID'))) {
+if (
+  command === 'start' &&
+  !existsSync(path.join(packageRoot, '.next', 'BUILD_ID'))
+) {
   console.error('AgentManager has not been built yet.');
   console.error(`Run: cd ${packageRoot} && npm install && npm run build`);
   process.exit(1);
 }
 
-const nextBinary = path.join(packageRoot, 'node_modules', 'next', 'dist', 'bin', 'next');
+const nextBinary = path.join(
+  packageRoot,
+  'node_modules',
+  'next',
+  'dist',
+  'bin',
+  'next',
+);
 if (!existsSync(nextBinary)) {
   console.error('AgentManager dependencies are missing.');
   console.error(`Run: cd ${packageRoot} && npm install`);

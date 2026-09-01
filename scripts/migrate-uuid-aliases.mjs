@@ -8,6 +8,7 @@ import {
   writeFile,
   lstat,
 } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { bindIdentity, uuidAlias } from '../lib/graph-identity.ts';
@@ -108,23 +109,29 @@ export async function migrateUuidAliases(
   for (const plan of plans) {
     const replace = (text) => {
       const protectedPaths = [];
+      let marker = `PATH-${randomUUID()}`;
+      while (text.includes(marker)) marker = `PATH-${randomUUID()}`;
+      const placeholder = new RegExp(
+        `${marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-(\\d+)-END`,
+        'g',
+      );
       let value = text.replace(
         /(task-graph|whats-next)\/nodes\/(NODE-[0-9a-f]+)(?=\/|\b)/g,
         (match, scope, alias) => {
           const mapped = plans.find((p) => p.scope === scope)?.aliases[alias];
           if (!mapped) return match;
           protectedPaths.push(`${scope}/nodes/${mapped}`);
-          return `\u0000PATH${protectedPaths.length - 1}\u0000`;
+          return `${marker}-${protectedPaths.length - 1}-END`;
         },
       );
       value = value.replace(
         /\b(?:NODE|CANDIDATE)-[0-9a-f]+\b/g,
         (alias) => plan.aliases[alias] ?? alias,
       );
-      return value.replace(
-        /\u0000PATH(\d+)\u0000/g,
-        (_, i) => protectedPaths[Number(i)],
-      );
+      return value.replace(placeholder, (match, index) => {
+        const restored = protectedPaths[Number(index)];
+        return restored === undefined ? match : restored;
+      });
     };
     const transform = (value) =>
       typeof value === 'string'

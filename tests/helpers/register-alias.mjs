@@ -1,11 +1,4 @@
-import nodeModule from 'node:module';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { installResolveHook } from './install-resolve-hook.mjs';
 import { resolve } from './resolve-alias.mjs';
 
-if (typeof nodeModule.registerHooks === 'function')
-  nodeModule.registerHooks({ resolve });
-else
-  nodeModule.register(
-    './resolve-alias.mjs',
-    pathToFileURL(fileURLToPath(import.meta.url)),
-  );
+installResolveHook(resolve, new URL('./resolve-alias.mjs', import.meta.url));

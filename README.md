@@ -115,16 +115,30 @@ Set `AGENT_MANAGER_ALLOWED_HOSTS` to accept additional `Host` values beyond
 ## Verification
 
 ```bash
-npm run typecheck
-npm run lint
-npm run test:settings
-npm run test:boundary
-npm run test:registry
-npm run build
+npm run test:ci
 ```
 
-These are focused commands, not the full suite. The repository has one test command
-per domain; run the one that covers what changed.
+That is the single gate CI runs: format check, lint, typecheck, the full portable
+test suite, and the production build. Run it before opening a pull request.
+
+While working, the focused commands are faster — one per domain:
+
+```bash
+npm run test:graph
+npm run test:runs
+npm run test:whats-next
+npm run test:boundary
+npm run test:registry
+npm run test:implementation-execution
+```
+
+`npm test` runs every portable suite without the build. See `package.json` for the
+full list.
+
+Four commands are deliberately outside CI because they need a signed-in Codex CLI or
+host-specific filesystem behavior: `test:coordination-smoke`, `test:simulator-access`,
+`test:worktree-sandbox` and `test:appserver-code-smoke`. Run them locally when
+changing the code they cover.
 
 See [Product Foundation](docs/PRODUCT.md),
 [Architecture Decisions](docs/ARCHITECTURE.md), and the
