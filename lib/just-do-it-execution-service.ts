@@ -457,6 +457,11 @@ export function createExecutionService(
         throw new Error('Card changed. Reload before trying again.');
       if (card.run?.status === 'running')
         throw new Error('Stop planning before executing.');
+      const dependencyReview = await store.dependencyReview(project, card);
+      if (dependencyReview.length)
+        throw new Error(
+          `Review unfinished lineage before execution: ${dependencyReview.map((item) => item.uid).join(', ')}`,
+        );
       const coordinationSettings = {
         profile:
           input.coordination?.profile ??

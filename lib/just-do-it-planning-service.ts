@@ -9,6 +9,7 @@ import {
   lstat,
 } from 'node:fs/promises';
 import path from 'node:path';
+import trash from 'trash';
 import { validateAgentProfile, type AgentProfile } from './agent-profile.ts';
 import type { CardExecution } from './just-do-it-execution-types.ts';
 import type { RegisteredProject } from './project-registry.ts';
@@ -71,6 +72,12 @@ export type PlanningCard = {
   updatedAt: string;
   finalizedAt: string | null;
   execution?: CardExecution;
+  dependencyDecisions?: Record<string, 'dependency' | 'lineage-only'>;
+};
+export type PendingDependencyReview = {
+  id: string;
+  uid: string;
+  title: string;
 };
 export type StartPlanningInput = {
   cardId: string;
@@ -135,6 +142,7 @@ export function createPlanningService(
   transport: Transport = startLocalAgentRun,
   active = defaultActive,
   timeoutMs = 600_000,
+  trashCard: (path: string) => Promise<unknown> = trash,
 ) {
   async function load(project: RegisteredProject, cardId: string) {
     await checkStorageRoot(project);
@@ -245,6 +253,153 @@ export function createPlanningService(
     return cards.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
+  async function dependencyReview(
+    project: RegisteredProject,
+    card: PlanningCard,
+  ): Promise<PendingDependencyReview[]> {
+    const [sources, cards] = await Promise.all([
+      listPlanningSources(project),
+      list(project),
+    ]);
+    return pendingDependencyReview(card, sources, cards);
+  }
+
+  async function dependencyReviews(
+    project: RegisteredProject,
+    cards: PlanningCard[],
+    sources: PlanningSource[],
+  ) {
+    await checkStorageRoot(project);
+    return Object.fromEntries(
+      cards.map((card) => [
+        card.id,
+        pendingDependencyReview(card, sources, cards),
+      ]),
+    );
+  }
+
+  function pendingDependencyReview(
+    card: PlanningCard,
+    sources: PlanningSource[],
+    cards: PlanningCard[],
+  ) {
+    const dependencies = new Set(card.source.dependsOn);
+    const decisions = card.dependencyDecisions ?? {};
+    return sources
+      .filter(
+        (source) =>
+          source.uid !== card.source.uid &&
+          (card.source.derivedFrom ?? []).some(
+            (id) => id === source.uid || id === source.id,
+          ) &&
+          ![...dependencies].some(
+            (id) => id === source.uid || id === source.id,
+          ) &&
+          decisions[source.uid] !== 'lineage-only' &&
+          !sourceDelivered(cards, source),
+      )
+      .map(({ id, uid, title }) => ({ id, uid, title }));
+  }
+
+  async function assertDependencyReview(
+    project: RegisteredProject,
+    card: PlanningCard,
+  ) {
+    const pending = await dependencyReview(project, card);
+    if (pending.length)
+      throw new Error(
+        `DEPENDENCY_REVIEW_REQUIRED:${pending.map((item) => item.uid).join(',')}`,
+      );
+  }
+
+  async function resolveDependency(
+    project: RegisteredProject,
+    cardId: string,
+    expectedRevision: number,
+    sourceUid: string,
+    decision: 'dependency' | 'lineage-only',
+  ) {
+    assertCardUuid(cardId);
+    assertCardUuid(sourceUid);
+    assertRevision(expectedRevision);
+    if (!['dependency', 'lineage-only'].includes(decision))
+      throw new Error('Invalid dependency decision.');
+    const card = await read(project, cardId);
+    if (card.revision !== expectedRevision)
+      throw new Error('Card changed. Reload before trying again.');
+    if (card.run?.status === 'running')
+      throw new Error('Stop the Planning Agent before reviewing dependencies.');
+    if (card.plan?.status === 'finalized' || card.execution?.runs.length)
+      throw new Error(
+        'Dependency review is locked after execution is confirmed.',
+      );
+    const pending = await dependencyReview(project, card);
+    const source = pending.find((item) => item.uid === sourceUid);
+    if (!source) throw new Error('Dependency candidate is no longer pending.');
+    const next: PlanningCard = {
+      ...card,
+      source: {
+        ...card.source,
+        dependsOn:
+          decision === 'dependency'
+            ? [...new Set([...card.source.dependsOn, source.uid])]
+            : card.source.dependsOn,
+      },
+      dependencyDecisions: {
+        ...card.dependencyDecisions,
+        [source.uid]: decision,
+      },
+      plan: null,
+      planRef: undefined,
+      actions: [],
+      run: null,
+      finalizedAt: null,
+    };
+    return commit(project, card.revision, next, {
+      kind: 'user-input',
+      stage: 'planning',
+      actionId: null,
+      text:
+        decision === 'dependency'
+          ? `User marked ${source.title} as an execution prerequisite.`
+          : `User marked ${source.title} as conceptual lineage only.`,
+    });
+  }
+
+  async function deleteCard(
+    project: RegisteredProject,
+    cardId: string,
+    expectedRevision: number,
+  ) {
+    assertCardUuid(cardId);
+    assertRevision(expectedRevision);
+    const card = await read(project, cardId);
+    if (card.revision !== expectedRevision)
+      throw new Error('Card changed. Reload before trying again.');
+    if (card.run?.status === 'running')
+      throw new Error('Stop the Planning Agent before deleting this Card.');
+    if (
+      card.plan?.status === 'finalized' ||
+      card.actions.length ||
+      card.execution?.runs.length
+    )
+      throw new Error(
+        'Only a Card without a confirmed Plan or execution may be deleted.',
+      );
+    const directory = path.join(root(project), cardId);
+    const actualRoot = await realpath(root(project));
+    const actualDirectory = await realpath(directory);
+    const info = await lstat(actualDirectory);
+    if (
+      !info.isDirectory() ||
+      info.isSymbolicLink() ||
+      !actualDirectory.startsWith(actualRoot + path.sep)
+    )
+      throw new Error('Card storage ownership changed.');
+    await trashCard(actualDirectory);
+    return { deleted: true as const, cardId };
+  }
+
   async function importSource(
     project: RegisteredProject,
     module: string,
@@ -276,6 +431,7 @@ export function createPlanningService(
       createdAt: now,
       updatedAt: now,
       finalizedAt: null,
+      dependencyDecisions: {},
     };
     try {
       return await commit(
@@ -424,6 +580,7 @@ export function createPlanningService(
       throw new Error(
         'The finalized Plan and acceptance checklist are locked.',
       );
+    await assertDependencyReview(project, card);
     const { log } = await load(project, input.cardId);
     if (
       input.targetId &&
@@ -680,6 +837,7 @@ export function createPlanningService(
         'The finalized Plan and acceptance checklist are locked.',
       );
     if (action === 'finalize') {
+      await assertDependencyReview(project, card);
       for (const step of card.plan.steps)
         validateAcceptanceCriteria(step.acceptanceCriteria);
       if (card.run?.status !== 'succeeded')
@@ -724,6 +882,10 @@ export function createPlanningService(
     list,
     read,
     importSource,
+    dependencyReview,
+    dependencyReviews,
+    resolveDependency,
+    deleteCard,
     start,
     update,
     sources: listPlanningSources,
@@ -731,6 +893,18 @@ export function createPlanningService(
 }
 
 export const planningService = createPlanningService();
+
+function sourceDelivered(cards: PlanningCard[], source: PlanningSource) {
+  const card = cards.find(
+    (item) => item.source.uid === source.uid || item.source.id === source.id,
+  );
+  return Boolean(
+    card?.actions.length &&
+    card.actions.every((action) =>
+      card.execution?.acceptedActionIds.includes(action.id),
+    ),
+  );
+}
 
 export async function readPlanningInstructions(project: RegisteredProject) {
   try {

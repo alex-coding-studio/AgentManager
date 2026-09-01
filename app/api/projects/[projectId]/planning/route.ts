@@ -25,14 +25,20 @@ export async function GET(
       readPlanningInstructions(project),
       readContextBrowser(project),
     ]);
+    const refreshedCards = await Promise.all(
+      cards.map((card) => executionService.refresh(project, card)),
+    );
     return Response.json(
       {
-        cards: await Promise.all(
-          cards.map((card) => executionService.refresh(project, card)),
-        ),
+        cards: refreshedCards,
         sources,
         instructions,
         folders,
+        dependencyReviews: await planningService.dependencyReviews(
+          project,
+          refreshedCards,
+          sources,
+        ),
       },
       { headers: { 'Cache-Control': 'no-store' } },
     );
@@ -96,6 +102,24 @@ export async function POST(
       await savePlanningInstructions(project, input.instructions);
       return Response.json({ ok: true });
     }
+    if (input.action === 'resolve-dependency')
+      return Response.json({
+        card: await planningService.resolveDependency(
+          project,
+          input.cardId,
+          input.expectedRevision,
+          input.sourceUid,
+          input.decision,
+        ),
+      });
+    if (input.action === 'delete-card')
+      return Response.json(
+        await planningService.deleteCard(
+          project,
+          input.cardId,
+          input.expectedRevision,
+        ),
+      );
     throw new Error('Unknown Planning operation.');
   } catch (error) {
     return failure(error);

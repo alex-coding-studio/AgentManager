@@ -55,6 +55,16 @@ export const chineseUi: Record<string, string> = {
   'Add development conventions or local Skill instructions. Leave empty to use the built-in workflow.':
     '填写开发约定、使用哪些本地 Skill 等。可以留空，系统会自动应用内置流程规则。',
   'Your additional requirements': '你的补充要求',
+  'Dependency review required': '需要确认依赖关系',
+  'This Card derives from unfinished Nodes that were not marked as prerequisites. Classify each one before planning or confirming this Card.':
+    '这张卡片来源于尚未完成、但未标记为前置依赖的节点。开始或确认计划前，请逐项确认它们的关系。',
+  'Conceptual source only': '仅作为概念来源',
+  'Add as prerequisite': '添加为前置依赖',
+  'Delete this Card': '删除这张卡片',
+  'Delete this Card?': '删除这张卡片？',
+  'The Just Do It Card and its unconfirmed draft will move to system Trash. The source Node in What’s Next or Break It Down remains unchanged.':
+    'Just Do It 卡片和未确认的计划草稿会移到系统废纸篓。What’s Next 或 Break It Down 中的来源节点不会改变。',
+  'Move Card to Trash': '移到废纸篓',
   'Model ID (optional)': '模型 ID（可选）',
   'Agent configuration': 'Agent 配置',
   'Plan together, execute one Action, then verify the output.':
