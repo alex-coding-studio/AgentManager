@@ -11,6 +11,7 @@ import {
   type ExecutionAccess,
 } from './local-agent-skills.ts';
 import type { ReasoningEffort } from './local-agent-model-types.ts';
+import type { CardEnvironmentManifest } from './card-host-operations.ts';
 
 export type LocalAgentKind = 'codex' | 'claude';
 
@@ -47,6 +48,11 @@ export type LocalAgentRunInput = {
   protectedPath?: string;
   gitWritePaths?: string[];
   primaryRepositoryPath?: string;
+  candidatePublication?: {
+    environment: CardEnvironmentManifest;
+    actionId: string;
+    roundId: string;
+  };
 };
 
 type CodexEvent =

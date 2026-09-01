@@ -19,6 +19,11 @@ commands. Project entry points define their own argument-based selection, such a
 targeted or skipped checks; the Host only executes the supplied executable and argument
 vector.
 
+Quick deterministic Host operations do not create another physical turn. Full Access Codex
+workers receive `publish_candidate`, which audits and publishes one clean Candidate HEAD
+through the Host. Long validation remains outside the model through System validation runs.
+See `CARD_HOST_OPERATIONS.md`.
+
 ## Push execution
 
 The Codex driver uses the experimental App Server protocol with the current local Codex

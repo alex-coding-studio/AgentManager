@@ -22,6 +22,12 @@ export type CodexAppServerDriverOptions = {
   arguments?: string[];
   environment?: NodeJS.ProcessEnv;
   brokerFactory: (input: AgentRuntimeThreadInput) => HostJobBroker;
+  hostTools?: Array<{
+    name: string;
+    description: string;
+    inputSchema: Record<string, unknown>;
+    call: (arguments_: Record<string, unknown>) => Promise<unknown>;
+  }>;
 };
 type Pending = {
   resolve: (value: unknown) => void;
@@ -66,9 +72,16 @@ export class CodexAppServerDriver implements AgentSessionDriver {
   private bufferedTurnMessages = new Map<string, RpcMessage[]>();
   private ready: Promise<void>;
   private brokerFactory: CodexAppServerDriverOptions['brokerFactory'];
+  private hostTools: Map<
+    string,
+    NonNullable<CodexAppServerDriverOptions['hostTools']>[number]
+  >;
 
   constructor(options: CodexAppServerDriverOptions) {
     this.brokerFactory = options.brokerFactory;
+    this.hostTools = new Map(
+      (options.hostTools ?? []).map((tool) => [tool.name, tool]),
+    );
     this.child = spawn(
       options.command ?? 'codex',
       options.arguments ?? ['app-server', '--stdio'],
@@ -119,6 +132,12 @@ export class CodexAppServerDriver implements AgentSessionDriver {
             },
           },
         },
+        ...[...this.hostTools.values()].map((tool) => ({
+          type: 'function',
+          name: tool.name,
+          description: tool.description,
+          inputSchema: tool.inputSchema,
+        })),
       ],
     })) as { thread: { id: string } };
     const thread = {
@@ -367,6 +386,36 @@ export class CodexAppServerDriver implements AgentSessionDriver {
 
   private async handleToolCall(message: RpcMessage) {
     const params = message.params ?? {};
+    const hostTool = this.hostTools.get(stringValue(params.tool));
+    if (hostTool) {
+      try {
+        const result = await hostTool.call(
+          (params.arguments as Record<string, unknown> | undefined) ?? {},
+        );
+        this.send({
+          id: message.id,
+          result: {
+            success: true,
+            contentItems: [{ type: 'inputText', text: JSON.stringify(result) }],
+          },
+        });
+      } catch (error) {
+        this.send({
+          id: message.id,
+          result: {
+            success: false,
+            contentItems: [
+              {
+                type: 'inputText',
+                text:
+                  error instanceof Error ? error.message : 'Host tool failed.',
+              },
+            ],
+          },
+        });
+      }
+      return;
+    }
     if (params.tool !== 'run_job') {
       this.send({
         id: message.id,

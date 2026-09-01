@@ -9,6 +9,7 @@ import {
 } from './local-agent-transport.ts';
 import { CodexAppServerDriver } from './codex-app-server-driver.ts';
 import { HostJobBroker } from './host-job-broker.ts';
+import { publishCardCandidate } from './card-host-operations.ts';
 
 export function startEventDrivenWorkerRun(
   agent: LocalAgentKind,
@@ -53,6 +54,37 @@ export function startEventDrivenWorkerRun(
               summary: `Running job: ${progress.label} — ${progress.outputTail}`,
             }),
         ),
+      hostTools: input.candidatePublication
+        ? [
+            {
+              name: 'publish_candidate',
+              description:
+                'Publish the current clean Candidate HEAD through the Host. The Host validates the full commit range, GitHub identity and permissions, pushes the Card branch, and creates or reuses its Draft PR.',
+              inputSchema: {
+                type: 'object',
+                additionalProperties: false,
+                required: ['baseSha', 'headSha', 'title', 'body'],
+                properties: {
+                  baseSha: { type: 'string' },
+                  headSha: { type: 'string' },
+                  title: { type: 'string' },
+                  body: { type: 'string' },
+                },
+              },
+              call: (arguments_) =>
+                publishCardCandidate({
+                  environment: input.candidatePublication!.environment,
+                  actionId: input.candidatePublication!.actionId,
+                  roundId: input.candidatePublication!.roundId,
+                  baseSha: stringArgument(arguments_.baseSha),
+                  headSha: stringArgument(arguments_.headSha),
+                  title: stringArgument(arguments_.title),
+                  body: stringArgument(arguments_.body),
+                  draft: true,
+                }),
+            },
+          ]
+        : [],
     });
     const profile: AgentProfile = {
       agent: 'codex' as const,
@@ -68,11 +100,15 @@ export function startEventDrivenWorkerRun(
       '\n\nExecution permissions: Full Access, selected in local Codex settings. There is no OS filesystem sandbox protecting the primary checkout or planning store. You must still work only in the Card worktree, preserve host-owned records, and follow the explicit PR and acceptance boundaries. Full Access is not authorization for unrelated actions.';
     const hostToolContext =
       '\n\nHost job tool: use run_job for builds, tests and other commands that may run longer than a quick inspection. The Host owns waiting, progress, logs and cancellation. Starting a job ends the current physical turn; AgentManager will create a continuation turn in this same thread only when the operating-system process exits. Never call wait or write_stdin and never start an overlapping replacement. Short read-only commands and file edits may use normal tools.';
+    const candidateToolContext = input.candidatePublication
+      ? '\n\nCandidate publication tool: after creating one or more local commits and reaching a clean Candidate HEAD, call publish_candidate once. Do not run gh auth, permission, push, PR creation or PR lookup commands yourself. The Host returns the Draft PR bound to the exact HEAD. Further repair commits may call it again with the new HEAD.'
+      : '';
     const turn = driver.startTurn(thread, {
       prompt:
         withSkillCatalog(input.prompt, catalog) +
         permissionContext +
-        hostToolContext,
+        hostToolContext +
+        candidateToolContext,
       onEvent: (event) => {
         if (event.type === 'activity')
           input.onActivity?.({ kind: 'message', summary: event.summary });
@@ -101,4 +137,10 @@ export function startEventDrivenWorkerRun(
       void driver?.close();
     },
   };
+}
+
+function stringArgument(value: unknown) {
+  if (typeof value !== 'string')
+    throw new Error('Candidate publication arguments must be strings.');
+  return value;
 }

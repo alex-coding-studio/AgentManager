@@ -244,6 +244,52 @@ else if(message.id===901){if(message.result?.success!==false)process.exit(2);sen
   assert.equal(result.finalOutput, 'PATH_REJECTED');
 });
 
+void test('Codex App Server exposes a quick Host candidate publication tool', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'app-server-publish-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const server = path.join(root, 'fake-server.mjs');
+  await writeFile(
+    server,
+    `import readline from 'node:readline';
+const rl=readline.createInterface({input:process.stdin});
+function send(value){process.stdout.write(JSON.stringify(value)+'\\n')}
+rl.on('line',line=>{const message=JSON.parse(line);
+if(message.method==='initialize')send({id:message.id,result:{}});
+else if(message.method==='thread/start'){if(!message.params.dynamicTools.some(tool=>tool.name==='publish_candidate'))process.exit(2);send({id:message.id,result:{thread:{id:'thread-publish'}}});}
+else if(message.method==='turn/start'){send({id:message.id,result:{turn:{id:'turn-publish'}}});send({id:902,method:'item/tool/call',params:{threadId:'thread-publish',turnId:'turn-publish',tool:'publish_candidate',arguments:{headSha:'a'.repeat(40)}}});}
+else if(message.id===902){if(message.result?.success!==true)process.exit(3);send({method:'item/completed',params:{threadId:'thread-publish',turnId:'turn-publish',item:{type:'agentMessage',text:'PUBLISHED'}}});send({method:'turn/completed',params:{threadId:'thread-publish',turn:{id:'turn-publish',status:'completed'}}});}
+});`,
+  );
+  let received = '';
+  const driver = new CodexAppServerDriver({
+    command: process.execPath,
+    arguments: [server],
+    brokerFactory: (input) =>
+      new HostJobBroker(input.workingDirectory, path.join(root, 'jobs')),
+    hostTools: [
+      {
+        name: 'publish_candidate',
+        description: 'Publish candidate',
+        inputSchema: { type: 'object' },
+        call: async (arguments_) => {
+          received = String(arguments_.headSha);
+          return { number: 7 };
+        },
+      },
+    ],
+  });
+  t.after(() => driver.close());
+  const thread = await driver.startThread({
+    profile: { agent: 'codex', model: 'fixture', effort: 'low' },
+    workingDirectory: root,
+    access: 'workspace-write',
+  });
+  const result = await driver.startTurn(thread, { prompt: 'publish' })
+    .completion;
+  assert.equal(received, 'a'.repeat(40));
+  assert.equal(result.finalOutput, 'PUBLISHED');
+});
+
 async function readdirOne(directory: string) {
   const entries = await import('node:fs/promises').then((fs) =>
     fs.readdir(directory),
