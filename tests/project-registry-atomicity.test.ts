@@ -1,10 +1,21 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { mkdtempSync } from 'node:fs';
-import { access, chmod, mkdtemp, readFile, readdir } from 'node:fs/promises';
+import {
+  access,
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  writeFile,
+} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { createJsonStore } from '../lib/atomic-json-store.ts';
+import {
+  StoreConsistencyError,
+  createJsonStore,
+} from '../lib/atomic-json-store.ts';
 
 const REGISTRY_HOME = mkdtempSync(path.join(os.tmpdir(), 'am-registry-home-'));
 process.env.AGENT_MANAGER_HOME = REGISTRY_HOME;
@@ -192,6 +203,115 @@ void test('a failed registry write rolls back the project-local file', async () 
     false,
   );
   assert.deepEqual(await listProjects(), before);
+});
+
+void test('a failed registry write restores a pre-existing project file byte for byte', async () => {
+  const { createProject, listProjects } =
+    await import('../lib/project-registry.ts');
+  const rootPath = await temporaryRoot('preexisting');
+  const projectFile = path.join(rootPath, '.agent-manager', 'project.json');
+  const sentinel =
+    '{\n  "schemaVersion": 1,\n  "id": "sentinel-from-the-lost-update-bug"\n}\n';
+  await mkdir(path.dirname(projectFile), { recursive: true });
+  await writeFile(projectFile, sentinel);
+  const before = await listProjects();
+
+  await chmod(REGISTRY_HOME, 0o500);
+  try {
+    await assert.rejects(() =>
+      createProject({
+        kind: 'standalone',
+        name: 'must-not-destroy-evidence',
+        description: '',
+        rootPath,
+      }),
+    );
+  } finally {
+    await chmod(REGISTRY_HOME, 0o700);
+  }
+
+  assert.equal(await readFile(projectFile, 'utf8'), sentinel);
+  assert.deepEqual(await listProjects(), before);
+});
+
+void test('rollback removes the project file only when the registration created it', async () => {
+  const { createProject } = await import('../lib/project-registry.ts');
+  const rootPath = await temporaryRoot('created');
+  const projectFile = path.join(rootPath, '.agent-manager', 'project.json');
+
+  await chmod(REGISTRY_HOME, 0o500);
+  try {
+    await assert.rejects(() =>
+      createProject({
+        kind: 'standalone',
+        name: 'created-then-removed',
+        description: '',
+        rootPath,
+      }),
+    );
+  } finally {
+    await chmod(REGISTRY_HOME, 0o700);
+  }
+
+  assert.equal(await exists(projectFile), false);
+});
+
+void test('a failed rollback is reported instead of being swallowed', async () => {
+  const home = await mkdtemp(path.join(os.tmpdir(), 'am-registry-both-'));
+  const file = path.join(home, 'config.json');
+  const store = createJsonStore<{ count: number }>(file, () => ({ count: 0 }));
+  await store.update(async () => ({ next: { count: 1 }, result: null }));
+
+  await chmod(home, 0o500);
+  let raised: unknown;
+  try {
+    await store.update(async (current) => ({
+      next: { count: current.count + 1 },
+      result: null,
+      rollback: () => Promise.reject(new Error('restore failed too')),
+    }));
+  } catch (error) {
+    raised = error;
+  } finally {
+    await chmod(home, 0o700);
+  }
+
+  assert.ok(raised instanceof StoreConsistencyError);
+  const failure = raised as StoreConsistencyError;
+  assert.match((failure.writeError as Error).message, /EACCES/);
+  assert.match((failure.rollbackError as Error).message, /restore failed too/);
+  assert.match(failure.message, /EACCES/);
+  assert.match(failure.message, /restore failed too/);
+});
+
+void test('a failed project metadata write leaves no partial file', async () => {
+  const { createProject } = await import('../lib/project-registry.ts');
+  const rootPath = await temporaryRoot('partial');
+  const planningPath = path.join(rootPath, '.agent-manager');
+  const projectFile = path.join(planningPath, 'project.json');
+  const sentinel = '{"id":"kept"}\n';
+  await mkdir(planningPath, { recursive: true });
+  await writeFile(projectFile, sentinel);
+
+  await chmod(planningPath, 0o500);
+  try {
+    await assert.rejects(() =>
+      createProject({
+        kind: 'standalone',
+        name: 'partial-write',
+        description: '',
+        rootPath,
+      }),
+    );
+  } finally {
+    await chmod(planningPath, 0o700);
+  }
+
+  assert.equal(await readFile(projectFile, 'utf8'), sentinel);
+  assert.deepEqual(
+    (await readdir(planningPath)).filter((entry) => entry.endsWith('.tmp')),
+    [],
+  );
 });
 
 void test('a rejected registration leaves registry and local state agreeing', async () => {

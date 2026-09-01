@@ -1,11 +1,43 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const state = globalThis as typeof globalThis & {
   atomicJsonStoreWrites?: Map<string, Promise<unknown>>;
 };
 const writes = (state.atomicJsonStoreWrites ??= new Map());
+
+export class StoreConsistencyError extends Error {
+  readonly writeError: unknown;
+  readonly rollbackError: unknown;
+  constructor(writeError: unknown, rollbackError: unknown) {
+    super(
+      `The store write failed and restoring the previous state also failed. Write: ${describe(writeError)}. Restore: ${describe(rollbackError)}.`,
+    );
+    this.name = 'StoreConsistencyError';
+    this.writeError = writeError;
+    this.rollbackError = rollbackError;
+  }
+}
+
+function describe(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+export async function writeFileAtomically(
+  file: string,
+  contents: string | Uint8Array,
+) {
+  await mkdir(path.dirname(file), { recursive: true });
+  const temporary = `${file}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporary, contents, { flag: 'wx' });
+    await rename(temporary, file);
+  } catch (error) {
+    await rm(temporary, { force: true }).catch(() => undefined);
+    throw error;
+  }
+}
 
 export type StoreMutation<T, R> = {
   next: T;
@@ -35,12 +67,7 @@ export function createJsonStore<T>(
   }
 
   async function write(value: T) {
-    await mkdir(path.dirname(file), { recursive: true });
-    const temporary = `${file}.${randomUUID()}.tmp`;
-    await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, {
-      flag: 'wx',
-    });
-    await rename(temporary, file);
+    await writeFileAtomically(file, `${JSON.stringify(value, null, 2)}\n`);
   }
 
   async function update<R>(
@@ -54,7 +81,13 @@ export function createJsonStore<T>(
         try {
           await write(next);
         } catch (error) {
-          await rollback?.().catch(() => undefined);
+          if (rollback) {
+            try {
+              await rollback();
+            } catch (rollbackError) {
+              throw new StoreConsistencyError(error, rollbackError);
+            }
+          }
           throw error;
         }
         return result;

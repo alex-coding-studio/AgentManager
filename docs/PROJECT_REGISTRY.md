@@ -50,9 +50,25 @@ Inside the chain, in order:
 2. create `.agent-manager/`, append the Git exclusion, write `project.json`;
 3. return the new registry value.
 
-If the registry write then fails, the store calls the mutation's `rollback`, which
-removes the `project.json` this call wrote. The registry and the project-local file
-therefore never disagree about whether the project was registered.
+`project.json` is published atomically — written to a temporary file and renamed over
+the target, with the temporary removed if either step fails. A failure while writing
+it therefore cannot leave a truncated file, including before the mutation has returned
+its rollback callback.
+
+Before publishing, `createProject` reads any existing `project.json` and keeps its
+exact bytes. If the registry write then fails, the store calls the mutation's
+`rollback`, which either restores those bytes or, when the file did not exist,
+removes the one this call created. Rollback never deletes metadata this registration
+did not author.
+
+That distinction matters specifically because of the bug being fixed: a directory
+left behind by the old lost-update path has a `project.json` and no registry entry.
+Retrying registration there and having it fail must not destroy the local evidence
+needed to reconcile it.
+
+If the rollback itself fails, the store raises `StoreConsistencyError` carrying both
+the original write error and the restoration error. A caller can never mistake an
+unrecovered inconsistency for a clean rollback.
 
 The `.git/info/exclude` append is deliberately not rolled back. It is idempotent,
 harmless on its own, and may reflect what the user wants regardless of registration.
@@ -83,5 +99,10 @@ The suite registers eight projects concurrently and asserts all eight are saved 
 distinct identities, that each has a matching `project.json`, that an unrelated saved
 project is untouched by a later write, that the schema version and project field
 shape are unchanged, that four concurrent registrations of one directory admit
-exactly one, that a rejected registration leaves no partial local state, and that a
-failed registry write rolls its `project.json` back.
+exactly one, and that a rejected registration leaves no partial local state.
+
+Four tests cover the failure boundary specifically: a failed registry write restores
+a pre-existing `project.json` byte for byte, removes the file only when this
+registration created it, surfaces a failed rollback as `StoreConsistencyError`
+instead of swallowing it, and leaves no partial metadata when the `project.json`
+write itself fails.

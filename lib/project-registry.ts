@@ -1,17 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { realpathSync } from 'node:fs';
-import {
-  appendFile,
-  mkdir,
-  readFile,
-  rm,
-  stat,
-  writeFile,
-} from 'node:fs/promises';
+import { appendFile, mkdir, readFile, rm, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
-import { createJsonStore } from './atomic-json-store.ts';
+import { createJsonStore, writeFileAtomically } from './atomic-json-store.ts';
 
 export type ProjectKind = 'standalone' | 'repository';
 
@@ -155,7 +148,13 @@ export async function createProject(input: {
 
     await mkdir(planningPath, { recursive: true });
     await ensureLocalGitExclusion(rootPath);
-    await writeFile(
+    const replaced = await readFile(projectFile).catch(
+      (error: NodeJS.ErrnoException) => {
+        if (error.code === 'ENOENT') return null;
+        throw error;
+      },
+    );
+    await writeFileAtomically(
       projectFile,
       `${JSON.stringify({ schemaVersion: 1, ...project }, null, 2)}\n`,
     );
@@ -163,7 +162,9 @@ export async function createProject(input: {
     return {
       next: { ...registry, projects: [project, ...registry.projects] },
       result: project,
-      rollback: () => rm(projectFile, { force: true }),
+      rollback: replaced
+        ? () => writeFileAtomically(projectFile, replaced)
+        : () => rm(projectFile, { force: true }),
     };
   });
 }
