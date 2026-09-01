@@ -136,6 +136,15 @@ export async function startTaskDecompositionRun(
   project: RegisteredProject,
   input: RunRequest,
 ) {
+  return mutateTaskDecomposition(project, () =>
+    startTaskDecompositionRunUnlocked(project, input),
+  );
+}
+
+async function startTaskDecompositionRunUnlocked(
+  project: RegisteredProject,
+  input: RunRequest,
+) {
   validateRunRequest(input);
   const profile: AgentProfile = {
     agent: input.agent,

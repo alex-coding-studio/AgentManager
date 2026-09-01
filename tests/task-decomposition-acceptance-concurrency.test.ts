@@ -29,9 +29,49 @@ function isNodePublication(target: string) {
   );
 }
 
+let requestArrivals: Arrival[] | null = null;
+let announceRequestArrival: (() => void) | null = null;
+
+mock.module('../lib/local-agent-transport.ts', {
+  namedExports: {
+    ...(await import('../lib/local-agent-transport.ts')),
+    startLocalAgentRun: () => ({
+      completion: new Promise(() => {}),
+      cancel: () => {},
+    }),
+  },
+});
+
 mock.module('node:fs/promises', {
   namedExports: {
     ...realFs,
+    writeFile: async (target: unknown, ...rest: unknown[]) => {
+      const name = String(target);
+      if (requestArrivals && name.endsWith(`${path.sep}request.json`)) {
+        let release: () => void;
+        const gate = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        let markSettled: () => void;
+        const settled = new Promise<void>((resolve) => {
+          markSettled = resolve;
+        });
+        requestArrivals.push({ target: name, release: release!, settled });
+        announceRequestArrival?.();
+        await gate;
+        try {
+          return await (
+            realFs.writeFile as (...args: unknown[]) => Promise<void>
+          )(target, ...rest);
+        } finally {
+          markSettled!();
+        }
+      }
+      return (realFs.writeFile as (...args: unknown[]) => Promise<void>)(
+        target,
+        ...rest,
+      );
+    },
     rename: async (from: string, to: string) => {
       if (!publishArrivals || !isNodePublication(String(to)))
         return realFs.rename(from, to);
@@ -55,9 +95,57 @@ mock.module('node:fs/promises', {
   },
 });
 
-const { acceptTaskDecompositionCandidate, readTaskDecompositionRun } =
-  await import('../lib/task-decomposition-runs.ts');
+const {
+  acceptTaskDecompositionCandidate,
+  discardTaskDecompositionCandidate,
+  readTaskDecompositionRun,
+  startTaskDecompositionRun,
+} = await import('../lib/task-decomposition-runs.ts');
 const { listTaskGraphNodes } = await import('../lib/task-graph.ts');
+
+function revisionRequest(runId: string) {
+  return {
+    sourceNodeId: SOURCE_NODE_ID,
+    agent: 'codex',
+    instruction: 'Revise the Candidate.',
+    contextRefs: [],
+    files: [],
+    revisionRunId: runId,
+    revisionCandidateId: CANDIDATE_A,
+  } as Parameters<typeof startTaskDecompositionRun>[1];
+}
+
+function clearActiveRuns() {
+  const runtime = globalThis as typeof globalThis & {
+    __agentManagerRuns?: Map<string, unknown>;
+  };
+  runtime.__agentManagerRuns?.clear();
+}
+
+function armRequestBarrier() {
+  requestArrivals = [];
+  return {
+    waitFor(count: number) {
+      if ((requestArrivals?.length ?? 0) >= count) return Promise.resolve();
+      return new Promise<void>((resolve) => {
+        announceRequestArrival = () => {
+          if ((requestArrivals?.length ?? 0) >= count) {
+            announceRequestArrival = null;
+            resolve();
+          }
+        };
+      });
+    },
+    count() {
+      return requestArrivals?.length ?? 0;
+    },
+    disarm() {
+      for (const arrival of requestArrivals ?? []) arrival.release();
+      requestArrivals = null;
+      announceRequestArrival = null;
+    },
+  };
+}
 
 function armPublishBarrier() {
   publishArrivals = [];
@@ -462,6 +550,146 @@ void test('a rejected mutation releases the process-local queue for the next cal
       CANDIDATE_A,
     );
     assert.equal(accepted.node.provenance?.candidateId, CANDIDATE_A);
+  } finally {
+    await cleanup();
+  }
+});
+
+void test('a Candidate revision start blocks acceptance until it is registered', async () => {
+  const { project, runId, cleanup } = await makeProject([
+    candidate(CANDIDATE_A),
+  ]);
+  try {
+    await readTaskDecompositionRun(project, runId);
+    const barrier = armRequestBarrier();
+    const revision = startTaskDecompositionRun(project, revisionRequest(runId));
+    await barrier.waitFor(1);
+    const accepted = Promise.allSettled([
+      acceptTaskDecompositionCandidate(project, runId, CANDIDATE_A),
+    ]);
+    barrier.disarm();
+    const started = await Promise.allSettled([revision]);
+    assert.equal(started[0]?.status, 'fulfilled');
+
+    const [outcome] = await accepted;
+    assert.equal(
+      outcome!.status,
+      'rejected',
+      'acceptance must not proceed against a Candidate a registered revision is revising',
+    );
+    assert.match(
+      (outcome!.reason as Error).message,
+      /Wait for the active Candidate revision to finish\./,
+    );
+    const nodes = await listTaskGraphNodes(project);
+    assert.equal(
+      nodes.filter((node) => node.provenance?.candidateId === CANDIDATE_A)
+        .length,
+      0,
+    );
+  } finally {
+    clearActiveRuns();
+    await cleanup();
+  }
+});
+
+void test('a Candidate revision start blocks discard until it is registered', async () => {
+  const { project, runId, cleanup } = await makeProject([
+    candidate(CANDIDATE_A),
+  ]);
+  try {
+    await readTaskDecompositionRun(project, runId);
+    const barrier = armRequestBarrier();
+    const revision = startTaskDecompositionRun(project, revisionRequest(runId));
+    await barrier.waitFor(1);
+    const discarded = Promise.allSettled([
+      discardTaskDecompositionCandidate(project, runId, CANDIDATE_A),
+    ]);
+    barrier.disarm();
+    const started = await Promise.allSettled([revision]);
+    assert.equal(started[0]?.status, 'fulfilled');
+
+    const [outcome] = await discarded;
+    assert.equal(
+      outcome!.status,
+      'rejected',
+      'a revision must not start from a Candidate that is concurrently discarded',
+    );
+    assert.match(
+      (outcome!.reason as Error).message,
+      /Cancel or finish the active Candidate revision first\./,
+    );
+    const after = await readTaskDecompositionRun(project, runId);
+    assert.equal(after.result?.outcome, 'proposal');
+  } finally {
+    clearActiveRuns();
+    await cleanup();
+  }
+});
+
+void test('discard invoked before accept settles into the other legal ordering', async () => {
+  const { project, runId, cleanup } = await makeProject([
+    candidate(CANDIDATE_A),
+  ]);
+  try {
+    await readTaskDecompositionRun(project, runId);
+    const [discarded, accepted] = await Promise.allSettled([
+      discardTaskDecompositionCandidate(project, runId, CANDIDATE_A),
+      acceptTaskDecompositionCandidate(project, runId, CANDIDATE_A),
+    ]);
+
+    assert.notEqual(
+      discarded.status === 'fulfilled' && accepted.status === 'fulfilled',
+      true,
+    );
+    const nodes = await listTaskGraphNodes(project);
+    const published = nodes.filter(
+      (node) => node.provenance?.candidateId === CANDIDATE_A,
+    );
+    if (discarded.status === 'fulfilled') {
+      assert.equal(published.length, 0);
+      assert.equal(accepted.status, 'rejected');
+    } else {
+      assert.equal(published.length, 1);
+      assert.equal(accepted.status, 'fulfilled');
+    }
+    assert.deepEqual(await temporaryNodeDirectories(project), []);
+  } finally {
+    await cleanup();
+  }
+});
+
+void test('a dependent invoked before its prerequisite is rejected and retries cleanly', async () => {
+  const { project, runId, cleanup } = await makeProject([
+    candidate(CANDIDATE_A),
+    candidate(CANDIDATE_B, { dependsOn: [CANDIDATE_A] }),
+  ]);
+  try {
+    await readTaskDecompositionRun(project, runId);
+    const [dependent, prerequisite] = await Promise.allSettled([
+      acceptTaskDecompositionCandidate(project, runId, CANDIDATE_B),
+      acceptTaskDecompositionCandidate(project, runId, CANDIDATE_A),
+    ]);
+
+    assert.equal(dependent.status, 'rejected');
+    assert.match(
+      (dependent.reason as Error).message,
+      new RegExp(`Accept ${CANDIDATE_A} before accepting ${CANDIDATE_B}`),
+    );
+    assert.equal(prerequisite.status, 'fulfilled');
+
+    const retried = await acceptTaskDecompositionCandidate(
+      project,
+      runId,
+      CANDIDATE_B,
+    );
+    const nodes = await listTaskGraphNodes(project);
+    const prerequisiteNode = nodes.find(
+      (node) => node.provenance?.candidateId === CANDIDATE_A,
+    );
+    assert.ok(prerequisiteNode);
+    assert.deepEqual(retried.node.dependsOn, [prerequisiteNode.id]);
+    assert.deepEqual(await temporaryNodeDirectories(project), []);
   } finally {
     await cleanup();
   }

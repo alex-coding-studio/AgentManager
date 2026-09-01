@@ -41,7 +41,7 @@
     "test:appserver-code-smoke": "node --experimental-strip-types scripts/smoke-app-server-code.ts",
     "format:check": "oxfmt --check .",
     "audit:runtime-dependencies": "node --experimental-strip-types scripts/audit-runtime-dependencies.ts",
-    "test:decomposition-concurrency": "node --experimental-strip-types --experimental-test-module-mocks --test tests/task-decomposition-acceptance-concurrency.test.ts"
+    "test:decomposition-concurrency": "node --experimental-strip-types --experimental-test-module-mocks --test-timeout=20000 --test tests/task-decomposition-acceptance-concurrency.test.ts"
   },
   "dependencies": {
     "@base-ui/react": "1.7.0",

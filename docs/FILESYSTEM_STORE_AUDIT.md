@@ -263,8 +263,11 @@ fail, and that a node's on-disk bytes can change without any user-visible edit.
 `lib/task-decomposition-runs.ts` publishes run records, candidates and graph nodes through `wx`
 temporary files and renames, and discards candidates through renames and `trash`.
 
-Candidate acceptance and discard are serialized through a process-local promise chain keyed on
-`project.planningPath`, mirroring the principle of `mutateWhatsNext` without copying its scope.
+Candidate acceptance, discard and Run start are serialized through a process-local promise chain
+keyed on `project.planningPath`, mirroring the principle of `mutateWhatsNext` without copying its
+scope. The chain covers Run start only until the Run is registered: `startTaskDecompositionRun`
+returns immediately after `activeRuns.set`, and the background Agent runs under an unawaited
+`finishTaskDecompositionRun`, so the queue is never held for an Agent's lifetime.
 Before that serializer existed, two concurrent accepts of one Candidate both passed the
 already-accepted check and renamed onto the same node path, so one caller received a raw
 `ENOTEMPTY` instead of the idempotent success that sequential repeated acceptance returns; and a
@@ -279,11 +282,19 @@ inside its own `serialized()` chain and returns the same `NODE-` id for one Cand
 canonical value was overwritten. The defect was idempotency and conflict handling, not a lost
 update.
 
-Run cancellation is deliberately outside the serializer. `cancelTaskDecompositionRun` returns
-without writing unless the run status is `running` or `validating`
-(`lib/task-decomposition-runs.ts:395`), while acceptance requires a completed run carrying a
-proposal, so the two never mutate the same record. Run creation writes under a freshly generated
-`runId`. Serializing either would be symmetry, not evidence.
+Candidate revision start had to be included, and the reason is semantic rather than
+path-based. `resolveRevisionTarget` reads the revised Candidate before the active-run guard, and
+the new Run is only registered after Context and request persistence. Deterministic tests
+demonstrated that during that window acceptance promoted the very Candidate a revision was
+starting from, and that discard removed it, with both operations reporting success. A fresh
+`runId` prevents a path collision, not this shared-Candidate race.
+
+Run cancellation remains outside the serializer, on evidence. It returns without writing unless
+the run status is `running` or `validating` (`lib/task-decomposition-runs.ts:404`), while
+acceptance and discard require a completed run carrying a proposal. The two status sets are
+disjoint, so ordering is coherent in either direction: a cancellation that arrives before a run
+is registered finds no record, and one that arrives after acts on a running record that
+acceptance cannot touch. Including it would be symmetry, not evidence.
 
 The chain is process-local. Two AgentManager processes against one `AGENT_MANAGER_HOME` do not
 see each other's queue.
@@ -311,14 +322,14 @@ sources can change once the Run starts. After the Run reads it, it is the eviden
 Run was given, and it is never rewritten.
 
 **Failure consequence is an orphan, not a corrupted record.** In both callers the workspace is
-written before anything registers the Run: `lib/task-decomposition-runs.ts:214` precedes
-`request.json` at `:280`, and `lib/whats-next-runs.ts:362` sits at the same point in its
+written before anything registers the Run: `lib/task-decomposition-runs.ts:223` precedes
+`request.json` at `:289`, and `lib/whats-next-runs.ts:362` sits at the same point in its
 sequence. A throw therefore happens before `request.json`, `run.json`, the active-run
 registration and `startLocalAgentRun`, leaving an unreferenced `context/` directory under a
 `runId` that no record mentions. Nothing reclaims it.
 
 **A retry is a different record.** `runId` is generated per call —
-`RUN-${randomUUID()}` at `lib/task-decomposition-runs.ts:185` and
+`RUN-${randomUUID()}` at `lib/task-decomposition-runs.ts:194` and
 `lib/whats-next-runs.ts:275` — so a retry writes into a fresh directory. There is no failed
 retry of the same logical record, and no contradictory canonical state.
 
@@ -446,10 +457,10 @@ misclassified the Run map as a serializer, which is why classification here is m
 ## Process-local versus cross-process boundaries
 
 Five modules serialize through a `globalThis` promise chain: `project-registry`,
-`app-settings`, `graph-identity-store`, `whats-next-runs` and `task-decomposition-runs`. **None of those four is a
-cross-process lock.** Two AgentManager processes against one `AGENT_MANAGER_HOME` — two ports,
-or `dev` and `start` together — do not see each other's chain. `docs/PROJECT_REGISTRY.md`
-states this for the registry; the other three do not document it.
+`app-settings`, `graph-identity-store`, `whats-next-runs` and `task-decomposition-runs`.
+**None of those five is a cross-process lock.** Two AgentManager processes against one
+`AGENT_MANAGER_HOME` — two ports, or `dev` and `start` together — do not see each other's chain.
+`docs/PROJECT_REGISTRY.md` states this for the registry; the other four do not document it.
 
 `lib/system-validation-runner.ts:68-79` is the exception. A non-recursive `mkdir` either
 creates the lock directory or fails `EEXIST`, atomically, at the filesystem level, and the
@@ -489,8 +500,9 @@ Mechanically tested:
   `tests/just-do-it-harness.test.ts:483-675`
 - planning path containment — `tests/planning-paths.test.ts`
 - Break It Down Candidate acceptance under concurrency: same-Candidate idempotency, sibling
-  independence, accept-versus-discard coherence, dependency ordering, per-project isolation and
-  queue release after a rejected mutation —
+  independence, accept-versus-discard coherence in both invocation orders, dependency ordering in
+  both invocation orders with clean retry, Candidate revision start racing acceptance and discard,
+  per-project isolation and queue release after a rejected mutation —
   `tests/task-decomposition-acceptance-concurrency.test.ts`
 
 The repository also has product-rule, provider, cancel and trash failure tests for several of
