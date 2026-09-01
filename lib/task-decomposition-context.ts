@@ -263,10 +263,7 @@ function validateSettings(value: unknown) {
     candidate.instructionsPath !== 'instructions.md' ||
     candidate.attachmentsDirectory !== 'attachments'
   ) {
-    throw new PublicApiError(
-      'Decomposition context settings are invalid.',
-      400,
-    );
+    throw new Error('Decomposition context settings are invalid.');
   }
 }
 

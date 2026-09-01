@@ -19,6 +19,12 @@ export function publicError(message: string, status = 400, code?: string) {
   return new PublicApiError(message, status, code);
 }
 
+const SECRET_WORDS =
+  'authorization|token|password|passwd|secret|credential|credentials|apikey|api_key|access_key|private_key|client_secret|session_key';
+
+// A secret key is a delimited segment, so `tokenizer` and `secretary` do not match.
+const KEY_NAME = `(?:[A-Za-z0-9]+[_.-])*(?:${SECRET_WORDS})(?:[_.-][A-Za-z0-9]+)*`;
+
 const SECRET_PATTERNS: Array<[RegExp, string]> = [
   [/\b(gh[pousr]_[A-Za-z0-9]{16,})/g, 'gh_[redacted]'],
   [/\b(sk-[A-Za-z0-9_-]{16,})/g, 'sk-[redacted]'],
@@ -28,10 +34,19 @@ const SECRET_PATTERNS: Array<[RegExp, string]> = [
     '[redacted-jwt]',
   ],
   [/\b(bearer)\s+\S+/gi, '$1 [redacted]'],
+  // Quoted JSON or shell values are replaced whole, so a value with spaces
+  // cannot leak its remainder.
+  [new RegExp(`("${KEY_NAME}"\\s*:\\s*)"[^"]*"`, 'gi'), '$1"[redacted]"'],
+  [new RegExp(`('${KEY_NAME}'\\s*:\\s*)'[^']*'`, 'gi'), "$1'[redacted]'"],
   [
-    /([A-Za-z0-9_.-]*(?:authorization|token|password|passwd|secret|credential|api[-_]?key|apikey|access[-_]?key|private[-_]?key)[A-Za-z0-9_.-]*)(\s*[:=]\s*["']?)\S+/gi,
-    '$1$2[redacted]',
+    new RegExp(`\\b(${KEY_NAME})(\\s*[:=]\\s*)"[^"]*"`, 'gi'),
+    '$1$2"[redacted]"',
   ],
+  [
+    new RegExp(`\\b(${KEY_NAME})(\\s*[:=]\\s*)'[^']*'`, 'gi'),
+    "$1$2'[redacted]'",
+  ],
+  [new RegExp(`\\b(${KEY_NAME})(\\s*[:=]\\s*)\\S+`, 'gi'), '$1$2[redacted]'],
   [/(--(?:token|password|secret|api-key))(=|\s+)\S+/gi, '$1$2[redacted]'],
 ];
 
@@ -55,6 +70,13 @@ export function recordUnexpectedApiError(
 ) {
   console.error(
     `[api-error ${correlationId}] ${route}: ${redactSecrets(diagnosticText(error))}`,
+  );
+}
+
+export function isCancellationError(error: unknown) {
+  return (
+    error instanceof Error &&
+    ('code' in error || error.message.toLowerCase().includes('cancel'))
   );
 }
 

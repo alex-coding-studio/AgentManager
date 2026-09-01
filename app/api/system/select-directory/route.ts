@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { guardRequest } from '@/lib/request-boundary';
+import { isCancellationError } from '@/lib/api-errors';
 import { promisify } from 'node:util';
 
 export const runtime = 'nodejs';
@@ -47,9 +48,7 @@ export async function POST(request: Request) {
       { status: 501 },
     );
   } catch (error) {
-    const cancelled =
-      error instanceof Error &&
-      ('code' in error || error.message.toLowerCase().includes('cancel'));
+    const cancelled = isCancellationError(error);
     return Response.json(
       {
         error: cancelled

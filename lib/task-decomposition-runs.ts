@@ -442,8 +442,7 @@ export async function acceptTaskDecompositionCandidate(
     existingNodes,
   );
 
-  if (!candidate.uid)
-    throw new PublicApiError('Candidate stable identity is missing.', 400);
+  if (!candidate.uid) throw new Error('Candidate stable identity is missing.');
   const { id: nodeId } = await reserveNodeIdentity(
     project.planningPath,
     'task-graph',
@@ -686,9 +685,8 @@ async function finishTaskDecompositionRun(
       (result.candidates.length !== 1 ||
         result.candidates[0]?.candidateId !== revisionTarget.candidateId)
     ) {
-      throw new PublicApiError(
+      throw new Error(
         'A revision must return exactly the requested Candidate identifier.',
-        400,
       );
     }
     const endedAt = new Date().toISOString();
@@ -1036,7 +1034,7 @@ function chooseUniqueFileName(value: string, usedNames: Set<string>) {
       return fileName;
     }
   }
-  throw new PublicApiError('Could not choose a unique Run Resource name.', 400);
+  throw new Error('Could not choose a unique Run Resource name.');
 }
 
 function taskDecompositionRunPath(project: RegisteredProject, runId: string) {

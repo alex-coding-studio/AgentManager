@@ -301,7 +301,7 @@ export async function updateStartNode(
     node.id !== input.id ||
     node.role !== 'start'
   ) {
-    throw new PublicApiError('The start node could not be edited.', 400);
+    throw new Error('The start node could not be edited.');
   }
 
   const contextRefs = await validateContextRefs(project, input.contextRefs);
@@ -514,7 +514,7 @@ function chooseUniqueName(baseName: string, usedNames: Set<string>) {
       return fileName;
     }
   }
-  throw new PublicApiError('Could not choose a unique source file name.', 400);
+  throw new Error('Could not choose a unique source file name.');
 }
 
 async function prepareUploads(files: File[]) {

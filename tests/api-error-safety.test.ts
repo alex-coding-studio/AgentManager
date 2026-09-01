@@ -330,9 +330,87 @@ void test('a caught Run guard keeps its exact actionable 400', async () => {
   });
 });
 
-const MESSAGE_READ = /\berror\s*\.\s*message\b/;
-const NARROWED = /instanceof\s+[A-Z]\w*Error/;
-const IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
+const INTERNAL_FAILURE_MESSAGES = [
+  'Expected a Planning response.',
+  'Expected an execution response.',
+  'Expected an execution report.',
+  'A revision must return exactly the requested Candidate identifier.',
+  'Refine must return exactly the requested Candidate identifier.',
+  'Candidate stable identity is missing.',
+  'Invalid Planning Card state.',
+  'Invalid Planning storage directory.',
+  'Invalid recorded output file.',
+  'Card storage ownership changed.',
+  'Original report evidence is unavailable.',
+  'Instructions directory escapes the project.',
+  'This run is owned by another server process.',
+  'Execution is owned by another server.',
+  'Could not choose a unique Run Resource name.',
+  'Could not choose a unique Markdown file name.',
+  'Could not choose a unique source file name.',
+];
+
+void test('an internal failure never reaches the client, only the fallback and an id', async () => {
+  for (const message of INTERNAL_FAILURE_MESSAGES) {
+    const { result, captured } = await captureDiagnosticsAsync(async () =>
+      apiErrorResponse(
+        new Error(message),
+        'Planning request failed.',
+        '/api/projects/[projectId]/planning',
+      ),
+    );
+    assert.equal(result.status, 500, message);
+    const body = (await result.json()) as {
+      error: string;
+      correlationId: string;
+    };
+    assert.equal(body.error, 'Planning request failed.');
+    assert.ok(!JSON.stringify(body).includes(message), message);
+    assert.match(body.correlationId, /^[0-9a-f]{12}$/);
+    assert.ok(captured.join('\n').includes(message));
+  }
+});
+
+void test('internal failures are not thrown as PublicApiError anywhere in lib', async () => {
+  const directory = new URL('../lib/', import.meta.url);
+  const files = (await readdir(directory)).filter((name) =>
+    name.endsWith('.ts'),
+  );
+  const misclassified: string[] = [];
+  for (const name of files) {
+    const source = await readFile(new URL(name, directory), 'utf8');
+    for (const message of INTERNAL_FAILURE_MESSAGES) {
+      const escaped = message.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const pattern = new RegExp(`throw new PublicApiError\\(\\s*'${escaped}'`);
+      if (pattern.test(source)) misclassified.push(`${name}: ${message}`);
+    }
+  }
+  assert.deepEqual(misclassified, []);
+});
+
+void test('deliberate request validation is still thrown as PublicApiError', async () => {
+  const directory = new URL('../lib/', import.meta.url);
+  const expected: Array<[string, string]> = [
+    ['task-graph.ts', 'A start-node title is required.'],
+    ['task-graph.ts', 'Upload no more than 20 Markdown files at once.'],
+    ['task-decomposition-runs.ts', 'An Instruction is required.'],
+    ['whats-next-runs.ts', 'Select at least one origin Node.'],
+    ['project-registry.ts', 'The project path must be an existing directory.'],
+    ['product-context.ts', 'Only Markdown files can be imported right now.'],
+  ];
+  for (const [name, message] of expected) {
+    const source = await readFile(new URL(name, directory), 'utf8');
+    const escaped = message.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    assert.match(
+      source,
+      new RegExp(`throw new PublicApiError\\(\\s*'${escaped}'`),
+      `${name} should keep ${message} public`,
+    );
+  }
+});
+
+const MESSAGE_READ = /\berror\s*\.\s*message\b/g;
+const NARROWING = /if\s*\(\s*error instanceof ([A-Z]\w*Error)\s*\)/g;
 
 function catchBlocks(source: string) {
   const blocks: Array<{ line: number; body: string }> = [];
@@ -352,104 +430,51 @@ function catchBlocks(source: string) {
   return blocks;
 }
 
-function balancedArguments(body: string, openIndex: number) {
-  let depth = 0;
-  let index = openIndex;
-  while (index < body.length) {
-    if (body[index] === '(') depth += 1;
-    else if (body[index] === ')') {
-      depth -= 1;
-      if (depth === 0) return body.slice(openIndex + 1, index);
-    }
-    index += 1;
-  }
-  return body.slice(openIndex + 1);
-}
-
-function withoutStringContent(text: string) {
-  let result = '';
-  let index = 0;
-  while (index < text.length) {
-    const character = text[index]!;
-    if (character === "'" || character === '"') {
-      const end = text.indexOf(character, index + 1);
-      result += character.repeat(2);
-      index = end === -1 ? text.length : end + 1;
-      continue;
-    }
-    if (character === '`') {
-      let cursor = index + 1;
-      let template = '``';
-      while (cursor < text.length && text[cursor] !== '`') {
-        if (text[cursor] === '$' && text[cursor + 1] === '{') {
-          const close = text.indexOf('}', cursor);
-          template += text.slice(
-            cursor,
-            close === -1 ? text.length : close + 1,
-          );
-          cursor = close === -1 ? text.length : close + 1;
-          continue;
+// Conservative rule: an API catch block may not read error.message at all,
+// except inside a branch already narrowed to a known error class. No data-flow
+// tracing, so no alias depth, template interpolation or field name can bypass it.
+function narrowedRanges(body: string) {
+  const ranges: Array<[number, number]> = [];
+  NARROWING.lastIndex = 0;
+  for (const match of body.matchAll(NARROWING)) {
+    let index = match.index + match[0].length;
+    while (index < body.length && /\s/.test(body[index]!)) index += 1;
+    if (body[index] === '{') {
+      let depth = 0;
+      let cursor = index;
+      while (cursor < body.length) {
+        if (body[cursor] === '{') depth += 1;
+        else if (body[cursor] === '}') {
+          depth -= 1;
+          if (depth === 0) break;
         }
         cursor += 1;
       }
-      result += template;
-      index = cursor + 1;
+      ranges.push([index, cursor]);
       continue;
     }
-    result += character;
-    index += 1;
+    const terminator = body.indexOf(';', index);
+    ranges.push([index, terminator === -1 ? body.length : terminator]);
   }
-  return result;
+  return ranges;
 }
-
-function publishedRegions(body: string) {
-  const regions: string[] = [];
-  for (const call of body.matchAll(
-    /(?:Response\.json|new Response|Response)\s*\(/g,
-  ))
-    regions.push(balancedArguments(body, call.index + call[0].length - 1));
-  for (const statement of body.matchAll(/\breturn\b([^;]*);/g))
-    regions.push(statement[1]!);
-  return regions;
-}
-
-function bindingFor(body: string, identifier: string) {
-  const binding = new RegExp(
-    `(?:const|let|var)\\s+${identifier}\\s*=([\\s\\S]*?);`,
-  ).exec(body);
-  return binding ? { text: binding[1]!, index: binding.index } : null;
-}
-
-function narrowedBefore(body: string, index: number) {
-  return NARROWED.test(body.slice(0, index));
-}
-
-function exposesUnknownMessage(body: string) {
-  for (const region of publishedRegions(body)) {
-    for (const usage of region.matchAll(MESSAGE_READ_GLOBAL)) {
-      const absolute = body.indexOf(region) + usage.index;
-      if (!narrowedBefore(body, absolute)) return true;
-    }
-    const code = withoutStringContent(region);
-    for (const token of code.matchAll(/[A-Za-z_$][\w$]*/g)) {
-      const identifier = token[0];
-      if (!IDENTIFIER.test(identifier)) continue;
-      const after = code.slice(token.index + identifier.length).trimStart();
-      if (after.startsWith('?')) continue;
-      const binding = bindingFor(body, identifier);
-      if (!binding || !MESSAGE_READ.test(binding.text)) continue;
-      if (!narrowedBefore(body, binding.index)) return true;
-    }
-  }
-  return false;
-}
-
-const MESSAGE_READ_GLOBAL = /\berror\s*\.\s*message\b/g;
 
 function leakingHandlers(source: string, file = 'source') {
-  return catchBlocks(source)
-    .filter(({ body }) => exposesUnknownMessage(body))
-    .map(({ line }) => `${file}:${line} publishes an unknown error message`);
+  const findings: string[] = [];
+  for (const { line, body } of catchBlocks(source)) {
+    const allowed = narrowedRanges(body);
+    MESSAGE_READ.lastIndex = 0;
+    for (const usage of body.matchAll(MESSAGE_READ)) {
+      const inNarrowedBranch = allowed.some(
+        ([from, to]) => usage.index >= from && usage.index <= to,
+      );
+      if (!inNarrowedBranch)
+        findings.push(
+          `${file}:${line} reads error.message outside a narrowed branch`,
+        );
+    }
+  }
+  return findings;
 }
 
 async function apiRouteFiles(
@@ -477,103 +502,85 @@ void test('no API catch block publishes an unknown error message', async () => {
   assert.deepEqual(findings, []);
 });
 
-void test('the leak assertion rejects every direct publication form', () => {
-  const cases: Array<[string, string, number]> = [
+void test('the leak assertion rejects every publication form including multi-hop aliases', () => {
+  const cases: Array<[string, string]> = [
     [
       'direct',
-      `export async function GET() {
-  try {
-    return Response.json({});
-  } catch (error) {
+      `catch (error) {
     return Response.json({ error: error.message }, { status: 400 });
-  }
-}`,
-      1,
+  }`,
     ],
     [
       'aliased',
-      `export async function POST() {
-  try {
-    return Response.json({});
-  } catch (error) {
+      `catch (error) {
     const message = error instanceof Error ? error.message : 'Could not act.';
     return Response.json({ error: message }, { status: 400 });
-  }
-}`,
-      1,
+  }`,
     ],
     [
       'other-field',
-      `export async function PUT() {
-  try {
-    return Response.json({});
-  } catch (error) {
+      `catch (error) {
     return Response.json({ error: 'Could not act.', detail: error.message });
-  }
-}`,
-      1,
+  }`,
     ],
     [
       'raw-response',
-      `export async function DELETE() {
-  try {
-    return Response.json({});
-  } catch (error) {
+      `catch (error) {
     return new Response(error.message, { status: 500 });
-  }
-}`,
-      1,
+  }`,
     ],
     [
       'interpolated',
-      `export async function PATCH() {
-  try {
-    return Response.json({});
-  } catch (error) {
+      `catch (error) {
     return new Response(\`Could not act: \${error.message}\`, { status: 500 });
-  }
-}`,
-      1,
+  }`,
     ],
     [
-      'interpolated-alias',
-      `export async function GET() {
-  try {
-    return Response.json({});
-  } catch (error) {
-    const detail = \`cause: \${error.message}\`;
-    return Response.json({ error: detail });
-  }
-}`,
-      1,
+      'two-hop-alias',
+      `catch (error) {
+    const message = error.message;
+    const payload = { detail: message };
+    return Response.json(payload);
+  }`,
+    ],
+    [
+      'three-hop-alias',
+      `catch (error) {
+    const first = error.message;
+    const second = first;
+    const payload = { detail: second };
+    return Response.json(payload);
+  }`,
+    ],
+    [
+      'logged-then-published',
+      `catch (error) {
+    const captured = String(error.message).slice(0, 200);
+    return Response.json({ error: captured });
+  }`,
     ],
   ];
 
-  for (const [label, source, expected] of cases)
-    assert.equal(
-      leakingHandlers(source, label).length,
-      expected,
-      `${label} should be reported`,
+  for (const [label, body] of cases) {
+    const findings = leakingHandlers(
+      `export async function GET() {
+  try {
+    return Response.json({});
+  } ${body}
+}`,
+      label,
     );
+    assert.ok(findings.length >= 1, `${label} should be reported`);
+  }
 
   const narrowed = `export async function PATCH() {
   try {
     return Response.json({});
   } catch (error) {
-    if (error instanceof NodeReferencedError)
+    if (error instanceof NodeReferencedError) {
       return Response.json({ error: error.message }, { status: 409 });
+    }
     return apiErrorResponse(error, 'Could not act.', 'PATCH /api/test');
-  }
-}`;
-  const decisionOnly = `export async function POST() {
-  try {
-    return Response.json({});
-  } catch (error) {
-    const cancelled =
-      error instanceof Error && error.message.toLowerCase().includes('cancel');
-    return Response.json({
-      error: cancelled ? 'Cancelled.' : 'Could not act.',
-    });
   }
 }`;
   const clean = `export async function DELETE() {
@@ -585,6 +592,5 @@ void test('the leak assertion rejects every direct publication form', () => {
 }`;
 
   assert.deepEqual(leakingHandlers(narrowed, 'narrowed'), []);
-  assert.deepEqual(leakingHandlers(decisionOnly, 'decision-only'), []);
   assert.deepEqual(leakingHandlers(clean, 'clean'), []);
 });

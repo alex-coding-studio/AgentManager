@@ -117,7 +117,7 @@ async function checkStorageRoot(project: RegisteredProject, create = false) {
     try {
       const info = await lstat(directory);
       if (!info.isDirectory() || info.isSymbolicLink())
-        throw new PublicApiError('Invalid Planning storage directory.', 400);
+        throw new Error('Invalid Planning storage directory.');
     } catch (error) {
       if (!create && (error as NodeJS.ErrnoException).code === 'ENOENT') return;
       throw error;
@@ -166,7 +166,7 @@ export function createPlanningService(
       !Array.isArray(card.actions) ||
       !Array.isArray(card.resources)
     )
-      throw new PublicApiError('Invalid Planning Card state.', 400);
+      throw new Error('Invalid Planning Card state.');
     return { card, log };
   }
 
@@ -415,7 +415,7 @@ export function createPlanningService(
       info.isSymbolicLink() ||
       !actualDirectory.startsWith(actualRoot + path.sep)
     )
-      throw new PublicApiError('Card storage ownership changed.', 409);
+      throw new Error('Card storage ownership changed.');
     await trashCard(actualDirectory);
     return { deleted: true as const, cardId };
   }
@@ -492,7 +492,7 @@ export function createPlanningService(
         raw = outcome.finalOutput;
         const result = parseCardHarnessResult(raw, request, log.revision);
         if (result.stage !== 'planning')
-          throw new PublicApiError('Expected a Planning response.', 400);
+          throw new Error('Expected a Planning response.');
         const next: PlanningCard = {
           ...card,
           planRef: revisionRef(card.id, card.revision + 1, 'plan.md'),
@@ -835,10 +835,7 @@ export function createPlanningService(
       if (card.run?.status !== 'running') return card;
       const running = active.get(key(project, cardId));
       if (running?.id !== card.run.id)
-        throw new PublicApiError(
-          'This run is owned by another server process.',
-          400,
-        );
+        throw new Error('This run is owned by another server process.');
       const next = {
         ...card,
         run: {
@@ -979,10 +976,7 @@ export async function savePlanningInstructions(
   await mkdir(directory, { recursive: true });
   const actual = await realpath(directory);
   if (!actual.startsWith((await realpath(project.planningPath)) + path.sep))
-    throw new PublicApiError(
-      'Instructions directory escapes the project.',
-      400,
-    );
+    throw new Error('Instructions directory escapes the project.');
   const temp = path.join(directory, `instructions-${randomUUID()}.tmp`);
   await writeFile(temp, value, { flag: 'wx' });
   await rename(temp, path.join(directory, 'instructions.md'));

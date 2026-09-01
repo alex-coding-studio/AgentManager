@@ -304,7 +304,7 @@ export function createExecutionService(
           );
         }
         if (result.stage !== 'execution')
-          throw new PublicApiError('Expected an execution response.', 400);
+          throw new Error('Expected an execution response.');
         const outputRef = reference(card, 'output.md');
         nextRun = {
           ...nextRun,
@@ -851,7 +851,7 @@ export function createExecutionService(
         throw new PublicApiError('No execution is running.', 400);
       const handle = active.get(project.rootPath);
       if (handle?.id !== run.id)
-        throw new PublicApiError('Execution is owned by another server.', 400);
+        throw new Error('Execution is owned by another server.');
       const saved = await commit(
         project,
         replaceRun(card, {
@@ -998,9 +998,8 @@ export function createExecutionService(
       .filter((run): run is ActionRun => Boolean(run && !run.outputRef));
     if (!missing.length) return card;
     if (missing.some((run) => !hasReviewableReport(run)))
-      throw new PublicApiError(
+      throw new Error(
         'An accepted Action is missing its original report; restore the record before continuing.',
-        400,
       );
     const files: Record<string, string> = {};
     const refs = new Map<string, string>();
@@ -1056,9 +1055,8 @@ export function createExecutionService(
       card.execution?.runs.at(-1)?.status === 'running' ||
       card.execution?.acceptedActionIds.includes(actionId)
     )
-      throw new PublicApiError(
+      throw new Error(
         'Only a legacy unaccepted Action without a checklist can be upgraded.',
-        400,
       );
     validateAcceptanceCriteria(criteria);
     if (typeof note !== 'string' || !note.trim())
@@ -1274,9 +1272,8 @@ export function createExecutionService(
           400,
         );
       if (hasUnsupportedAppArtifact(run))
-        throw new PublicApiError(
+        throw new Error(
           'App bundle verification is unsupported. Retrying cannot resolve this until support is added.',
-          400,
         );
       if (card.execution?.workspace)
         await verifyCardWorkspace(card.execution.workspace);
@@ -1319,10 +1316,7 @@ export function createExecutionService(
         if (request && raw && recorded) break;
       }
       if (!request || !raw || !recorded)
-        throw new PublicApiError(
-          'Original report evidence is unavailable.',
-          400,
-        );
+        throw new Error('Original report evidence is unavailable.');
       if (JSON.stringify(card.plan) !== JSON.stringify(request.context.plan))
         throw new PublicApiError('Plan changed since this report.', 409);
       const current = await snapshotWorkspace(workingProject);
@@ -1385,7 +1379,7 @@ export function createExecutionService(
         );
       }
       if (result.stage !== 'execution')
-        throw new PublicApiError('Expected an execution report.', 400);
+        throw new Error('Expected an execution report.');
       const github =
         run.github?.outputHead === recorded.head &&
         run.github.repositoryUrl === getGitHubRepositoryUrl(workingProject)
@@ -1577,7 +1571,7 @@ async function optionalRecordFile(file: string) {
   try {
     const stat = await lstat(file);
     if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 8000000)
-      throw new PublicApiError('Invalid recorded output file.', 400);
+      throw new Error('Invalid recorded output file.');
     return await readFile(file, 'utf8');
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;

@@ -92,25 +92,37 @@ messages and extra fields still reach the client while unknown errors cannot.
 
 ## Choosing what is public
 
-The rule is about what a message _contains_, not how it reads: **a throw whose message
-is a plain string literal is public; a throw that interpolates runtime values is not.**
+A message is public only when the product deliberately says it to a user. That is a
+judgement made per throw site, not a property derived from the message.
 
-A string literal is text the author wrote. It cannot contain an absolute path, a
-filename, an identifier, a command line or a credential, because nothing is
-substituted into it. An interpolated message can, and those are exactly the ones this
-boundary exists to stop — `` `${fileName} is not a valid Task Graph node.` `` and
-`` `The selected source ${ref} could not be read.` `` stay unknown.
+**Public** — deliberate request validation, actionable conflicts, and product states a
+user can act on:
 
-This also preserves behaviour rather than expanding exposure. Before this change every
-caught message was forwarded, so these literals were already what the user saw. Keeping
-them public keeps validation actionable; the change is that interpolated and
-unrecognized errors stop being forwarded.
+- `An Instruction is required.`, `Upload no more than 20 Markdown files at once.`
+- `This project directory is already registered.` (409)
+- `Stop the Planning Agent before deleting this Card.`, `Generate a Plan first.`
 
-Wording is not evidence either way. A friendly-sounding message produced by a failed
-subprocess is still unknown, because it is not a literal at a throw site in this
-codebase.
+**Unknown** — internal invariants, Agent or provider contract violations, persistence
+damage, and operational failures. These reach the client only as the Route's fallback
+plus a correlation identifier:
 
-Status codes follow the same principle. Routes used to derive 409 by matching the error
+- `Expected a Planning response.`, `A revision must return exactly the requested Candidate identifier.` — the Agent broke its contract
+- `Candidate stable identity is missing.`, `Invalid recorded output file.` — stored state is damaged
+- `This run is owned by another server process.`, `Card storage ownership changed.` — internal ownership
+- `Could not choose a unique Run Resource name.` — an operation exhausted its attempts
+
+A literal with no interpolation is not automatically safe. `Invalid Planning Card
+state.` substitutes nothing, yet it tells a caller that Planning Cards have states and
+that one is inconsistent. Absence of runtime data prevents _credential and path_ leaks;
+it does not make an internal failure something to publish.
+
+Nor is "the user already saw this before the change" a reason to keep publishing it.
+The old code forwarded everything; that is the defect, not the baseline.
+
+Wording is not evidence in either direction. A friendly-sounding message from a failed
+subprocess stays unknown.
+
+Status codes follow the classification. Routes used to derive 409 by matching error
 text (`/already has an active Agent Run/`); the throw site now carries `409` and no
 Route inspects wording.
 
@@ -127,8 +139,18 @@ identifier; Request Boundary statuses surviving; a real Route that previously le
 `ENOENT`/`realpath` now answering with its own generic 500; existing safe validation
 staying exact; and a rejected request creating no project and starting no Agent Run.
 
-One test is structural: it walks every `route.ts` under `app/api` and fails when a
-catch block publishes an unknown error message, whether directly in the response or
-through a variable bound to it. Reading `error.message` to make a decision — as the
-folder picker does to detect cancellation — is not an exposure and does not fail it.
-The assertion is itself covered by synthetic leaking and non-leaking handlers.
+Three tests fix the classification itself: an internal failure returns only the Route
+fallback and an identifier; the named internal failures are asserted **not** to be
+`PublicApiError` anywhere in `lib`; and representative request validations are asserted
+to still be public. A future edit that moves a message across the boundary fails one of
+them.
+
+One test is structural, and deliberately conservative: an API catch block may not read
+`error.message` at all, except inside a branch already narrowed to a known error class.
+It does no data-flow analysis, so no alias depth, template interpolation or field name
+can slip past it — two-hop and three-hop alias cases are in its synthetic coverage.
+
+The cost of that strictness is that a catch block cannot inspect a message to make a
+decision. Where that is genuinely needed — the folder picker detecting a cancelled
+dialog — the check lives in a named predicate (`isCancellationError`) instead. That is
+an improvement on its own: the intent has a name, and the catch block stays declarative.

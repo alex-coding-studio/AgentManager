@@ -547,10 +547,7 @@ async function writeUniqueMarkdown(
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
     }
   }
-  throw new PublicApiError(
-    'Could not choose a unique Markdown file name.',
-    400,
-  );
+  throw new Error('Could not choose a unique Markdown file name.');
 }
 
 function slugify(value: string) {

@@ -48,7 +48,7 @@ async function instructionsDirectory(
   try {
     const info = await lstat(directory);
     if (!info.isDirectory() || info.isSymbolicLink())
-      throw new PublicApiError('Invalid What’s Next context directory.', 400);
+      throw new Error('Invalid What’s Next context directory.');
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
@@ -63,7 +63,7 @@ export async function readWhatsNextInstructions(project: RegisteredProject) {
   try {
     const info = await lstat(file);
     if (!info.isFile() || info.isSymbolicLink() || info.size > 80_000)
-      throw new PublicApiError('Invalid What’s Next instructions file.', 400);
+      throw new Error('Invalid What’s Next instructions file.');
     const instructions = await readFile(file, 'utf8');
     if (instructions.length > 20_000)
       throw new PublicApiError('Instructions exceed 20000 characters.', 400);
