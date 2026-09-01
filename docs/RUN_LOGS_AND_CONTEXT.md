@@ -149,7 +149,8 @@ Do not infer architectural success from unit-test counts alone.
 
 Related records: [rolling dogfood review](JUST_DO_IT_DOGFOOD_REVIEW.md),
 [execution boundary](JUST_DO_IT_EXECUTION.md),
-[environment validation and repair proposal](DEVELOPMENT_ENVIRONMENT.md).
+[environment validation and repair proposal](DEVELOPMENT_ENVIRONMENT.md), and the
+[cross-module Automation Audit Framework](AUTOMATION_AUDIT.md).
 
 ## Coordinator use and first-slice boundary
 
