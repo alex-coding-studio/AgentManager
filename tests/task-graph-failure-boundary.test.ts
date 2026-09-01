@@ -256,6 +256,11 @@ void test('createStartNode keeps the primary error when cleanup itself fails', a
           'EIO',
           'a failing cleanup must not replace the reason the operation failed',
         );
+        assert.equal(
+          (error.cause as NodeJS.ErrnoException | undefined)?.code,
+          'EACCES',
+          'the cleanup failure is retained for Host diagnostics, not discarded',
+        );
         return true;
       },
     );
@@ -271,27 +276,39 @@ void test('createStartNode keeps the primary error when cleanup itself fails', a
   }
 });
 
-void test('createStartNode does not clean up after the publication rename succeeded', async () => {
+void test('createStartNode commits without any fallible work after publication', async () => {
   const { project, cleanup } = await makeProject();
   try {
     resetInjections();
     injectOnce('readFile', (t) => t.endsWith('node.json'));
-    await assert.rejects(() => createSecond(project), { code: 'EIO' });
+    const created = await createSecond(project);
 
-    const state = await nodeDirectories(project);
-    assert.equal(state.published.length, 1, 'the node is already committed');
-    assert.deepEqual(state.temporary, []);
     assert.equal(
       callsOf('rm').length,
       0,
-      'a post-publication failure must not run rollback cleanup',
+      'a committed node is never subjected to rollback cleanup',
+    );
+    assert.equal(
+      created.nodes.at(-1)?.id,
+      created.node.id,
+      'the returned graph includes the node just committed',
     );
 
+    const state = await nodeDirectories(project);
+    assert.deepEqual(state.published, [created.node.id]);
+    assert.deepEqual(state.temporary, []);
+    assert.equal(
+      injections[0]?.remaining,
+      1,
+      'publication never depended on the injected read',
+    );
+
+    resetInjections();
     const nodes = await listTaskGraphNodes(project);
     assert.equal(nodes.length, 1, 'a fresh reader sees the committed node');
     assert.equal(nodes[0]?.title, 'Second');
     const resources = await readdir(
-      path.join(nodesPath(project), nodes[0]!.id, 'resources'),
+      path.join(nodesPath(project), created.node.id, 'resources'),
     );
     assert.deepEqual(resources.sort(), ['a.md', 'b.md', 'idea.md']);
 
@@ -403,6 +420,9 @@ async function inspect(project: RegisteredProject, nodeId: string) {
   const onDisk = (
     await readdir(path.join(nodeDir, 'resources')).catch(() => [] as string[])
   ).sort();
+  const nodeDirEntries = (
+    await readdir(nodeDir).catch(() => [] as string[])
+  ).sort();
   const referenced = new Set(
     record.resources.map((resource) => path.basename(resource.path)),
   );
@@ -414,7 +434,10 @@ async function inspect(project: RegisteredProject, nodeId: string) {
     ideaBytes,
     onDisk,
     unreferenced: onDisk.filter((name) => !referenced.has(name)),
-    strayTemporaries: onDisk.filter((name) => name.endsWith('.tmp')),
+    nodeDirEntries,
+    strayTemporaries: [...onDisk, ...nodeDirEntries]
+      .filter((name) => name.endsWith('.tmp'))
+      .sort(),
     listedTitle: listed.find((node) => node.id === nodeId)?.title ?? null,
   };
 }
@@ -767,5 +790,209 @@ void test('a retry after a failed pre-commit update succeeds cleanly', async () 
   } finally {
     resetInjections();
     await cleanup();
+  }
+});
+
+void test('a retry after a failed staged cleanup chooses fresh names', async () => {
+  const { project, cleanup } = await makeProject();
+  try {
+    const seed = await seedNode(project);
+    const retained = seed.node.resources
+      .filter((resource) => resource.kind !== 'idea')
+      .map((resource) => resource.path);
+
+    resetInjections();
+    injectOnce('rename', (t) => t.endsWith('node.json'), 'EIO');
+    injections.push({
+      op: 'unlink',
+      match: () => true,
+      error: fsError('EACCES', 'cleanup'),
+      remaining: 99,
+      skip: 0,
+    });
+    await assert.rejects(
+      () =>
+        updateStartNode(
+          project,
+          updateInput(
+            seed.node.id,
+            retained,
+            [markdown('staged.md', '# staged\n')],
+            'first retry idea',
+          ),
+        ),
+      { code: 'EIO' },
+    );
+    const stranded = await inspect(project, seed.node.id);
+    assert.ok(stranded.unreferenced.length > 0, 'orphans are left behind');
+
+    resetInjections();
+    const retried = await updateStartNode(
+      project,
+      updateInput(
+        seed.node.id,
+        retained,
+        [markdown('staged.md', '# staged\n')],
+        'second retry idea',
+      ),
+    );
+
+    const after = await inspect(project, seed.node.id);
+    assert.equal(retried.node.title, 'Updated title');
+    assert.equal(after.title, 'Updated title');
+    assert.equal(after.ideaBytes.split('\n')[0], '# Updated title');
+    assert.notEqual(
+      after.ideaPath,
+      stranded.ideaPath,
+      'the retry publishes the idea at a fresh path',
+    );
+    for (const name of after.referenced)
+      assert.ok(
+        after.onDisk.includes(name),
+        'every referenced resource exists',
+      );
+    for (const name of stranded.unreferenced)
+      assert.ok(
+        !after.referenced.includes(name),
+        'a prior orphan is never adopted as canonical',
+      );
+    assert.deepEqual(
+      after.strayTemporaries.filter(
+        (name) => !stranded.strayTemporaries.includes(name),
+      ),
+      [],
+      'the retry adds no temporary record of its own',
+    );
+  } finally {
+    resetInjections();
+    await cleanup();
+  }
+});
+
+void test('a retry after a failed post-commit cleanup does not collide with the orphan', async () => {
+  const { project, cleanup } = await makeProject();
+  try {
+    const seed = await seedNode(project);
+    const retained = seed.node.resources
+      .filter((resource) => resource.kind !== 'idea')
+      .map((resource) => resource.path);
+    const originalIdea = path.basename(
+      seed.node.resources.find((r) => r.kind === 'idea')!.path,
+    );
+
+    resetInjections();
+    injectOnce('unlink', (t) => t.endsWith(originalIdea), 'EACCES');
+    const first = await updateStartNode(
+      project,
+      updateInput(seed.node.id, retained, [], 'first idea'),
+    );
+    const orphaned = await inspect(project, seed.node.id);
+    assert.ok(
+      orphaned.unreferenced.includes(originalIdea),
+      'the superseded idea survives its failed removal',
+    );
+    assert.equal(first.node.title, 'Updated title');
+
+    resetInjections();
+    const retried = await updateStartNode(
+      project,
+      updateInput(seed.node.id, retained, [], 'second idea'),
+    );
+
+    const after = await inspect(project, seed.node.id);
+    assert.notEqual(after.ideaPath, orphaned.ideaPath);
+    assert.ok(
+      !after.referenced.includes(originalIdea),
+      'the orphan is not reused as the published idea',
+    );
+    assert.equal(after.ideaBytes.split('\n')[0], '# Updated title');
+    assert.match(
+      await readFile(path.join(project.planningPath, after.ideaPath!), 'utf8'),
+      /second idea/,
+    );
+    assert.equal(retried.node.title, 'Updated title');
+    for (const name of after.referenced)
+      assert.ok(
+        after.onDisk.includes(name),
+        'every referenced resource exists',
+      );
+    assert.deepEqual(after.strayTemporaries, []);
+  } finally {
+    resetInjections();
+    await cleanup();
+  }
+});
+
+void test('the create Route reports a committed node as success, not a retryable failure', async () => {
+  const managerHome = await mkdtemp(path.join(os.tmpdir(), 'am-tg-home-'));
+  process.env.AGENT_MANAGER_HOME = managerHome;
+  const { project, cleanup } = await makeProject();
+  try {
+    await realFs.writeFile(
+      path.join(managerHome, 'config.json'),
+      `${JSON.stringify({ schemaVersion: 1, projects: [project] }, null, 2)}\n`,
+    );
+    const { POST } =
+      await import('../app/api/projects/[projectId]/nodes/route.ts');
+
+    resetInjections();
+    injectOnce('readFile', (t) => t.endsWith('node.json'));
+
+    const body = new FormData();
+    body.set('title', 'Routed start');
+    body.set('idea', 'a routed idea');
+    body.append('files', markdown('routed.md', '# routed\n'));
+    const response = await POST(
+      new Request('http://localhost:3000/api/projects/PROJECT-0001/nodes', {
+        method: 'POST',
+        headers: { host: 'localhost:3000' },
+        body,
+      }),
+      { params: Promise.resolve({ projectId: project.id }) },
+    );
+
+    assert.equal(
+      response.status,
+      201,
+      'a committed node must not be reported as a failure the caller should retry',
+    );
+    const payload = (await response.json()) as {
+      node: { id: string; title: string };
+      nodes: Array<{ id: string }>;
+    };
+    assert.equal(payload.node.title, 'Routed start');
+    assert.ok(
+      payload.nodes.some((node) => node.id === payload.node.id),
+      'the response carries the committed node rather than hiding it',
+    );
+
+    resetInjections();
+    const state = await nodeDirectories(project);
+    assert.deepEqual(state.published, [payload.node.id]);
+    assert.deepEqual(state.temporary, []);
+
+    const retry = await POST(
+      new Request('http://localhost:3000/api/projects/PROJECT-0001/nodes', {
+        method: 'POST',
+        headers: { host: 'localhost:3000' },
+        body: (() => {
+          const again = new FormData();
+          again.set('title', 'Routed start');
+          return again;
+        })(),
+      }),
+      { params: Promise.resolve({ projectId: project.id }) },
+    );
+    assert.equal(
+      retry.status,
+      400,
+      'a duplicate retry is refused by the product rule',
+    );
+    assert.equal((await nodeDirectories(project)).published.length, 1);
+  } finally {
+    resetInjections();
+    delete process.env.AGENT_MANAGER_HOME;
+    await cleanup();
+    await rm(managerHome, { recursive: true, force: true });
   }
 });

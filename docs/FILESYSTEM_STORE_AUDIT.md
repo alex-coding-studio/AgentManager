@@ -199,15 +199,21 @@ writes resources and `node.json` into it, and publishes with one directory renam
 record write and at the rename itself each leaves no published node, no listed node and no
 temporary directory.
 
-Two corrections came out of that exercise, both mutation-checked:
+Three corrections came out of that exercise:
 
 - **A failing cleanup no longer replaces the failure it was cleaning up after.** The `rm` in the
-  catch tolerates its own error, so the injected cause stays primary. The temporary directory then
-  remains, which the tests assert rather than hide.
-- **A failure after the rename no longer runs rollback cleanup.** The publication is tracked with
-  a `published` flag, so a fault in the listing that follows the rename leaves the committed node
-  alone. The node is present and complete, the caller still receives the error, and a retry meets
-  the existing `This Canvas already has a Start node.` rule rather than creating a second node.
+  catch cannot throw over the original error, and the cleanup failure is attached as that error's
+  `cause`, so `recordUnexpectedApiError` keeps both for Host diagnostics while the response still
+  carries only the generic message and a correlation id.
+- **Nothing fallible runs after publication.** The function returns the already-loaded graph plus
+  the node it just committed rather than re-listing from disk, so a read fault cannot make a
+  committed node look uncommitted. A `published` flag still guards the cleanup, but with the
+  re-list gone there is no reachable path that reaches the catch after the rename — bypassing that
+  guard changes no test, which is the evidence that the post-publication window is closed rather
+  than merely handled.
+- **The Route reflects that.** `POST /api/projects/[projectId]/nodes` answers `201` with the
+  committed node even when a subsequent read would fail, and a duplicate retry meets the existing
+  `This Canvas already has a Start node.` rule.
 
 **Crash boundary.** A process kill between the last write and the rename leaves a dot-prefixed
 temporary directory. Listing ignores it because it is not a node directory, and nothing reclaims
@@ -216,29 +222,32 @@ out of scope here.
 
 ### Task Graph node update — canonical
 
-`lib/task-graph.ts` `updateStartNode` publishes through one boundary: the `node.json` rename at
-`lib/task-graph.ts:402`. Resources reach that boundary as staged, unreferenced files.
+`lib/task-graph.ts` `updateStartNode` publishes through one boundary: the `node.json` rename.
+Resources reach that boundary as staged, unreferenced files.
 
-New attachments are written into the live resources directory with `flag: 'wx'` under names that
-cannot collide with an existing resource, and a changed idea is written to a **new** unique
-resource path rather than over the file the current record references
-(`lib/task-graph.ts:369-378`). Nothing the live `node.json` points at is modified before the
-rename. The rename publishes the new resource references; only after it commits is the superseded
-idea resource removed, as cleanup whose failure leaves an orphan without invalidating any
-reference.
+New attachments are written into the live resources directory with `flag: 'wx'`, and a changed
+idea is written to a **new** unique resource path rather than over the file the current record
+references. Nothing the live `node.json` points at is modified before the rename. The rename
+publishes the new resource references; only after it commits is the superseded idea resource
+removed, as cleanup whose failure leaves an orphan without invalidating any reference.
 
-A pre-commit failure removes every staged path, each removal tolerating its own error so the
-original failure stays primary. When that cleanup cannot run, the staged files remain as
-unreferenced orphans and the record is untouched.
+A pre-commit failure removes the temporary record and every staged path, each removal tolerating
+its own error so the original failure stays primary.
+
+Two properties this depends on, both regression-tested:
+
+- **Name allocation reads the resource directory, not only the references.** An orphan left by a
+  failed cleanup would otherwise be chosen again by a later update and fail its exclusive create.
+  Retries after a failed staged cleanup and after a failed post-commit removal both publish at
+  fresh paths and never adopt a prior orphan as canonical.
+- **The temporary record is cleaned on an ordinary pre-commit failure.** It lives in the node
+  directory rather than under `resources/`, so an inspection that scans only the resource
+  directory cannot see it — the first version of these tests missed exactly that.
 
 **This replaced an in-place overwrite.** Before the change, a changed idea was written directly
 over the referenced file, so an injected failure at the temporary-record write, at the rename, or
 during cleanup left the idea document holding the new title while `node.json` still described the
-previous state. `tests/task-graph-failure-boundary.test.ts` demonstrates that contradiction
-deterministically; restoring the in-place write turns six of its tests red.
-
-Post-commit removal of dropped attachments already tolerated its own failure and still does: an
-orphan may remain, and the tests assert that every path the record references still exists.
+previous state. Restoring the in-place write turns nine tests red.
 
 ### Task Graph listing normalization — derived
 

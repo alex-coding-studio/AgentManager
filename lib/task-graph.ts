@@ -243,12 +243,19 @@ export async function createStartNode(
     );
     await rename(temporaryNodePath, nodePath);
     published = true;
-    return { node, nodes: await listTaskGraphNodes(project, graphRoot) };
+    return { node, nodes: [...existingNodes, node] };
   } catch (error) {
-    if (!published)
-      await rm(temporaryNodePath, { recursive: true, force: true }).catch(
-        () => undefined,
+    if (!published) {
+      const cleanupFailure = await rm(temporaryNodePath, {
+        recursive: true,
+        force: true,
+      }).then(
+        () => null,
+        (failure: unknown) => failure,
       );
+      if (cleanupFailure && error instanceof Error && error.cause === undefined)
+        error.cause = cleanupFailure;
+    }
     throw error;
   }
 }
@@ -345,13 +352,15 @@ export async function updateStartNode(
   const uploads = await prepareUploads(input.files);
   const resourcesPath = path.join(nodePath, 'resources');
   await mkdir(resourcesPath, { recursive: true });
-  const usedNames = new Set(
-    [...existingAttachments.keys()].map((ref) => path.basename(ref)),
-  );
+  const usedNames = new Set([
+    ...[...existingAttachments.keys()].map((ref) => path.basename(ref)),
+    ...(await readdir(resourcesPath).catch(() => [] as string[])),
+  ]);
   if (ideaResource) usedNames.add(path.basename(ideaResource.path));
   const newAttachments: TaskGraphNode['resources'] = [];
   const newAttachmentPaths: string[] = [];
   let stagedIdea: TaskGraphNode['resources'][number] | null = null;
+  let temporaryJsonPath: string | null = null;
   let committed = false;
 
   try {
@@ -390,10 +399,7 @@ export async function updateStartNode(
         ...newAttachments,
       ],
     };
-    const temporaryJsonPath = path.join(
-      nodePath,
-      `.node-${randomUUID()}.json.tmp`,
-    );
+    temporaryJsonPath = path.join(nodePath, `.node-${randomUUID()}.json.tmp`);
     await writeFile(
       temporaryJsonPath,
       `${JSON.stringify(updatedNode, null, 2)}\n`,
@@ -421,6 +427,8 @@ export async function updateStartNode(
     };
   } catch (error) {
     if (!committed) {
+      if (temporaryJsonPath)
+        await unlink(temporaryJsonPath).catch(() => undefined);
       await Promise.all(
         newAttachmentPaths.map((filePath) =>
           unlink(filePath).catch(() => undefined),
