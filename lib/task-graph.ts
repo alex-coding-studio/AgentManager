@@ -1,10 +1,15 @@
 import { PublicApiError } from './api-errors.ts';
+import {
+  CONTEXT_LIBRARY_MARKDOWN,
+  TASK_GRAPH_MARKDOWN_SHAPES,
+  isPlanningPathRejection,
+  resolvePlanningPath,
+} from './planning-paths.ts';
 import { randomUUID } from 'node:crypto';
 import {
   mkdir,
   readFile,
   readdir,
-  realpath,
   rename,
   rm,
   unlink,
@@ -432,72 +437,42 @@ export async function readTaskGraphMarkdownResource(
   project: RegisteredProject,
   resourcePath: string,
 ) {
-  if (
-    !/^context(?:\/[a-z0-9][a-z0-9-]*)+\/[a-zA-Z0-9][a-zA-Z0-9._-]*\.(md|markdown)$/i.test(
-      resourcePath,
-    ) &&
-    !/^(?:task-graph|whats-next)\/nodes\/NODE-[0-9a-f]{8,32}\/resources\/[a-zA-Z0-9][a-zA-Z0-9._-]*\.(md|markdown)$/i.test(
-      resourcePath,
-    ) &&
-    !/^task-decomposition\/runs\/RUN-[0-9a-f-]{36}\/candidates\/CANDIDATE-(?:[0-9]{4,}|[0-9a-f]{8,32})\/output\.md$/i.test(
-      resourcePath,
-    ) &&
-    !/^whats-next\/runs\/RUN-[0-9a-f-]{36}\/candidates\/CANDIDATE-(?:[0-9]{4,}|[0-9a-f]{8,32})\/output\.md$/i.test(
-      resourcePath,
-    ) &&
-    !/^whats-next\/runs\/RUN-[0-9a-f-]{36}\/reflection\.md$/i.test(
-      resourcePath,
-    ) &&
-    !/^whats-next\/runs\/RUN-[0-9a-f-]{36}\/response\.md$/i.test(
-      resourcePath,
-    ) &&
-    !/^whats-next\/runs\/RUN-[0-9a-f-]{36}\/resources\/[a-zA-Z0-9][a-zA-Z0-9._-]*\.(md|markdown)$/i.test(
-      resourcePath,
-    ) &&
-    !/^(?:task-graph|whats-next)\/nodes\/NODE-[0-9a-f]{8,32}\/output\.md$/i.test(
-      resourcePath,
-    )
-  ) {
-    throw new PublicApiError('The source document path is invalid.', 400);
-  }
-
-  const planningRoot = await realpath(project.planningPath);
-  const absolutePath = await realpath(
-    path.resolve(project.planningPath, resourcePath),
-  );
-  if (!absolutePath.startsWith(`${planningRoot}${path.sep}`)) {
-    throw new PublicApiError('The source document path is invalid.', 400);
+  let resolved;
+  try {
+    resolved = await resolvePlanningPath(project, resourcePath, {
+      shapes: TASK_GRAPH_MARKDOWN_SHAPES,
+    });
+  } catch (error) {
+    if (isPlanningPathRejection(error))
+      throw new PublicApiError('The source document path is invalid.', 400);
+    throw error;
   }
   return {
     fileName: path.basename(resourcePath),
     path: resourcePath,
-    markdown: await readFile(absolutePath, 'utf8'),
+    markdown: await readFile(resolved.absolutePath, 'utf8'),
   };
 }
 
 async function validateContextRefs(project: RegisteredProject, refs: string[]) {
   const uniqueRefs = [...new Set(refs)];
-  const contextRoot = path.join(project.planningPath, 'context');
   for (const ref of uniqueRefs) {
-    if (
-      !/^context(?:\/[a-z0-9][a-z0-9-]*)+\/[a-zA-Z0-9][a-zA-Z0-9._-]*\.(md|markdown)$/i.test(
-        ref,
-      )
-    ) {
-      throw new PublicApiError(
-        'A selected Context Library reference is invalid.',
-        400,
-      );
-    }
-    const absolutePath = path.resolve(project.planningPath, ref);
-    if (!absolutePath.startsWith(`${contextRoot}${path.sep}`)) {
-      throw new PublicApiError(
-        'A selected Context Library reference is invalid.',
-        400,
-      );
+    let resolved;
+    try {
+      resolved = await resolvePlanningPath(project, ref, {
+        shapes: [CONTEXT_LIBRARY_MARKDOWN],
+        within: 'context',
+      });
+    } catch (error) {
+      if (isPlanningPathRejection(error))
+        throw new PublicApiError(
+          'A selected Context Library reference is invalid.',
+          400,
+        );
+      throw new Error(`The selected source ${ref} could not be read.`);
     }
     try {
-      await readFile(absolutePath, 'utf8');
+      await readFile(resolved.absolutePath, 'utf8');
     } catch {
       throw new Error(`The selected source ${ref} could not be read.`);
     }

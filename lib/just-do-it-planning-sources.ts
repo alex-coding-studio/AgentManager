@@ -1,6 +1,13 @@
-import { readFile, readdir, realpath, stat } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import type { RegisteredProject } from './project-registry.ts';
+import {
+  PlanningPathEscapeError,
+  PlanningPathKindError,
+  PlanningPathShapeError,
+  PlanningPathSizeError,
+  resolvePlanningPath,
+} from './planning-paths.ts';
 import { assertCardUuid } from './just-do-it-harness.ts';
 import { primarySourceResourcePaths } from './task-decomposition-context-workspace.ts';
 
@@ -20,16 +27,25 @@ export async function readPlanningFile(
   relative: string,
   maxBytes = 262_144,
 ) {
-  if (path.isAbsolute(relative) || relative.split(/[\\/]/).includes('..'))
-    throw new Error('Invalid planning file path.');
-  const root = await realpath(project.planningPath);
-  const file = await realpath(path.join(root, relative));
-  if (!file.startsWith(root + path.sep))
-    throw new Error('Planning resource escapes the project.');
-  const info = await stat(file);
-  if (!info.isFile() || info.size > maxBytes)
-    throw new Error('Planning resource is missing or too large.');
-  return readFile(file, 'utf8');
+  let resolved;
+  try {
+    resolved = await resolvePlanningPath(project, relative, {
+      require: 'file',
+      maxBytes,
+    });
+  } catch (error) {
+    if (error instanceof PlanningPathShapeError)
+      throw new Error('Invalid planning file path.');
+    if (error instanceof PlanningPathEscapeError)
+      throw new Error('Planning resource escapes the project.');
+    if (
+      error instanceof PlanningPathKindError ||
+      error instanceof PlanningPathSizeError
+    )
+      throw new Error('Planning resource is missing or too large.');
+    throw error;
+  }
+  return readFile(resolved.absolutePath, 'utf8');
 }
 
 export async function listPlanningSources(
