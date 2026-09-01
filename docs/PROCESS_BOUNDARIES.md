@@ -2,10 +2,11 @@
 
 ## What this document is for
 
-Six modules in this codebase serialize concurrent callers, and one of them takes a lock that
-another process can see. The difference matters: five of the seven queues below order work
-inside a single Node process only, and reading any of them as mutual exclusion over the data
-directory is wrong.
+Six modules in this codebase serialize concurrent callers through an in-process queue. A seventh
+mechanism, in `lib/system-validation-runner.ts`, is not a queue at all: it is a filesystem lock
+that refuses a contending caller, and it is the only thing here another process can see. The
+difference matters — every one of the six queues orders work inside a single Node process only,
+and reading any of them as mutual exclusion over the data directory is wrong.
 
 `docs/PROJECT_REGISTRY.md` already states this for the registry. This document is the shared
 statement for every serializer, so the per-store sections of
@@ -65,11 +66,15 @@ taskDecompositionMutations / whatsNextMutations  (planningPath)
 ```
 
 Break It Down and What's Next hold their planning-path chain across calls to
-`listTaskGraphNodes`, which is deliberately not queued. The Task Graph mutations call the
-identity store, which never calls back into Task Graph. No queued Task Graph operation is
-invoked from inside another one — `createStartNode`, `updateStartNode` and
-`deleteTaskGraphNode` each enter the chain once and then run unqueued internals — so no caller
-waits on a key it already holds.
+`listTaskGraphNodes`, and that call takes `taskGraphMutations` whenever it has legacy
+`whats-next` defaults to publish — that is the middle edge, and it is real. `lib/task-graph.ts`
+imports nothing from either higher-level module, so the reverse edge does not exist and the order
+is acyclic. The Task Graph chain in turn calls the identity store, which never calls back.
+
+Re-entrancy is avoided by composition, not by a re-entrant lock. Each of `createStartNode`,
+`updateStartNode` and `deleteTaskGraphNode` enters the key once and then runs unqueued
+internals, including an unqueued listing that publishes its normalization inline because the
+caller already holds the key. No caller ever waits on a key it already holds.
 
 ## The one cross-process primitive
 

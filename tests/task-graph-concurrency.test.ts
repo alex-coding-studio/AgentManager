@@ -19,7 +19,7 @@ let arrivals: Arrival[] | null = null;
 let gate: ((kind: string, target: string, source: string) => boolean) | null =
   null;
 let announce: (() => void) | null = null;
-let calls: Array<{ kind: string; target: string }> = [];
+let calls: Array<{ kind: string; target: string; source: string }> = [];
 
 async function pass<T>(
   kind: string,
@@ -27,7 +27,7 @@ async function pass<T>(
   source: string,
   run: () => Promise<T>,
 ): Promise<T> {
-  calls.push({ kind, target });
+  calls.push({ kind, target, source });
   if (!arrivals || !gate?.(kind, target, source)) return run();
   let release: () => void;
   const held = new Promise<void>((resolve) => {
@@ -128,8 +128,12 @@ function isCanvasPublication(kind: string, target: string) {
   );
 }
 
-function isRecordPublication(kind: string, target: string) {
-  return kind === 'rename' && target.endsWith(`${path.sep}node.json`);
+function isRecordPublication(kind: string, target: string, source: string) {
+  return (
+    kind === 'rename' &&
+    target.endsWith(`${path.sep}node.json`) &&
+    path.basename(source).startsWith('.node-')
+  );
 }
 
 async function stagedTitle(arrival: Arrival) {
@@ -189,10 +193,14 @@ async function canvasEntries(
   };
 }
 
-async function temporaryRecords(project: RegisteredProject, nodeId: string) {
-  const entries = await readdir(path.join(nodesPath(project), nodeId)).catch(
-    () => [] as string[],
-  );
+async function temporaryRecords(
+  project: RegisteredProject,
+  nodeId: string,
+  graphRoot = 'task-graph',
+) {
+  const entries = await readdir(
+    path.join(nodesPath(project, graphRoot), nodeId),
+  ).catch(() => [] as string[]);
   return entries.filter((entry) => entry.endsWith('.tmp')).sort();
 }
 
@@ -634,6 +642,99 @@ void test('the losing create is answered as a public conflict through the Route'
     const state = await canvasEntries(project);
     assert.equal(state.published.length, 1);
     assert.deepEqual(state.temporary, []);
+  } finally {
+    barrier.disarm();
+    await cleanup();
+  }
+});
+
+void test('listing normalization publishes in Canvas order, not from a stale snapshot', async () => {
+  const { project, cleanup } = await makeProject();
+  const barrier = armBarrier(isRecordPublication);
+  try {
+    const created = await createStartNode(
+      project,
+      {
+        title: 'Legacy',
+        contextRefs: [],
+        files: [],
+        idea: 'The legacy idea.',
+      },
+      'whats-next',
+    );
+    const nodeFile = path.join(
+      nodesPath(project, 'whats-next'),
+      created.node.id,
+      'node.json',
+    );
+    const legacy = JSON.parse(await readFile(nodeFile, 'utf8')) as Record<
+      string,
+      unknown
+    >;
+    delete legacy.layer;
+    delete legacy.artifactKind;
+    await writeFile(nodeFile, `${JSON.stringify(legacy, null, 2)}\n`);
+    resetCalls();
+
+    const update = updateStartNode(
+      project,
+      {
+        id: created.node.id,
+        title: 'Renamed',
+        contextRefs: [],
+        retainedAttachmentRefs: [],
+        files: [],
+        idea: 'The renamed idea.',
+      },
+      'whats-next',
+    );
+    await barrier.waitFor(1);
+    const listing = listTaskGraphNodes(project, 'whats-next');
+    barrier.at(0).release();
+    barrier.disarm();
+    const [updated, listed] = await Promise.allSettled([update, listing]);
+    assert.equal(updated.status, 'fulfilled');
+    assert.equal(listed.status, 'fulfilled');
+
+    const publications = calls
+      .filter((call) => call.kind === 'rename' && call.target === nodeFile)
+      .map((call) =>
+        path.basename(call.source).startsWith('node.json.')
+          ? 'normalization'
+          : 'update',
+      );
+    assert.deepEqual(
+      publications,
+      ['update', 'normalization'],
+      'normalization must publish after the update it queued behind, never from the snapshot it read first',
+    );
+
+    const stored = JSON.parse(await readFile(nodeFile, 'utf8')) as {
+      title: string;
+      layer?: string;
+      artifactKind?: string;
+      resources: Array<{ kind: string; path: string }>;
+    };
+    assert.equal(stored.title, 'Renamed');
+    assert.equal(stored.layer, 'discovery');
+    assert.equal(stored.artifactKind, 'source');
+    for (const resource of stored.resources) {
+      assert.ok(await exists(path.join(project.planningPath, resource.path)));
+    }
+
+    resetCalls();
+    await listTaskGraphNodes(project, 'whats-next');
+    assert.deepEqual(
+      calls.filter(
+        (call) => call.kind === 'rename' && call.target === nodeFile,
+      ),
+      [],
+      'a normalized record must not be republished by a later listing',
+    );
+    assert.deepEqual(
+      await temporaryRecords(project, created.node.id, 'whats-next'),
+      [],
+    );
   } finally {
     barrier.disarm();
     await cleanup();
