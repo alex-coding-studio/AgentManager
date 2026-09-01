@@ -32,6 +32,28 @@ function isNodePublication(target: string) {
 let requestArrivals: Arrival[] | null = null;
 let announceRequestArrival: (() => void) | null = null;
 
+let injectedFailure: {
+  match: (target: string) => boolean;
+  error: NodeJS.ErrnoException;
+} | null = null;
+
+function failingOn(
+  match: (target: string) => boolean,
+  error: NodeJS.ErrnoException,
+) {
+  injectedFailure = { match, error };
+  return { clear: () => (injectedFailure = null) };
+}
+
+function fsError(code: string, target: string) {
+  const error = new Error(
+    `${code}: injected, open '${target}'`,
+  ) as NodeJS.ErrnoException;
+  error.code = code;
+  error.path = target;
+  return error;
+}
+
 mock.module('../lib/local-agent-transport.ts', {
   namedExports: {
     ...(await import('../lib/local-agent-transport.ts')),
@@ -45,8 +67,16 @@ mock.module('../lib/local-agent-transport.ts', {
 mock.module('node:fs/promises', {
   namedExports: {
     ...realFs,
+    readFile: async (target: unknown, ...rest: unknown[]) => {
+      if (injectedFailure?.match(String(target))) throw injectedFailure.error;
+      return (realFs.readFile as (...args: unknown[]) => Promise<unknown>)(
+        target,
+        ...rest,
+      );
+    },
     writeFile: async (target: unknown, ...rest: unknown[]) => {
       const name = String(target);
+      if (injectedFailure?.match(name)) throw injectedFailure.error;
       if (requestArrivals && name.endsWith(`${path.sep}request.json`)) {
         let release: () => void;
         const gate = new Promise<void>((resolve) => {
@@ -102,6 +132,7 @@ const {
   startTaskDecompositionRun,
 } = await import('../lib/task-decomposition-runs.ts');
 const { listTaskGraphNodes } = await import('../lib/task-graph.ts');
+const { PublicApiError } = await import('../lib/api-errors.ts');
 
 function revisionRequest(runId: string) {
   return {
@@ -693,6 +724,95 @@ void test('a dependent invoked before its prerequisite is rejected and retries c
     assert.deepEqual(retried.node.dependsOn, [prerequisiteNode.id]);
     assert.deepEqual(await temporaryNodeDirectories(project), []);
   } finally {
+    await cleanup();
+  }
+});
+
+void test('a missing Run record on the loser path becomes the existing public error', async () => {
+  const { project, runId, cleanup } = await makeProject([
+    candidate(CANDIDATE_A),
+  ]);
+  try {
+    await readTaskDecompositionRun(project, runId);
+    const [discarded, accepted] = await Promise.allSettled([
+      discardTaskDecompositionCandidate(project, runId, CANDIDATE_A),
+      acceptTaskDecompositionCandidate(project, runId, CANDIDATE_A),
+    ]);
+    assert.equal(discarded.status, 'fulfilled');
+    assert.equal(accepted.status, 'rejected');
+    const reason = (accepted as PromiseRejectedResult).reason as Error;
+    assert.ok(
+      reason instanceof PublicApiError,
+      'a discarded Run must reach the caller as a public product error',
+    );
+    assert.equal(reason.message, 'The Candidate proposal is unavailable.');
+  } finally {
+    await cleanup();
+  }
+});
+
+void test('an ENOENT from nested Candidate state stays an internal error', async () => {
+  const { project, runId, cleanup } = await makeProject([
+    candidate(CANDIDATE_A),
+  ]);
+  const nested = path.join(
+    project.planningPath,
+    'task-decomposition',
+    'runs',
+    runId,
+    'candidates',
+    CANDIDATE_A,
+    'output.md',
+  );
+  const injection = failingOn(
+    (target) => target === nested,
+    fsError('ENOENT', nested),
+  );
+  try {
+    await assert.rejects(
+      () => acceptTaskDecompositionCandidate(project, runId, CANDIDATE_A),
+      (error: NodeJS.ErrnoException) => {
+        assert.equal(error.code, 'ENOENT');
+        assert.equal(error.path, nested);
+        assert.ok(
+          !(error instanceof PublicApiError),
+          'a nested filesystem failure must not be relabelled as a missing proposal',
+        );
+        return true;
+      },
+    );
+  } finally {
+    injection.clear();
+    await cleanup();
+  }
+});
+
+void test('a non-ENOENT failure reading the Run record is passed through unchanged', async () => {
+  const { project, runId, cleanup } = await makeProject([
+    candidate(CANDIDATE_A),
+  ]);
+  const record = path.join(
+    project.planningPath,
+    'task-decomposition',
+    'runs',
+    runId,
+    'run.json',
+  );
+  const injection = failingOn(
+    (target) => target === record,
+    fsError('EACCES', record),
+  );
+  try {
+    await assert.rejects(
+      () => acceptTaskDecompositionCandidate(project, runId, CANDIDATE_A),
+      (error: NodeJS.ErrnoException) => {
+        assert.equal(error.code, 'EACCES');
+        assert.ok(!(error instanceof PublicApiError));
+        return true;
+      },
+    );
+  } finally {
+    injection.clear();
     await cleanup();
   }
 });

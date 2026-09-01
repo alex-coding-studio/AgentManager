@@ -359,10 +359,15 @@ async function readAvailableProposalRun(
   project: RegisteredProject,
   runId: string,
 ) {
+  const recordPath = path.join(
+    taskDecompositionRunPath(project, runId),
+    'run.json',
+  );
   try {
     return await readTaskDecompositionRun(project, runId);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT')
+    const failure = error as NodeJS.ErrnoException;
+    if (failure.code === 'ENOENT' && failure.path === recordPath)
       throw new PublicApiError('The Candidate proposal is unavailable.', 400);
     throw error;
   }

@@ -279,8 +279,10 @@ scenarios when the serializer is bypassed.
 A third symptom of the same defect surfaced once the queue's ordering was asserted strictly: the
 caller that loses the race read a run directory the winner had already discarded and received a
 raw `ENOENT`. Acceptance and discard now read the run through a wrapper that converts that one
-case into the existing `The Candidate proposal is unavailable.`, leaving
-`readTaskDecompositionRun` and every other caller unchanged.
+case into the existing `The Candidate proposal is unavailable.`. The conversion requires both
+`code === 'ENOENT'` and an error path equal to the requested Run record, so a failure from the
+identity, Candidate or artifact reads that the same function performs stays an ordinary internal
+error. `readTaskDecompositionRun` and every other caller are unchanged.
 
 The graph identity allocator already prevented the worse outcome: `reserveNodeIdentity` runs
 inside its own `serialized()` chain and returns the same `NODE-` id for one Candidate uid
