@@ -1,3 +1,4 @@
+import { PublicApiError } from './api-errors.ts';
 import { validateAcceptanceCriteria } from './just-do-it-checklist.ts';
 import { randomUUID } from 'node:crypto';
 import {
@@ -326,7 +327,10 @@ export function createPlanningService(
       throw new Error('Invalid dependency decision.');
     const card = await read(project, cardId);
     if (card.revision !== expectedRevision)
-      throw new Error('Card changed. Reload before trying again.');
+      throw new PublicApiError(
+        'Card changed. Reload before trying again.',
+        409,
+      );
     if (card.run?.status === 'running')
       throw new Error('Stop the Planning Agent before reviewing dependencies.');
     if (card.plan?.status === 'finalized' || card.execution?.runs.length)
@@ -375,7 +379,10 @@ export function createPlanningService(
     assertRevision(expectedRevision);
     const card = await read(project, cardId);
     if (card.revision !== expectedRevision)
-      throw new Error('Card changed. Reload before trying again.');
+      throw new PublicApiError(
+        'Card changed. Reload before trying again.',
+        409,
+      );
     if (card.run?.status === 'running')
       throw new Error('Stop the Planning Agent before deleting this Card.');
     if (
@@ -395,7 +402,7 @@ export function createPlanningService(
       info.isSymbolicLink() ||
       !actualDirectory.startsWith(actualRoot + path.sep)
     )
-      throw new Error('Card storage ownership changed.');
+      throw new PublicApiError('Card storage ownership changed.', 409);
     await trashCard(actualDirectory);
     return { deleted: true as const, cardId };
   }
@@ -569,13 +576,16 @@ export function createPlanningService(
       throw new Error('Invalid planning input.');
     const card = await read(project, input.cardId);
     if (card.revision !== input.expectedRevision)
-      throw new Error('Card changed. Reload before trying again.');
+      throw new PublicApiError(
+        'Card changed. Reload before trying again.',
+        409,
+      );
     if (card.execution?.runs.length)
       throw new Error(
         'Execution has started. Clean rollback is required before changing the Plan; rollback is not connected yet.',
       );
     if (card.run?.status === 'running')
-      throw new Error('This Card already has a running Agent.');
+      throw new PublicApiError('This Card already has a running Agent.', 409);
     if (card.plan?.status === 'finalized')
       throw new Error(
         'The finalized Plan and acceptance checklist are locked.',
@@ -712,7 +722,7 @@ export function createPlanningService(
     const prompt = `${buildCardHarnessPrompt(request)}\nPlanning-only runtime: read relevant source and selected resources. Never write project files, run implementation, create Issues/PRs, or execute shell commands with external side effects. Return all user-facing plan text in the language of the user's goal and feedback. The host persists the Plan. Use UUID-form step IDs. Project directory: ${project.rootPath}`;
     const runKey = key(project, card.id);
     if (active.has(runKey))
-      throw new Error('This Card already has a running Agent.');
+      throw new PublicApiError('This Card already has a running Agent.', 409);
     active.set(runKey, { id: request.requestId, handle: null, timer: null });
     let saved: PlanningCard;
     try {
@@ -797,7 +807,10 @@ export function createPlanningService(
     assertRevision(expectedRevision);
     const card = await read(project, cardId);
     if (card.revision !== expectedRevision)
-      throw new Error('Card changed. Reload before trying again.');
+      throw new PublicApiError(
+        'Card changed. Reload before trying again.',
+        409,
+      );
     if (action === 'cancel') {
       if (card.run?.status !== 'running') return card;
       const running = active.get(key(project, cardId));

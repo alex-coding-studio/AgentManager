@@ -1,4 +1,5 @@
 import { getProject } from '@/lib/project-registry';
+import { apiErrorResponse } from '@/lib/api-errors';
 import { guardJsonRequest } from '@/lib/request-boundary';
 import {
   ContextDocumentConflictError,
@@ -80,9 +81,11 @@ export async function POST(
         { status: 409 },
       );
     }
-    const message =
-      error instanceof Error ? error.message : 'Could not add the document.';
-    return Response.json({ error: message }, { status: 400 });
+    return apiErrorResponse(
+      error,
+      'Could not add the document.',
+      'POST /api/projects/[projectId]/context/documents',
+    );
   }
 }
 
@@ -116,8 +119,10 @@ export async function DELETE(
     );
     return Response.json(result);
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : 'Could not delete the document.';
-    return Response.json({ error: message }, { status: 400 });
+    return apiErrorResponse(
+      error,
+      'Could not delete the document.',
+      'DELETE /api/projects/[projectId]/context/documents',
+    );
   }
 }

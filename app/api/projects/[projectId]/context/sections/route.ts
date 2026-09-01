@@ -1,4 +1,5 @@
 import { getProject } from '@/lib/project-registry';
+import { apiErrorResponse } from '@/lib/api-errors';
 import { guardJsonRequest } from '@/lib/request-boundary';
 import {
   createContextSection,
@@ -37,9 +38,11 @@ export async function POST(
     const result = await createContextSection(project, title);
     return Response.json(result, { status: 201 });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : 'Could not create the folder.';
-    return Response.json({ error: message }, { status: 400 });
+    return apiErrorResponse(
+      error,
+      'Could not create the folder.',
+      'POST /api/projects/[projectId]/context/sections',
+    );
   }
 }
 
@@ -76,8 +79,10 @@ export async function PATCH(
     const result = await renameContextSection(project, payload.section, title);
     return Response.json(result);
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : 'Could not rename the folder.';
-    return Response.json({ error: message }, { status: 400 });
+    return apiErrorResponse(
+      error,
+      'Could not rename the folder.',
+      'PATCH /api/projects/[projectId]/context/sections',
+    );
   }
 }

@@ -1,3 +1,4 @@
+import { PublicApiError } from './api-errors.ts';
 import {
   startCoordinatedExecution,
   CoordinationRunError,
@@ -454,7 +455,10 @@ export function createExecutionService(
       }
       let card = await store.read(project, input.cardId);
       if (card.revision !== input.expectedRevision)
-        throw new Error('Card changed. Reload before trying again.');
+        throw new PublicApiError(
+          'Card changed. Reload before trying again.',
+          409,
+        );
       if (card.run?.status === 'running')
         throw new Error('Stop planning before executing.');
       const dependencyReview = await store.dependencyReview(project, card);
@@ -829,10 +833,13 @@ export function createExecutionService(
     assertCardUuid(outputId);
     const card = await refresh(project, await store.read(project, cardId));
     if (card.revision !== expectedRevision)
-      throw new Error('Card changed. Reload before trying again.');
+      throw new PublicApiError(
+        'Card changed. Reload before trying again.',
+        409,
+      );
     const run = card.execution?.runs.at(-1);
     if (!run || run.id !== outputId)
-      throw new Error('The current Action output changed.');
+      throw new PublicApiError('The current Action output changed.', 409);
     if (action === 'cancel') {
       if (run.status !== 'running') throw new Error('No execution is running.');
       const handle = active.get(project.rootPath);
@@ -1026,7 +1033,10 @@ export function createExecutionService(
     assertCardUuid(cardId);
     const card = await store.read(project, cardId);
     if (card.revision !== expectedRevision)
-      throw new Error('Card changed. Reload before trying again.');
+      throw new PublicApiError(
+        'Card changed. Reload before trying again.',
+        409,
+      );
     const action = card.actions.find((item) => item.id === actionId);
     if (
       card.plan?.status !== 'finalized' ||
@@ -1072,7 +1082,10 @@ export function createExecutionService(
     assertCardUuid(cardId);
     const card = await store.read(project, cardId);
     if (card.revision !== expectedRevision)
-      throw new Error('Card changed. Reload before trying again.');
+      throw new PublicApiError(
+        'Card changed. Reload before trying again.',
+        409,
+      );
     const workspace = card.execution?.workspace;
     if (!workspace) throw new Error('This Card has no workspace yet.');
     await verifyCardWorkspace(workspace);
@@ -1100,7 +1113,10 @@ export function createExecutionService(
     assertCardUuid(cardId);
     const card = await store.read(project, cardId);
     if (card.revision !== expectedRevision)
-      throw new Error('Card changed. Reload before trying again.');
+      throw new PublicApiError(
+        'Card changed. Reload before trying again.',
+        409,
+      );
     const run = card.execution?.runs.at(-1);
     if (
       !run?.acceptanceChecklist ||
@@ -1159,7 +1175,10 @@ export function createExecutionService(
     assertCardUuid(outputId);
     const card = await store.read(project, cardId);
     if (card.revision !== expectedRevision)
-      throw new Error('Card changed. Reload before trying again.');
+      throw new PublicApiError(
+        'Card changed. Reload before trying again.',
+        409,
+      );
     if (card.execution?.runs.at(-1)?.status === 'running')
       throw new Error('Wait for execution to finish before refreshing GitHub.');
     const run = card.execution?.runs.find((item) => item.id === outputId);
@@ -1213,7 +1232,10 @@ export function createExecutionService(
     try {
       const card = await store.read(project, cardId);
       if (card.revision !== expectedRevision)
-        throw new Error('Card changed. Reload before trying again.');
+        throw new PublicApiError(
+          'Card changed. Reload before trying again.',
+          409,
+        );
       const run = card.execution?.runs.at(-1);
       if (
         !run ||
@@ -1272,7 +1294,7 @@ export function createExecutionService(
       if (!request || !raw || !recorded)
         throw new Error('Original report evidence is unavailable.');
       if (JSON.stringify(card.plan) !== JSON.stringify(request.context.plan))
-        throw new Error('Plan changed since this report.');
+        throw new PublicApiError('Plan changed since this report.', 409);
       const current = await snapshotWorkspace(workingProject);
       if (
         current.root !== recorded.root ||
@@ -1408,7 +1430,10 @@ export function createExecutionService(
     try {
       const card = await store.read(project, cardId);
       if (card.revision !== expectedRevision)
-        throw new Error('Card changed. Reload before trying again.');
+        throw new PublicApiError(
+          'Card changed. Reload before trying again.',
+          409,
+        );
       const workspace = card.execution?.workspace;
       const last = card.execution?.runs.at(-1);
       if (
@@ -1452,7 +1477,10 @@ export function createExecutionService(
       };
       if (confirmation === undefined) return { preview };
       if (confirmation !== token)
-        throw new Error('Workspace changed. Preview the reset again.');
+        throw new PublicApiError(
+          'Workspace changed. Preview the reset again.',
+          409,
+        );
       const restarted = await restartCardWorkspace(project, card);
       try {
         const saved = await commit(

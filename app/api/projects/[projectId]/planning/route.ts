@@ -1,4 +1,5 @@
 import { getProject } from '@/lib/project-registry';
+import { apiErrorResponse } from '@/lib/api-errors';
 import { guardJsonRequest } from '@/lib/request-boundary';
 import { readContextBrowser } from '@/lib/product-context';
 import { executionService } from '@/lib/just-do-it-execution-service';
@@ -125,10 +126,9 @@ export async function POST(
 }
 
 function failure(error: unknown) {
-  const message =
-    error instanceof Error ? error.message : 'Planning request failed.';
-  return Response.json(
-    { error: message },
-    { status: /changed|conflict|running Agent/.test(message) ? 409 : 400 },
+  return apiErrorResponse(
+    error,
+    'Planning request failed.',
+    '/api/projects/[projectId]/planning',
   );
 }

@@ -1,4 +1,5 @@
 import { getProject } from '@/lib/project-registry';
+import { apiErrorResponse } from '@/lib/api-errors';
 import { readTaskGraphMarkdownResource } from '@/lib/task-graph';
 
 export const runtime = 'nodejs';
@@ -25,10 +26,10 @@ export async function GET(
       await readTaskGraphMarkdownResource(project, resourcePath),
     );
   } catch (error) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : 'Could not read the source document.';
-    return Response.json({ error: message }, { status: 400 });
+    return apiErrorResponse(
+      error,
+      'Could not read the source document.',
+      'GET /api/projects/[projectId]/resources',
+    );
   }
 }

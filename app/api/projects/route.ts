@@ -3,6 +3,7 @@ import {
   listProjects,
   type ProjectKind,
 } from '@/lib/project-registry';
+import { apiErrorResponse } from '@/lib/api-errors';
 import { guardJsonRequest } from '@/lib/request-boundary';
 
 export const runtime = 'nodejs';
@@ -56,8 +57,10 @@ export async function POST(request: Request) {
     });
     return Response.json({ project }, { status: 201 });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : 'Could not create project.';
-    return Response.json({ error: message }, { status: 400 });
+    return apiErrorResponse(
+      error,
+      'Could not create project.',
+      'POST /api/projects',
+    );
   }
 }

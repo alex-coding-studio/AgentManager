@@ -1,4 +1,5 @@
 import { getProject } from '@/lib/project-registry';
+import { apiErrorResponse } from '@/lib/api-errors';
 import { guardJsonRequest } from '@/lib/request-boundary';
 import { executionService } from '@/lib/just-do-it-execution-service';
 
@@ -86,9 +87,10 @@ export async function POST(
       });
     throw new Error('Unknown execution operation.');
   } catch (error) {
-    return Response.json(
-      { error: error instanceof Error ? error.message : 'Execution failed.' },
-      { status: 400 },
+    return apiErrorResponse(
+      error,
+      'Execution failed.',
+      'POST /api/projects/[projectId]/execution',
     );
   }
 }

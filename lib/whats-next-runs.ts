@@ -1,3 +1,4 @@
+import { PublicApiError } from './api-errors.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import {
   validateAgentProfile,
@@ -262,7 +263,10 @@ async function startWhatsNextRunUnlocked(
         ) && ['running', 'validating'].includes(active.record.status),
     )
   ) {
-    throw new Error("A selected Node already has an active What's next Run.");
+    throw new PublicApiError(
+      "A selected Node already has an active What's next Run.",
+      409,
+    );
   }
   const runId = `RUN-${randomUUID()}`;
   const sessionId = coordinatorRun?.sessionId ?? `SESSION-${randomUUID()}`;

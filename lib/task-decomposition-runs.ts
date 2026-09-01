@@ -1,3 +1,4 @@
+import { PublicApiError } from './api-errors.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import {
   validateAgentProfile,
@@ -177,7 +178,7 @@ export async function startTaskDecompositionRun(
         ['running', 'validating'].includes(active.record.status),
     )
   ) {
-    throw new Error('This Node already has an active Agent Run.');
+    throw new PublicApiError('This Node already has an active Agent Run.', 409);
   }
 
   const runId = `RUN-${randomUUID()}`;

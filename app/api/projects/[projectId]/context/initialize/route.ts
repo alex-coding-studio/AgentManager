@@ -1,4 +1,5 @@
 import { getProject } from '@/lib/project-registry';
+import { apiErrorResponse } from '@/lib/api-errors';
 import { guardRequest } from '@/lib/request-boundary';
 import { initializeProductContext } from '@/lib/product-context';
 
@@ -20,10 +21,10 @@ export async function POST(
     const sections = await initializeProductContext(project);
     return Response.json({ sections });
   } catch (error) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : 'Could not initialize Product Context.';
-    return Response.json({ error: message }, { status: 500 });
+    return apiErrorResponse(
+      error,
+      'Could not initialize Product Context.',
+      'POST /api/projects/[projectId]/context/initialize',
+    );
   }
 }

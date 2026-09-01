@@ -1,3 +1,4 @@
+import { PublicApiError } from './api-errors.ts';
 import { randomUUID } from 'node:crypto';
 import {
   mkdir,
@@ -32,11 +33,11 @@ type TaskDecompositionSettings = {
   attachmentsDirectory: 'attachments';
 };
 
-export class TaskDecompositionAttachmentConflictError extends Error {
+export class TaskDecompositionAttachmentConflictError extends PublicApiError {
   conflicts: string[];
 
   constructor(conflicts: string[]) {
-    super('One or more context attachments already exist.');
+    super('One or more context attachments already exist.', 409);
     this.name = 'TaskDecompositionAttachmentConflictError';
     this.conflicts = conflicts;
   }
