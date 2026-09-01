@@ -75,32 +75,73 @@ they share a source file.
 
 ## Summary
 
-| write unit                       | class                           | owner                                         | publication boundary                      | serialization                    | priority     |
-| -------------------------------- | ------------------------------- | --------------------------------------------- | ----------------------------------------- | -------------------------------- | ------------ |
-| project registry                 | canonical                       | `lib/project-registry.ts`                     | shared helper, `wx` temp + rename         | promise chain, per file          | no migration |
-| app settings                     | canonical                       | `lib/app-settings.ts`                         | `wx` temp + rename                        | promise chain, per file          | no migration |
-| worklog revision history         | canonical, append-only evidence | `lib/just-do-it-worklog.ts`                   | complete pending directory + rename       | rename is the compare-and-swap   | no migration |
-| worklog HANDOFF / INDEX / refs   | derived materialization         | `lib/just-do-it-worklog.ts`                   | inside the same revision directory        | inherited from the revision      | no migration |
-| Task Graph node creation         | canonical                       | `lib/task-graph.ts` `createStartNode`         | unique temp directory + rename            | none                             | P3           |
-| Task Graph node update           | canonical                       | `lib/task-graph.ts` `updateStartNode`         | **`node.json` only; other effects live**  | none                             | **P2**       |
-| Task Graph listing normalization | derived materialization         | `lib/task-graph.ts` `listTaskGraphNodes`      | `wx` temp + rename, on the read path      | none, idempotent                 | P3           |
-| Break It Down Runs               | canonical                       | `lib/task-decomposition-runs.ts`              | `wx` temp + rename per artifact           | **none**                         | **P2**       |
-| What's Next Runs                 | canonical                       | `lib/whats-next-runs.ts`                      | `wx` temp + rename per artifact           | promise chain, per planning path | P3           |
-| Run context workspace            | derived, not reconstructible    | `lib/task-decomposition-context-workspace.ts` | **none**                                  | none                             | **P2**       |
-| Break It Down context            | canonical                       | `lib/task-decomposition-context.ts`           | `wx` per attachment; settings create-once | none                             | P3           |
-| Context Library documents        | canonical                       | `lib/product-context.ts`                      | `wx` per document; section rename         | none                             | P3           |
-| What's Next instructions         | canonical                       | `lib/whats-next-context.ts`                   | `wx` temp + rename                        | none                             | P3           |
-| Just Do It planning records      | canonical                       | `lib/just-do-it-planning-service.ts`          | `wx` temp + rename                        | none                             | P3           |
-| Card environment manifest        | canonical                       | `lib/card-host-operations.ts`                 | `wx` temp + rename                        | none                             | P3           |
-| Card workspace record            | canonical                       | `lib/just-do-it-worktree.ts`                  | `wx` temp + rename                        | none                             | P3           |
-| host job events and logs         | append-only evidence            | `lib/host-job-broker.ts`                      | temp + rename, **no `wx`**                | none                             | P3           |
-| system validation result         | cache                           | `lib/system-validation-runner.ts`             | `wx` temp + rename                        | **`mkdir` lock, cross-process**  | no migration |
+| write unit                       | class                           | owner                                         | publication boundary                                 | serialization                    | priority     |
+| -------------------------------- | ------------------------------- | --------------------------------------------- | ---------------------------------------------------- | -------------------------------- | ------------ |
+| project registry                 | canonical                       | `lib/project-registry.ts`                     | shared helper, `wx` temp + rename                    | promise chain, per file          | no migration |
+| app settings                     | canonical                       | `lib/app-settings.ts`                         | `wx` temp + rename                                   | promise chain, per file          | no migration |
+| worklog revision history         | canonical, append-only evidence | `lib/just-do-it-worklog.ts`                   | complete pending directory + rename                  | rename is the compare-and-swap   | no migration |
+| worklog HANDOFF / INDEX / refs   | derived materialization         | `lib/just-do-it-worklog.ts`                   | inside the same revision directory                   | inherited from the revision      | no migration |
+| Task Graph node creation         | canonical                       | `lib/task-graph.ts` `createStartNode`         | unique temp directory + rename                       | none                             | P3           |
+| Task Graph node update           | canonical                       | `lib/task-graph.ts` `updateStartNode`         | **`node.json` only; other effects live**             | none                             | **P2**       |
+| Task Graph listing normalization | derived materialization         | `lib/task-graph.ts` `listTaskGraphNodes`      | `wx` temp + rename, on the read path                 | none, idempotent                 | P3           |
+| Break It Down Runs               | canonical                       | `lib/task-decomposition-runs.ts`              | `wx` temp + rename per artifact                      | **none**                         | **P2**       |
+| What's Next Runs                 | canonical                       | `lib/whats-next-runs.ts`                      | `wx` temp + rename per artifact                      | promise chain, per planning path | P3           |
+| Run context workspace            | immutable Run-input evidence    | `lib/task-decomposition-context-workspace.ts` | immutable Run-input evidence                         |
+| Break It Down context            | canonical                       | `lib/task-decomposition-context.ts`           | `wx` per attachment; settings create-once            | none                             | P3           |
+| Context Library documents        | canonical                       | `lib/product-context.ts`                      | `wx` per document; section rename                    | none                             | P3           |
+| What's Next instructions         | canonical                       | `lib/whats-next-context.ts`                   | `wx` temp + rename                                   | none                             | P3           |
+| Just Do It planning instructions | canonical                       | `lib/just-do-it-planning-service.ts`          | canonical — planning instructions                    |
+| Card environment manifest        | canonical                       | `lib/card-host-operations.ts`                 | canonical manifest; Git-backed candidate publication |
+| Card workspace record            | canonical                       | `lib/just-do-it-worktree.ts`                  | `wx` temp + rename                                   | none                             | P3           |
+| host job status record           | canonical, mutable              | `lib/host-job-broker.ts`                      | canonical mutable job status; derived output log     |
+| host job output log              | derived output                  | `lib/host-job-broker.ts`                      | written once at completion                           | none                             | no migration |
+| system validation result         | cache                           | `lib/system-validation-runner.ts`             | `wx` temp + rename                                   | **`mkdir` lock, cross-process**  | no migration |
 
-Class totals: 12 canonical, 1 canonical-and-append-only, 1 append-only evidence,
-3 derived materialization, 1 cache. External repository state and ephemeral process state own
-no JSON write unit and are covered in their own sections below.
+Class totals: 14 canonical — 12 plain, one also append-only, one a mutable two-state record —
+plus 2 derived materialization, 1 derived output, 1 immutable Run-input evidence and 1 cache,
+for 19 write units.
+External repository state and ephemeral process state own no JSON write unit and are covered in
+their own sections below. Card candidate publication is Git-backed and appears there, not as
+evidence for the manifest row.
 
 ## Detailed sections
+
+### project registry — canonical
+
+`lib/project-registry.ts` is the only consumer of `lib/atomic-json-store.ts`
+(`lib/project-registry.ts:8,37`). `createProject` performs the duplicate check, the filesystem
+effects and the registry update inside one link of the per-file promise chain. Its read path
+tolerates a missing project file by returning `null` on `ENOENT`
+(`lib/project-registry.ts:158-163`); its failure path restores the exact prior bytes through
+`writeFileAtomically`, or removes the file when it did not previously exist
+(`lib/project-registry.ts:164`).
+
+Concurrency is reachable and covered: `tests/project-registry-atomicity.test.ts` exercises
+concurrent creation and rollback over a pre-existing file. The process-local limit of the chain
+is already documented in `docs/PROJECT_REGISTRY.md`.
+
+### app settings — canonical
+
+`lib/app-settings.ts` reads `settings.json`, treating both `ENOENT` and a parse failure as an
+empty value rather than throwing (`lib/app-settings.ts:42-53`). `updateAppSettings` merges and
+republishes through a `wx` temporary file and one rename, inside a `globalThis` promise chain
+keyed per file (`lib/app-settings.ts:15`). A publish failure leaves the temporary file behind
+and the target intact.
+
+Concurrent partial saves are covered by `tests/app-settings.test.ts`. The chain is process-local
+and undocumented; see the cross-process section.
+
+### graph identity index — canonical
+
+`lib/graph-identity-store.ts` reads the index with `JSON.parse` and treats a missing file as
+absent, rethrowing any other error (`lib/graph-identity-store.ts:55-56,80`); a missing records
+directory reads as an empty list (`lib/graph-identity-store.ts:106`). `atomicJson` re-implements
+the shared helper locally — `mkdir`, `wx` temporary file, rename
+(`lib/graph-identity-store.ts:89-95`) — and mutations run through a local `serialized()` promise
+chain (`lib/graph-identity-store.ts:38`).
+
+**Not proven.** No dedicated test exercises its concurrency or failure path; the chain is
+process-local and undocumented.
 
 ### worklog revision history — canonical, append-only
 
@@ -239,31 +280,45 @@ first item in the Item 6 queue.
 `project.planningPath`, and publishes individual artifacts through `wx` temporary files and
 renames. The serializer is process-local; see the cross-process section.
 
-### Run context workspace — derived, not reconstructible, P2
+### Run context workspace — immutable Run-input evidence
 
 `lib/task-decomposition-context-workspace.ts` `writeTaskDecompositionContextWorkspace`.
 
-**Write path.** Each selected resource is written with `flag: 'wx'` under
-`<runPath>/context/`, followed by `index.json` carrying a `sha256` per entry
-(`lib/task-decomposition-context-workspace.ts:76-114`). There is **no temporary directory, no
-rename and no cleanup on failure** — the one canonical-adjacent write unit in this inventory
-with no publication boundary.
+**Write path.** Each selected resource is written with `flag: 'wx'` under `<runPath>/context/`,
+followed by `index.json` carrying a `sha256` per entry
+(`lib/task-decomposition-context-workspace.ts:76-114`). There is no temporary directory, no
+rename and no cleanup on failure.
 
-**Partial publication is possible.** A failure part-way leaves a `context/` directory holding
-some resources and no manifest. Because every file is created exclusively, a retry against the
-same run fails `EEXIST` on the first file already present rather than repairing the directory.
+**Classification.** A completed workspace is the immutable snapshot of the exact inputs handed
+to the Agent. It is derived at the moment of writing — its content comes from the source node,
+related nodes, context refs, uploads and feature-context attachments — but it is **not reliably
+reconstructible afterwards**, because it records no version of those inputs and the canonical
+sources can change once the Run starts. After the Run reads it, it is the evidence of what that
+Run was given, and it is never rewritten.
 
-**Classification.** At the moment of writing it is derived: its content comes from the source
-node, related nodes, context refs, uploads and feature-context attachments. It is **not
-reliably reconstructible afterwards**, because it records no version of those inputs and the
-canonical sources may change after the Run starts. Once the Run has read it, it is the
-evidence of what that Run was given. Treat it as derived-on-write and evidence-thereafter.
+**Failure consequence is an orphan, not a corrupted record.** In both callers the workspace is
+written before anything registers the Run: `lib/task-decomposition-runs.ts:214` precedes
+`request.json` at `:280`, and `lib/whats-next-runs.ts:362` sits at the same point in its
+sequence. A throw therefore happens before `request.json`, `run.json`, the active-run
+registration and `startLocalAgentRun`, leaving an unreferenced `context/` directory under a
+`runId` that no record mentions. Nothing reclaims it.
 
-**Callers.** `lib/task-decomposition-runs.ts:214` and `lib/whats-next-runs.ts:362`, both
-writing into the live run directory rather than into something published later by rename.
+**A retry is a different record.** `runId` is generated per call —
+`RUN-${randomUUID()}` at `lib/task-decomposition-runs.ts:185` and
+`lib/whats-next-runs.ts:275` — so a retry writes into a fresh directory. There is no failed
+retry of the same logical record, and no contradictory canonical state.
 
-**Concurrency reachability.** `runPath` derives from a freshly generated `runId`, so no second
-writer contends. The gap is recovery, not concurrency.
+An earlier revision of this document stated that a retry against the same run fails `EEXIST`
+rather than repairing the directory. That was wrong: it assumed a retry reuses the `runId`
+without checking either caller.
+
+**Priority P3, not P2.** The gap is orphan cleanup and the absence of failure evidence, not a
+demonstrated correctness failure.
+
+**Existing tests.** `tests/task-decomposition-context-workspace.test.ts` has five tests covering
+primary and related selection, neighborhood narrowing, duplicate promotion, collision-free
+inherited outputs, and the manifest not embedding content. None exercises a partial write or
+the orphan path.
 
 ### Break It Down context — canonical
 
@@ -288,11 +343,17 @@ several documents in one call with no cross-document rollback.
 (`lib/whats-next-context.ts:89-95`). `lstat` guards reject symlinked directories and files and
 enforce a size bound (`lib/whats-next-context.ts:49-66`).
 
-### Just Do It planning records — canonical
+### Just Do It planning instructions — canonical
 
-`lib/just-do-it-planning-service.ts` publishes instructions through an `instructions-<uuid>.tmp`
-file created with `wx` and one rename (`lib/just-do-it-planning-service.ts:980-984`). Directory
-access is guarded by `lstat` against symlinks (`lib/just-do-it-planning-service.ts:118-122`).
+`lib/just-do-it-planning-service.ts` `savePlanningInstructions` publishes a single file,
+`implementation/instructions.md`, through an `instructions-<uuid>.tmp` file created with `wx`
+and one rename (`lib/just-do-it-planning-service.ts:980-984`). Directory access is guarded by
+`lstat` against symlinks (`lib/just-do-it-planning-service.ts:118-122`).
+
+This write unit covers that file only. Card and Plan state is persisted through the worklog
+revision store under `implementation/cards/<cardId>/<revision>/`
+(`lib/just-do-it-planning-service.ts:128`) and is audited in the worklog sections above. The
+temporary-file rename described here does not cover it.
 
 ### Card environment manifest — canonical
 
@@ -302,19 +363,41 @@ access is guarded by `lstat` against symlinks (`lib/just-do-it-planning-service.
 (`lib/card-host-operations.ts:382-404`). A missing manifest reads as `null` on `ENOENT`
 (`lib/card-host-operations.ts:487-492`).
 
+### Card environment manifest — canonical
+
+`lib/card-host-operations.ts` `atomicJson` writes a `wx` temporary file and renames
+(`lib/card-host-operations.ts:496-503`). A missing manifest reads as `null` on `ENOENT`
+(`lib/card-host-operations.ts:487-492`). That rename is the manifest's entire publication
+boundary.
+
+Candidate publication is a separate write unit and is not evidence for this row; it is
+Git-backed and appears in the external repository section.
+
 ### Card workspace record — canonical
 
 `lib/just-do-it-worktree.ts` `save` writes `<file>.<uuid>.tmp` with `wx` and renames
 (`lib/just-do-it-worktree.ts:62-64`). Reads are guarded by `lstat` against non-files and
 symlinks (`lib/just-do-it-worktree.ts:133-136`).
 
-### host job events and logs — append-only evidence
+### host job status record — canonical, mutable
 
-`lib/host-job-broker.ts` `persist` writes its temporary file **without** `flag: 'wx'` and then
-renames (`lib/host-job-broker.ts:152-153`). It is the only production temporary-write path
-lacking exclusive creation, so a colliding temporary name would truncate rather than fail. The
-name is randomised, so no second writer currently reaches it. Job logs are written directly
-(`lib/host-job-broker.ts:113`).
+`lib/host-job-broker.ts` `run()` persists `job.json` once with `status: 'running'`, then
+replaces the same file with the terminal completed, failed or canceled event
+(`lib/host-job-broker.ts:89-124`). The file is therefore a mutable current-status record, not an
+append-only stream: the running event does not survive the terminal one.
+
+`persist` writes `<target>.<uuid>.tmp` **without** `flag: 'wx'` and then renames
+(`lib/host-job-broker.ts:149-154`). It is the only production temporary-write path lacking
+exclusive creation, so a colliding temporary name would truncate rather than fail. The name is
+randomised, so no second writer currently reaches it.
+
+An earlier revision of this document classified this store as append-only evidence, which
+misread a two-state overwrite as an event stream.
+
+### host job output log — derived output
+
+`output.log` is written once at completion (`lib/host-job-broker.ts:113`) from output already
+captured in memory. It is not migration material.
 
 ### system validation result — cache
 
@@ -334,6 +417,13 @@ Seven modules invoke `git`: `lib/just-do-it-git.ts`, `lib/just-do-it-artifacts.t
 The first three perform **no direct filesystem mutation** and therefore own no JSON write unit
 in this inventory. An earlier revision listed them as stores, which is why its prose count of
 external-repository stores disagreed with its own table.
+
+`publishCardCandidate` in `lib/card-host-operations.ts` belongs to this class rather than to the
+manifest write unit. It reads repository state through `git rev-parse HEAD`,
+`git branch --show-current` and `git status` (`lib/card-host-operations.ts:262-270`), writes the
+candidate body with `wx`, and removes its temporary directory recursively on failure
+(`lib/card-host-operations.ts:382-404`). Its correctness depends on the repository, not on the
+JSON manifest.
 
 A Git commit is a transaction for repository content. It does not cover companion JSON records
 written before or after it, and those records are owned by the stores above. None of this class
@@ -374,7 +464,7 @@ this codebase.
 | `appendCardWorkRecord`                   | one directory rename | pending directory removed in `finally`          |
 | `createStartNode`                        | one directory rename | temporary directory removed on failure          |
 | `updateStartNode`                        | **only `node.json`** | compensation for attachments; none for the idea |
-| `writeTaskDecompositionContextWorkspace` | **none**             | **none**                                        |
+| `writeTaskDecompositionContextWorkspace` | **none**             | none; failure orphans an unregistered directory |
 | `importTaskDecompositionAttachments`     | per file             | unlinks every path created in the call          |
 | `importContextDocuments`                 | per file             | none across documents                           |
 | `createProject`                          | shared helper        | restores the prior bytes                        |
@@ -393,10 +483,16 @@ Mechanically tested:
   `tests/just-do-it-harness.test.ts:483-675`
 - planning path containment — `tests/planning-paths.test.ts`
 
-**No deterministic concurrency or failure test exists for:** Task Graph node creation or
-update, Break It Down Runs, What's Next Runs, the Run context workspace, Context Library
-imports, or Just Do It planning records. Their correctness is argued from code shape, not
-demonstrated.
+The repository also has product-rule, provider, cancel and trash failure tests for several of
+these modules — `tests/whats-next-harness.test.ts` rejects contradictory advice, unknown origin
+nodes and out-of-range proposals, and `tests/task-decomposition-context-workspace.test.ts` covers
+content selection and manifest structure. Those prove input validation and product behavior.
+
+**The evidence this audit needs, and does not find, is narrower:** no deterministic test exercises
+concurrent filesystem publication, and no test injects a filesystem failure to observe rollback
+or cleanup, for Task Graph node creation or update, Break It Down Runs, What's Next Runs, the Run
+context workspace, Context Library imports, or Just Do It planning instructions. Their publication
+behavior under contention and partial failure is argued from code shape, not demonstrated.
 
 ## Confirmed risks and remaining unknowns
 
@@ -405,14 +501,14 @@ external effect, or a lost update that has been shown to occur.
 
 **P2 — credible reachable risk with incomplete mechanical protection:**
 
-- `updateStartNode` mutates live canonical state before publishing the record that describes
-  it, with compensation that cannot restore an overwritten idea document.
+- `updateStartNode` mutates live canonical state before publishing the record that describes it,
+  with compensation that cannot restore an overwritten idea document.
 - Break It Down Run acceptance performs a read-modify-write with no serializer, while the
   structurally identical What's Next module has one.
-- The Run context workspace has no publication boundary and cannot be repaired by retry.
 
-**P3 — evidence or documentation gap without demonstrated incorrect state:** Task Graph
-creation and listing paths lacking tests, the two `wx`-less temporary writes, and the three
+**P3 — evidence or documentation gap without demonstrated incorrect state:** the Run context
+workspace leaving unreferenced orphan directories with no cleanup and no failure test, Task Graph
+creation and listing paths lacking tests, the `wx`-less host job status write, and the three
 undocumented process-local serializers.
 
 **Genuine unknowns after inspection:**
@@ -446,6 +542,8 @@ No store is marked unknown for not having been read.
 - **system validation result.** A cache; loss cannot change correctness.
 - **Git-backed worktree, artifact and delivery operations.** External repository state.
 - **Smoke scripts and one-shot migrations.** Not stores.
+- **Run context workspace.** Immutable Run-input evidence; the open item is orphan cleanup, not
+  a store migration.
 
 ## Appendix: writer-module reconciliation
 
