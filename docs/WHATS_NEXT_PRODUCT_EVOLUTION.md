@@ -232,6 +232,9 @@ document writes remain outside What’s Next.
 Motion controls how the selected evidence is transformed. It does not decide the
 destination Layer.
 
+Unspecified is the default Motion for every Intention. It follows the semantic boundaries
+already present in the input. Diverge and Converge apply only when the user selects them.
+
 ### Diverge
 
 - Generate two to five materially distinct nodes.

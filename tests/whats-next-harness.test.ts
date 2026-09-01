@@ -367,10 +367,10 @@ One possible next step grown from the Start.
 void test('rejects a single-direction proposal', () => {
   assert.throws(
     () =>
-      validateWhatsNextHarnessResult(
-        proposal([candidate('CANDIDATE-0001')]),
-        context,
-      ),
+      validateWhatsNextHarnessResult(proposal([candidate('CANDIDATE-0001')]), {
+        ...context,
+        motion: 'diverge',
+      }),
     WhatsNextResultValidationError,
   );
 });
@@ -384,7 +384,7 @@ void test('rejects more than five directions', () => {
             candidate(`CANDIDATE-000${index + 1}`),
           ),
         ),
-        context,
+        { ...context, motion: 'diverge' },
       ),
     WhatsNextResultValidationError,
   );

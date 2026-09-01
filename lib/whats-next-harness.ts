@@ -583,11 +583,11 @@ function validateOperationCardinality(
   context: WhatsNextValidationContext,
 ) {
   if ((context.operation ?? 'explore') === 'explore') {
-    if ((context.motion ?? 'diverge') === 'converge') {
+    if ((context.motion ?? 'unspecified') === 'converge') {
       if (candidates.length !== 1)
         fail('Converge must return exactly one aggregate Candidate.');
     } else if (
-      (context.motion ?? 'diverge') === 'diverge' &&
+      (context.motion ?? 'unspecified') === 'diverge' &&
       (candidates.length < 2 || candidates.length > 5)
     ) {
       fail("A What's Next divergence must return two to five directions.");

@@ -181,7 +181,7 @@ async function startWhatsNextRunUnlocked(
 ) {
   validateRunRequest(input);
   const intention = input.intention ?? 'mvp-exploration';
-  const motion = input.motion ?? 'diverge';
+  const motion = input.motion ?? 'unspecified';
   const profile: AgentProfile = {
     agent: input.agent,
     model: input.model ?? '',
@@ -1206,7 +1206,7 @@ async function writeRunRecord(
 
 function validateRunRequest(input: RunRequest) {
   assertWhatsNextIntention(input.intention ?? 'mvp-exploration');
-  assertWhatsNextMotion(input.motion ?? 'diverge');
+  assertWhatsNextMotion(input.motion ?? 'unspecified');
   if (
     input.redoProposal &&
     (input.revisionRunId || input.revisionCandidateId || input.feedback?.length)
