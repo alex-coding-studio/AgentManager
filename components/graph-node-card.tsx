@@ -1,12 +1,12 @@
 'use client';
 
 import {
-  CheckSquare2,
+  CheckCircle2,
+  Circle,
   GitFork,
   Info,
   LoaderCircle,
   Plus,
-  Square,
   X,
 } from 'lucide-react';
 import { useUiText } from '@/components/ui-language-provider';
@@ -62,7 +62,7 @@ export function GraphNodeCard({
       className={cn(
         'group relative flex w-72 flex-col rounded-2xl border border-t-[3px] bg-card px-4 py-3 text-left shadow-[0_10px_30px_rgb(15_23_42/6%)] transition',
         selected && 'ring-3 ring-ring/20',
-        data.selectedForRun && 'ring-3 ring-violet-500/45',
+        data.selectedForRun && 'ring-2 ring-foreground/35',
         preview && 'border-dashed bg-secondary/35',
       )}
       style={
@@ -79,37 +79,11 @@ export function GraphNodeCard({
       }
     >
       <div className="flex min-h-8 items-center justify-between gap-3">
-        <span
-          data-node-type-label
-          className={cn(
-            'min-w-0 rounded-lg px-2 py-0.5 text-[9px] font-medium leading-3.5 whitespace-normal capitalize [overflow-wrap:anywhere]',
-            preview
-              ? 'bg-secondary text-secondary-foreground'
-              : 'bg-foreground text-background',
-          )}
-          title={running ? runningLabel : data.type}
-          style={
-            preview
-              ? {
-                  backgroundColor: `color-mix(in srgb, ${data.color} 12%, transparent)`,
-                  color: data.color,
-                }
-              : undefined
-          }
-        >
-          {running ? (
-            <LoaderCircle
-              className="mr-1 inline size-2.5 animate-spin"
-              aria-hidden="true"
-            />
-          ) : null}
-          {running ? runningLabel : data.type}
-        </span>
-        <span className="flex shrink-0 items-center gap-1.5">
+        <span className="flex min-w-0 items-center gap-1.5">
           {data.selectionEnabled ? (
             <button
               type="button"
-              className="nodrag nopan grid size-8 shrink-0 place-items-center rounded-full text-muted-foreground transition hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
+              className="nodrag nopan grid size-7 shrink-0 place-items-center rounded-full text-muted-foreground transition hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
               aria-label={
                 data.selectedForRun
                   ? t('Remove {title} from selection', { title: data.title })
@@ -122,12 +96,40 @@ export function GraphNodeCard({
               }}
             >
               {data.selectedForRun ? (
-                <CheckSquare2 className="size-4 text-violet-600" />
+                <CheckCircle2 className="size-4 text-foreground" />
               ) : (
-                <Square className="size-4" />
+                <Circle className="size-4" />
               )}
             </button>
           ) : null}
+          <span
+            data-node-type-label
+            className={cn(
+              'min-w-0 rounded-lg px-2 py-0.5 text-[9px] font-medium leading-3.5 whitespace-normal capitalize [overflow-wrap:anywhere]',
+              preview
+                ? 'bg-secondary text-secondary-foreground'
+                : 'bg-foreground text-background',
+            )}
+            title={running ? runningLabel : data.type}
+            style={
+              preview
+                ? {
+                    backgroundColor: `color-mix(in srgb, ${data.color} 12%, transparent)`,
+                    color: data.color,
+                  }
+                : undefined
+            }
+          >
+            {running ? (
+              <LoaderCircle
+                className="mr-1 inline size-2.5 animate-spin"
+                aria-hidden="true"
+              />
+            ) : null}
+            {running ? runningLabel : data.type}
+          </span>
+        </span>
+        <span className="flex shrink-0 items-center gap-1.5">
           {data.relationshipCount > 0 ? (
             <button
               type="button"

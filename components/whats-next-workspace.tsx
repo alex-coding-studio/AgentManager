@@ -852,6 +852,7 @@ function WhatsNextCanvas({
         locateRequest={locateRequest}
         selectedNodeIds={combineIds}
         edgeAlignedOverlays
+        avoidBottomRightPanel={combineIds.length >= 1}
         selectionEnabled
         onToggleSelection={toggleSelection}
         onFocusNode={setFocusedNodeId}

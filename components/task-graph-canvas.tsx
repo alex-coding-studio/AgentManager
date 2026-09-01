@@ -51,6 +51,7 @@ export function TaskGraphCanvas({
   selectedNodeIds,
   plusLabel,
   edgeAlignedOverlays = false,
+  avoidBottomRightPanel = false,
   readOnly = false,
   selectionEnabled = false,
   onMultiSelect,
@@ -68,6 +69,7 @@ export function TaskGraphCanvas({
   selectedNodeIds?: string[];
   plusLabel?: string;
   edgeAlignedOverlays?: boolean;
+  avoidBottomRightPanel?: boolean;
   readOnly?: boolean;
   selectionEnabled?: boolean;
   onMultiSelect?: (nodeId: string) => void;
@@ -227,6 +229,7 @@ export function TaskGraphCanvas({
         className={cn(
           '!m-3 flex items-center gap-3 rounded-lg border border-border bg-background/90 px-2.5 py-2 text-[10px] text-muted-foreground shadow-sm backdrop-blur',
           edgeAlignedOverlays ? '!-bottom-2' : '!bottom-5',
+          avoidBottomRightPanel && '!right-[380px]',
         )}
       >
         <span className="flex items-center gap-1.5">
