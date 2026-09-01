@@ -30,7 +30,8 @@
     "dist/**",
     "coverage/**",
     "next-env.d.ts",
-    "components/ui/**"
+    "components/ui/**",
+    "tests/fixtures/**"
   ],
   "rules": {
     "no-array-constructor": "error",
