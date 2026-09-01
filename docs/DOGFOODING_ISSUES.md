@@ -19,6 +19,28 @@ does not authorize implementation or changing the live trial's Harness.
   same interaction; do not treat that as authorization to change them now.
 - User evidence: `Snapzy_2026-08-30_16-04-46_697.png`.
 
+## Show acceptance dependency errors inside the active Card dialog
+
+- Reported: 2026-08-30, accepting the combined What's Next proposal in HereItIsV2.
+- Status: recorded; UI fix deferred during the output-evaluation round.
+- The user attempted to accept `CANDIDATE-58a30896` before its prerequisite
+  `CANDIDATE-eef14eef`. The application returned:
+  "Accept CANDIDATE-eef14eef before accepting CANDIDATE-58a30896."
+- Positive evidence: the application detected the prerequisite acceptance order.
+  This does not yet establish that accepting both Cards persists every dependency correctly.
+- Observed usability failure: acceptance is performed from the Card's properties
+  dialog, but the error appears on the underlying Canvas. The dialog's blurred
+  backdrop prevents the user from reading the reason while operating the dialog.
+- Expected: show the rejection reason inside the active dialog, near the accept
+  control, without requiring the user to close it. Keep the dependency guard.
+- Explain the prerequisite using its Card title, with its identifier as secondary
+  information, and localize the message to the selected interface language.
+- Follow-up verification: rejecting the dependent Card keeps it unaccepted and
+  shows a readable inline explanation; after the prerequisite is accepted, retrying
+  the dependent Card succeeds and clears the stale error.
+- User evidence: `Snapzy_2026-08-30_16-32-48_813.png`, plus the user's report of
+  the obscuring properties dialog. No live acceptance was performed for this record.
+
 ## Keep the App-building goal while deepening an accepted direction
 
 - Reported: 2026-08-30, after accepting the initial three What's Next directions
