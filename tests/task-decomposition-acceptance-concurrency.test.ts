@@ -1,0 +1,468 @@
+import assert from 'node:assert/strict';
+import test, { mock } from 'node:test';
+import os from 'node:os';
+import path from 'node:path';
+import { randomUUID } from 'node:crypto';
+import type { RegisteredProject } from '../lib/project-registry.ts';
+import {
+  TASK_DECOMPOSITION_HARNESS_ID,
+  TASK_DECOMPOSITION_HARNESS_REVISION,
+  type HarnessCandidate,
+} from '../lib/task-decomposition-harness.ts';
+
+const realFs = await import('node:fs/promises');
+const { mkdir, mkdtemp, readdir, rm, writeFile } = realFs;
+
+type Arrival = {
+  target: string;
+  release: () => void;
+  settled: Promise<void>;
+};
+
+let publishArrivals: Arrival[] | null = null;
+let announceArrival: (() => void) | null = null;
+
+function isNodePublication(target: string) {
+  return (
+    target.includes(`task-graph${path.sep}nodes${path.sep}NODE-`) &&
+    !target.endsWith('.tmp')
+  );
+}
+
+mock.module('node:fs/promises', {
+  namedExports: {
+    ...realFs,
+    rename: async (from: string, to: string) => {
+      if (!publishArrivals || !isNodePublication(String(to)))
+        return realFs.rename(from, to);
+      let release: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let markSettled: () => void;
+      const settled = new Promise<void>((resolve) => {
+        markSettled = resolve;
+      });
+      publishArrivals.push({ target: String(to), release: release!, settled });
+      announceArrival?.();
+      await gate;
+      try {
+        return await realFs.rename(from, to);
+      } finally {
+        markSettled!();
+      }
+    },
+  },
+});
+
+const { acceptTaskDecompositionCandidate, readTaskDecompositionRun } =
+  await import('../lib/task-decomposition-runs.ts');
+const { listTaskGraphNodes } = await import('../lib/task-graph.ts');
+
+function armPublishBarrier() {
+  publishArrivals = [];
+  return {
+    waitFor(count: number) {
+      if ((publishArrivals?.length ?? 0) >= count) return Promise.resolve();
+      return new Promise<void>((resolve) => {
+        announceArrival = () => {
+          if ((publishArrivals?.length ?? 0) >= count) {
+            announceArrival = null;
+            resolve();
+          }
+        };
+      });
+    },
+    at(index: number) {
+      const arrival = publishArrivals?.[index];
+      assert.ok(arrival, `expected a publication arrival at index ${index}`);
+      return arrival;
+    },
+    count() {
+      return publishArrivals?.length ?? 0;
+    },
+    disarm() {
+      for (const arrival of publishArrivals ?? []) arrival.release();
+      publishArrivals = null;
+      announceArrival = null;
+    },
+  };
+}
+
+const SOURCE_NODE_ID = 'NODE-00000000';
+const CANDIDATE_A = 'CANDIDATE-a1b2c3d4';
+const CANDIDATE_B = 'CANDIDATE-b2c3d4e5';
+
+function candidate(
+  candidateId: string,
+  overrides: Partial<HarnessCandidate> = {},
+): HarnessCandidate {
+  return {
+    candidateId,
+    revision: 1,
+    type: 'module',
+    title: `Title for ${candidateId}`,
+    summary: `Summary for ${candidateId}.`,
+    derivedFrom: [SOURCE_NODE_ID],
+    dependsOn: [],
+    resources: [],
+    typeTemplateRef: null,
+    metadata: { acceptance: ['The user can inspect the result.'] },
+    presentation: {},
+    assumptions: [],
+    ...overrides,
+  };
+}
+
+async function makeProject(candidates: HarnessCandidate[]) {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'am-bid-accept-'));
+  const planningPath = path.join(rootPath, 'planning');
+  const project: RegisteredProject = {
+    id: 'PROJECT-0001',
+    kind: 'standalone',
+    name: 'Concurrency Fixture',
+    description: 'Deterministic acceptance fixture.',
+    rootPath,
+    codePath: null,
+    planningPath,
+    createdAt: new Date(0).toISOString(),
+  };
+
+  const nodePath = path.join(
+    planningPath,
+    'task-graph',
+    'nodes',
+    SOURCE_NODE_ID,
+  );
+  await mkdir(nodePath, { recursive: true });
+  await writeFile(
+    path.join(nodePath, 'node.json'),
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        id: SOURCE_NODE_ID,
+        role: 'start',
+        type: 'product',
+        title: 'Source',
+        summary: 'The source of the decomposition.',
+        resources: [],
+      },
+      null,
+      2,
+    )}\n`,
+  );
+
+  const runId = `RUN-${randomUUID()}`;
+  const runPath = path.join(planningPath, 'task-decomposition', 'runs', runId);
+  await mkdir(runPath, { recursive: true });
+  await writeFile(
+    path.join(runPath, 'run.json'),
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        runId,
+        sessionId: `SESSION-${randomUUID()}`,
+        requestId: `REQUEST-${randomUUID()}`,
+        agentSessionId: null,
+        sourceNodeId: SOURCE_NODE_ID,
+        operation: 'propose',
+        status: 'completed',
+        transport: 'codex-cli',
+        harness: {
+          id: TASK_DECOMPOSITION_HARNESS_ID,
+          revision: TASK_DECOMPOSITION_HARNESS_REVISION,
+        },
+        inputFingerprint: 'fingerprint',
+        startedAt: new Date(0).toISOString(),
+        updatedAt: new Date(0).toISOString(),
+        endedAt: new Date(0).toISOString(),
+        usage: null,
+        error: null,
+        result: {
+          schemaVersion: 1,
+          harness: {
+            id: TASK_DECOMPOSITION_HARNESS_ID,
+            revision: TASK_DECOMPOSITION_HARNESS_REVISION,
+          },
+          request: {
+            sessionId: 'SESSION-0001',
+            requestId: 'REQUEST-0001',
+            inputFingerprint: 'fingerprint',
+          },
+          impactReview: {
+            reviewedNodeIds: [],
+            affectedNodeIds: [],
+            notes: [],
+          },
+          outcome: 'proposal',
+          candidates,
+        },
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  return {
+    project,
+    runId,
+    cleanup: () => rm(rootPath, { recursive: true, force: true }),
+  };
+}
+
+async function temporaryNodeDirectories(project: RegisteredProject) {
+  const nodesPath = path.join(project.planningPath, 'task-graph', 'nodes');
+  const entries = await readdir(nodesPath).catch(() => []);
+  return entries.filter((entry) => entry.startsWith('.'));
+}
+
+void test('the fixture drives the real acceptance path and repeated sequential acceptance is idempotent', async () => {
+  const { project, runId, cleanup } = await makeProject([
+    candidate(CANDIDATE_A),
+  ]);
+  try {
+    const run = await readTaskDecompositionRun(project, runId);
+    assert.equal(run.result?.outcome, 'proposal');
+    const uid = run.result.candidates[0]?.uid;
+    assert.ok(uid, 'the run must resolve a stable identity for the Candidate');
+
+    const first = await acceptTaskDecompositionCandidate(
+      project,
+      runId,
+      CANDIDATE_A,
+    );
+    const second = await acceptTaskDecompositionCandidate(
+      project,
+      runId,
+      CANDIDATE_A,
+    );
+
+    assert.equal(first.node.uid, uid);
+    assert.equal(second.node.id, first.node.id);
+    const nodes = await listTaskGraphNodes(project);
+    assert.equal(nodes.filter((node) => node.uid === uid).length, 1);
+    assert.deepEqual(await temporaryNodeDirectories(project), []);
+  } finally {
+    await cleanup();
+  }
+});
+
+void test('two concurrent accepts of one Candidate publish once and both return the same node', async () => {
+  const { project, runId, cleanup } = await makeProject([
+    candidate(CANDIDATE_A),
+  ]);
+  try {
+    const run = await readTaskDecompositionRun(project, runId);
+    const uid =
+      run.result?.outcome === 'proposal'
+        ? run.result.candidates[0]?.uid
+        : undefined;
+    assert.ok(uid);
+
+    const barrier = armPublishBarrier();
+    const first = acceptTaskDecompositionCandidate(project, runId, CANDIDATE_A);
+    const second = acceptTaskDecompositionCandidate(
+      project,
+      runId,
+      CANDIDATE_A,
+    );
+    await barrier.waitFor(1);
+    barrier.at(0).release();
+    await barrier.at(0).settled;
+    const arrivalsBeforeCompletion = barrier.count();
+    barrier.disarm();
+    const outcomes = await Promise.allSettled([first, second]);
+    assert.equal(
+      arrivalsBeforeCompletion,
+      1,
+      'a serialized second caller must never reach the publication rename',
+    );
+
+    assert.deepEqual(
+      outcomes.map((outcome) => outcome.status),
+      ['fulfilled', 'fulfilled'],
+      'concurrent acceptance must be idempotent, not an internal filesystem conflict',
+    );
+    const [a, b] = outcomes as Array<
+      PromiseFulfilledResult<{ node: { id: string } }>
+    >;
+    assert.equal(a.value.node.id, b.value.node.id);
+
+    const nodes = await listTaskGraphNodes(project);
+    const published = nodes.filter((node) => node.uid === uid);
+    assert.equal(
+      published.length,
+      1,
+      'exactly one Formal Node per Candidate UID',
+    );
+    assert.equal(published[0]?.provenance?.candidateId, CANDIDATE_A);
+    assert.deepEqual(await temporaryNodeDirectories(project), []);
+  } finally {
+    await cleanup();
+  }
+});
+
+void test('two concurrent accepts of sibling Candidates both publish independently', async () => {
+  const { project, runId, cleanup } = await makeProject([
+    candidate(CANDIDATE_A),
+    candidate(CANDIDATE_B),
+  ]);
+  try {
+    await readTaskDecompositionRun(project, runId);
+    const outcomes = await Promise.allSettled([
+      acceptTaskDecompositionCandidate(project, runId, CANDIDATE_A),
+      acceptTaskDecompositionCandidate(project, runId, CANDIDATE_B),
+    ]);
+    assert.deepEqual(
+      outcomes.map((outcome) => outcome.status),
+      ['fulfilled', 'fulfilled'],
+    );
+
+    const nodes = await listTaskGraphNodes(project);
+    const provenance = nodes
+      .map((node) => node.provenance?.candidateId)
+      .filter((value): value is string => Boolean(value))
+      .sort();
+    assert.deepEqual(provenance, [CANDIDATE_A, CANDIDATE_B].sort());
+    assert.equal(new Set(nodes.map((node) => node.uid)).size, nodes.length);
+    assert.deepEqual(await temporaryNodeDirectories(project), []);
+  } finally {
+    await cleanup();
+  }
+});
+
+void test('a concurrent accept and discard settle into one legal ordering', async () => {
+  const { project, runId, cleanup } = await makeProject([
+    candidate(CANDIDATE_A),
+  ]);
+  try {
+    await readTaskDecompositionRun(project, runId);
+    const { discardTaskDecompositionCandidate } =
+      await import('../lib/task-decomposition-runs.ts');
+    const [accepted, discarded] = await Promise.allSettled([
+      acceptTaskDecompositionCandidate(project, runId, CANDIDATE_A),
+      discardTaskDecompositionCandidate(project, runId, CANDIDATE_A),
+    ]);
+
+    assert.notEqual(
+      accepted.status === 'fulfilled' && discarded.status === 'fulfilled',
+      true,
+      'a published Formal Node and a discarded source record cannot both stand',
+    );
+
+    const nodes = await listTaskGraphNodes(project);
+    const published = nodes.filter(
+      (node) => node.provenance?.candidateId === CANDIDATE_A,
+    );
+    if (accepted.status === 'fulfilled') {
+      assert.equal(published.length, 1);
+      assert.equal(discarded.status, 'rejected');
+    } else {
+      assert.equal(published.length, 0);
+      assert.equal(discarded.status, 'fulfilled');
+    }
+    assert.deepEqual(await temporaryNodeDirectories(project), []);
+  } finally {
+    await cleanup();
+  }
+});
+
+void test('dependency ordering survives overlap and the dependent accepts cleanly on retry', async () => {
+  const { project, runId, cleanup } = await makeProject([
+    candidate(CANDIDATE_A),
+    candidate(CANDIDATE_B, { dependsOn: [CANDIDATE_A] }),
+  ]);
+  try {
+    await readTaskDecompositionRun(project, runId);
+    const [prerequisite, dependent] = await Promise.allSettled([
+      acceptTaskDecompositionCandidate(project, runId, CANDIDATE_A),
+      acceptTaskDecompositionCandidate(project, runId, CANDIDATE_B),
+    ]);
+    assert.equal(prerequisite.status, 'fulfilled');
+
+    if (dependent.status === 'rejected') {
+      assert.match(
+        (dependent.reason as Error).message,
+        new RegExp(`Accept ${CANDIDATE_A} before accepting ${CANDIDATE_B}`),
+      );
+      const retried = await acceptTaskDecompositionCandidate(
+        project,
+        runId,
+        CANDIDATE_B,
+      );
+      assert.equal(retried.node.provenance?.candidateId, CANDIDATE_B);
+    }
+
+    const nodes = await listTaskGraphNodes(project);
+    const dependentNode = nodes.find(
+      (node) => node.provenance?.candidateId === CANDIDATE_B,
+    );
+    const prerequisiteNode = nodes.find(
+      (node) => node.provenance?.candidateId === CANDIDATE_A,
+    );
+    assert.ok(prerequisiteNode);
+    assert.ok(dependentNode);
+    assert.deepEqual(dependentNode.dependsOn, [prerequisiteNode.id]);
+    assert.deepEqual(await temporaryNodeDirectories(project), []);
+  } finally {
+    await cleanup();
+  }
+});
+
+void test('the serializer is keyed per project and does not block a second project', async () => {
+  const one = await makeProject([candidate(CANDIDATE_A)]);
+  const two = await makeProject([candidate(CANDIDATE_A)]);
+  try {
+    await readTaskDecompositionRun(one.project, one.runId);
+    await readTaskDecompositionRun(two.project, two.runId);
+    const barrier = armPublishBarrier();
+    const first = acceptTaskDecompositionCandidate(
+      one.project,
+      one.runId,
+      CANDIDATE_A,
+    );
+    const second = acceptTaskDecompositionCandidate(
+      two.project,
+      two.runId,
+      CANDIDATE_A,
+    );
+    await barrier.waitFor(2);
+    assert.equal(
+      barrier.count(),
+      2,
+      'independent projects must publish concurrently',
+    );
+    barrier.at(0).release();
+    barrier.at(1).release();
+    const outcomes = await Promise.allSettled([first, second]);
+    barrier.disarm();
+    assert.deepEqual(
+      outcomes.map((outcome) => outcome.status),
+      ['fulfilled', 'fulfilled'],
+    );
+  } finally {
+    await one.cleanup();
+    await two.cleanup();
+  }
+});
+
+void test('a rejected mutation releases the process-local queue for the next caller', async () => {
+  const { project, runId, cleanup } = await makeProject([
+    candidate(CANDIDATE_A),
+  ]);
+  try {
+    await readTaskDecompositionRun(project, runId);
+    await assert.rejects(
+      () =>
+        acceptTaskDecompositionCandidate(project, runId, 'CANDIDATE-ffffffff'),
+      /The Candidate could not be found\./,
+    );
+    const accepted = await acceptTaskDecompositionCandidate(
+      project,
+      runId,
+      CANDIDATE_A,
+    );
+    assert.equal(accepted.node.provenance?.candidateId, CANDIDATE_A);
+  } finally {
+    await cleanup();
+  }
+});

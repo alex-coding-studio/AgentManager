@@ -5,7 +5,7 @@
 |                                          |                                                                    |
 | ---------------------------------------- | ------------------------------------------------------------------ |
 | base commit                              | `45b5e2b20967629f21d519d026e636643984a39a`                         |
-| analyzer input fingerprint               | `08d7bed3533d1ad41118855c81e02bdb3fcb1d9f62159f5e679eb97fe647a3ef` |
+| analyzer input fingerprint               | `080037d421bee29a44a7c26ce26a7dfa0c16168ceab85f828961f147eb9e5ebf` |
 | command                                  | `npm run audit:runtime-dependencies`                               |
 | Node runtime                             | v26.5.1, also verified on v22.13.0                                 |
 | TypeScript                               | 5.9.3, already a repository dependency                             |

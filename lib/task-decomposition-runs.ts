@@ -411,6 +411,16 @@ export async function acceptTaskDecompositionCandidate(
   runId: string,
   candidateId: string,
 ) {
+  return mutateTaskDecomposition(project, () =>
+    acceptTaskDecompositionCandidateUnlocked(project, runId, candidateId),
+  );
+}
+
+async function acceptTaskDecompositionCandidateUnlocked(
+  project: RegisteredProject,
+  runId: string,
+  candidateId: string,
+) {
   if (
     [...activeRuns.values()].some(
       (active) =>
@@ -516,6 +526,16 @@ export async function acceptTaskDecompositionCandidate(
 }
 
 export async function discardTaskDecompositionCandidate(
+  project: RegisteredProject,
+  runId: string,
+  candidateId: string,
+) {
+  return mutateTaskDecomposition(project, () =>
+    discardTaskDecompositionCandidateUnlocked(project, runId, candidateId),
+  );
+}
+
+async function discardTaskDecompositionCandidateUnlocked(
   project: RegisteredProject,
   runId: string,
   candidateId: string,
@@ -1050,6 +1070,29 @@ function validateRunId(runId: string) {
 
 function runKey(project: RegisteredProject, runId: string) {
   return `${project.id}:${runId}`;
+}
+
+const mutationRuntime = globalThis as typeof globalThis & {
+  taskDecompositionMutations?: Map<string, Promise<unknown>>;
+};
+const mutations = (mutationRuntime.taskDecompositionMutations ??= new Map<
+  string,
+  Promise<unknown>
+>());
+
+async function mutateTaskDecomposition<T>(
+  project: RegisteredProject,
+  work: () => Promise<T>,
+): Promise<T> {
+  const previous = mutations.get(project.planningPath) ?? Promise.resolve();
+  const next = previous.catch(() => undefined).then(work);
+  mutations.set(project.planningPath, next);
+  try {
+    return (await next) as T;
+  } finally {
+    if (mutations.get(project.planningPath) === next)
+      mutations.delete(project.planningPath);
+  }
 }
 
 function getActiveRuns() {
