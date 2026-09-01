@@ -71,9 +71,66 @@ export type TaskGraphNode = GraphIdentityFields & {
   };
 };
 
+const mutationRuntime = globalThis as typeof globalThis & {
+  taskGraphMutations?: Map<string, Promise<unknown>>;
+};
+const mutations = (mutationRuntime.taskGraphMutations ??= new Map<
+  string,
+  Promise<unknown>
+>());
+
+function canvasKey(project: RegisteredProject, graphRoot: GraphRoot) {
+  return `${path.resolve(project.planningPath)}\u0000${graphRoot}`;
+}
+
+async function mutateCanvas<T>(
+  project: RegisteredProject,
+  graphRoot: GraphRoot,
+  work: () => Promise<T>,
+): Promise<T> {
+  const key = canvasKey(project, graphRoot);
+  const previous = mutations.get(key) ?? Promise.resolve();
+  const next = previous.catch(() => undefined).then(work);
+  mutations.set(key, next);
+  try {
+    return (await next) as T;
+  } finally {
+    if (mutations.get(key) === next) mutations.delete(key);
+  }
+}
+
 export async function listTaskGraphNodes(
   project: RegisteredProject,
   graphRoot: GraphRoot = 'task-graph',
+) {
+  return listCanvasNodes(project, graphRoot, (publish) =>
+    mutateCanvas(project, graphRoot, publish),
+  );
+}
+
+async function listCanvasNodesWithinCanvas(
+  project: RegisteredProject,
+  graphRoot: GraphRoot,
+) {
+  return listCanvasNodes(project, graphRoot, (publish) => publish());
+}
+
+async function publishWhatsNextDefaults(nodeFile: string) {
+  const node = JSON.parse(await readFile(nodeFile, 'utf8')) as TaskGraphNode;
+  if (node.layer && node.artifactKind) return;
+  node.layer ??= 'discovery';
+  node.artifactKind ??= node.role === 'start' ? 'source' : 'direction';
+  const temporary = `${nodeFile}.${randomUUID()}.tmp`;
+  await writeFile(temporary, `${JSON.stringify(node, null, 2)}\n`, {
+    flag: 'wx',
+  });
+  await rename(temporary, nodeFile);
+}
+
+async function listCanvasNodes(
+  project: RegisteredProject,
+  graphRoot: GraphRoot,
+  order: <T>(publish: () => Promise<T>) => Promise<T>,
 ) {
   await ensureGraphIdentities(project.planningPath, graphRoot);
   const nodesPath = path.join(project.planningPath, graphRoot, 'nodes');
@@ -88,6 +145,7 @@ export async function listTaskGraphNodes(
     .map((entry) => entry.name)
     .sort((left, right) => right.localeCompare(left));
 
+  const unnormalized: string[] = [];
   const nodes = await Promise.all(
     fileNames.map(async (fileName) => {
       const nodeFile = path.join(nodesPath, fileName, 'node.json');
@@ -109,15 +167,17 @@ export async function listTaskGraphNodes(
       if (graphRoot === 'whats-next' && (!node.layer || !node.artifactKind)) {
         node.layer ??= 'discovery';
         node.artifactKind ??= node.role === 'start' ? 'source' : 'direction';
-        const temporary = `${nodeFile}.${randomUUID()}.tmp`;
-        await writeFile(temporary, `${JSON.stringify(node, null, 2)}\n`, {
-          flag: 'wx',
-        });
-        await rename(temporary, nodeFile);
+        unnormalized.push(nodeFile);
       }
       return node;
     }),
   );
+  if (unnormalized.length > 0) {
+    await order(async () => {
+      for (const nodeFile of unnormalized)
+        await publishWhatsNextDefaults(nodeFile);
+    });
+  }
   return readIdentifiedEntities(project.planningPath, graphRoot, nodes, true);
 }
 
@@ -130,6 +190,21 @@ export async function createStartNode(
     idea?: string;
   },
   graphRoot: GraphRoot = 'task-graph',
+) {
+  return mutateCanvas(project, graphRoot, () =>
+    createStartNodeWithinCanvas(project, input, graphRoot),
+  );
+}
+
+async function createStartNodeWithinCanvas(
+  project: RegisteredProject,
+  input: {
+    title: string;
+    contextRefs: string[];
+    files: File[];
+    idea?: string;
+  },
+  graphRoot: GraphRoot,
 ) {
   const title = input.title.trim();
   if (!title) throw new PublicApiError('A start-node title is required.', 400);
@@ -171,7 +246,7 @@ export async function createStartNode(
   const taskGraphPath = path.join(project.planningPath, graphRoot);
   const nodesPath = path.join(taskGraphPath, 'nodes');
   await mkdir(nodesPath, { recursive: true });
-  const existingNodes = await listTaskGraphNodes(project, graphRoot);
+  const existingNodes = await listCanvasNodesWithinCanvas(project, graphRoot);
   assertCanvasCanCreateStartNode(existingNodes);
   const { id, uid } = await reserveNodeIdentity(
     project.planningPath,
@@ -270,6 +345,23 @@ export async function updateStartNode(
   },
   graphRoot: GraphRoot = 'task-graph',
 ) {
+  return mutateCanvas(project, graphRoot, () =>
+    updateStartNodeWithinCanvas(project, input, graphRoot),
+  );
+}
+
+async function updateStartNodeWithinCanvas(
+  project: RegisteredProject,
+  input: {
+    id: string;
+    title: string;
+    contextRefs: string[];
+    retainedAttachmentRefs: string[];
+    files: File[];
+    idea?: string;
+  },
+  graphRoot: GraphRoot,
+) {
   if (!/^NODE-[0-9a-f]{8,32}$/.test(input.id)) {
     throw new PublicApiError('The start node is invalid.', 400);
   }
@@ -308,9 +400,14 @@ export async function updateStartNode(
     input.id,
   );
   const nodeJsonPath = path.join(nodePath, 'node.json');
-  const node = JSON.parse(
-    await readFile(nodeJsonPath, 'utf8'),
-  ) as TaskGraphNode;
+  const record = await readFile(nodeJsonPath, 'utf8').catch(
+    (error: NodeJS.ErrnoException) => {
+      if (error.code === 'ENOENT')
+        throw new PublicApiError('The node could not be found.', 400);
+      throw error;
+    },
+  );
+  const node = JSON.parse(record) as TaskGraphNode;
   if (
     node.schemaVersion !== 1 ||
     node.id !== input.id ||
@@ -421,7 +518,7 @@ export async function updateStartNode(
     );
     return {
       node: updatedNode,
-      nodes: await listTaskGraphNodes(project, graphRoot),
+      nodes: await listCanvasNodesWithinCanvas(project, graphRoot),
     };
   } catch (error) {
     if (!committed) {
@@ -461,11 +558,21 @@ export async function deleteTaskGraphNode(
   nodeId: string,
   graphRoot: GraphRoot = 'task-graph',
 ) {
+  return mutateCanvas(project, graphRoot, () =>
+    deleteTaskGraphNodeWithinCanvas(project, nodeId, graphRoot),
+  );
+}
+
+async function deleteTaskGraphNodeWithinCanvas(
+  project: RegisteredProject,
+  nodeId: string,
+  graphRoot: GraphRoot,
+) {
   if (!/^NODE-[0-9a-f]{8,32}$/.test(nodeId)) {
     throw new PublicApiError('The node is invalid.', 400);
   }
 
-  const nodes = await listTaskGraphNodes(project, graphRoot);
+  const nodes = await listCanvasNodesWithinCanvas(project, graphRoot);
   if (!nodes.some((node) => node.id === nodeId)) {
     throw new PublicApiError('The node could not be found.', 400);
   }
@@ -473,7 +580,7 @@ export async function deleteTaskGraphNode(
 
   const nodePath = path.join(project.planningPath, graphRoot, 'nodes', nodeId);
   await trash(nodePath);
-  return { nodes: await listTaskGraphNodes(project, graphRoot) };
+  return { nodes: await listCanvasNodesWithinCanvas(project, graphRoot) };
 }
 
 export async function readTaskGraphMarkdownResource(
