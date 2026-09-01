@@ -1,4 +1,4 @@
-import { installResolveHook } from './install-resolve-hook.mjs';
-import { resolve } from './resolve-alias.mjs';
+import { installHooks } from './install-resolve-hook.mjs';
+import { load, resolve } from './tsx-hooks.mjs';
 
-installResolveHook(resolve, new URL('./resolve-alias.mjs', import.meta.url));
+installHooks({ load, resolve }, new URL('./tsx-hooks.mjs', import.meta.url));
