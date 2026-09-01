@@ -75,27 +75,28 @@ they share a source file.
 
 ## Summary
 
-| write unit                       | class                           | owner                                         | publication boundary                                                      | serialization                          | priority             |
-| -------------------------------- | ------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------- | -------------------------------------- | -------------------- |
-| project registry                 | canonical                       | `lib/project-registry.ts`                     | shared helper, `wx` temp + rename                                         | promise chain, per file                | no migration         |
-| app settings                     | canonical                       | `lib/app-settings.ts`                         | `wx` temp + rename                                                        | promise chain, per file                | no migration         |
-| worklog revision history         | canonical, append-only evidence | `lib/just-do-it-worklog.ts`                   | complete pending directory + rename                                       | rename is the compare-and-swap         | no migration         |
-| worklog HANDOFF / INDEX / refs   | derived materialization         | `lib/just-do-it-worklog.ts`                   | inside the same revision directory                                        | inherited from the revision            | no migration         |
-| Task Graph node creation         | canonical                       | `lib/task-graph.ts` `createStartNode`         | unique temp directory + rename                                            | none                                   | P3                   |
-| Task Graph node update           | canonical                       | `lib/task-graph.ts` `updateStartNode`         | staged resources + `node.json` rename                                     | **none**                               | **P2**               |
-| Task Graph listing normalization | derived materialization         | `lib/task-graph.ts` `listTaskGraphNodes`      | `wx` temp + rename, on the read path                                      | none, idempotent                       | P3                   |
-| Break It Down Runs               | canonical                       | `lib/task-decomposition-runs.ts`              | `wx` temp + rename per artifact                                           | process-local chain, per planning path | no migration         |
-| What's Next Runs                 | canonical                       | `lib/whats-next-runs.ts`                      | `wx` temp + rename per artifact                                           | promise chain, per planning path       | P3                   |
-| Run context workspace            | immutable Run-input evidence    | `lib/task-decomposition-context-workspace.ts` | **none**                                                                  | none                                   | P3                   |
-| Break It Down context            | canonical                       | `lib/task-decomposition-context.ts`           | `wx` per attachment, batch compensation; settings create-once             | none                                   | P3, concurrency only |
-| Context Library documents        | canonical                       | `lib/product-context.ts`                      | `wx` batch with compensation; staged rename for overwrite; section rename | none                                   | P3, concurrency only |
-| What's Next instructions         | canonical                       | `lib/whats-next-context.ts`                   | `wx` temp + rename                                                        | none                                   | P3                   |
-| Just Do It planning instructions | canonical                       | `lib/just-do-it-planning-service.ts`          | `wx` temp + rename                                                        | none                                   | P3                   |
-| Card environment manifest        | canonical                       | `lib/card-host-operations.ts` `atomicJson`    | `wx` temp + rename                                                        | none                                   | P3                   |
-| Card workspace record            | canonical                       | `lib/just-do-it-worktree.ts`                  | `wx` temp + rename                                                        | none                                   | P3                   |
-| host job status record           | canonical, mutable              | `lib/host-job-broker.ts`                      | temp + rename, **no `wx`**, overwritten                                   | none                                   | P3                   |
-| host job output log              | derived output                  | `lib/host-job-broker.ts`                      | written once at completion                                                | none                                   | no migration         |
-| system validation result         | cache                           | `lib/system-validation-runner.ts`             | `wx` temp + rename                                                        | **`mkdir` lock, cross-process**        | no migration         |
+| write unit                       | class                           | owner                                         | publication boundary                                                      | serialization                           | priority             |
+| -------------------------------- | ------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------- | --------------------------------------- | -------------------- |
+| project registry                 | canonical                       | `lib/project-registry.ts`                     | shared helper, `wx` temp + rename                                         | promise chain, per file                 | no migration         |
+| app settings                     | canonical                       | `lib/app-settings.ts`                         | `wx` temp + rename                                                        | promise chain, per file                 | no migration         |
+| worklog revision history         | canonical, append-only evidence | `lib/just-do-it-worklog.ts`                   | complete pending directory + rename                                       | rename is the compare-and-swap          | no migration         |
+| worklog HANDOFF / INDEX / refs   | derived materialization         | `lib/just-do-it-worklog.ts`                   | inside the same revision directory                                        | inherited from the revision             | no migration         |
+| Task Graph node creation         | canonical                       | `lib/task-graph.ts` `createStartNode`         | unique temp directory + rename                                            | process-local chain, per Canvas         | no migration         |
+| Task Graph node update           | canonical                       | `lib/task-graph.ts` `updateStartNode`         | staged resources + `node.json` rename                                     | process-local chain, per Canvas         | no migration         |
+| Task Graph node deletion         | canonical                       | `lib/task-graph.ts` `deleteTaskGraphNode`     | `trash` of the node directory                                             | process-local chain, per Canvas         | no migration         |
+| Task Graph listing normalization | derived materialization         | `lib/task-graph.ts` `listTaskGraphNodes`      | `wx` temp + rename, on the read path                                      | none, idempotent, deliberately unqueued | P3                   |
+| Break It Down Runs               | canonical                       | `lib/task-decomposition-runs.ts`              | `wx` temp + rename per artifact                                           | process-local chain, per planning path  | no migration         |
+| What's Next Runs                 | canonical                       | `lib/whats-next-runs.ts`                      | `wx` temp + rename per artifact                                           | promise chain, per planning path        | P3                   |
+| Run context workspace            | immutable Run-input evidence    | `lib/task-decomposition-context-workspace.ts` | **none**                                                                  | none                                    | P3                   |
+| Break It Down context            | canonical                       | `lib/task-decomposition-context.ts`           | `wx` per attachment, batch compensation; settings create-once             | none                                    | P3, concurrency only |
+| Context Library documents        | canonical                       | `lib/product-context.ts`                      | `wx` batch with compensation; staged rename for overwrite; section rename | none                                    | P3, concurrency only |
+| What's Next instructions         | canonical                       | `lib/whats-next-context.ts`                   | `wx` temp + rename                                                        | none                                    | P3                   |
+| Just Do It planning instructions | canonical                       | `lib/just-do-it-planning-service.ts`          | `wx` temp + rename                                                        | none                                    | P3                   |
+| Card environment manifest        | canonical                       | `lib/card-host-operations.ts` `atomicJson`    | `wx` temp + rename                                                        | none                                    | P3                   |
+| Card workspace record            | canonical                       | `lib/just-do-it-worktree.ts`                  | `wx` temp + rename                                                        | none                                    | P3                   |
+| host job status record           | canonical, mutable              | `lib/host-job-broker.ts`                      | temp + rename, **no `wx`**, overwritten                                   | none                                    | P3                   |
+| host job output log              | derived output                  | `lib/host-job-broker.ts`                      | written once at completion                                                | none                                    | no migration         |
+| system validation result         | cache                           | `lib/system-validation-runner.ts`             | `wx` temp + rename                                                        | **`mkdir` lock, cross-process**         | no migration         |
 
 Class totals: 14 canonical — 12 plain, one also append-only, one a mutable two-state record —
 plus 2 derived materialization, 1 derived output, 1 immutable Run-input evidence and 1 cache,
@@ -216,10 +217,22 @@ Three corrections came out of that exercise:
   committed node even when a subsequent read would fail, and a duplicate retry meets the existing
   `This Canvas already has a Start node.` rule.
 
-**Concurrency is not covered here.** Neither creation nor update serializes, in-process or
-across processes. Two overlapping updates to one node can both read the same record and publish
-last-writer-wins, and the one-Start Canvas check is not protected against a concurrent second
-creation. No test in this suite exercises either path; both are open P2 and Item 6 queue entry 5.
+**Concurrency was demonstrated and is now bounded in-process.**
+`tests/task-graph-concurrency.test.ts` pauses two real `createStartNode` calls for one empty
+Canvas at the publication rename. Before the fix both calls passed `assertCanvasCanCreateStartNode`
+against the same empty listing and both published: two `role: 'start'` directories, two stable
+identities bound in `identities.json`, both listed in `formalAliases`, no temporary directory left,
+no conflict raised, and `POST /api/projects/[projectId]/nodes` answering `201` twice. A fresh
+`listTaskGraphNodes` then returned two Start Nodes, which the one-Start rule forbids.
+
+`createStartNode`, `updateStartNode` and `deleteTaskGraphNode` now enter a process-local promise
+chain keyed by `resolve(project.planningPath)` plus the graph root
+(`lib/task-graph.ts:74-100`), and call unqueued internals inside it. One caller commits; the
+second re-reads the committed Canvas and meets the existing
+`This Canvas already has a Start node.` `PublicApiError`, so the Route answers `409` with that
+message and no absolute path. Listing stays outside the chain — every queued operation calls it,
+so queueing it would be a same-key self-wait. The tests fail if the chain is removed, if the
+planning path is dropped from the key, or if the graph root is dropped from the key.
 
 **Crash boundary.** A process kill between the last write and the rename leaves a dot-prefixed
 temporary directory. Listing ignores it because it is not a node directory, and nothing reclaims
@@ -255,6 +268,40 @@ over the referenced file, so an injected failure at the temporary-record write, 
 during cleanup left the idea document holding the new title while `node.json` still described the
 previous state. Restoring the in-place write turns nine tests red.
 
+**Two overlapping updates produced states no sequential order could produce.** Both were
+demonstrated against one seeded Start Node with an idea and one attachment:
+
+- When both requests replace the idea, both derive the same unique resource name from the same
+  read of the resources directory, and the second `wx` write fails `EEXIST` on
+  `resources/idea-2.md`. That raw filesystem error reached the caller and, through the Route, a
+  generic `500`.
+- When both requests only restage attachments, both reach the record rename. The first to commit
+  is overwritten by the second, and the first caller's post-commit cleanup then unlinks the
+  attachment the committed record still references. The final `node.json` carried
+  `resources/seed.md` while that file no longer existed, and the loser's `beta.md` stayed behind
+  unreferenced. Neither invocation order produces that state: `Alpha` then `Beta` ends at `Beta`'s
+  title, and `Beta` then `Alpha` rejects `Alpha` with `A retained attachment is invalid.`
+
+Both are closed by the same Canvas chain. The first invocation commits one coherent state, the
+second then reads that committed state and applies its full request, and the committed record's
+resources all exist. Cleanup may still leave an unreferenced orphan; it can no longer leave a
+broken reference. The update contract is unchanged — the second request replaces the state, and
+no field-level merge was introduced.
+
+**A missing record is now an actionable state error.** `updateStartNode` read `node.json`
+directly, so an update against a node removed by a concurrent delete surfaced `ENOENT` as an
+internal failure. It now maps `ENOENT` on that read to the existing
+`The node could not be found.` `PublicApiError` used by delete. Any other read error stays
+internal.
+
+**Update versus delete shares the same boundary.** `deleteTaskGraphNode` lists the Canvas,
+applies the referential rule, and `trash`es the node directory, so it reads and removes the state
+`updateStartNode` reads and republishes. Paused before its `resources` `mkdir`, an update whose
+node was trashed underneath it recreated the directory and republished the record, resurrecting a
+deleted node. Both orders now follow the chain: an update invoked first commits and the delete
+then removes the updated node, and a delete invoked first completes and the update receives
+`The node could not be found.`
+
 ### Task Graph listing normalization — derived
 
 `listTaskGraphNodes` validates each node on read and throws on a malformed record. For the
@@ -266,6 +313,10 @@ This makes listing a mutating operation. Two concurrent listings each write thei
 named temporary file and rename it, producing the same content, so the outcome is idempotent
 rather than racy. The practical consequences are that a read-only filesystem makes listing
 fail, and that a node's on-disk bytes can change without any user-visible edit.
+
+**It is deliberately outside the Canvas mutation chain.** Every queued Task Graph mutation calls
+`listTaskGraphNodes`, so queueing listing would make each mutation wait on the key it already
+holds. The exclusion rests on the idempotence above, not on symmetry.
 
 ### Break It Down Runs — canonical
 
@@ -548,11 +599,16 @@ misclassified the Run map as a serializer, which is why classification here is m
 
 ## Process-local versus cross-process boundaries
 
-Five modules serialize through a `globalThis` promise chain: `project-registry`,
-`app-settings`, `graph-identity-store`, `whats-next-runs` and `task-decomposition-runs`.
-**None of those five is a cross-process lock.** Two AgentManager processes against one
-`AGENT_MANAGER_HOME` — two ports, or `dev` and `start` together — do not see each other's chain.
-`docs/PROJECT_REGISTRY.md` states this for the registry; the other four do not document it.
+`docs/PROCESS_BOUNDARIES.md` is the shared statement: it names every serializer, its runtime
+property and its real key, states the eight properties the chains do and do not have, records the
+one-way lock order, and documents the `system-validation-runner` `mkdir` lock with its stale-lock
+limits. This section keeps only the summary.
+
+Six modules serialize through a `globalThis` promise chain: `atomic-json-store` (used by
+`project-registry`), `app-settings`, `graph-identity-store`, `whats-next-runs`,
+`task-decomposition-runs` and `task-graph`. **None of those six is a cross-process lock.** Two
+AgentManager processes against one `AGENT_MANAGER_HOME` — two ports, or `dev` and `start`
+together — do not see each other's chain.
 
 `lib/system-validation-runner.ts:68-79` is the exception. A non-recursive `mkdir` either
 creates the lock directory or fails `EEXIST`, atomically, at the filesystem level, and the
@@ -564,7 +620,9 @@ is rejected instead of delayed, and it records no owner or timestamp, so a hard 
 leaves a stale lock directory that nothing reclaims.
 
 The primitive that would extend cross-process exclusion to the other stores already exists in
-this codebase.
+this codebase, but adopting it is a separate design: a store needs contending callers to wait
+rather than be refused, and needs a lock left by a killed process to become reclaimable.
+`docs/PROCESS_BOUNDARIES.md` states what such a design would have to settle.
 
 ## Multi-file publication and rollback findings
 
@@ -597,6 +655,12 @@ Mechanically tested:
   publication rename, staged resources that never precede the record, orphan behavior on both
   cleanup paths, and clean retry —
   `tests/task-graph-failure-boundary.test.ts`
+- Task Graph creation, update and deletion under same-process concurrency: two creates in one
+  Canvas, independent graph roots and independent projects reaching publication together, two
+  updates to one node in both the idea-replacing and attachment-restaging shapes, update versus
+  delete in both invocation orders, queue release after a rejected mutation, and the public
+  `409` conflict through the Route with nothing internal in the body —
+  `tests/task-graph-concurrency.test.ts`
 - Break It Down Candidate acceptance under concurrency: same-Candidate idempotency, sibling
   independence, accept-versus-discard coherence in both invocation orders, dependency ordering in
   both invocation orders with clean retry, Candidate revision start racing acceptance and discard,
@@ -627,31 +691,37 @@ contention remains argued from code shape.
 No P0 and no P1. Nothing in this inventory demonstrates corruption, a path escape, an unsafe
 external effect, or a lost update that has been shown to occur.
 
-**One P2 remains open, and one entry moved.** The Task Graph failure and rollback boundaries are
-closed by demonstration; Task Graph _concurrency_ is not, and was never exercised by those tests:
+**No P2 remains open.** The Task Graph failure and rollback boundaries were closed by
+demonstration first; Task Graph _concurrency_ is now closed the same way:
 
 - `updateStartNode` mutated live canonical state before publishing the record that described it.
   Failure injection reproduced an idea document holding the new title while `node.json` still held
   the previous one. Resources are now staged and published through the record rename, and the
   tests fail if the in-place write returns. **That closes the failure boundary, not concurrency.**
-  `updateStartNode` has no in-process serializer: two overlapping `PATCH` calls can both read the
-  same record and publish last-writer-wins, and no deterministic test exercises it. Likewise
-  `createStartNode` checks the one-Start Canvas rule before publication with no same-project
-  concurrency test — the suite's creation test uses two _separate_ projects and cannot speak to
-  Canvas uniqueness under contention. Both remain **P2**, untested same-process concurrency
-  risks.
+  Concurrency was then demonstrated separately and was worse than last-writer-wins: two
+  overlapping creates both published into one Canvas, two overlapping updates either failed with a
+  raw `EEXIST` or left the committed record pointing at an attachment the loser had deleted, and
+  an update paused underneath a concurrent delete resurrected the deleted node. A process-local
+  chain keyed by planning path plus graph root now covers `createStartNode`, `updateStartNode` and
+  `deleteTaskGraphNode`; the deterministic tests fail if it is removed or if either half of the
+  key is dropped. **Closed.**
 - Break It Down Run acceptance performed a read-modify-write with no serializer. Both demonstrated
   races are closed by a process-local chain over acceptance, discard and Run start, and the
   deterministic tests fail if it is removed.
 
 **P3 — evidence or documentation gap without demonstrated incorrect state:** the Run context
 workspace leaving unreferenced orphan directories with no cleanup and no failure test, Task Graph
-creation and listing paths lacking tests, the `wx`-less host job status write, and the three
-undocumented process-local serializers.
+creation and listing paths lacking tests, and the `wx`-less host job status write. The
+serializers are no longer undocumented: `docs/PROCESS_BOUNDARIES.md` names each one, its key and
+its limits.
 
 **Genuine unknowns after inspection:**
 
 - Whether two Break It Down accepts interleave through the API under normal single-user use.
+- Whether a Candidate acceptance publishing a formal Node can race a `deleteTaskGraphNode` of its
+  parent. Acceptance publishes node directories itself under `taskDecompositionMutations` rather
+  than through the Task Graph functions, so it is outside the Canvas chain. Adding it would keep
+  the lock order acyclic, but no test demonstrates the race and none was added here.
 - What reclaims a `system-validation-runner` lock directory left by a killed process.
 - Worklog behavior when a revision directory is removed by an external process between listing
   and reading.
@@ -673,13 +743,19 @@ No store is marked unknown for not having been read.
    ran. Creation now compensates, overwrite is staged and restored from captured bytes, cleanup
    failures reach Host diagnostics, neither import reads after publication, and the Route
    accepts the form the UI sends. Concurrent imports remain untested and are not queued here.
-4. **Document the process-local boundary** for `app-settings`, `graph-identity-store` and
-   `whats-next-runs`, matching `docs/PROJECT_REGISTRY.md`, and record the
-   `system-validation-runner` `mkdir` lock as the available cross-process option.
-5. **Deterministic same-process concurrency tests for Task Graph creation and update.** Two
-   overlapping `PATCH` calls against one node, and two overlapping creations in one Canvas. The
-   tests decide whether a serializer is warranted; do not add one first. Bounded to those two
-   paths — the failure and rollback boundaries are already closed.
+4. ~~**Document the process-local boundary**~~ Done. `docs/PROCESS_BOUNDARIES.md` names every
+   serializer, its runtime property and its real key, states what the chains do and do not
+   guarantee, records the one-way lock order, and documents the `system-validation-runner`
+   `mkdir` lock together with the ownership, stale-recovery and error-behavior questions any
+   general adoption would have to settle.
+5. ~~**Deterministic same-process concurrency tests for Task Graph creation and update.**~~ Done.
+   The tests demonstrated a violated one-Start invariant, a raw `EEXIST` and a broken resource
+   reference between two updates, and a delete-then-update resurrection. A process-local chain
+   keyed by planning path plus graph root covers creation, update and deletion; listing stays
+   outside it with evidence.
+
+The queue is empty. Nothing here proposes a cross-process lock, a startup sweep or a transaction
+framework; each remains a separate decision.
 
 ## Explicit non-candidates
 

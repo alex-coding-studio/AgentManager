@@ -75,6 +75,9 @@ harmless on its own, and may reflect what the user wants regardless of registrat
 
 ## What this does not cover
 
+`docs/PROCESS_BOUNDARIES.md` states this for every serializer in the codebase, including this
+one, and records the single cross-process primitive that exists today.
+
 **The boundary is process-local.** The chain lives in one Node process. Two
 AgentManager servers pointed at the same `AGENT_MANAGER_HOME` — two ports, or a `dev`
 and a `start` process at once — do not see each other's chain, and their

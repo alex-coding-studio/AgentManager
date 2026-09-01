@@ -71,6 +71,34 @@ export type TaskGraphNode = GraphIdentityFields & {
   };
 };
 
+const mutationRuntime = globalThis as typeof globalThis & {
+  taskGraphMutations?: Map<string, Promise<unknown>>;
+};
+const mutations = (mutationRuntime.taskGraphMutations ??= new Map<
+  string,
+  Promise<unknown>
+>());
+
+function canvasKey(project: RegisteredProject, graphRoot: GraphRoot) {
+  return `${path.resolve(project.planningPath)}\u0000${graphRoot}`;
+}
+
+async function mutateCanvas<T>(
+  project: RegisteredProject,
+  graphRoot: GraphRoot,
+  work: () => Promise<T>,
+): Promise<T> {
+  const key = canvasKey(project, graphRoot);
+  const previous = mutations.get(key) ?? Promise.resolve();
+  const next = previous.catch(() => undefined).then(work);
+  mutations.set(key, next);
+  try {
+    return (await next) as T;
+  } finally {
+    if (mutations.get(key) === next) mutations.delete(key);
+  }
+}
+
 export async function listTaskGraphNodes(
   project: RegisteredProject,
   graphRoot: GraphRoot = 'task-graph',
@@ -130,6 +158,21 @@ export async function createStartNode(
     idea?: string;
   },
   graphRoot: GraphRoot = 'task-graph',
+) {
+  return mutateCanvas(project, graphRoot, () =>
+    createStartNodeWithinCanvas(project, input, graphRoot),
+  );
+}
+
+async function createStartNodeWithinCanvas(
+  project: RegisteredProject,
+  input: {
+    title: string;
+    contextRefs: string[];
+    files: File[];
+    idea?: string;
+  },
+  graphRoot: GraphRoot,
 ) {
   const title = input.title.trim();
   if (!title) throw new PublicApiError('A start-node title is required.', 400);
@@ -270,6 +313,23 @@ export async function updateStartNode(
   },
   graphRoot: GraphRoot = 'task-graph',
 ) {
+  return mutateCanvas(project, graphRoot, () =>
+    updateStartNodeWithinCanvas(project, input, graphRoot),
+  );
+}
+
+async function updateStartNodeWithinCanvas(
+  project: RegisteredProject,
+  input: {
+    id: string;
+    title: string;
+    contextRefs: string[];
+    retainedAttachmentRefs: string[];
+    files: File[];
+    idea?: string;
+  },
+  graphRoot: GraphRoot,
+) {
   if (!/^NODE-[0-9a-f]{8,32}$/.test(input.id)) {
     throw new PublicApiError('The start node is invalid.', 400);
   }
@@ -308,9 +368,14 @@ export async function updateStartNode(
     input.id,
   );
   const nodeJsonPath = path.join(nodePath, 'node.json');
-  const node = JSON.parse(
-    await readFile(nodeJsonPath, 'utf8'),
-  ) as TaskGraphNode;
+  const record = await readFile(nodeJsonPath, 'utf8').catch(
+    (error: NodeJS.ErrnoException) => {
+      if (error.code === 'ENOENT')
+        throw new PublicApiError('The node could not be found.', 400);
+      throw error;
+    },
+  );
+  const node = JSON.parse(record) as TaskGraphNode;
   if (
     node.schemaVersion !== 1 ||
     node.id !== input.id ||
@@ -460,6 +525,16 @@ export async function deleteTaskGraphNode(
   project: RegisteredProject,
   nodeId: string,
   graphRoot: GraphRoot = 'task-graph',
+) {
+  return mutateCanvas(project, graphRoot, () =>
+    deleteTaskGraphNodeWithinCanvas(project, nodeId, graphRoot),
+  );
+}
+
+async function deleteTaskGraphNodeWithinCanvas(
+  project: RegisteredProject,
+  nodeId: string,
+  graphRoot: GraphRoot,
 ) {
   if (!/^NODE-[0-9a-f]{8,32}$/.test(nodeId)) {
     throw new PublicApiError('The node is invalid.', 400);
