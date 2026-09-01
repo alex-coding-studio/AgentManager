@@ -168,6 +168,31 @@ void test('four stages prepare bounded role-specific prompts without invoking a 
   }
 });
 
+void test('stage Harnesses keep their near-neighbor responsibilities separate', () => {
+  const planning = buildCardHarnessPrompt(request('planning'));
+  assert.match(
+    planning,
+    /acceptanceCriteria must be detailed before finalization/,
+  );
+  assert.match(planning, /Do not execute the Plan or finalize it/);
+
+  const execution = buildCardHarnessPrompt(request('execution'));
+  assert.match(execution, /Additional checks are non-blockers/);
+  assert.match(execution, /Self-checking is not user acceptance/);
+  assert.match(execution, /do not merge or infer user acceptance/i);
+
+  const review = buildCardHarnessPrompt(request('review'));
+  assert.match(review, /Do not fix code, run a correction loop/);
+  assert.match(review, /ready recommendation is not approval by the user/);
+
+  const todo = buildCardHarnessPrompt(request('todo'));
+  assert.match(
+    todo,
+    /host creates the Issue only under separate authorization/,
+  );
+  assert.match(todo, /Current delivery problems stay in the Action/);
+});
+
 void test('semantic plans need no filename inventory or arbitrary five-step minimum', () => {
   const req = request();
   const value = response(req);

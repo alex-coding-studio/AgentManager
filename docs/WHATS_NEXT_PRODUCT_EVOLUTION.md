@@ -203,10 +203,18 @@ selected per Run; the project does not have one globally locked maturity phase.
 
 The first What’s Next intentions are:
 
-| Intention         | Destination    | Typical output                                 |
-| ----------------- | -------------- | ---------------------------------------------- |
-| MVP Exploration   | Discovery      | concrete MVPs for product-value discussion     |
-| Feature Synthesis | Product Design | lightweight, rich Product Design Feature nodes |
+| Intention                 | Destination    | Typical output                                     |
+| ------------------------- | -------------- | -------------------------------------------------- |
+| MVP Exploration           | Discovery      | concrete MVPs for product-value discussion         |
+| Feature Synthesis         | Product Design | Features synthesized from selected Discovery proof |
+| Product Design Completion | Product Design | a justified missing Feature or an honest no-change |
+
+Product Design Completion starts after the product goal is coherent. The Product Source
+and every accepted Product Design Feature are implicit primary Context. The user's
+Instruction identifies a possible product gap; selected nodes only focus the request. The
+Harness first decides whether the concern deserves a separate Feature. Existing coverage
+returns no-change, a missing rule inside one Feature routes to refinement, and material
+ambiguity returns one clarification. It must not create a nominal Feature merely to answer.
 
 Document synthesis may later create a Product Context candidate, but direct repository
 document writes remain outside What’s Next.
@@ -460,6 +468,7 @@ Delivered:
 - make output cardinality depend on Motion;
 - preserve backward compatibility by treating existing nodes as Discovery directions;
 - provide MVP Exploration and Feature Synthesis profiles;
+- provide Product Design Completion with implicit Source and accepted-Feature Context;
 - generate Product Design Features directly from Discovery evidence;
 - replace node plus actions with persistent check-mark selection and one fixed action card;
 - keep Source selection exclusive and repeated Source exploration additive.

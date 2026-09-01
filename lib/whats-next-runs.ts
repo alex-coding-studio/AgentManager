@@ -211,6 +211,17 @@ async function startWhatsNextRunUnlocked(
     )
   )
     throw new Error('Feature Synthesis currently accepts Discovery sources.');
+  if (
+    intention === 'product-design-completion' &&
+    sourceNodes.some(
+      (node) =>
+        node.role !== 'start' &&
+        (node.layer ?? 'discovery') !== 'product-design',
+    )
+  )
+    throw new Error(
+      'Product Design Completion accepts the Source or Product Design Features.',
+    );
   const revisionTarget = await resolveRevisionTarget(project, input);
   if (revisionTarget && input.feedback?.length) {
     await validateInlineFeedback(project, revisionTarget, input.feedback);
@@ -241,7 +252,9 @@ async function startWhatsNextRunUnlocked(
           )
         : intention === 'feature-synthesis'
           ? 'Synthesize the selected Discovery evidence into useful Product Features.'
-          : 'Explore useful MVP directions from the selected origin.');
+          : intention === 'product-design-completion'
+            ? 'Complete the known Product Design around the missing concern in the Instruction.'
+            : 'Explore useful MVP directions from the selected origin.');
   const reservedCandidateIds = await collectReservedCandidateIds(project);
   if (
     [...activeRuns.values()].some(
@@ -301,6 +314,12 @@ async function startWhatsNextRunUnlocked(
     });
   }
   const featureContext = await readWhatsNextContext(project);
+  const implicitProductDesignContext =
+    intention === 'product-design-completion'
+      ? nodes.filter(
+          (node) => node.role === 'start' || node.layer === 'product-design',
+        )
+      : [];
   const contextInputs = await collectContextWorkspaceInputs(
     project,
     sourceNodes,
@@ -309,6 +328,7 @@ async function startWhatsNextRunUnlocked(
     uploadedResources,
     featureContext.attachments.map((attachment) => attachment.fileName),
     redo ? false : continuesExistingSession,
+    implicitProductDesignContext,
     revisionTarget
       ? {
           outputPath: `whats-next/runs/${revisionTarget.run.runId}/candidates/${revisionTarget.candidate.candidateId}/output.md`,
@@ -348,6 +368,17 @@ async function startWhatsNextRunUnlocked(
     intention,
     motion,
     destination: intentionDestination(intention),
+    implicitProductDesignContext:
+      intention === 'product-design-completion'
+        ? {
+            sourceNodeId:
+              implicitProductDesignContext.find((node) => node.role === 'start')
+                ?.id ?? null,
+            featureNodeIds: implicitProductDesignContext
+              .filter((node) => node.layer === 'product-design')
+              .map((node) => node.id),
+          }
+        : undefined,
     proposalCorrection: redo
       ? {
           intent:
@@ -980,6 +1011,7 @@ async function collectContextWorkspaceInputs(
   uploads: ContextWorkspaceInput[],
   featureAttachmentNames: string[],
   continuesExistingSession: boolean,
+  implicitPrimaryNodes: TaskGraphNode[] = [],
   revision?: { outputPath: string; resourcePaths: string[] },
 ) {
   const relatedNodeIds = new Set(
@@ -1012,6 +1044,23 @@ async function collectContextWorkspaceInputs(
           : undefined,
       }));
     }),
+    ...implicitPrimaryNodes.flatMap((node) =>
+      node.resources
+        .filter(
+          (resource) =>
+            node.role === 'start' ||
+            resource.path.endsWith(`/nodes/${node.id}/output.md`),
+        )
+        .map((resource) => ({
+          path: resource.path,
+          role: 'primary' as const,
+          kind:
+            node.role === 'start' ? 'product-source' : 'product-design-context',
+          nodeId: resource.path.endsWith(`/nodes/${node.id}/output.md`)
+            ? node.id
+            : undefined,
+        })),
+    ),
     ...contextRefs.map((resourcePath) => ({
       path: resourcePath,
       role: 'primary' as const,

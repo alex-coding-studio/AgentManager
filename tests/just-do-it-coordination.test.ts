@@ -5,6 +5,7 @@ import {
   type CardHarnessRequest,
 } from '../lib/just-do-it-harness.ts';
 import {
+  coordinationPrompt,
   createCoordinationRequest,
   parseCoordinationDecision,
   type CoordinationDecision,
@@ -237,6 +238,30 @@ void test('complete worker self-check bypasses coordinator review and keeps sepa
   assert.equal(output.coordination.attempts.length, 2);
   assert.deepEqual(JSON.parse(output.finalOutput).additionalChecks, []);
   assert.match(f.calls[1].prompt, /Only repair the requested output/);
+});
+
+void test('Coordinator Harness stays a coordinator rather than becoming a Reviewer or retry loop', () => {
+  const req = createCoordinationRequest({
+    phase: 'prepare',
+    task: task(),
+    basis: 'current',
+    priorEvidence: [],
+    previousContext: '',
+    workerReport: null,
+    previousDecision: null,
+    repairsRemaining: 1,
+  });
+  const prompt = coordinationPrompt(req);
+  assert.match(prompt, /You are not the code or product Reviewer/);
+  assert.match(prompt, /Trust passed worker self-checks/);
+  assert.match(
+    prompt,
+    /Repeating the same commands without a changed condition is not a repair plan/,
+  );
+  assert.match(
+    prompt,
+    /Do not dispatch repair solely for additional diagnostics/,
+  );
 });
 void test('a coordinator-only reference decision does not start a coding worker', async () => {
   const f = setup((req) => decision(req, 'ready'));

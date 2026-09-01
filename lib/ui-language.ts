@@ -828,6 +828,9 @@ export const chineseUi: Record<string, string> = {
     '说明你希望这些卡片生成什么结果。',
   'What should the Agent reconsider here?': '你希望 Agent 重新考虑什么？',
   'What to do with the selected cards': '对选中卡片的要求',
+  'Product Design Completion': '产品设计补全',
+  'The Product Source and all current Product Design Features are included automatically.':
+    '系统会自动带入 Product Source 和当前所有 Product Design Feature。',
   'Edit feedback': '编辑反馈',
   'Save feedback': '保存反馈',
   'Delete feedback': '删除反馈',

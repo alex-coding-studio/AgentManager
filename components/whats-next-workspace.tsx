@@ -57,6 +57,7 @@ import type {
   WhatsNextLayer,
   WhatsNextMotion,
 } from '@/lib/whats-next-intention';
+import { intentionDestination } from '@/lib/whats-next-intention';
 import { toggleWhatsNextSelection } from '@/lib/whats-next-selection';
 
 const AGENT_LABELS: Record<LocalAgentKind, string> = {
@@ -264,9 +265,7 @@ function WhatsNextCanvas({
     .reverse()
     .find(
       (run) =>
-        (run.intention === 'feature-synthesis'
-          ? 'product-design'
-          : 'discovery') === activeLayer &&
+        intentionDestination(run.intention).layer === activeLayer &&
         run.result &&
         !['running', 'validating'].includes(run.status),
     );
@@ -516,9 +515,7 @@ function WhatsNextCanvas({
         intention,
         motion,
       });
-      setActiveLayer(
-        intention === 'feature-synthesis' ? 'product-design' : 'discovery',
-      );
+      setActiveLayer(intentionDestination(intention).layer);
       setCombineIds([]);
       setCombineInstruction('');
     } catch (caught) {
@@ -611,11 +608,13 @@ function WhatsNextCanvas({
         feedback: pendingFeedback,
         revisionTarget,
         intention:
-          selectedCandidate &&
+          runs.find((run) => run.runId === selectedCandidatePreview?.runId)
+            ?.intention ??
+          (selectedCandidate &&
           'layer' in selectedCandidate &&
           selectedCandidate.layer === 'product-design'
             ? 'feature-synthesis'
-            : 'mvp-exploration',
+            : 'mvp-exploration'),
         motion: 'converge',
       });
       setRevisionTarget(null);
@@ -1018,14 +1017,21 @@ function WhatsNextCanvas({
               {t('Intention')}
               <select
                 value={intention}
-                onChange={(event) =>
-                  setIntention(event.target.value as WhatsNextIntention)
-                }
+                onChange={(event) => {
+                  const next = event.target.value as WhatsNextIntention;
+                  setIntention(next);
+                  if (next === 'product-design-completion') {
+                    setMotion('converge');
+                  }
+                }}
                 className="h-9 w-full rounded-lg border border-border bg-background px-2 text-xs text-foreground"
               >
                 <option value="mvp-exploration">{t('MVP Exploration')}</option>
                 <option value="feature-synthesis">
                   {t('Feature Synthesis')}
+                </option>
+                <option value="product-design-completion">
+                  {t('Product Design Completion')}
                 </option>
               </select>
             </label>
@@ -1043,6 +1049,14 @@ function WhatsNextCanvas({
               </select>
             </label>
           </div>
+
+          {intention === 'product-design-completion' ? (
+            <p className="mt-2 text-[10px] leading-4 text-muted-foreground">
+              {t(
+                'The Product Source and all current Product Design Features are included automatically.',
+              )}
+            </p>
+          ) : null}
 
           <div className="mt-3 flex max-h-40 flex-col gap-0.5 overflow-y-auto">
             {combineNodes.map((node) => (
@@ -2212,10 +2226,7 @@ function runToPreviews(run: WhatsNextRunRecord): TaskGraphPreview[] {
     runId: run.runId,
     startedAt: run.startedAt,
     derivedFrom: run.sourceNodeIds,
-    layer:
-      run.intention === 'feature-synthesis'
-        ? ('product-design' as const)
-        : ('discovery' as const),
+    layer: intentionDestination(run.intention).layer,
   };
   const agentLabel = run.transport === 'claude-cli' ? 'Claude' : 'Codex';
 
