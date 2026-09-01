@@ -112,5 +112,17 @@ The suite covers Host normalization across IPv4, IPv6 and port forms, malformed 
 rejection, configured hostnames, the forwarding-header case, cross-origin and
 same-origin writes, the no-Origin native path, and Proxy responses. It also calls the
 real project and decomposition Route Handlers to prove a rejected request registers
-no project, writes no file and starts no Agent Run, and asserts that every unsafe
-handler under `app/api` passes through the shared guard.
+no project, writes no file and starts no Agent Run.
+
+One test is structural: it walks every `route.ts` under `app/api` and fails if an
+unsafe handler omits the shared guard **or calls it after any await, request body
+read or project lookup**. A guard that runs after the work it is supposed to prevent
+is not a boundary, so ordering is asserted rather than mere presence. That assertion
+is itself covered by negative cases, so a weakened check fails its own test.
+
+Route Handlers import through the `@/` alias, which Node does not resolve on its own.
+`tests/helpers/register-alias.mjs` installs a resolve hook, using the synchronous
+`module.registerHooks` where available and falling back to `module.register` with
+`tests/helpers/resolve-alias.mjs`. The fallback keeps the suite runnable on the
+minimum runtime declared in `package.json` (Node 22.13.0), where `registerHooks` does
+not exist. This is test-only infrastructure and is not loaded by the application.

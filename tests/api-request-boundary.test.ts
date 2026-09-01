@@ -323,23 +323,93 @@ void test('a rejected decomposition request starts no Agent Run', async () => {
   assert.equal((await savedProjects()).length, before + 1);
 });
 
-void test('every unsafe API handler passes through the shared guard', async () => {
+const UNSAFE_HANDLER = /export async function (POST|PUT|PATCH|DELETE)\(/g;
+const GUARD_CALL = /guard(?:Json)?Request\(request\)/;
+const HANDLER_WORK = [
+  /\bawait\b/,
+  /\brequest\s*\.\s*(?:json|formData|text|arrayBuffer|blob|bytes|clone)\s*\(/,
+  /\bgetProject\s*\(/,
+  /\bparams\b/,
+];
+
+function handlerBody(source: string, parenthesis: number) {
+  let depth = 0;
+  let index = parenthesis;
+  while (index < source.length) {
+    if (source[index] === '(') depth += 1;
+    else if (source[index] === ')') {
+      depth -= 1;
+      if (depth === 0) break;
+    }
+    index += 1;
+  }
+  const open = source.indexOf('{', index);
+  const next = source.indexOf('export async function', open);
+  return source.slice(open + 1, next === -1 ? source.length : next);
+}
+
+function unguardedHandlers(source: string, file = 'source') {
+  const findings: string[] = [];
+  for (const match of source.matchAll(UNSAFE_HANDLER)) {
+    const body = handlerBody(source, match.index + match[0].length - 1);
+    const guard = GUARD_CALL.exec(body);
+    if (!guard) {
+      findings.push(`${file} ${match[1]} does not call the shared guard`);
+      continue;
+    }
+    const firstWork = Math.min(
+      ...HANDLER_WORK.map((pattern) => pattern.exec(body)?.index ?? Infinity),
+    );
+    if (guard.index > firstWork)
+      findings.push(
+        `${file} ${match[1]} calls the shared guard after other work`,
+      );
+  }
+  return findings;
+}
+
+void test('every unsafe API handler calls the shared guard before any work', async () => {
   const routes = await apiRouteFiles();
   assert.ok(routes.length >= 18);
-  const unguarded: string[] = [];
-  for (const file of routes) {
-    const source = await readFile(file, 'utf8');
-    for (const match of source.matchAll(
-      /export async function (POST|PUT|PATCH|DELETE)\(/g,
-    )) {
-      const start = match.index + match[0].length;
-      const next = source.indexOf('export async function', start);
-      const body = source.slice(start, next === -1 ? source.length : next);
-      if (!/guard(Json)?Request\(request\)/.test(body))
-        unguarded.push(`${file} ${match[1]}`);
-    }
-  }
-  assert.deepEqual(unguarded, []);
+  const findings: string[] = [];
+  for (const file of routes)
+    findings.push(...unguardedHandlers(await readFile(file, 'utf8'), file));
+  assert.deepEqual(findings, []);
+});
+
+void test('the handler assertion rejects a guard that runs after other work', () => {
+  const missing = `export async function POST(request: Request) {
+  return Response.json({ ok: true });
+}`;
+  const afterAwait = `export async function POST(request: Request) {
+  const body = await request.formData();
+  const denied = guardRequest(request);
+  if (denied) return denied;
+  return Response.json({ ok: Boolean(body) });
+}`;
+  const afterLookup = `export async function DELETE(request: Request, { params }) {
+  const project = await getProject((await params).projectId);
+  const denied = guardJsonRequest(request);
+  if (denied) return denied;
+  return Response.json({ ok: Boolean(project) });
+}`;
+  const compliant = `export async function PATCH(request: Request, { params }) {
+  const denied = guardJsonRequest(request);
+  if (denied) return denied;
+  const project = await getProject((await params).projectId);
+  return Response.json({ ok: Boolean(project) });
+}`;
+
+  assert.deepEqual(unguardedHandlers(missing, 'missing'), [
+    'missing POST does not call the shared guard',
+  ]);
+  assert.deepEqual(unguardedHandlers(afterAwait, 'after-await'), [
+    'after-await POST calls the shared guard after other work',
+  ]);
+  assert.deepEqual(unguardedHandlers(afterLookup, 'after-lookup'), [
+    'after-lookup DELETE calls the shared guard after other work',
+  ]);
+  assert.deepEqual(unguardedHandlers(compliant, 'compliant'), []);
 });
 
 async function apiRouteFiles(

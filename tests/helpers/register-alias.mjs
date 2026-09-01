@@ -1,27 +1,11 @@
-import { existsSync } from 'node:fs';
-import { registerHooks } from 'node:module';
-import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import nodeModule from 'node:module';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { resolve } from './resolve-alias.mjs';
 
-const projectRoot = path.resolve(import.meta.dirname, '../..');
-const suffixes = ['', '.ts', '.tsx', '.mts', '.js', '/index.ts', '/index.tsx'];
-
-function projectFile(relative) {
-  const base = path.join(projectRoot, relative);
-  const resolved = suffixes
-    .map((suffix) => `${base}${suffix}`)
-    .find((candidate) => existsSync(candidate));
-  if (!resolved)
-    throw new Error(`Specifier could not be resolved: ${relative}`);
-  return pathToFileURL(resolved).href;
-}
-
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier.startsWith('@/'))
-      return nextResolve(projectFile(specifier.slice(2)), context);
-    if (specifier === 'next/server')
-      return nextResolve(projectFile('node_modules/next/server.js'), context);
-    return nextResolve(specifier, context);
-  },
-});
+if (typeof nodeModule.registerHooks === 'function')
+  nodeModule.registerHooks({ resolve });
+else
+  nodeModule.register(
+    './resolve-alias.mjs',
+    pathToFileURL(fileURLToPath(import.meta.url)),
+  );
