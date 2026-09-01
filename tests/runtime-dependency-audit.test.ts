@@ -258,7 +258,7 @@ void test('the real audit runs offline, is deterministic and matches its report'
   assert.ok(first.modules.length > 0);
   assert.ok(!first.modules.some((module) => module.startsWith('tests/')));
   assert.ok(
-    !first.modules.some((module) => module.startsWith('components/ui/')),
+    first.modules.some((module) => module.startsWith('components/ui/')),
   );
 
   const report = await readFile(
@@ -270,6 +270,11 @@ void test('the real audit runs offline, is deterministic and matches its report'
     ['runtime edges', first.runtimeEdges.length],
     ['type-only edges excluded', first.typeOnlyEdges.length],
     ['unresolved internal imports', first.unresolvedImports.length],
+    [
+      'internal imports outside the analyzed graph',
+      first.excludedInternalImports.length,
+    ],
+    ['non-module asset references', first.assetImports.length],
     ['runtime strongly connected components', first.components.length],
   ];
   for (const [label, value] of statedMetrics) {
@@ -324,4 +329,87 @@ void test('the earlier reported modules form no runtime component but do form ty
       covered.has(reportedModule),
       `${reportedModule} should appear once type-only edges are included`,
     );
+});
+
+void test('an excluded internal module on a back edge is never reported as acyclic', () => {
+  const withExclusion = analyzeRuntimeDependencies({
+    projectRoot: PROJECT_ROOT,
+    sourceRoots: [`${FIXTURES}/hidden`],
+    exclusions: [`${FIXTURES}/hidden/gap`],
+  });
+  assert.equal(
+    withExclusion.components.length,
+    0,
+    'the excluded module breaks the visible loop',
+  );
+  assert.ok(
+    withExclusion.excludedInternalImports.length > 0,
+    'the audit must report the hidden hop instead of a clean acyclic graph',
+  );
+  const hop = withExclusion.excludedInternalImports.find((item) =>
+    item.from.endsWith('hidden/included/entry.ts'),
+  );
+  assert.ok(hop?.to.endsWith('hidden/gap/bridge.ts'));
+  assert.ok(hop!.line > 0);
+
+  const complete = analyzeRuntimeDependencies({
+    projectRoot: PROJECT_ROOT,
+    sourceRoots: [`${FIXTURES}/hidden`],
+  });
+  assert.deepEqual(complete.excludedInternalImports, []);
+  assert.equal(complete.components.length, 1);
+  assert.deepEqual(
+    complete.components[0]!.files.map((file) => path.basename(file)),
+    ['bridge.ts', 'entry.ts', 'target.ts'],
+  );
+});
+
+void test('a genuinely one-way excluded leaf is reported without fabricating a cycle', () => {
+  const graph = analyzeRuntimeDependencies({
+    projectRoot: PROJECT_ROOT,
+    sourceRoots: [`${FIXTURES}/oneway`],
+    exclusions: [`${FIXTURES}/oneway/leaf`],
+  });
+  assert.equal(graph.components.length, 0);
+  assert.equal(graph.excludedInternalImports.length, 1);
+  const reference = graph.excludedInternalImports[0]!;
+  assert.ok(reference.from.endsWith('oneway/included/consumer.ts'));
+  assert.ok(reference.to.endsWith('oneway/leaf/leaf.ts'));
+
+  const complete = analyzeRuntimeDependencies({
+    projectRoot: PROJECT_ROOT,
+    sourceRoots: [`${FIXTURES}/oneway`],
+  });
+  assert.deepEqual(complete.excludedInternalImports, []);
+  assert.equal(complete.components.length, 0);
+  assert.equal(complete.runtimeEdges.length, 1);
+});
+
+void test('a non-module asset reference is recorded without failing the audit', () => {
+  const graph = runAudit(PROJECT_ROOT);
+  assert.deepEqual(graph.excludedInternalImports, []);
+  const asset = graph.assetImports.find((item) => item.to.endsWith('.css'));
+  assert.ok(asset, 'the global stylesheet import should be recorded');
+  assert.ok(asset!.from.endsWith('app/layout.tsx'));
+  assert.ok(
+    !graph.modules.some((module) => module.endsWith('.css')),
+    'a stylesheet must not become a graph node',
+  );
+});
+
+void test('vendored UI modules are part of the analyzed runtime graph', () => {
+  const graph = runAudit(PROJECT_ROOT);
+  assert.ok(
+    graph.modules.some((module) => module.startsWith('components/ui/')),
+    'components/ui must be analyzed because owned modules import it and it imports owned modules',
+  );
+  const outgoing = graph.runtimeEdges.filter(
+    (edge) =>
+      edge.from.startsWith('components/ui/') &&
+      !edge.to.startsWith('components/ui/'),
+  );
+  assert.ok(
+    outgoing.length > 0,
+    'components/ui imports owned modules, so it is not a graph leaf',
+  );
 });

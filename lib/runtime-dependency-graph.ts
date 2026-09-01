@@ -28,6 +28,23 @@ export type TypeOnlyEdge = {
   form: 'type-import' | 'type-re-export';
 };
 
+export type AssetImport = {
+  from: string;
+  to: string;
+  line: number;
+  column: number;
+  specifier: string;
+};
+
+export type ExcludedInternalImport = {
+  from: string;
+  to: string;
+  line: number;
+  column: number;
+  specifier: string;
+  form: ImportForm;
+};
+
 export type UnresolvedImport = {
   from: string;
   line: number;
@@ -55,6 +72,8 @@ export type DependencyGraph = {
   runtimeEdges: RuntimeEdge[];
   typeOnlyEdges: TypeOnlyEdge[];
   unresolvedImports: UnresolvedImport[];
+  excludedInternalImports: ExcludedInternalImport[];
+  assetImports: AssetImport[];
   externalSpecifiers: string[];
   surfaces: RuntimeSurface[];
   components: StronglyConnectedComponent[];
@@ -167,6 +186,8 @@ export function analyzeRuntimeDependencies(
   const runtimeEdges: RuntimeEdge[] = [];
   const typeOnlyEdges: TypeOnlyEdge[] = [];
   const unresolvedImports: UnresolvedImport[] = [];
+  const excludedInternalImports: ExcludedInternalImport[] = [];
+  const assetImports: AssetImport[] = [];
   const externalSpecifiers = new Set<string>();
 
   for (const relativeFile of modules) {
@@ -227,7 +248,27 @@ export function analyzeRuntimeDependencies(
         return;
       }
       const target = path.relative(projectRoot, resolved);
-      if (!owned.has(target)) return;
+      if (!owned.has(target)) {
+        if (!SOURCE_EXTENSIONS.has(path.extname(resolved))) {
+          assetImports.push({
+            from: relativeFile,
+            to: target,
+            line,
+            column,
+            specifier,
+          });
+          return;
+        }
+        excludedInternalImports.push({
+          from: relativeFile,
+          to: target,
+          line,
+          column,
+          specifier,
+          form,
+        });
+        return;
+      }
       if (typeOnly) {
         typeOnlyEdges.push({
           from: relativeFile,
@@ -323,6 +364,8 @@ export function analyzeRuntimeDependencies(
     (left, right) =>
       left.from.localeCompare(right.from) || left.line - right.line,
   );
+  excludedInternalImports.sort(compareEdges);
+  assetImports.sort(compareEdges);
 
   const surfaces = (options.surfaces ?? []).map((surface) => ({
     name: surface.name,
@@ -356,6 +399,8 @@ export function analyzeRuntimeDependencies(
     runtimeEdges,
     typeOnlyEdges,
     unresolvedImports,
+    excludedInternalImports,
+    assetImports,
     externalSpecifiers: [...externalSpecifiers].sort(),
     surfaces,
     components,

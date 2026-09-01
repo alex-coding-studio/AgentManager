@@ -16,7 +16,6 @@ export const AUDIT_SOURCE_ROOTS = [
 
 export const AUDIT_EXCLUSIONS = [
   '.next',
-  'components/ui',
   'coverage',
   'dist',
   'node_modules',
@@ -69,6 +68,10 @@ export function formatAudit(graph: DependencyGraph) {
   lines.push(`external specifiers: ${graph.externalSpecifiers.length}`);
   lines.push(`unresolved internal imports: ${graph.unresolvedImports.length}`);
   lines.push(
+    `internal imports outside the analyzed graph: ${graph.excludedInternalImports.length}`,
+  );
+  lines.push(`non-module asset references: ${graph.assetImports.length}`);
+  lines.push(
     `runtime strongly connected components: ${graph.components.length}`,
   );
   lines.push('');
@@ -78,6 +81,26 @@ export function formatAudit(graph: DependencyGraph) {
       `surface ${surface.name}: ${surface.entryPoints.length} entry points`,
     );
   lines.push('');
+
+  lines.push('## Non-module asset references');
+  if (graph.assetImports.length)
+    for (const item of graph.assetImports)
+      lines.push(`- ${item.from}:${item.line}:${item.column} -> ${item.to}`);
+  else lines.push('- none');
+  lines.push('');
+
+  if (graph.excludedInternalImports.length) {
+    lines.push('## Internal imports outside the analyzed graph');
+    for (const item of graph.excludedInternalImports)
+      lines.push(
+        `- ${item.from}:${item.line}:${item.column} -> ${item.to} [${item.form}]`,
+      );
+    lines.push('');
+  } else {
+    lines.push('## Internal imports outside the analyzed graph');
+    lines.push('- none');
+    lines.push('');
+  }
 
   if (graph.unresolvedImports.length) {
     lines.push('## Unresolved internal imports');
@@ -134,6 +157,12 @@ if (invokedDirectly) {
         'Audit incomplete: unresolved internal imports make the graph untrustworthy.\n',
       );
       process.exit(2);
+    }
+    if (graph.excludedInternalImports.length) {
+      process.stderr.write(
+        'Audit incomplete: owned modules import internal files outside the analyzed graph.\n',
+      );
+      process.exit(3);
     }
     process.exit(0);
   } catch (error) {

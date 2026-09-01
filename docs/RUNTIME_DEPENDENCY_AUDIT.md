@@ -24,20 +24,32 @@ from erased ones, and reports strongly connected components with file-and-line e
 
 Analyzed source roots: `app`, `bin`, `components`, `hooks`, `lib`, `scripts`.
 
-| exclusion                          | why it cannot hide an owned runtime cycle                                                                      |
-| ---------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `tests`                            | test files are never imported by production modules; an edge from a test cannot close a production cycle       |
-| `components/ui`                    | vendored shadcn output; owned modules import it but it imports no owned module, so it can only be a graph leaf |
-| `.next`, `out`, `dist`, `coverage` | build and report output, regenerated from the analyzed sources                                                 |
-| `node_modules`                     | external packages are recorded as specifiers, never as nodes                                                   |
+`components/ui` is **included**. An earlier draft of this document excluded it and claimed
+it "imports no owned module, so it can only be a graph leaf". That claim was false and was
+never checked before it was written: 58 files there import `@/lib/utils`,
+`components/ui/sidebar.tsx` imports `@/hooks/use-mobile`, and `dialog.tsx` and `sheet.tsx`
+import `@/components/ui-language-provider`. Excluding it dropped 61 real runtime edges.
 
-External packages are counted as specifiers and never become graph nodes, so no cycle can
-be routed through one.
+Lint and type-check exclusions are a separate concern. `tests/fixtures/**` is excluded from
+`tsc` and `oxlint` because it deliberately contains malformed and unresolvable modules;
+that has no bearing on which files belong in the runtime graph.
 
-`components/ui` deserves the explicit argument: it is excluded as a _node_, and an owned
-module importing it produces no edge. That is safe only because those files import nothing
-from `app`, `components`, `hooks`, `lib`, `scripts` or `bin`. If a vendored file ever
-imported an owned module, this exclusion would need to change.
+| exclusion                          | why it cannot hide an owned runtime cycle                                                                                                            |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tests`                            | test files are never imported by production modules, and the analyzer now reports any import that resolves outside the graph rather than dropping it |
+| `.next`, `out`, `dist`, `coverage` | build and report output, regenerated from the analyzed sources                                                                                       |
+| `node_modules`                     | external packages are recorded as specifiers, never as nodes                                                                                         |
+
+The exclusion argument no longer rests on a claim about what those directories import. The
+analyzer records every internal import whose target resolves outside the analyzed graph as
+an `excludedInternalImports` finding and exits non-zero. A future exclusion that would hide
+a back edge fails the audit instead of producing a quiet zero.
+
+Non-module assets are the one deliberate exception. An import that resolves to a file whose
+extension is not a JavaScript or TypeScript source — currently `app/layout.tsx` importing
+`app/globals.css` — is recorded as an asset reference and does not fail the audit, because
+a stylesheet cannot participate in a JavaScript runtime cycle. Assets are listed, never
+silently dropped.
 
 ## Runtime surfaces
 
@@ -81,20 +93,21 @@ the audit exit non-zero, because an incomplete graph cannot support a claim abou
 
 ## Results
 
-| metric                                | value |
-| ------------------------------------- | ----- |
-| owned modules                         | 142   |
-| runtime edges                         | 314   |
-| type-only edges excluded              | 110   |
-| unresolved internal imports           | 0     |
-| external specifiers                   | 27    |
-| runtime strongly connected components | 0     |
-
-Runtime edges by form: 312 static imports, 1 dynamic import, 1 runtime re-export.
+| metric                                      | value |
+| ------------------------------------------- | ----- |
+| owned modules                               | 203   |
+| runtime edges                               | 483   |
+| type-only edges excluded                    | 110   |
+| unresolved internal imports                 | 0     |
+| internal imports outside the analyzed graph | 0     |
+| non-module asset references                 | 1     |
+| external specifiers                         | 67    |
+| runtime strongly connected components       | 0     |
 
 **There is no confirmed runtime dependency cycle in the owned production code.**
 
-Unresolved internal imports: none.
+Every internal import resolves either into the analyzed graph or to a declared non-module
+asset. Nothing is dropped.
 
 ## Comparison with the earlier twelve-cycle claim
 
