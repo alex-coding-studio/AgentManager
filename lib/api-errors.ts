@@ -54,10 +54,30 @@ export function redactSecrets(text: string) {
   );
 }
 
-function diagnosticText(error: unknown) {
-  if (error instanceof Error)
-    return `${error.name}: ${error.message}${error.stack ? `\n${error.stack}` : ''}`;
-  return String(error);
+const MAX_CAUSE_DEPTH = 4;
+
+function diagnosticText(
+  error: unknown,
+  depth = 0,
+  seen: Set<unknown> = new Set(),
+): string {
+  if (!(error instanceof Error)) return String(error);
+  if (seen.has(error)) return `${error.name}: <cause cycle>`;
+  seen.add(error);
+  const head = `${error.name}: ${error.message}${error.stack ? `\n${error.stack}` : ''}`;
+  if (depth >= MAX_CAUSE_DEPTH) return head;
+  const nested =
+    error instanceof AggregateError
+      ? error.errors
+          .slice(0, MAX_CAUSE_DEPTH)
+          .map((entry) => diagnosticText(entry, depth + 1, seen))
+      : [];
+  const cause: unknown = error.cause;
+  const chained =
+    cause === undefined ? [] : [diagnosticText(cause, depth + 1, seen)];
+  const parts = [...nested, ...chained];
+  if (parts.length === 0) return head;
+  return `${head}\n${parts.map((part) => `caused by ${part}`).join('\n')}`;
 }
 
 export function recordUnexpectedApiError(

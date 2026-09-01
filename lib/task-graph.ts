@@ -6,6 +6,8 @@ import {
   resolvePlanningPath,
 } from './planning-paths.ts';
 import { randomUUID } from 'node:crypto';
+
+const MAX_REPORTED_CLEANUP_FAILURES = 4;
 import {
   mkdir,
   readFile,
@@ -241,9 +243,17 @@ export async function createStartNode(
       { flag: 'wx' },
     );
     await rename(temporaryNodePath, nodePath);
-    return { node, nodes: await listTaskGraphNodes(project, graphRoot) };
+    return { node, nodes: [...existingNodes, node] };
   } catch (error) {
-    await rm(temporaryNodePath, { recursive: true, force: true });
+    const cleanupFailure = await rm(temporaryNodePath, {
+      recursive: true,
+      force: true,
+    }).then(
+      () => null,
+      (failure: unknown) => failure,
+    );
+    if (cleanupFailure && error instanceof Error && error.cause === undefined)
+      error.cause = cleanupFailure;
     throw error;
   }
 }
@@ -340,11 +350,15 @@ export async function updateStartNode(
   const uploads = await prepareUploads(input.files);
   const resourcesPath = path.join(nodePath, 'resources');
   await mkdir(resourcesPath, { recursive: true });
-  const usedNames = new Set(
-    [...existingAttachments.keys()].map((ref) => path.basename(ref)),
-  );
+  const usedNames = new Set([
+    ...[...existingAttachments.keys()].map((ref) => path.basename(ref)),
+    ...(await readdir(resourcesPath).catch(() => [] as string[])),
+  ]);
+  if (ideaResource) usedNames.add(path.basename(ideaResource.path));
   const newAttachments: TaskGraphNode['resources'] = [];
   const newAttachmentPaths: string[] = [];
+  let stagedIdea: TaskGraphNode['resources'][number] | null = null;
+  let temporaryJsonPath: string | null = null;
   let committed = false;
 
   try {
@@ -360,10 +374,14 @@ export async function updateStartNode(
     }
 
     if (idea && ideaResource) {
-      await writeFile(
-        path.join(project.planningPath, ideaResource.path),
-        `# ${title}\n\n${idea}\n`,
-      );
+      const fileName = chooseUniqueName('idea', usedNames);
+      const absolutePath = path.join(resourcesPath, fileName);
+      await writeFile(absolutePath, `# ${title}\n\n${idea}\n`, { flag: 'wx' });
+      newAttachmentPaths.push(absolutePath);
+      stagedIdea = {
+        kind: 'idea',
+        path: `${graphRoot}/nodes/${input.id}/resources/${fileName}`,
+      };
     }
 
     const updatedNode: TaskGraphNode = {
@@ -371,16 +389,15 @@ export async function updateStartNode(
       title,
       updatedAt: new Date().toISOString(),
       resources: [
-        ...(ideaResource ? [ideaResource] : []),
+        ...((stagedIdea ?? ideaResource)
+          ? [(stagedIdea ?? ideaResource)!]
+          : []),
         ...contextRefs.map((ref) => ({ kind: 'context', path: ref })),
         ...retainedAttachments,
         ...newAttachments,
       ],
     };
-    const temporaryJsonPath = path.join(
-      nodePath,
-      `.node-${randomUUID()}.json.tmp`,
-    );
+    temporaryJsonPath = path.join(nodePath, `.node-${randomUUID()}.json.tmp`);
     await writeFile(
       temporaryJsonPath,
       `${JSON.stringify(updatedNode, null, 2)}\n`,
@@ -388,6 +405,11 @@ export async function updateStartNode(
     );
     await rename(temporaryJsonPath, nodeJsonPath);
     committed = true;
+
+    if (stagedIdea && ideaResource && ideaResource.path !== stagedIdea.path)
+      await unlink(path.join(project.planningPath, ideaResource.path)).catch(
+        () => undefined,
+      );
 
     const removedAttachments = [...existingAttachments.keys()].filter(
       (ref) => !retainedAttachmentRefs.includes(ref),
@@ -403,11 +425,32 @@ export async function updateStartNode(
     };
   } catch (error) {
     if (!committed) {
-      await Promise.all(
-        newAttachmentPaths.map((filePath) =>
-          unlink(filePath).catch(() => undefined),
-        ),
-      );
+      const cleanupTargets = [
+        ...(temporaryJsonPath ? [temporaryJsonPath] : []),
+        ...newAttachmentPaths,
+      ];
+      const cleanupFailures = (
+        await Promise.all(
+          cleanupTargets.map((filePath) =>
+            unlink(filePath).then(
+              () => null,
+              (failure: unknown) => failure,
+            ),
+          ),
+        )
+      ).filter((failure): failure is unknown => failure !== null);
+      if (
+        cleanupFailures.length > 0 &&
+        error instanceof Error &&
+        error.cause === undefined
+      )
+        error.cause =
+          cleanupFailures.length === 1
+            ? cleanupFailures[0]
+            : new AggregateError(
+                cleanupFailures.slice(0, MAX_REPORTED_CLEANUP_FAILURES),
+                'Cleanup after a failed update did not complete.',
+              );
     }
     throw error;
   }
