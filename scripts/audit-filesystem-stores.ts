@@ -30,39 +30,52 @@ export function runStoreAudit(
   });
 }
 
-export function formatStoreAudit(scan: StoreScan) {
-  const lines: string[] = [];
+export const MUTATION_KINDS = ['write', 'append', 'rename', 'remove', 'trash'];
+
+export function storeAuditWriterModules(scan: StoreScan) {
+  return scan.modules
+    .filter((entry) =>
+      scan.operations.some(
+        (operation) =>
+          operation.file === entry.file &&
+          MUTATION_KINDS.includes(operation.kind),
+      ),
+    )
+    .map((entry) => entry.file);
+}
+
+export function storeAuditMetrics(scan: StoreScan): Array<[string, number]> {
   const byKind = new Map<string, number>();
   for (const operation of scan.operations)
     byKind.set(operation.kind, (byKind.get(operation.kind) ?? 0) + 1);
 
-  const writers = scan.modules.filter((entry) =>
-    scan.operations.some(
-      (operation) =>
-        operation.file === entry.file &&
-        ['write', 'append', 'rename', 'remove', 'trash'].includes(
-          operation.kind,
-        ),
-    ),
-  );
+  return [
+    ['analyzed files', scan.analyzedFiles.length],
+    ['filesystem operations', scan.operations.length],
+    ['modules performing writes', storeAuditWriterModules(scan).length],
+    ['unresolved filesystem usages', scan.unresolved.length],
+    ['omitted filesystem files', scan.omittedFilesystemFiles.length],
+    ...[...byKind.keys()]
+      .sort()
+      .map(
+        (kind) => [`${kind} operations`, byKind.get(kind)!] as [string, number],
+      ),
+  ];
+}
+
+export function formatStoreAudit(scan: StoreScan) {
+  const lines: string[] = [];
 
   lines.push('# Filesystem store inventory');
   lines.push('');
   lines.push(`input fingerprint: ${scan.inputFingerprint}`);
   lines.push(`analyzed source roots: ${scan.sourceRoots.join(', ')}`);
   lines.push(`exclusions: ${scan.exclusions.join(', ')}`);
-  lines.push(`analyzed files: ${scan.analyzedFiles.length}`);
-  lines.push(`filesystem operations: ${scan.operations.length}`);
-  lines.push(`modules performing writes: ${writers.length}`);
-  lines.push(`unresolved filesystem usages: ${scan.unresolved.length}`);
-  lines.push(
-    `production files with filesystem imports omitted from analysis: ${scan.omittedFilesystemFiles.length}`,
-  );
   lines.push('');
 
-  lines.push('## Operations by kind');
-  for (const kind of [...byKind.keys()].sort())
-    lines.push(`- ${kind}: ${byKind.get(kind)}`);
+  lines.push('## Metrics');
+  for (const [label, value] of storeAuditMetrics(scan))
+    lines.push(`| ${label} | ${value} |`);
   lines.push('');
 
   lines.push('## Modules importing the shared atomic store');
@@ -71,6 +84,10 @@ export function formatStoreAudit(scan: StoreScan) {
     for (const entry of shared)
       lines.push(`- ${entry.file} [${entry.atomicStoreCalls.join(', ')}]`);
   else lines.push('- none');
+  lines.push('');
+
+  lines.push('## Modules performing mutations');
+  for (const file of storeAuditWriterModules(scan)) lines.push(`- ${file}`);
   lines.push('');
 
   lines.push('## Modules with their own temporary-write and rename');
@@ -95,13 +112,18 @@ export function formatStoreAudit(scan: StoreScan) {
   else lines.push('- none');
   lines.push('');
 
-  lines.push('## Functions writing more than one file');
-  const multi = scan.modules.flatMap((owner) =>
-    owner.multiWriteFunctions.map(
-      (fn) => `- ${owner.file} ${fn.name} writes=${fn.writes}`,
-    ),
+  lines.push(
+    '## Static mutation call sites per function (call sites in source, not files written at runtime)',
   );
-  if (multi.length) lines.push(...multi);
+  const mutations = scan.modules.flatMap((owner) =>
+    owner.staticMutationCallSites
+      .filter((entry) => entry.total > 1)
+      .map(
+        (entry) =>
+          `- ${owner.file} ${entry.name} create=${entry.create} write=${entry.write} append=${entry.append} rename=${entry.rename} remove=${entry.remove} trash=${entry.trash}`,
+      ),
+  );
+  if (mutations.length) lines.push(...mutations);
   else lines.push('- none');
   lines.push('');
 

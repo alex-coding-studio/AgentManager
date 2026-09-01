@@ -50,7 +50,18 @@ export type ModuleSignals = {
   containmentChecks: number;
   cleanupInFinally: number;
   localWriteWrappers: string[];
-  multiWriteFunctions: Array<{ name: string; writes: number }>;
+  staticMutationCallSites: MutationCallSites[];
+};
+
+export type MutationCallSites = {
+  name: string;
+  create: number;
+  write: number;
+  append: number;
+  rename: number;
+  remove: number;
+  trash: number;
+  total: number;
 };
 
 export type StoreScan = {
@@ -105,13 +116,28 @@ const KIND_BY_METHOD: Record<string, FsOperationKind> = {
   copyFile: 'write',
 };
 
-const WRITE_KINDS = new Set<FsOperationKind>([
+type MutationKind = 'write' | 'append' | 'rename' | 'remove' | 'trash';
+
+const WRITE_KINDS = new Set<string>([
   'write',
   'append',
   'rename',
   'remove',
   'trash',
 ]);
+
+function isMutationKind(kind: FsOperationKind): kind is MutationKind {
+  return WRITE_KINDS.has(kind);
+}
+
+const OMISSION_SCAN_ROOTS = [
+  'app',
+  'bin',
+  'components',
+  'hooks',
+  'lib',
+  'scripts',
+];
 
 const SOURCE_EXTENSIONS: ReadonlySet<string> = new Set([
   '.ts',
@@ -278,7 +304,7 @@ export function scanFilesystemStores(options: {
       containmentChecks: 0,
       cleanupInFinally: 0,
       localWriteWrappers: [],
-      multiWriteFunctions: [],
+      staticMutationCallSites: [],
     };
 
     for (const statement of source.statements) {
@@ -308,7 +334,7 @@ export function scanFilesystemStores(options: {
         }
     }
 
-    const writesByFunction = new Map<string, number>();
+    const mutationsByFunction = new Map<string, MutationCallSites>();
     const localWrappers = new Set<string>();
 
     const recordOperation = (
@@ -348,13 +374,27 @@ export function scanFilesystemStores(options: {
       });
       if (exclusiveCreate) signals.exclusiveCreateCount += 1;
       if (kind === 'rename') signals.renameCount += 1;
-      if (insideFinally && WRITE_KINDS.has(kind)) signals.cleanupInFinally += 1;
-      if (WRITE_KINDS.has(kind) && kind !== 'rename') {
-        writesByFunction.set(
-          enclosing,
-          (writesByFunction.get(enclosing) ?? 0) + 1,
-        );
-        if (origin === 'node-fs' && enclosing !== '(module scope)')
+      if (insideFinally && isMutationKind(kind)) signals.cleanupInFinally += 1;
+      if (isMutationKind(kind)) {
+        const entry = mutationsByFunction.get(enclosing) ?? {
+          name: enclosing,
+          create: 0,
+          write: 0,
+          append: 0,
+          rename: 0,
+          remove: 0,
+          trash: 0,
+          total: 0,
+        };
+        if (kind === 'write' && exclusiveCreate) entry.create += 1;
+        else entry[kind] += 1;
+        entry.total += 1;
+        mutationsByFunction.set(enclosing, entry);
+        if (
+          origin === 'node-fs' &&
+          kind !== 'rename' &&
+          enclosing !== '(module scope)'
+        )
           localWrappers.add(enclosing);
       }
     };
@@ -444,10 +484,9 @@ export function scanFilesystemStores(options: {
     }
 
     signals.localWriteWrappers = [...localWrappers].sort();
-    signals.multiWriteFunctions = [...writesByFunction.entries()]
-      .filter(([, count]) => count > 1)
-      .map(([name, writes]) => ({ name, writes }))
-      .sort((left, right) => left.name.localeCompare(right.name));
+    signals.staticMutationCallSites = [...mutationsByFunction.values()].sort(
+      (left, right) => left.name.localeCompare(right.name),
+    );
     if (signals.importsAtomicStore)
       signals.atomicStoreCalls = [
         ...new Set(
@@ -490,6 +529,54 @@ export function scanFilesystemStores(options: {
   };
 }
 
+function importedModuleSpecifiers(source: ts.SourceFile): Set<string> {
+  const specifiers = new Set<string>();
+  const record = (node: ts.Expression | undefined) => {
+    if (node && ts.isStringLiteralLike(node)) specifiers.add(node.text);
+  };
+  const visit = (node: ts.Node) => {
+    if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node))
+      record(node.moduleSpecifier);
+    else if (ts.isImportEqualsDeclaration(node)) {
+      const reference = node.moduleReference;
+      if (ts.isExternalModuleReference(reference)) record(reference.expression);
+    } else if (ts.isCallExpression(node)) {
+      const callee = node.expression;
+      const isRequire = ts.isIdentifier(callee) && callee.text === 'require';
+      if (isRequire || callee.kind === ts.SyntaxKind.ImportKeyword)
+        record(node.arguments[0]);
+    } else if (ts.isImportTypeNode(node)) {
+      const argument = node.argument;
+      if (ts.isLiteralTypeNode(argument))
+        record(argument.literal as ts.Expression);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return specifiers;
+}
+
+function performsFilesystemWork(absoluteFile: string): boolean {
+  let source: ts.SourceFile;
+  try {
+    source = ts.createSourceFile(
+      absoluteFile,
+      readFileSync(absoluteFile, 'utf8'),
+      ts.ScriptTarget.ESNext,
+      true,
+      absoluteFile.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+    );
+  } catch {
+    return true;
+  }
+  const diagnostics = (source as unknown as { parseDiagnostics?: unknown[] })
+    .parseDiagnostics;
+  if (diagnostics?.length) return true;
+  for (const specifier of importedModuleSpecifiers(source))
+    if (FS_MODULES.has(specifier) || specifier === 'trash') return true;
+  return false;
+}
+
 function detectOmittedFilesystemFiles(
   projectRoot: string,
   sourceRoots: string[],
@@ -497,8 +584,7 @@ function detectOmittedFilesystemFiles(
   analyzed: Set<string>,
 ): string[] {
   const omitted: string[] = [];
-  const roots = ['app', 'bin', 'components', 'hooks', 'lib', 'scripts'];
-  for (const root of roots) {
+  for (const root of OMISSION_SCAN_ROOTS) {
     const directory = path.resolve(projectRoot, root);
     if (!existsSync(directory)) continue;
     const walk = (current: string) => {
@@ -509,14 +595,9 @@ function detectOmittedFilesystemFiles(
           walk(full);
           continue;
         }
-        if (!/\.(ts|tsx|mts|mjs)$/.test(entry.name)) continue;
+        if (!SOURCE_EXTENSIONS.has(path.extname(entry.name))) continue;
         if (analyzed.has(relative)) continue;
-        const text = readFileSync(full, 'utf8');
-        if (
-          /from '(node:)?fs(\/promises)?'/.test(text) ||
-          /require\(['"](node:)?fs/.test(text)
-        )
-          omitted.push(relative);
+        if (performsFilesystemWork(full)) omitted.push(relative);
       }
     };
     walk(directory);
