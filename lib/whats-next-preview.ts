@@ -234,6 +234,62 @@ The direction remains useful, but its center has shifted. The value is not produ
   };
 }
 
+export function createWhatsNextAttentionPreview() {
+  const preview = createWhatsNextReviewPreview();
+  const source = structuredClone(preview.runs[0]!);
+  if (source.result?.outcome !== 'proposal')
+    throw new Error('Proposal fixture is missing.');
+  const { candidates: _candidates, outcome: _outcome, ...base } = source.result;
+  return {
+    nodes: preview.nodes,
+    runs: [
+      {
+        ...source,
+        status: 'clarification' as const,
+        result: {
+          ...base,
+          reflection: {
+            markdown:
+              '# Reflection\n\nOne product ruling is required before the directions can remain distinct.',
+            continuationAdvice: {
+              action: 'continue' as const,
+              recommendedFocus: 'clarify' as const,
+              reason: 'Answer the relationship question before continuing.',
+            },
+          },
+          outcome: 'clarification' as const,
+          clarification: {
+            question:
+              'Should Container own an Item, or only describe its current location?',
+            options: [],
+          },
+        },
+      },
+    ],
+    transitionRun: undefined,
+    completionRun: undefined,
+  };
+}
+
+export function createWhatsNextErrorPreview() {
+  const preview = createWhatsNextReviewPreview();
+  const source = structuredClone(preview.runs[0]!);
+  return {
+    nodes: preview.nodes,
+    runs: [
+      {
+        ...source,
+        status: 'failed' as const,
+        result: null,
+        error:
+          'The Agent result could not be applied. The current graph is unchanged.',
+      },
+    ],
+    transitionRun: undefined,
+    completionRun: undefined,
+  };
+}
+
 export function createWhatsNextRefiningPreview() {
   const preview = createWhatsNextReviewPreview();
   const refinement = preview.runs[1]!;

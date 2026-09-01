@@ -5,7 +5,6 @@ import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import {
   FileText,
   LoaderCircle,
-  MessageSquareText,
   Pencil,
   RotateCcw,
   Sparkles,
@@ -59,6 +58,8 @@ import type {
 } from '@/lib/whats-next-intention';
 import { intentionDestination } from '@/lib/whats-next-intention';
 import { toggleWhatsNextSelection } from '@/lib/whats-next-selection';
+import { LatestResponse } from '@/components/latest-response';
+import { latestWhatsNextResponse } from '@/lib/latest-response';
 
 const AGENT_LABELS: Record<LocalAgentKind, string> = {
   codex: 'Codex',
@@ -266,9 +267,11 @@ function WhatsNextCanvas({
     .find(
       (run) =>
         intentionDestination(run.intention).layer === activeLayer &&
-        run.result &&
         !['running', 'validating'].includes(run.status),
     );
+  const latestResponsePresentation = latestResponse
+    ? latestWhatsNextResponse(latestResponse)
+    : null;
   const continuingGrow = growSource
     ? runs.some(
         (run) =>
@@ -947,33 +950,36 @@ function WhatsNextCanvas({
         ))}
       </div>
 
-      {latestResponse?.result ? (
-        <button
-          type="button"
-          className="absolute top-4 left-4 z-10 w-[min(320px,calc(100%-2rem))] rounded-xl border border-border bg-background/95 p-3 text-left shadow-[0_12px_35px_rgb(15_23_42/9%)] backdrop-blur transition hover:border-foreground/25"
-          onClick={() =>
-            setPreview({
-              title: 'Latest Response',
-              path: `whats-next/runs/${latestResponse.runId}/response.md`,
-              markdown: renderWhatsNextResponseMarkdown(latestResponse.result!),
-            })
-          }
+      {latestResponse && latestResponsePresentation ? (
+        <LatestResponse
+          key={latestResponse.runId}
+          className="absolute top-4 left-4 z-10 w-[min(320px,calc(100%-2rem))]"
+          title={t('Latest Response')}
+          statusLabel={t(latestResponsePresentation.statusLabel)}
+          summary={latestResponsePresentation.summary}
+          tone={latestResponsePresentation.tone}
+          attention={latestResponsePresentation.attention}
+          icon={latestResponsePresentation.icon}
         >
-          <span className="flex items-center gap-2 text-xs font-semibold">
-            <MessageSquareText className="size-3.5" />
-            {t('Latest Response')}
-            <span className="ml-auto rounded-full bg-secondary px-2 py-0.5 text-[9px] font-medium text-muted-foreground">
-              {t(
-                continuationLabel(
-                  latestResponse.result.reflection.continuationAdvice.action,
-                ),
-              )}
-            </span>
-          </span>
-          <span className="mt-1.5 block max-h-10 overflow-hidden text-[11px] leading-5 text-muted-foreground">
-            {plainMarkdown(latestResponse.result.reflection.markdown)}
-          </span>
-        </button>
+          {latestResponse.result ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                setPreview({
+                  title: 'Latest Response',
+                  path: `whats-next/runs/${latestResponse.runId}/response.md`,
+                  markdown: renderWhatsNextResponseMarkdown(
+                    latestResponse.result!,
+                  ),
+                })
+              }
+            >
+              {t('Open full response')}
+            </Button>
+          ) : null}
+        </LatestResponse>
       ) : null}
 
       <div className="pointer-events-none absolute top-4 left-1/2 -translate-x-1/2">
@@ -2146,24 +2152,6 @@ function upsertRun(current: WhatsNextRunRecord[], run: WhatsNextRunRecord) {
   return [...current.filter((item) => item.runId !== run.runId), run].sort(
     (left, right) => left.startedAt.localeCompare(right.startedAt),
   );
-}
-
-function continuationLabel(
-  action: 'continue' | 'consider-closing' | 'consider-branching',
-) {
-  if (action === 'consider-closing') return 'Ready to close';
-  if (action === 'consider-branching') return 'Consider branching';
-  return 'Continue';
-}
-
-function plainMarkdown(markdown: string) {
-  return markdown
-    .replace(/^#{1,6}\s+/gm, '')
-    .replace(/^\s*[-*>]\s+/gm, '')
-    .replace(/[*_`>]/g, '')
-    .replace(/\s+/g, ' ')
-    .replace(/^Reflection\s*/i, '')
-    .trim();
 }
 
 async function sha256(value: string) {
