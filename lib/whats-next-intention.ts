@@ -1,6 +1,7 @@
 export const whatsNextIntentions = [
   'mvp-exploration',
   'feature-synthesis',
+  'product-design-completion',
 ] as const;
 export type WhatsNextIntention = (typeof whatsNextIntentions)[number];
 
@@ -14,7 +15,8 @@ export function intentionDestination(intention: WhatsNextIntention): {
   layer: WhatsNextLayer;
   artifactKind: 'mvp' | 'feature';
 } {
-  return intention === 'feature-synthesis'
+  return intention === 'feature-synthesis' ||
+    intention === 'product-design-completion'
     ? { layer: 'product-design', artifactKind: 'feature' }
     : { layer: 'discovery', artifactKind: 'mvp' };
 }

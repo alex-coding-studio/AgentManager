@@ -115,6 +115,31 @@ void test('composes the selected Intention and Motion profiles', () => {
   assert.match(prompt, /Do not create an intermediate Discovery Feature/);
 });
 
+void test('Product Design Completion judges whether a new Feature is warranted', () => {
+  const prompt = whatsNextHarnessPrompt(
+    'product-design-completion',
+    'converge',
+  );
+  assert.match(
+    prompt,
+    /Product Source and every current Product Design Feature/,
+  );
+  assert.match(
+    prompt,
+    /First judge whether the concern deserves an independent Feature/,
+  );
+  assert.match(prompt, /If the concern is already covered, return no-change/);
+  assert.match(
+    prompt,
+    /only a missing rule or edge case inside an existing Feature/,
+  );
+  assert.match(prompt, /Never manufacture a duplicate or nominal Feature/);
+  assert.match(
+    prompt,
+    /do not require an MVP or prototype detour when the product goal is already clear/,
+  );
+});
+
 void test('Converge accepts one aggregate Candidate and rejects siblings', () => {
   const convergeContext = { ...context, motion: 'converge' as const };
   assert.equal(
@@ -156,6 +181,41 @@ void test('Feature Synthesis requires a Product Design Feature', () => {
         featureContext,
       ),
     WhatsNextResultValidationError,
+  );
+});
+
+void test('Product Design Completion shares the Product Design destination contract', () => {
+  const completionContext = {
+    ...context,
+    intention: 'product-design-completion' as const,
+    motion: 'converge' as const,
+  };
+  const feature = candidate('CANDIDATE-0001', {
+    type: 'feature',
+    layer: 'product-design',
+    artifactKind: 'feature',
+  });
+  assert.equal(
+    validateWhatsNextHarnessResult(proposal([feature]), completionContext)
+      .outcome,
+    'proposal',
+  );
+  const value = baseResult();
+  value.reflection.continuationAdvice = {
+    action: 'consider-closing',
+    recommendedFocus: 'close',
+    reason: 'The concern is already covered by the current Product Design.',
+  };
+  assert.equal(
+    validateWhatsNextHarnessResult(
+      {
+        ...value,
+        outcome: 'no-change',
+        reason: 'Refine the existing Feature.',
+      },
+      completionContext,
+    ).outcome,
+    'no-change',
   );
 });
 

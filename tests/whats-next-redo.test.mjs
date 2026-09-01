@@ -195,8 +195,9 @@ process.stdin.resume();process.stdin.on('end',()=>setTimeout(()=>{
  const {packet}=JSON.parse(fs.readFileSync('request.json','utf8'));
  fs.writeFileSync('fixture-argv.json',JSON.stringify(process.argv.slice(2)));
  if(!packet.origins){console.log(JSON.stringify({type:'thread.started',thread_id:'fixture-decomposition-session'}));console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'{}'}}));console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:0,output_tokens:0}}));return;}
- const candidates=Array.from({length:packet.motion==='converge'?1:(packet.proposalCorrection?3:2)},(_,i)=>({candidateId:'CANDIDATE-000'+(i+1),revision:1,type:packet.destination.artifactKind,layer:packet.destination.layer,artifactKind:packet.destination.artifactKind,title:'Direction '+(i+1),summary:'A concrete next direction.',derivedFrom:packet.origins.map(n=>n.id),dependsOn:[],resources:packet.resources.filter(r=>r.kind==='previous-proposal').map(r=>({kind:r.kind,path:r.path})),typeTemplateRef:null,metadata:{},presentation:{},assumptions:[],outputMarkdown:'# Direction '+(i+1)+'\\n\\nA concrete next direction.\\n\\n## Why this direction\\n\\n- Resolve the current uncertainty.\\n- Keep the next step bounded.\\n\\n## Assumptions\\n\\n- None'}));
- const result={schemaVersion:1,harness:{id:'agent-manager.whats-next',revision:4},request:packet.request,outcome:'proposal',reflection:{markdown:'The previous directions misunderstood the user.',continuationAdvice:{action:'continue',recommendedFocus:'compare',reason:'Compare the corrected choices.'}},exploration:{consideredNodeIds:packet.origins.map(n=>n.id),notes:[]},candidates};
+ const candidateBase=packet.intention==='feature-synthesis'?1000:packet.intention==='product-design-completion'?2000:0;
+ const candidates=Array.from({length:packet.motion==='converge'?1:(packet.proposalCorrection?3:2)},(_,i)=>({candidateId:'CANDIDATE-'+String(candidateBase+i+1).padStart(4,'0'),revision:1,type:packet.destination.artifactKind,layer:packet.destination.layer,artifactKind:packet.destination.artifactKind,title:'Direction '+(i+1),summary:'A concrete next direction.',derivedFrom:packet.origins.map(n=>n.id),dependsOn:[],resources:packet.resources.filter(r=>r.kind==='previous-proposal').map(r=>({kind:r.kind,path:r.path})),typeTemplateRef:null,metadata:{},presentation:{},assumptions:[],outputMarkdown:'# Direction '+(i+1)+'\\n\\nA concrete next direction.\\n\\n## Why this direction\\n\\n- Resolve the current uncertainty.\\n- Keep the next step bounded.\\n\\n## Assumptions\\n\\n- None'}));
+ const result={schemaVersion:1,harness:{id:'agent-manager.whats-next',revision:5},request:packet.request,outcome:'proposal',reflection:{markdown:'The previous directions misunderstood the user.',continuationAdvice:{action:'continue',recommendedFocus:'compare',reason:'Compare the corrected choices.'}},exploration:{consideredNodeIds:packet.origins.map(n=>n.id),notes:[]},candidates};
  console.log(JSON.stringify({type:'thread.started',thread_id:'fixture-session'}));console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:JSON.stringify(result)}}));console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:0,output_tokens:0}}));
 },process.env.REDO_TEST_MODE==='slow'?10000:80));
 }
@@ -303,6 +304,73 @@ void test('What’s Next persists the requested model, forwards CLI flags, and i
     await assert.rejects(
       () => startWhatsNextRun(project, { ...input, model: 'bad;model' }),
       /configuration/,
+    );
+  }));
+
+void test('Product Design Completion injects the Source and accepted Product Design as primary Context', async () =>
+  fixture(async ({ project, input, original }) => {
+    assert.equal(original.result.outcome, 'proposal');
+    const discovery = [];
+    for (const candidate of original.result.candidates) {
+      const accepted = await acceptWhatsNextCandidate(
+        project,
+        original.runId,
+        candidate.candidateId,
+      );
+      discovery.push(accepted.node.id);
+    }
+    const synthesis = await finished(
+      project,
+      await startWhatsNextRun(project, {
+        ...input,
+        sourceNodeIds: discovery,
+        instruction: 'Synthesize one Feature.',
+        intention: 'feature-synthesis',
+        motion: 'converge',
+      }),
+    );
+    assert.equal(synthesis.result.outcome, 'proposal');
+    const acceptedFeature = await acceptWhatsNextCandidate(
+      project,
+      synthesis.runId,
+      synthesis.result.candidates[0].candidateId,
+    );
+    const completion = await finished(
+      project,
+      await startWhatsNextRun(project, {
+        ...input,
+        instruction: 'The product does not define deletion yet.',
+        intention: 'product-design-completion',
+        motion: 'converge',
+      }),
+    );
+    const request = JSON.parse(
+      await readFile(
+        path.join(
+          project.planningPath,
+          'whats-next/runs',
+          completion.runId,
+          'request.json',
+        ),
+        'utf8',
+      ),
+    );
+    assert.deepEqual(request.packet.implicitProductDesignContext, {
+      sourceNodeId: input.sourceNodeIds[0],
+      featureNodeIds: [acceptedFeature.node.id],
+    });
+    const primaryPaths = request.packet.contextWorkspace.primary.map(
+      (entry) => entry.logicalPath,
+    );
+    assert.ok(
+      primaryPaths.includes(
+        `whats-next/nodes/${input.sourceNodeIds[0]}/resources/idea.md`,
+      ),
+    );
+    assert.ok(
+      primaryPaths.includes(
+        `whats-next/nodes/${acceptedFeature.node.id}/output.md`,
+      ),
     );
   }));
 

@@ -66,7 +66,10 @@ export async function POST(
       redoProposal,
       intention:
         typeof intention === 'string' && intention
-          ? (intention as 'mvp-exploration' | 'feature-synthesis')
+          ? (intention as
+              | 'mvp-exploration'
+              | 'feature-synthesis'
+              | 'product-design-completion')
           : undefined,
       motion:
         typeof motion === 'string' && motion

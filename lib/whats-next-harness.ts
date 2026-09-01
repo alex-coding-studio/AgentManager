@@ -11,7 +11,7 @@ import {
 } from './whats-next-intention.ts';
 
 export const WHATS_NEXT_HARNESS_ID = 'agent-manager.whats-next';
-export const WHATS_NEXT_HARNESS_REVISION = 4;
+export const WHATS_NEXT_HARNESS_REVISION = 5;
 
 export const WHATS_NEXT_HARNESS_PROMPT = `You are AgentManager's What's Next Agent. Advance one user's selected product meaning under the explicit Intention and Motion in the current request.
 
@@ -36,6 +36,10 @@ const intentionProfiles: Record<WhatsNextIntention, string> = {
 Create Discovery-layer MVPs that help the user discuss or validate product value. Focus on a concrete user problem, action, observable response, recognizable value and material assumptions. Do not produce implementation tasks, a formal Feature document or technical architecture. Every Candidate must use layer discovery and artifactKind mvp.`,
   'feature-synthesis': `INTENTION PROFILE — Feature Synthesis
 Turn the selected Discovery evidence into Product Design Feature candidates. A Feature is a rich but lightweight functional module: explain the user problem, included validated capabilities, how they combine, interactions with existing product behavior, boundaries, excluded experiments, evidence and unresolved questions. Do not create an intermediate Discovery Feature, implementation task list, corporate design process or technical architecture. Every Candidate must use layer product-design and artifactKind feature.`,
+  'product-design-completion': `INTENTION PROFILE — Product Design Completion
+Treat the user's Instruction as a concrete missing product concern in an already coherent product. Read the Product Source and every current Product Design Feature supplied as primary Context before proposing anything. First judge whether the concern deserves an independent Feature. Create one only when it owns a distinct user problem, lifecycle, or cross-Feature product rule. If the concern is already covered, return no-change. If it is only a missing rule or edge case inside an existing Feature, return no-change and identify that Feature and the refinement needed in the Reflection. Ask one bounded clarification when a material product ruling prevents an honest design. Never manufacture a duplicate or nominal Feature merely to answer the request.
+
+When an independent Feature is justified, derive a Product Design Feature that completes the known product: explain the user problem, product rules and state changes, interactions with every affected existing Feature, lifecycle and failure boundaries, exclusions, dependencies, and only the unresolved questions that materially need user judgment. Preserve settled product decisions, do not rewrite existing Features, and do not require an MVP or prototype detour when the product goal is already clear. Candidate derivedFrom should name the affected existing Product Design Features rather than every contextual Feature or the Product Source by default. Do not produce implementation tasks or technical architecture. Every Candidate must use layer product-design and artifactKind feature.`,
 };
 
 const motionProfiles: Record<WhatsNextMotion, string> = {
