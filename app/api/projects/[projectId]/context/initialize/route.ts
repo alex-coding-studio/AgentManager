@@ -1,12 +1,15 @@
 import { getProject } from '@/lib/project-registry';
+import { guardRequest } from '@/lib/request-boundary';
 import { initializeProductContext } from '@/lib/product-context';
 
 export const runtime = 'nodejs';
 
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ projectId: string }> },
 ) {
+  const denied = guardRequest(request);
+  if (denied) return denied;
   const { projectId } = await params;
   const project = await getProject(projectId);
   if (!project) {

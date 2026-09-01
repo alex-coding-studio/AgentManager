@@ -1,11 +1,14 @@
 import { execFile } from 'node:child_process';
+import { guardRequest } from '@/lib/request-boundary';
 import { promisify } from 'node:util';
 
 export const runtime = 'nodejs';
 
 const execute = promisify(execFile);
 
-export async function POST() {
+export async function POST(request: Request) {
+  const denied = guardRequest(request);
+  if (denied) return denied;
   try {
     if (process.platform === 'darwin') {
       const { stdout } = await execute('osascript', [
@@ -48,7 +51,11 @@ export async function POST() {
       error instanceof Error &&
       ('code' in error || error.message.toLowerCase().includes('cancel'));
     return Response.json(
-      { error: cancelled ? 'Folder selection was cancelled.' : 'Could not open the folder picker.' },
+      {
+        error: cancelled
+          ? 'Folder selection was cancelled.'
+          : 'Could not open the folder picker.',
+      },
       { status: 400 },
     );
   }

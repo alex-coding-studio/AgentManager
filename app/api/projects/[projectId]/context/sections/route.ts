@@ -1,4 +1,5 @@
 import { getProject } from '@/lib/project-registry';
+import { guardJsonRequest } from '@/lib/request-boundary';
 import {
   createContextSection,
   renameContextSection,
@@ -10,6 +11,8 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ projectId: string }> },
 ) {
+  const denied = guardJsonRequest(request);
+  if (denied) return denied;
   const { projectId } = await params;
   const project = await getProject(projectId);
   if (!project) {
@@ -44,6 +47,8 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ projectId: string }> },
 ) {
+  const denied = guardJsonRequest(request);
+  if (denied) return denied;
   const { projectId } = await params;
   const project = await getProject(projectId);
   if (!project) {

@@ -57,6 +57,12 @@ The hostname is machine-specific and must not be committed to configuration.
 Tailscale Serve keeps the site inside the tailnet; this project does not require
 or enable public Funnel access.
 
+Publishing the port to a tailnet gives every device on that tailnet the ability to
+register projects, write planning state and start Agent Runs on this machine.
+AgentManager has no user authentication; `tailscale serve` bounds the network, not
+the trust. See [API Request Boundary](docs/REQUEST_BOUNDARY.md) for what the
+boundary does and does not cover.
+
 ## Settings, interface language, and appearance
 
 Open **Settings** from the project sidebar or project-list header. Choose English
@@ -100,6 +106,9 @@ the built-in Harness that defines Agent output boundaries. Existing internal
 paths and identifiers retain `task-decomposition` for data compatibility.
 
 Set `AGENT_MANAGER_HOME` to use a different machine-registry directory.
+Set `AGENT_MANAGER_ALLOWED_HOSTS` to accept additional `Host` values beyond
+`localhost`, `127.0.0.1` and `[::1]`; see
+[API Request Boundary](docs/REQUEST_BOUNDARY.md).
 
 ## Verification
 
@@ -107,8 +116,12 @@ Set `AGENT_MANAGER_HOME` to use a different machine-registry directory.
 npm run typecheck
 npm run lint
 npm run test:settings
+npm run test:boundary
 npm run build
 ```
+
+These are focused commands, not the full suite. The repository has one test command
+per domain; run the one that covers what changed.
 
 See [Product Foundation](docs/PRODUCT.md),
 [Architecture Decisions](docs/ARCHITECTURE.md), and the
