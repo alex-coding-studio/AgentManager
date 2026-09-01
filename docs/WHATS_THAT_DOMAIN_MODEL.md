@@ -80,6 +80,54 @@ derived Entities, relationships and Constraints, plus any change outside the sel
 discussion boundary. It may offer `Undo this change`. The provider's raw response and
 private chain-of-thought are never presented as the model change summary.
 
+## Summary and log context
+
+What’s That? follows the shared [summary and log context model](RUN_LOGS_AND_CONTEXT.md).
+The current Domain Model owns current formal meaning; a bounded Summary owns continuity;
+Run Logs own complete process evidence. These are different records and none replaces the
+others.
+
+The default Agent packet contains:
+
+- the current Instruction;
+- the compact whole-model identity, title, summary and relationship index;
+- full definitions for checked Entities and the relationships among them;
+- direct-neighbor summaries available for on-demand reading;
+- the latest bounded model Summary and references to relevant earlier Runs;
+- the exact current model revision and Harness revision.
+
+It does not eagerly inject raw logs, every prior Instruction, full unrelated Entity bodies
+or complete provider transcripts. When one concrete ambiguity, failure or prior decision
+matters, the Agent reads a bounded excerpt through the referenced Run or event.
+
+Every Run retains enough local evidence to recover without the provider Session:
+
+```text
+domain-model/runs/RUN-<uuid>/
+├── run.json
+├── request.json
+├── context/index.json
+├── activity.jsonl
+├── agent-output.txt
+├── change.json
+└── summary.md
+```
+
+`change.json` is the Host-validated structured model change used by Latest Response and
+revision history. `summary.md` records the concise result, current unresolved questions and
+relevant next context. `activity.jsonl` and raw output remain local evidence and never become
+the user-facing response by default.
+
+Provider Session reuse is an optimization, not the correctness boundary. A fresh Session
+receives the current model, bounded Summary and evidence references; it must not require an
+old provider transcript to understand settled meaning. A continued Session receives only
+the current Instruction, model delta, selected Context and Summary changes rather than the
+unchanged complete history.
+
+Summary claims retain evidence references and applicability to a model revision. User input
+and current canonical model state override stale Summary text. Later correction records a
+new event instead of rewriting a failed or superseded Run as successful.
+
 ## Domain elements
 
 The canonical model begins with three concepts rather than a complete UML vocabulary.
@@ -397,6 +445,8 @@ enforces these high-level rules:
 14. Use the compact whole-model index for discovery, selected Entity definitions as primary
     Context and related Entity bodies on demand. Selection narrows cost but never supplies
     relationship semantics or blocks a required consistency update.
+15. Use the current bounded Summary for continuity and read detailed Run Logs only through a
+    concrete evidence need. Do not reinject complete history merely because it exists.
 
 The Host validates schema, referenced identifiers, base revision and atomicity before
 changing canonical state. A late result from an older base revision is stale and cannot
@@ -459,6 +509,8 @@ The first slice should prove one complete modeling loop:
 11. Cancel or fail one Run without changing the current model.
 12. Restore the most recent successful model change.
 13. Keep automatic layout stable across field-only and selection changes.
+14. Start a fresh Agent Session from the saved Summary and model revision without replaying
+    the full prior transcript.
 
 Use HereItIs as the first scenario: create Item and Container, make Container an Item with
 child-management capability, and express that a Container can contain both ordinary Items
