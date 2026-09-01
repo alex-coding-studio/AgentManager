@@ -186,6 +186,24 @@ export async function prepareCardEnvironment(
     '--short',
     'refs/remotes/origin/HEAD',
   );
+  const roles = {
+    ...request.roles,
+    expectedGitHubLogin:
+      request.roles.expectedGitHubLogin ?? previous?.roles.expectedGitHubLogin,
+  };
+  if (
+    remoteUrl &&
+    githubRepositoryOrNull(remoteUrl) &&
+    !roles.expectedGitHubLogin
+  )
+    roles.expectedGitHubLogin = await runner(
+      'gh',
+      ['api', 'user', '--jq', '.login'],
+      {
+        cwd: request.workspace.path,
+        env: { ...process.env, GH_PROMPT_DISABLED: '1' },
+      },
+    );
   const manifest: CardEnvironmentManifest = {
     version: 1,
     environmentId: previous?.environmentId ?? randomUUID(),
@@ -218,7 +236,7 @@ export async function prepareCardEnvironment(
         'user.email',
       ),
     },
-    roles: request.roles,
+    roles,
     createdAt: previous?.createdAt ?? now,
     verifiedAt: now,
   };
@@ -287,6 +305,12 @@ export async function publishCardCandidate(
   if (!Number.isSafeInteger(commitCount) || commitCount < 1)
     throw new Error('Candidate commit range is invalid.');
   const repository = githubRepository(environment.repository.remoteUrl);
+  if (!environment.repository.defaultBranch)
+    throw new Error('GitHub default branch is unavailable.');
+  if (!request.title.trim() || request.title.length > 200)
+    throw new Error('Candidate PR title is invalid.');
+  if (!request.body.trim() || Buffer.byteLength(request.body) > 100_000)
+    throw new Error('Candidate PR body is invalid.');
   const githubEnvironment = { ...process.env, GH_PROMPT_DISABLED: '1' };
   const login = await runner('gh', ['api', 'user', '--jq', '.login'], {
     cwd: workspace,
@@ -354,7 +378,7 @@ export async function publishCardCandidate(
         '--repo',
         repository,
         '--base',
-        environment.repository.defaultBranch ?? 'main',
+        environment.repository.defaultBranch,
         '--head',
         branch,
         '--title',
@@ -434,12 +458,17 @@ function forbiddenCandidatePath(file: string) {
 }
 
 function githubRepository(remoteUrl: string | null) {
+  const repository = githubRepositoryOrNull(remoteUrl);
+  if (!repository)
+    throw new Error('Candidate repository is not a supported GitHub remote.');
+  return repository;
+}
+
+function githubRepositoryOrNull(remoteUrl: string | null) {
   const match = remoteUrl?.match(
     /^(?:https:\/\/github\.com\/|git@github\.com:)([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+?)(?:\.git)?$/,
   );
-  if (!match)
-    throw new Error('Candidate repository is not a supported GitHub remote.');
-  return match[1];
+  return match?.[1] ?? null;
 }
 
 function candidateId(environmentId: string, headSha: string) {
