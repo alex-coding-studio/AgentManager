@@ -95,21 +95,38 @@ async function atomicJson(file: string, value: unknown) {
   await rename(temporary, file);
 }
 
-async function records<T>(root: string, pattern: RegExp, name: string) {
+async function records<T>(
+  root: string,
+  pattern: RegExp,
+  name: string,
+  ignoreMissing = false,
+) {
   const entries = await readdir(root, { withFileTypes: true }).catch(
     (error: NodeJS.ErrnoException) => {
       if (error.code === 'ENOENT') return [];
       throw error;
     },
   );
-  return Promise.all(
+  const loaded = await Promise.all(
     entries
       .filter((entry) => entry.isDirectory() && pattern.test(entry.name))
       .map(async (entry) => {
         const file = path.join(root, entry.name, name);
-        const text = await readFile(file, 'utf8');
-        return { file, text, value: JSON.parse(text) as T };
+        try {
+          const text = await readFile(file, 'utf8');
+          return { file, text, value: JSON.parse(text) as T };
+        } catch (error) {
+          if (
+            ignoreMissing &&
+            (error as NodeJS.ErrnoException).code === 'ENOENT'
+          )
+            return null;
+          throw error;
+        }
       }),
+  );
+  return loaded.filter(
+    (entry): entry is NonNullable<typeof entry> => entry !== null,
   );
 }
 
@@ -133,6 +150,7 @@ export async function ensureGraphIdentities(
       path.join(planningPath, runRoot, 'runs'),
       /^RUN-/,
       'run.json',
+      true,
     );
     const candidates = runs.flatMap((run) =>
       run.value.result?.outcome === 'proposal'
