@@ -21,6 +21,10 @@ decomposition, and delivery-sized implementation is defined in
 terminology describes the current implementation and does not make one Agent
 Session the universal size limit for every product-level Card.
 
+The adjacent [What’s That?](WHATS_THAT_DOMAIN_MODEL.md) design defines an optional,
+natural-language-first Domain Model workspace. It keeps Entities and semantic relationships
+separate from What’s Next product exploration and from Break It Down delivery structure.
+
 ## Primary user
 
 The primary user is one developer working across one or more software repositories with coding agents. The user owns product judgment and acceptance. Agents help clarify intent, decompose work, implement bounded tasks, review changes, and preserve delivery evidence.

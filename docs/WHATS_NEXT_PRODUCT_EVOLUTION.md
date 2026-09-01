@@ -1,8 +1,9 @@
 # What’s Next Product Evolution
 
 Status: Phase 1 implementation. Discovery and Product Design projections, MVP Exploration,
-Feature Synthesis, Diverge and Converge form the first delivered slice. Domain Model and
-Break It Down reuse remain future directions.
+Feature Synthesis, Diverge and Converge form the first delivered slice. Domain modeling is
+now designed as the independent [What’s That?](WHATS_THAT_DOMAIN_MODEL.md) module. Break It
+Down reuse remains a future direction.
 
 ## Problem
 
@@ -14,9 +15,9 @@ creates three limitations once a product has validated useful MVP behavior:
 1. The same Source cannot easily receive additive explorations under a different intent.
 2. Explore requires several distinct directions even when the user has already described
    one coherent initiative that should converge into one node.
-3. Product Design, Domain Model and implementation-readiness artifacts have no explicit
-   semantic home, so a high-level Feature can reach Just Do It before its required design
-   translation exists.
+3. Product Design and implementation-readiness artifacts need explicit semantic homes, and
+   domain modeling needs a separate handoff so a high-level Feature does not reach Just Do
+   It without relevant concepts being defined.
 
 The desired model keeps What’s Next useful throughout product discovery and formalization
 without turning it into a mandatory pipeline for every project.
@@ -52,17 +53,20 @@ A product has one stable Source or Idea, such as:
 The Source is global. It does not belong to one Layer and appears as the shared anchor in
 every Layer projection. Every generated node records how it serves this product anchor.
 
-### One Product Graph, several Layer projections
+### One Product Graph, two Layer projections
 
 The underlying Product Graph owns global node identity, provenance and dependency
 relationships. The Canvas displays one Layer projection at a time. Switching Layer changes
 both the rendered node set and the rendered internal edges.
 
-The agreed long-term Layers are:
+The What’s Next Layers are:
 
 - Discovery
 - Product Design
-- Domain Model
+
+Domain Model no longer shares this Canvas or lifecycle. The independent What’s That? module
+uses hidden Source and Product Design context to maintain Entities and semantic
+relationships through a different interaction model.
 
 Technical decisions are not a default Graph Layer or mandatory standalone module. For a
 personal app, straightforward implementation remains Agent-owned. A lightweight
@@ -161,40 +165,15 @@ A Product Design document may use this structure:
 ## Open questions
 ```
 
-## Domain Model Layer
+## Domain modeling moves to What’s That?
 
-Domain Model explains the product through its concepts and relationships. It is related to
-data modeling but is not yet a SwiftData schema, database table design or repository API.
+Domain modeling proved to require different nodes, edges, editing behavior and lifecycle
+from product exploration. It is therefore owned by the independent
+[What’s That?](WHATS_THAT_DOMAIN_MODEL.md) module rather than another What’s Next Layer.
 
-For HereItIs, candidate concepts include:
-
-- Space
-- Item
-- Container
-- Location
-- Container Note
-- Activity
-
-Example relationships:
-
-```text
-Space contains Container
-Container contains Item
-Container has Location
-Container may have Container Note
-Activity may affect Item or Container
-```
-
-The Layer can explore alternative models, such as:
-
-- Item and Container as independent types;
-- Container as an Item that may contain children;
-- all organizing objects represented as a tree;
-- current state plus a separate Activity history.
-
-Each Domain node owns its definition, properties, invariants, relationships and unresolved
-questions. The accepted Domain Model gives implementation Agents stable product semantics while
-leaving storage technology open until a material choice actually matters.
+What’s Next may provide the Product Source, accepted Product Design Features and provenance
+that inform the model. It does not generate Domain Candidates through Intention and Motion,
+render Domain Entities on this Canvas or own Domain revision state.
 
 ## Intentions
 
@@ -254,13 +233,12 @@ Examples:
 ```text
 Several MVPs + Feature Synthesis + Converge
 → one Product Design Feature
-
-Several MVPs + Domain Model synthesis + Converge
-→ one Domain Model proposal
 ```
 
-The system should allow evidence-supported cross-Layer transformations without enforcing a
-fixed pipeline. Intention owns the destination; Motion owns cardinality and transformation.
+The system should allow evidence-supported transformations without enforcing a fixed
+pipeline. Intention owns the What’s Next destination; Motion owns cardinality and
+transformation within that operation. Domain modeling uses its own natural-language-first
+Harness.
 
 ## Additive exploration from the same Source
 
@@ -356,9 +334,9 @@ Technical Design document before ordinary feature delivery. The default path is:
 Discovery → Product Design → EXPERIENCE → Agent implementation and user UI acceptance
 ```
 
-Domain Model is an optional input when product concepts or relationships need explicit
-clarification. Existing projects may start directly from their Product Design, EXPERIENCE,
-Project context and codebase.
+The current What’s That? Domain Model is an optional input when product concepts or
+relationships need explicit clarification. Existing projects may start directly from their
+Product Design, EXPERIENCE, Project context and codebase.
 
 ### Implementation Readiness Check
 
@@ -399,10 +377,10 @@ implementation Agent can safely make and validate inside one delivery.
 
 ### Handoff to execution
 
-Product Design and EXPERIENCE remain the normal product contract. Domain Model and a
-lightweight Implementation Approach are attached only when relevant. Just Do It then creates
-its existing concrete Plan, Action contracts and required checks. A separate Delivery
-Contract is not mandatory for ordinary personal-app work.
+Product Design and EXPERIENCE remain the normal product contract. The current What’s That?
+Domain Model and a lightweight Implementation Approach are attached only when relevant.
+Just Do It then creates its existing concrete Plan, Action contracts and required checks. A
+separate Delivery Contract is not mandatory for ordinary personal-app work.
 
 Complex work may still be sent to Break It Down before execution. That is a user choice, not
 a required pipeline stage.
@@ -437,7 +415,7 @@ That reuse does not create a mandatory pipeline.
 
 - Unified Search Product Design
 
-### Domain Model
+### What’s That? Domain Model
 
 - Item
 - Container
@@ -484,22 +462,22 @@ Delivered:
 - replace node plus actions with persistent check-mark selection and one fixed action card;
 - keep Source selection exclusive and repeated Source exploration additive.
 
-### Phase 2: broader Layer projections and Product Anchor
+### Phase 2: broader What’s Next projections and Product Anchor
 
 - introduce global Source identity and Layer metadata;
 - extend Discovery and Product Design projections when dogfooding supports it;
-- consider Domain Model as a separate projection only after concrete use earns it;
 - retain separate layout state per Layer;
 - show cross-Layer provenance through compact portals;
 - add the cross-Layer selection basket.
 
-### Phase 3: optional Domain Model profiles
+### Independent follow-up: What’s That? first slice
 
-- add intent-specific Harness profiles and Skills;
-- support Domain Model divergence and convergence;
-- persist artifact kind and execution-readiness metadata.
+- follow [What’s That?](WHATS_THAT_DOMAIN_MODEL.md) as a separate module;
+- validate natural-language Entity and relationship modeling through one HereItIs scenario;
+- keep Source hidden and inject accepted Product Design as context;
+- persist a continuously editable current model without Candidate or Finalize states.
 
-### Phase 4: lightweight implementation bridge and module reuse
+### Phase 3: lightweight implementation bridge and module reuse
 
 - add a bounded Implementation Readiness Check before Plan confirmation;
 - surface only material technical decisions as a short, revisable note;
@@ -515,12 +493,10 @@ The following remain intentionally unresolved for focused follow-up discussion:
 1. Final user-facing Intention labels and how many appear in the first release.
 2. Whether a later Product Design intention should support one whole-product Design Doc in
    addition to Feature Synthesis.
-3. Whether future Domain concepts use individual nodes or may remain one aggregate proposal
-   before convergence.
-4. How the cross-Layer selection basket behaves when source nodes conflict.
-5. Which concrete conditions trigger a lightweight Implementation Approach instead of
+3. How the cross-Layer selection basket behaves when source nodes conflict.
+4. Which concrete conditions trigger a lightweight Implementation Approach instead of
    immediate planning.
-6. Which Intention/Motion concepts should be shared with Break It Down in its first update.
+5. Which Intention/Motion concepts should be shared with Break It Down in its first update.
 
 ## Evaluation
 
@@ -531,7 +507,8 @@ The redesign is successful when:
   aggregate;
 - selected Discovery evidence can become a rich but visually simple Product Design Feature
   without an intermediate translation node;
-- Domain Model explains concepts without prematurely choosing storage technology;
+- What’s That? can explain concepts without prematurely choosing storage technology or
+  inheriting What’s Next Candidate semantics;
 - straightforward personal-app work reaches execution without a mandatory technical-design
   document;
 - material, durable technical choices receive one bounded user/Agent decision before
