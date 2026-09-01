@@ -218,6 +218,11 @@ returns no-change, a missing rule inside one Feature routes to refinement, and m
 ambiguity returns one clarification. It must not create a nominal Feature merely to answer.
 Every Product Design Feature remains a direct child of the Product Source. Interactions
 with sibling Features belong in Markdown; only true prerequisites become dependencies.
+When no accepted Product Design Feature exists, Completion may create the first Feature or
+several Features from a coherent Source when the Instruction exposes equally clear,
+independent product boundaries. A supplied Product Design document may define many such
+boundaries. Unspecified Motion returns one Candidate per real boundary without an arbitrary
+Card-count limit. A broad request without boundaries returns clarification.
 
 Document synthesis may later create a Product Context candidate, but direct repository
 document writes remain outside What’s Next.
@@ -226,6 +231,9 @@ document writes remain outside What’s Next.
 
 Motion controls how the selected evidence is transformed. It does not decide the
 destination Layer.
+
+Unspecified is the default Motion for every Intention. It follows the semantic boundaries
+already present in the input. Diverge and Converge apply only when the user selects them.
 
 ### Diverge
 

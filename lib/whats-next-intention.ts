@@ -5,7 +5,7 @@ export const whatsNextIntentions = [
 ] as const;
 export type WhatsNextIntention = (typeof whatsNextIntentions)[number];
 
-export const whatsNextMotions = ['diverge', 'converge'] as const;
+export const whatsNextMotions = ['unspecified', 'diverge', 'converge'] as const;
 export type WhatsNextMotion = (typeof whatsNextMotions)[number];
 
 export const whatsNextLayers = ['discovery', 'product-design'] as const;

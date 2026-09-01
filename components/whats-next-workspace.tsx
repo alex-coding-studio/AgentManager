@@ -143,7 +143,7 @@ function WhatsNextCanvas({
   const [combineInstruction, setCombineInstruction] = useState('');
   const [intention, setIntention] =
     useState<WhatsNextIntention>('mvp-exploration');
-  const [motion, setMotion] = useState<WhatsNextMotion>('diverge');
+  const [motion, setMotion] = useState<WhatsNextMotion>('unspecified');
   const [activeLayer, setActiveLayer] = useState<WhatsNextLayer>('discovery');
 
   const [focusedNodeId, setFocusedNodeId] = useState('');
@@ -390,7 +390,7 @@ function WhatsNextCanvas({
     body.append('model', agentProfile.model);
     body.append('effort', agentProfile.effort);
     body.append('intention', input.intention ?? 'mvp-exploration');
-    body.append('motion', input.motion ?? 'diverge');
+    body.append('motion', input.motion ?? 'unspecified');
     if (input.redoProposal) body.append('redoProposal', 'true');
     for (const ref of input.contextRefs ?? []) body.append('contextRefs', ref);
     for (const file of input.files ?? []) body.append('files', file);
@@ -418,7 +418,7 @@ function WhatsNextCanvas({
       revisionTarget: input.revisionTarget,
       redoProposal: input.redoProposal,
       intention: input.intention ?? 'mvp-exploration',
-      motion: input.motion ?? 'diverge',
+      motion: input.motion ?? 'unspecified',
     });
     const discardedRuns = new Set(payload.run.replacement?.runIds ?? []);
     setRuns((current) =>
@@ -471,7 +471,7 @@ function WhatsNextCanvas({
         sourceNodeIds: [payload.node.id],
         instruction: '',
         intention: 'mvp-exploration',
-        motion: 'diverge',
+        motion: 'unspecified',
       });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Something failed.');
@@ -1021,7 +1021,7 @@ function WhatsNextCanvas({
                   const next = event.target.value as WhatsNextIntention;
                   setIntention(next);
                   if (next === 'product-design-completion') {
-                    setMotion('converge');
+                    setMotion('unspecified');
                     if (sharedSourceId) setCombineIds([sharedSourceId]);
                   }
                 }}
@@ -1045,6 +1045,7 @@ function WhatsNextCanvas({
                 }
                 className="h-9 w-full rounded-lg border border-border bg-background px-2 text-xs text-foreground"
               >
+                <option value="unspecified">{t('Unspecified')}</option>
                 <option value="diverge">{t('Diverge')}</option>
                 <option value="converge">{t('Converge')}</option>
               </select>

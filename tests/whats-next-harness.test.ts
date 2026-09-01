@@ -124,11 +124,15 @@ void test('Product Design Completion judges whether a new Feature is warranted',
     'product-design-completion',
     'converge',
   );
+  assert.match(prompt, /Product Source, every current Product Design Feature/);
+  assert.match(prompt, /selected Product Source is the trigger/);
+  assert.match(prompt, /zero current Product Design Features/);
+  assert.match(prompt, /first Product Design pass/);
+  assert.match(prompt, /available input establishes a coherent product goal/);
   assert.match(
     prompt,
-    /Product Source and every current Product Design Feature/,
+    /complete Product Design document may justify many Feature Candidates/,
   );
-  assert.match(prompt, /selected Product Source is the trigger/);
   assert.match(
     prompt,
     /First judge whether the concern deserves an independent Feature/,
@@ -163,6 +167,31 @@ void test('Converge accepts one aggregate Candidate and rejects siblings', () =>
       ),
     WhatsNextResultValidationError,
   );
+});
+
+void test('Unspecified follows every clear boundary without a five-Card product limit', () => {
+  const unspecifiedContext = { ...context, motion: 'unspecified' as const };
+  assert.equal(
+    validateWhatsNextHarnessResult(
+      proposal([candidate('CANDIDATE-0001')]),
+      unspecifiedContext,
+    ).outcome,
+    'proposal',
+  );
+  const many = Array.from({ length: 8 }, (_, index) =>
+    candidate(`CANDIDATE-${String(index + 1).padStart(4, '0')}`),
+  );
+  assert.equal(
+    validateWhatsNextHarnessResult(proposal(many), unspecifiedContext).outcome,
+    'proposal',
+  );
+  const prompt = whatsNextHarnessPrompt(
+    'product-design-completion',
+    'unspecified',
+  );
+  assert.match(prompt, /exactly as many Candidates as.*boundaries require/);
+  assert.match(prompt, /Do not split one module to increase count/);
+  assert.match(prompt, /truncate a clear design to an arbitrary limit/);
 });
 
 void test('Feature Synthesis requires a Product Design Feature', () => {
@@ -338,10 +367,10 @@ One possible next step grown from the Start.
 void test('rejects a single-direction proposal', () => {
   assert.throws(
     () =>
-      validateWhatsNextHarnessResult(
-        proposal([candidate('CANDIDATE-0001')]),
-        context,
-      ),
+      validateWhatsNextHarnessResult(proposal([candidate('CANDIDATE-0001')]), {
+        ...context,
+        motion: 'diverge',
+      }),
     WhatsNextResultValidationError,
   );
 });
@@ -355,7 +384,7 @@ void test('rejects more than five directions', () => {
             candidate(`CANDIDATE-000${index + 1}`),
           ),
         ),
-        context,
+        { ...context, motion: 'diverge' },
       ),
     WhatsNextResultValidationError,
   );
