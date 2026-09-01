@@ -9,6 +9,8 @@ import {
   createWhatsNextRevisionTarget,
   parseWhatsNextHarnessResult,
   validateWhatsNextHarnessResult,
+  whatsNextHarnessPrompt,
+  type WhatsNextCandidate,
 } from '../lib/whats-next-harness.ts';
 import { renderWhatsNextResponseMarkdown } from '../lib/whats-next-response.ts';
 
@@ -17,7 +19,7 @@ void test('ships the settled Reflection and Markdown Harness contract', () => {
   assert.match(WHATS_NEXT_HARNESS_PROMPT, /Why this direction/);
   assert.match(WHATS_NEXT_HARNESS_PROMPT, /For refine-candidate/);
   assert.match(WHATS_NEXT_HARNESS_PROMPT, /requiredRevision/);
-  assert.match(WHATS_NEXT_HARNESS_PROMPT, /exactly one semantic level/);
+  assert.match(WHATS_NEXT_HARNESS_PROMPT, /Intention owns the destination/);
   assert.match(WHATS_NEXT_HARNESS_PROMPT, /protected comparison Context/);
   assert.doesNotMatch(WHATS_NEXT_HARNESS_PROMPT, /placeholder/);
 });
@@ -58,12 +60,17 @@ function baseResult() {
   };
 }
 
-function candidate(id: string, overrides: Record<string, unknown> = {}) {
+function candidate(
+  id: string,
+  overrides: Partial<WhatsNextCandidate> = {},
+): WhatsNextCandidate {
   const title = `Direction ${id}`;
   return {
     candidateId: id,
     revision: 1,
     type: 'module',
+    layer: 'discovery',
+    artifactKind: 'mvp',
     title,
     summary: 'One possible next step grown from the Start.',
     derivedFrom: ['NODE-00000001'],
@@ -99,6 +106,57 @@ void test('accepts a proposal of distinct directions', () => {
     context,
   );
   assert.equal(result.outcome, 'proposal');
+});
+
+void test('composes the selected Intention and Motion profiles', () => {
+  const prompt = whatsNextHarnessPrompt('feature-synthesis', 'converge');
+  assert.match(prompt, /Product Design Feature candidates/);
+  assert.match(prompt, /exactly one aggregate Candidate/);
+  assert.match(prompt, /Do not create an intermediate Discovery Feature/);
+});
+
+void test('Converge accepts one aggregate Candidate and rejects siblings', () => {
+  const convergeContext = { ...context, motion: 'converge' as const };
+  assert.equal(
+    validateWhatsNextHarnessResult(
+      proposal([candidate('CANDIDATE-0001')]),
+      convergeContext,
+    ).outcome,
+    'proposal',
+  );
+  assert.throws(
+    () =>
+      validateWhatsNextHarnessResult(
+        proposal([candidate('CANDIDATE-0001'), candidate('CANDIDATE-0002')]),
+        convergeContext,
+      ),
+    WhatsNextResultValidationError,
+  );
+});
+
+void test('Feature Synthesis requires a Product Design Feature', () => {
+  const featureContext = {
+    ...context,
+    intention: 'feature-synthesis' as const,
+    motion: 'converge' as const,
+  };
+  const feature = candidate('CANDIDATE-0001', {
+    type: 'feature',
+    layer: 'product-design',
+    artifactKind: 'feature',
+  });
+  assert.equal(
+    validateWhatsNextHarnessResult(proposal([feature]), featureContext).outcome,
+    'proposal',
+  );
+  assert.throws(
+    () =>
+      validateWhatsNextHarnessResult(
+        proposal([candidate('CANDIDATE-0001')]),
+        featureContext,
+      ),
+    WhatsNextResultValidationError,
+  );
 });
 
 void test('requires a machine-readable progressive continuation focus', () => {

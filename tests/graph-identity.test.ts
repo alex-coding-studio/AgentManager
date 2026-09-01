@@ -123,6 +123,8 @@ for (const scope of ['whats-next', 'task-graph'] as const) {
         assumptions: [],
         ...(scope === 'whats-next'
           ? {
+              layer: 'discovery',
+              artifactKind: 'mvp',
               outputMarkdown:
                 '# A useful next step\n\nOne bounded piece of product meaning.\n\n## Why this direction\n\n- Explore one useful direction.\n- Keep the scope understandable.\n\n## Assumptions\n\n- None',
             }

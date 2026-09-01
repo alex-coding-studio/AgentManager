@@ -52,6 +52,12 @@ import type {
 } from '@/lib/whats-next-runs';
 import { cn } from '@/lib/utils';
 import { redoProposalPlan, redoProposalContext } from '@/lib/whats-next-redo';
+import type {
+  WhatsNextIntention,
+  WhatsNextLayer,
+  WhatsNextMotion,
+} from '@/lib/whats-next-intention';
+import { toggleWhatsNextSelection } from '@/lib/whats-next-selection';
 
 const AGENT_LABELS: Record<LocalAgentKind, string> = {
   codex: 'Codex',
@@ -63,6 +69,8 @@ type RunSnapshot = {
   instruction: string;
   revisionTarget?: { runId: string; candidateId: string };
   redoProposal?: boolean;
+  intention: WhatsNextIntention;
+  motion: WhatsNextMotion;
 };
 
 export function WhatsNextWorkspace(
@@ -132,6 +140,10 @@ function WhatsNextCanvas({
 
   const [combineIds, setCombineIds] = useState<string[]>([]);
   const [combineInstruction, setCombineInstruction] = useState('');
+  const [intention, setIntention] =
+    useState<WhatsNextIntention>('mvp-exploration');
+  const [motion, setMotion] = useState<WhatsNextMotion>('diverge');
+  const [activeLayer, setActiveLayer] = useState<WhatsNextLayer>('discovery');
 
   const [focusedNodeId, setFocusedNodeId] = useState('');
   const [inspectorId, setInspectorId] = useState('');
@@ -195,6 +207,10 @@ function WhatsNextCanvas({
     const node = nodes.find((value) => value.id === nodeId);
     return node ? [node] : [];
   });
+  const visibleNodes = nodes.filter(
+    (node) =>
+      node.role === 'start' || (node.layer ?? 'discovery') === activeLayer,
+  );
   const selectedNode = nodes.find((node) => node.id === inspectorId) ?? null;
   const deletionBlockers = selectedNode
     ? (() => {
@@ -221,14 +237,20 @@ function WhatsNextCanvas({
   );
   const visiblePreviews = previews.filter(
     (item) =>
-      item.kind !== 'candidate' ||
-      !acceptedCandidateIds.has(item.candidate?.candidateId ?? ''),
+      (item.layer ?? 'discovery') === activeLayer &&
+      (item.kind !== 'candidate' ||
+        !acceptedCandidateIds.has(item.candidate?.candidateId ?? '')),
   );
   const hasGraph = nodes.length > 0;
   const latestResponse = [...runs]
     .reverse()
     .find(
-      (run) => run.result && !['running', 'validating'].includes(run.status),
+      (run) =>
+        (run.intention === 'feature-synthesis'
+          ? 'product-design'
+          : 'discovery') === activeLayer &&
+        run.result &&
+        !['running', 'validating'].includes(run.status),
     );
   const continuingGrow = growSource
     ? runs.some(
@@ -338,6 +360,8 @@ function WhatsNextCanvas({
     feedback?: WhatsNextFeedbackAnchor[];
     revisionTarget?: { runId: string; candidateId: string };
     redoProposal?: boolean;
+    intention?: WhatsNextIntention;
+    motion?: WhatsNextMotion;
   }) {
     if (developmentPreview) return;
     const body = new FormData();
@@ -348,6 +372,8 @@ function WhatsNextCanvas({
     body.append('agent', selectedAgent);
     body.append('model', agentProfile.model);
     body.append('effort', agentProfile.effort);
+    body.append('intention', input.intention ?? 'mvp-exploration');
+    body.append('motion', input.motion ?? 'diverge');
     if (input.redoProposal) body.append('redoProposal', 'true');
     for (const ref of input.contextRefs ?? []) body.append('contextRefs', ref);
     for (const file of input.files ?? []) body.append('files', file);
@@ -374,6 +400,8 @@ function WhatsNextCanvas({
       instruction: input.instruction,
       revisionTarget: input.revisionTarget,
       redoProposal: input.redoProposal,
+      intention: input.intention ?? 'mvp-exploration',
+      motion: input.motion ?? 'diverge',
     });
     const discardedRuns = new Set(payload.run.replacement?.runIds ?? []);
     setRuns((current) =>
@@ -425,6 +453,8 @@ function WhatsNextCanvas({
       await startRun({
         sourceNodeIds: [payload.node.id],
         instruction: '',
+        intention: 'mvp-exploration',
+        motion: 'diverge',
       });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Something failed.');
@@ -459,18 +489,29 @@ function WhatsNextCanvas({
   }
 
   async function submitCombine() {
-    if (combineIds.length < 2 || !combineInstruction.trim()) return;
+    if (combineIds.length < 1) return;
     setError('');
     try {
       await startRun({
         sourceNodeIds: combineIds,
         instruction: combineInstruction,
+        intention,
+        motion,
       });
+      setActiveLayer(
+        intention === 'feature-synthesis' ? 'product-design' : 'discovery',
+      );
       setCombineIds([]);
       setCombineInstruction('');
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Something failed.');
     }
+  }
+
+  function toggleSelection(nodeId: string) {
+    setCombineIds((current) =>
+      toggleWhatsNextSelection(nodes, current, nodeId),
+    );
   }
 
   function closeGrow() {
@@ -495,14 +536,10 @@ function WhatsNextCanvas({
       return;
     }
     if (!snapshot || snapshot.revisionTarget) return;
-    if (snapshot.sourceNodeIds.length > 1) {
-      setCombineIds(snapshot.sourceNodeIds);
-      setCombineInstruction(snapshot.instruction);
-    } else {
-      setGrowSourceId(snapshot.sourceNodeIds[0] ?? '');
-      setGrowInstruction(snapshot.instruction);
-      setRedoProposal(false);
-    }
+    setCombineIds(snapshot.sourceNodeIds);
+    setCombineInstruction(snapshot.instruction);
+    setIntention(snapshot.intention);
+    setMotion(snapshot.motion);
   }
 
   async function updateCandidate(action: 'accept' | 'discard') {
@@ -555,6 +592,13 @@ function WhatsNextCanvas({
           'Refine the current Markdown using the attached inline feedback.',
         feedback: pendingFeedback,
         revisionTarget,
+        intention:
+          selectedCandidate &&
+          'layer' in selectedCandidate &&
+          selectedCandidate.layer === 'product-design'
+            ? 'feature-synthesis'
+            : 'mvp-exploration',
+        motion: 'converge',
       });
       setRevisionTarget(null);
       setReviseNote('');
@@ -802,22 +846,41 @@ function WhatsNextCanvas({
   return (
     <div className="relative h-full">
       <TaskGraphCanvas
-        nodes={nodes}
+        nodes={visibleNodes}
         previews={visiblePreviews}
         focusedNodeId={focusedNodeId}
         locateRequest={locateRequest}
         selectedNodeIds={combineIds}
-        plusLabel="Ask what's next"
         edgeAlignedOverlays
-        onMultiSelect={(nodeId) =>
-          setCombineIds((current) => toggle(current, nodeId))
-        }
+        selectionEnabled
+        onToggleSelection={toggleSelection}
         onFocusNode={setFocusedNodeId}
         onInspectNode={setInspectorId}
         onSelectPreview={setInspectorId}
-        onDecompose={setGrowSourceId}
+        onDecompose={() => {}}
         onCancelRun={(runId) => void cancelRun(runId)}
       />
+
+      <div className="absolute top-4 right-4 z-10 flex rounded-xl border border-border bg-background/95 p-1 shadow-sm backdrop-blur">
+        {(['discovery', 'product-design'] as const).map((layer) => (
+          <button
+            key={layer}
+            type="button"
+            className={cn(
+              'rounded-lg px-3 py-1.5 text-xs font-medium transition',
+              activeLayer === layer
+                ? 'bg-foreground text-background'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
+            onClick={() => {
+              setActiveLayer(layer);
+              setFocusedNodeId('');
+            }}
+          >
+            {layer === 'discovery' ? t('Discovery') : t('Product Design')}
+          </button>
+        ))}
+      </div>
 
       {latestResponse?.result ? (
         <button
@@ -856,16 +919,19 @@ function WhatsNextCanvas({
         ) : null}
       </div>
 
-      {combineIds.length >= 2 ? (
+      {combineIds.length >= 1 ? (
         <div className="absolute right-5 bottom-5 w-[360px] rounded-2xl border border-border bg-background p-4 shadow-[0_18px_50px_rgb(15_23_42/12%)]">
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-xs font-semibold">
-                {t('Combine')}
-                {combineIds.length} {t('cards')}
+                {combineIds.length}{' '}
+                {combineIds.length === 1 ? t('card') : t('cards')}{' '}
+                {t('selected')}
               </p>
               <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
-                {t('Their output becomes the input for one question.')}
+                {combineNodes[0]?.role === 'start'
+                  ? t('Choose what this Source should generate.')
+                  : t('Choose what these cards should become.')}
               </p>
             </div>
             <button
@@ -879,6 +945,37 @@ function WhatsNextCanvas({
             >
               <X className="size-4" />
             </button>
+          </div>
+
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <label className="space-y-1 text-[10px] font-medium text-muted-foreground">
+              {t('Intention')}
+              <select
+                value={intention}
+                onChange={(event) =>
+                  setIntention(event.target.value as WhatsNextIntention)
+                }
+                className="h-9 w-full rounded-lg border border-border bg-background px-2 text-xs text-foreground"
+              >
+                <option value="mvp-exploration">{t('MVP Exploration')}</option>
+                <option value="feature-synthesis">
+                  {t('Feature Synthesis')}
+                </option>
+              </select>
+            </label>
+            <label className="space-y-1 text-[10px] font-medium text-muted-foreground">
+              {t('Motion')}
+              <select
+                value={motion}
+                onChange={(event) =>
+                  setMotion(event.target.value as WhatsNextMotion)
+                }
+                className="h-9 w-full rounded-lg border border-border bg-background px-2 text-xs text-foreground"
+              >
+                <option value="diverge">{t('Diverge')}</option>
+                <option value="converge">{t('Converge')}</option>
+              </select>
+            </label>
           </div>
 
           <div className="mt-3 flex max-h-40 flex-col gap-0.5 overflow-y-auto">
@@ -908,7 +1005,7 @@ function WhatsNextCanvas({
             onChange={(event) => setCombineInstruction(event.target.value)}
             rows={3}
             maxLength={1_000}
-            placeholder={t('What do you want to do with these together?')}
+            placeholder={t('Optional guidance for the Agent')}
             className="mt-3 resize-none text-sm"
             aria-label={t('What to do with the selected cards')}
           />
@@ -921,7 +1018,7 @@ function WhatsNextCanvas({
             />
             <Button
               size="sm"
-              disabled={!combineInstruction.trim() || developmentPreview}
+              disabled={developmentPreview}
               onClick={() => void submitCombine()}
             >
               <Sparkles className="size-3.5" />
@@ -1583,9 +1680,7 @@ function WhatsNextCanvas({
                     className="flex-1"
                     onClick={() => {
                       setInspectorId('');
-                      setCombineIds((current) =>
-                        toggle(current, selectedNode.id),
-                      );
+                      toggleSelection(selectedNode.id);
                       locateSequence.current += 1;
                       setLocateRequest({
                         nodeId: selectedNode.id,
@@ -1898,6 +1993,10 @@ function runToPreviews(run: WhatsNextRunRecord): TaskGraphPreview[] {
     additionalResourceCount: 0,
     runId: run.runId,
     derivedFrom: run.sourceNodeIds,
+    layer:
+      run.intention === 'feature-synthesis'
+        ? ('product-design' as const)
+        : ('discovery' as const),
   };
   const agentLabel = run.transport === 'claude-cli' ? 'Claude' : 'Codex';
 
@@ -1929,6 +2028,7 @@ function runToPreviews(run: WhatsNextRunRecord): TaskGraphPreview[] {
       derivedFrom: candidate.derivedFrom,
       dependsOn: candidate.dependsOn,
       candidate,
+      layer: candidate.layer,
       outputPath: `whats-next/runs/${run.runId}/candidates/${candidate.candidateId}/output.md`,
       previousOutputPath:
         run.revisionOf && run.parentRunId
