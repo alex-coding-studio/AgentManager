@@ -30,6 +30,7 @@ import { GoalSourcePicker } from '@/components/goal-source-picker';
 import { useUiText } from '@/components/ui-language-provider';
 import { cn } from '@/lib/utils';
 import type {
+  PendingDependencyReview,
   PlanningCard,
   PlanningProfile,
 } from '@/lib/just-do-it-planning-service';
@@ -41,6 +42,7 @@ type View = {
   sources: PlanningSource[];
   instructions: string;
   folders: ContextBrowserFolder[];
+  dependencyReviews: Record<string, PendingDependencyReview[]>;
 };
 type Draft = {
   requirements: string;
@@ -77,6 +79,7 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [instructions, setInstructions] = useState<string | null>(null);
   const [contextOpen, setContextOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const mounted = useRef(true);
   const refreshBusy = useRef(false);
 
@@ -129,6 +132,16 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
       )?.id
     : undefined;
   const scopedBusy = running && Boolean(card?.run?.targetId);
+  const dependencyReview = card
+    ? (view?.dependencyReviews?.[card.id] ?? [])
+    : [];
+  const deletable = Boolean(
+    card &&
+    !running &&
+    card.plan?.status !== 'finalized' &&
+    !card.actions.length &&
+    !card.execution?.runs.length,
+  );
 
   function patchDraft(id: string, patch: Partial<Draft>) {
     setDrafts((old) => {
@@ -165,6 +178,17 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
             ],
           };
         });
+      if (data.deleted && mounted.current) {
+        setView((old) =>
+          old
+            ? {
+                ...old,
+                cards: old.cards.filter((item) => item.id !== data.cardId),
+              }
+            : old,
+        );
+        setSelectedId(null);
+      }
       return data.card as PlanningCard | undefined;
     } catch (err) {
       if (mounted.current)
@@ -466,7 +490,77 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
                   </p>
                 )}
               </details>
+              {deletable && (
+                <Button
+                  className="mt-3"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => setDeleteOpen(true)}
+                >
+                  {t('Delete this Card')}
+                </Button>
+              )}
             </header>
+            {dependencyReview.length > 0 && (
+              <section className="rounded-xl border border-amber-500/40 bg-amber-500/5 p-4">
+                <h2 className="text-sm font-semibold">
+                  {t('Dependency review required')}
+                </h2>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  {t(
+                    'This Card derives from unfinished Nodes that were not marked as prerequisites. Classify each one before planning or confirming this Card.',
+                  )}
+                </p>
+                <div className="mt-3 space-y-3">
+                  {dependencyReview.map((item) => (
+                    <div
+                      key={item.uid}
+                      className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card p-3"
+                    >
+                      <div>
+                        <p className="text-sm font-medium">{item.title}</p>
+                        <p className="font-mono text-[11px] text-muted-foreground">
+                          {item.id}
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={busy}
+                          onClick={() =>
+                            void mutate({
+                              action: 'resolve-dependency',
+                              cardId: card.id,
+                              expectedRevision: card.revision,
+                              sourceUid: item.uid,
+                              decision: 'lineage-only',
+                            })
+                          }
+                        >
+                          {t('Conceptual source only')}
+                        </Button>
+                        <Button
+                          size="sm"
+                          disabled={busy}
+                          onClick={() =>
+                            void mutate({
+                              action: 'resolve-dependency',
+                              cardId: card.id,
+                              expectedRevision: card.revision,
+                              sourceUid: item.uid,
+                              decision: 'dependency',
+                            })
+                          }
+                        >
+                          {t('Add as prerequisite')}
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
             {card.run?.error && (
               <p
                 role="alert"
@@ -506,7 +600,10 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
                   )}
                 </p>
                 {setup}
-                <Button disabled={busy} onClick={() => void generate(null)}>
+                <Button
+                  disabled={busy || dependencyReview.length > 0}
+                  onClick={() => void generate(null)}
+                >
                   {t('Start planning')}
                 </Button>
               </section>
@@ -548,7 +645,11 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
                           {t('Adjust whole plan')}
                         </Button>
                         <Button
-                          disabled={busy || card.run?.status !== 'succeeded'}
+                          disabled={
+                            busy ||
+                            card.run?.status !== 'succeeded' ||
+                            dependencyReview.length > 0
+                          }
                           onClick={() => command('finalize')}
                         >
                           <Check />
@@ -740,6 +841,37 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
           </>
         )}
       </div>
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t('Delete this Card?')}</DialogTitle>
+            <DialogDescription>
+              {t(
+                'The Just Do It Card and its unconfirmed draft will move to system Trash. The source Node in What’s Next or Break It Down remains unchanged.',
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setDeleteOpen(false)}>
+              {t('Cancel')}
+            </Button>
+            <Button
+              disabled={!card || pending}
+              onClick={async () => {
+                if (!card) return;
+                await mutate({
+                  action: 'delete-card',
+                  cardId: card.id,
+                  expectedRevision: card.revision,
+                });
+                setDeleteOpen(false);
+              }}
+            >
+              {t('Move Card to Trash')}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       <Dialog open={contextOpen} onOpenChange={setContextOpen}>
         <DialogContent className="max-h-[85dvh] overflow-auto sm:max-w-2xl">
           <DialogHeader>

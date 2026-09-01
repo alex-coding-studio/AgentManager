@@ -39,6 +39,7 @@ import { JUST_DO_IT_BUILT_IN_INSTRUCTIONS } from '../lib/just-do-it-harness.ts';
 const uid = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const step1 = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const step2 = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+const originUid = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 
 async function fixture(t: { after: (fn: () => Promise<void>) => void }) {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'jdi-planning-test-'));
@@ -79,6 +80,44 @@ async function fixture(t: { after: (fn: () => Promise<void>) => void }) {
     '# 本地网站骨架\n不要接真实 AI。',
   );
   return project;
+}
+
+async function addUnfinishedLineage(project: RegisteredProject) {
+  const originDirectory = path.join(
+    project.planningPath,
+    'whats-next/nodes/NODE-bbbbbbbb',
+  );
+  await mkdir(originDirectory, { recursive: true });
+  await writeFile(
+    path.join(originDirectory, 'node.json'),
+    JSON.stringify({
+      schemaVersion: 1,
+      id: 'NODE-bbbbbbbb',
+      uid: originUid,
+      role: 'node',
+      status: 'accepted',
+      title: '尚未完成的来源能力',
+      summary: '可能是前置能力，也可能只是概念来源。',
+      relations: { derivedFrom: [], dependsOn: [] },
+      resources: [
+        {
+          kind: 'output',
+          path: 'whats-next/nodes/NODE-bbbbbbbb/output.md',
+        },
+      ],
+    }),
+  );
+  await writeFile(
+    path.join(originDirectory, 'output.md'),
+    '# 尚未完成的来源能力',
+  );
+  const sourceFile = path.join(
+    project.planningPath,
+    'whats-next/nodes/NODE-aaaaaaaa/node.json',
+  );
+  const source = JSON.parse(await readFile(sourceFile, 'utf8'));
+  source.relations = { derivedFrom: [originUid], dependsOn: [] };
+  await writeFile(sourceFile, JSON.stringify(source));
 }
 
 function controlled() {
@@ -246,6 +285,94 @@ void test('imports accepted formal Nodes idempotently and never imports Candidat
   assert.equal(
     (await service.read(project, uid)).source.title,
     card.source.title,
+  );
+});
+
+void test('unfinished lineage requires an explicit dependency decision before planning', async (t) => {
+  const project = await fixture(t);
+  await addUnfinishedLineage(project);
+  const { service, calls } = controlled();
+  let card = await service.importSource(project, 'whats-next', uid);
+  assert.deepEqual(await service.dependencyReview(project, card), [
+    {
+      id: 'NODE-bbbbbbbb',
+      uid: originUid,
+      title: '尚未完成的来源能力',
+    },
+  ]);
+  await assert.rejects(
+    service.start(project, input(card)),
+    /DEPENDENCY_REVIEW_REQUIRED/,
+  );
+  assert.equal(calls.length, 0);
+  card = await service.resolveDependency(
+    project,
+    card.id,
+    card.revision,
+    originUid,
+    'dependency',
+  );
+  assert.deepEqual(card.source.dependsOn, [originUid]);
+  assert.deepEqual(await service.dependencyReview(project, card), []);
+  assert.equal(card.plan, null);
+});
+
+void test('user may classify unfinished lineage as conceptual before planning', async (t) => {
+  const project = await fixture(t);
+  await addUnfinishedLineage(project);
+  const { service, calls } = controlled();
+  let card = await service.importSource(project, 'whats-next', uid);
+  card = await service.resolveDependency(
+    project,
+    card.id,
+    card.revision,
+    originUid,
+    'lineage-only',
+  );
+  assert.deepEqual(card.source.dependsOn, []);
+  assert.equal(card.dependencyDecisions?.[originUid], 'lineage-only');
+  await service.start(project, input(card));
+  assert.equal(calls.length, 1);
+  calls[0].resolve(result(calls[0].request));
+  assert.equal((await settled(service, project)).run?.status, 'succeeded');
+});
+
+void test('an unconfirmed Card can be deleted without changing its source Node', async (t) => {
+  const project = await fixture(t);
+  let trashed = '';
+  const service = createPlanningService(
+    undefined,
+    new Map(),
+    10_000,
+    async (directory) => {
+      trashed = directory;
+      await rm(directory, { recursive: true, force: true });
+    },
+  );
+  const sourceFile = path.join(
+    project.planningPath,
+    'whats-next/nodes/NODE-aaaaaaaa/node.json',
+  );
+  const sourceBefore = await readFile(sourceFile, 'utf8');
+  const card = await service.importSource(project, 'whats-next', uid);
+  const deleted = await service.deleteCard(project, card.id, card.revision);
+  assert.deepEqual(deleted, { deleted: true, cardId: uid });
+  assert.match(trashed, new RegExp(`${uid}$`));
+  await assert.rejects(service.read(project, uid), /not found/);
+  assert.equal(await readFile(sourceFile, 'utf8'), sourceBefore);
+});
+
+void test('a confirmed Card cannot be deleted', async (t) => {
+  const project = await fixture(t);
+  const { service, calls } = controlled();
+  let card = await service.importSource(project, 'whats-next', uid);
+  await service.start(project, input(card));
+  calls[0].resolve(result(calls[0].request));
+  card = await settled(service, project);
+  card = await service.update(project, card.id, card.revision, 'finalize');
+  await assert.rejects(
+    service.deleteCard(project, card.id, card.revision),
+    /without a confirmed Plan/,
   );
 });
 
