@@ -234,6 +234,7 @@ async function startWhatsNextRunUnlocked(
   const coordinatorRun =
     !redo &&
     coordinatorCandidate &&
+    (intention !== 'product-design-completion' || Boolean(revisionTarget)) &&
     canReuseWhatsNextSession(coordinatorCandidate, transport) &&
     sameModelSelection(coordinatorCandidate.profile, profile) &&
     coordinatorCandidate.intention === intention &&
@@ -930,6 +931,11 @@ async function finishWhatsNextRun(
   try {
     const agentResult = await agent.completion;
     if (isRunCanceled(record)) return;
+    await writeFile(
+      path.join(whatsNextRunPath(project, record.runId), 'agent-output.txt'),
+      agentResult.finalOutput,
+      { flag: 'wx' },
+    );
     record.status = 'validating';
     record.agentSessionId = agentResult.agentSessionId;
     record.usage = agentResult.usage;

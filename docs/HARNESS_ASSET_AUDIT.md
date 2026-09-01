@@ -62,7 +62,8 @@ to form a holdout set.
 
 ## Rollback boundary
 
-What’s Next Harness revision 5 isolates the new profile from prior provider Sessions. A
+What’s Next Harness revision 6 isolates the new profile and its empty-Assumptions output
+contract from prior provider Sessions. A
 rollback removes Product Design Completion, restores revision 4 and leaves existing graph
 nodes and Run artifacts readable. The Just Do It Harness remains revision 2 because its
 contract did not change.
