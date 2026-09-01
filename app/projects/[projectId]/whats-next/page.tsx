@@ -11,6 +11,8 @@ import { listTaskGraphNodes } from '@/lib/task-graph';
 import { findDemoSource } from '@/lib/just-do-it-demo';
 import { JustDoItSourcePreview } from '@/components/just-do-it-source-preview';
 import {
+  createWhatsNextAttentionPreview,
+  createWhatsNextErrorPreview,
   createWhatsNextRefiningPreview,
   createWhatsNextReviewPreview,
   createWhatsNextRedoPreview,
@@ -54,9 +56,13 @@ export default async function WhatsNextPage({
         ? createWhatsNextRedoPreview()
         : preview === 'review-flow'
           ? createWhatsNextReviewPreview()
-          : preview === 'refining-flow'
-            ? createWhatsNextRefiningPreview()
-            : null;
+          : preview === 'latest-response-attention'
+            ? createWhatsNextAttentionPreview()
+            : preview === 'latest-response-error'
+              ? createWhatsNextErrorPreview()
+              : preview === 'refining-flow'
+                ? createWhatsNextRefiningPreview()
+                : null;
 
   return (
     <ProjectShell
