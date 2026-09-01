@@ -18,8 +18,8 @@ already established repository target, environment cause or delivery rule. Keepi
 raw logs alone does not solve this: relevant verified conclusions must reach the
 next Session in a short, current handoff with evidence pointers.
 
-Treat this as shared run-record infrastructure for What's Next, Break It Down and
-Just Do It. Preserve the local-first, single-user boundary. It is not a new Card,
+Treat this as shared run-record infrastructure for What's Next, What’s That?, Break It Down
+and Just Do It. Preserve the local-first, single-user boundary. It is not a new Card,
 an MCP redesign, or a requirement for users to curate every log and Skill.
 
 ## Running-state presentation
@@ -59,6 +59,8 @@ Keep original outcomes; later correction or user waiver is a separate event.
 
 - What's Next retains decision evidence, user selections/rejections and applicable
   project facts, so later proposals do not repeat settled discussions blindly.
+- What’s That? retains current model revision, structured changes, selected Entity Context,
+  unresolved modeling questions and evidence pointers without injecting full raw Runs.
 - Break It Down retains decomposition rationale, dependencies, scope boundaries
   and adjustment decisions, linked to the formal nodes they produced.
 - Just Do It retains implementation evidence, successful repairs, unresolved work,
