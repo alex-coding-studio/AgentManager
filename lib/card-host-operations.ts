@@ -1,6 +1,14 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rename,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import {
@@ -366,10 +374,10 @@ export async function publishCardCandidate(
     throw new Error('Candidate branch has ambiguous pull request state.');
   let pr = existing[0];
   if (!pr) {
-    const bodyPath = path.join(
-      workspace,
-      `.agentmanager-pr-${randomUUID()}.md`,
+    const temporaryDirectory = await mkdtemp(
+      path.join(os.tmpdir(), 'agentmanager-pr-'),
     );
+    const bodyPath = path.join(temporaryDirectory, 'body.md');
     try {
       await writeFile(bodyPath, request.body, { flag: 'wx' });
       const arguments_ = [
@@ -392,9 +400,7 @@ export async function publishCardCandidate(
         env: githubEnvironment,
       });
     } finally {
-      await import('node:fs/promises').then((fs) =>
-        fs.rm(bodyPath, { force: true }),
-      );
+      await rm(temporaryDirectory, { recursive: true, force: true });
     }
     const created = JSON.parse(
       await runner(
