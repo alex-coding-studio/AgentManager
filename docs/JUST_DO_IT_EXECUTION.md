@@ -109,14 +109,6 @@ is preserved; no Action starts automatically.
 - `npm run test:implementation-execution` covers real fixture-file changes,
   output persistence, feedback context, manual progression, cancellation,
   interrupted runs, version/change separation and permission separation.
-- `node --experimental-strip-types scripts/smoke-just-do-it-execution.ts --run-live <model>`
-  authorizes one real Codex call in a newly created temporary directory. It leaves
-  the fixture as inspectable evidence and does not register or execute user projects.
-- The initial live smoke used `gpt-5.6-luna`, low effort, produced exactly
-  `smoke.txt` with `ready\n`, passed host content comparison, and left acceptance
-  empty. This is file-writing integration evidence, not an iOS build/device pass.
-- Browser rendering and acceptance-state checks used the real smoke output with
-  intercepted fixture API responses. No user Plan was finalized or executed.
 
 ## GitHub delivery evidence
 
