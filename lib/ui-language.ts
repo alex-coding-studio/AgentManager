@@ -824,6 +824,8 @@ export const chineseUi: Record<string, string> = {
     '由你管理的约束和偏好。功能 Harness 独立维护，不会覆盖此文件。',
   'What do you want to build?': '你想做一个什么样的产品？',
   'What do you want to do with these together?': '你想如何一起使用这些内容？',
+  'Describe the result you want from these cards.':
+    '说明你希望这些卡片生成什么结果。',
   'What should the Agent reconsider here?': '你希望 Agent 重新考虑什么？',
   'What to do with the selected cards': '对选中卡片的要求',
   'Your idea': '你的想法',

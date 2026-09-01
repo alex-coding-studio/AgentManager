@@ -140,6 +140,15 @@ export function TaskGraphCanvas({
   );
 
   useEffect(() => {
+    const instance = flowInstance.current;
+    if (!instance) return;
+    const frame = requestAnimationFrame(() => {
+      void instance.fitView(defaultFitViewOptions);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [graphNodeIdsKey]);
+
+  useEffect(() => {
     setFlowNodes(graph.nodes);
     setFlowEdges(graph.edges);
   }, [focusedNodeId, graph, setFlowEdges, setFlowNodes]);
