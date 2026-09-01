@@ -1,4 +1,5 @@
 import { getProject } from '@/lib/project-registry';
+import { guardJsonRequest } from '@/lib/request-boundary';
 import {
   readWhatsNextInstructions,
   saveWhatsNextInstructions,
@@ -28,18 +29,12 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ projectId: string }> },
 ) {
+  const denied = guardJsonRequest(request);
+  if (denied) return denied;
   const project = await getProject((await params).projectId);
   if (!project)
     return Response.json({ error: 'Project not found.' }, { status: 404 });
   try {
-    const origin = request.headers.get('origin');
-    if (origin && new URL(origin).host !== request.headers.get('host'))
-      return Response.json(
-        { error: 'Cross-origin writes are not allowed.' },
-        { status: 403 },
-      );
-    if (!request.headers.get('content-type')?.startsWith('application/json'))
-      throw new Error('JSON input is required.');
     const body = await request.text();
     if (Buffer.byteLength(body) > 150_000)
       throw new Error('Instructions request is too large.');

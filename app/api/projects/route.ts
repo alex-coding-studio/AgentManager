@@ -3,6 +3,7 @@ import {
   listProjects,
   type ProjectKind,
 } from '@/lib/project-registry';
+import { guardJsonRequest } from '@/lib/request-boundary';
 
 export const runtime = 'nodejs';
 
@@ -11,6 +12,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const denied = guardJsonRequest(request);
+  if (denied) return denied;
   try {
     const payload = (await request.json()) as {
       kind?: ProjectKind;
@@ -20,7 +23,10 @@ export async function POST(request: Request) {
     };
     const name = payload.name?.trim();
     if (!name) {
-      return Response.json({ error: 'Project name is required.' }, { status: 400 });
+      return Response.json(
+        { error: 'Project name is required.' },
+        { status: 400 },
+      );
     }
     if (name.length > 120) {
       return Response.json(
@@ -36,7 +42,10 @@ export async function POST(request: Request) {
       );
     }
     if (payload.kind !== 'standalone' && payload.kind !== 'repository') {
-      return Response.json({ error: 'Project kind is invalid.' }, { status: 400 });
+      return Response.json(
+        { error: 'Project kind is invalid.' },
+        { status: 400 },
+      );
     }
 
     const project = await createProject({
@@ -47,7 +56,8 @@ export async function POST(request: Request) {
     });
     return Response.json({ project }, { status: 201 });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Could not create project.';
+    const message =
+      error instanceof Error ? error.message : 'Could not create project.';
     return Response.json({ error: message }, { status: 400 });
   }
 }

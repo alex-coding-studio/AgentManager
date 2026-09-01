@@ -1,4 +1,5 @@
 import { getProject } from '@/lib/project-registry';
+import { guardJsonRequest } from '@/lib/request-boundary';
 import { readContextBrowser } from '@/lib/product-context';
 import { executionService } from '@/lib/just-do-it-execution-service';
 import {
@@ -51,15 +52,12 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ projectId: string }> },
 ) {
+  const denied = guardJsonRequest(request);
+  if (denied) return denied;
   const project = await getProject((await params).projectId);
   if (!project)
     return Response.json({ error: 'Project not found.' }, { status: 404 });
   try {
-    const origin = request.headers.get('origin');
-    if (origin && new URL(origin).host !== request.headers.get('host'))
-      throw new Error('Cross-origin Planning writes are not allowed.');
-    if (!request.headers.get('content-type')?.startsWith('application/json'))
-      throw new Error('JSON input is required.');
     const text = await request.text();
     if (Buffer.byteLength(text) > 1_500_000)
       throw new Error('Planning request is too large.');

@@ -1,4 +1,5 @@
 import { getProject } from '@/lib/project-registry';
+import { guardJsonRequest } from '@/lib/request-boundary';
 import {
   ContextDocumentConflictError,
   createContextDocument,
@@ -12,6 +13,8 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ projectId: string }> },
 ) {
+  const denied = guardJsonRequest(request);
+  if (denied) return denied;
   const { projectId } = await params;
   const project = await getProject(projectId);
   if (!project) {
@@ -87,6 +90,8 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ projectId: string }> },
 ) {
+  const denied = guardJsonRequest(request);
+  if (denied) return denied;
   const { projectId } = await params;
   const project = await getProject(projectId);
   if (!project) {

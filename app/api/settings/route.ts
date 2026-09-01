@@ -3,6 +3,7 @@ import {
   updateAppSettings,
   isSettingsPatch,
 } from '@/lib/app-settings';
+import { guardJsonRequest } from '@/lib/request-boundary';
 
 export async function GET() {
   return Response.json(await readAppSettings(), {
@@ -11,6 +12,8 @@ export async function GET() {
 }
 
 export async function PATCH(request: Request) {
+  const denied = guardJsonRequest(request);
+  if (denied) return denied;
   let body: unknown;
   try {
     body = await request.json();

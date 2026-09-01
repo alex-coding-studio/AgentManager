@@ -1,4 +1,5 @@
 import { getProject } from '@/lib/project-registry';
+import { guardJsonRequest, guardRequest } from '@/lib/request-boundary';
 import { readAgentProfile } from '@/lib/agent-profile';
 import {
   acceptTaskDecompositionCandidate,
@@ -15,6 +16,8 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ projectId: string }> },
 ) {
+  const denied = guardRequest(request);
+  if (denied) return denied;
   const project = await resolveProject(params);
   if (!project) {
     return Response.json({ error: 'Project not found.' }, { status: 404 });
@@ -111,6 +114,8 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ projectId: string }> },
 ) {
+  const denied = guardJsonRequest(request);
+  if (denied) return denied;
   const project = await resolveProject(params);
   if (!project) {
     return Response.json({ error: 'Project not found.' }, { status: 404 });
@@ -140,6 +145,8 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ projectId: string }> },
 ) {
+  const denied = guardJsonRequest(request);
+  if (denied) return denied;
   const project = await resolveProject(params);
   if (!project) {
     return Response.json({ error: 'Project not found.' }, { status: 404 });
