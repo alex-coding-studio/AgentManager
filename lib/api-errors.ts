@@ -29,7 +29,7 @@ const SECRET_PATTERNS: Array<[RegExp, string]> = [
   ],
   [/\b(bearer)\s+\S+/gi, '$1 [redacted]'],
   [
-    /\b(authorization|token|password|passwd|secret|api[-_]?key|access[-_]?key|client[-_]?secret|private[-_]?key)\b(\s*[:=]\s*|["']?\s*[:=]\s*["']?)\S+/gi,
+    /([A-Za-z0-9_.-]*(?:authorization|token|password|passwd|secret|credential|api[-_]?key|apikey|access[-_]?key|private[-_]?key)[A-Za-z0-9_.-]*)(\s*[:=]\s*["']?)\S+/gi,
     '$1$2[redacted]',
   ],
   [/(--(?:token|password|secret|api-key))(=|\s+)\S+/gi, '$1$2[redacted]'],

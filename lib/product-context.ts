@@ -481,8 +481,9 @@ export async function importContextDocuments(
     entry.requestedName.toLowerCase(),
   );
   if (new Set(requestedNames).size !== requestedNames.length) {
-    throw new Error(
+    throw new PublicApiError(
       'The import contains multiple files with the same destination name.',
+      400,
     );
   }
   const conflicts = imports
@@ -546,7 +547,10 @@ async function writeUniqueMarkdown(
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
     }
   }
-  throw new Error('Could not choose a unique Markdown file name.');
+  throw new PublicApiError(
+    'Could not choose a unique Markdown file name.',
+    400,
+  );
 }
 
 function slugify(value: string) {

@@ -1,3 +1,4 @@
+import { PublicApiError } from './api-errors.ts';
 import {
   isModelId,
   reasoningEfforts,
@@ -18,7 +19,7 @@ export function validateAgentProfile(profile: AgentProfile) {
     (profile.model && !isModelId(profile.model)) ||
     !['', ...reasoningEfforts].includes(profile.effort)
   )
-    throw new Error('Invalid Agent configuration.');
+    throw new PublicApiError('Invalid Agent configuration.', 400);
 }
 
 export function readAgentProfile(form: FormData): AgentProfile {

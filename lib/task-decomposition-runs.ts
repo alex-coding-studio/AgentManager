@@ -145,7 +145,8 @@ export async function startTaskDecompositionRun(
   validateAgentProfile(profile);
   const nodes = await listTaskGraphNodes(project);
   const sourceNode = nodes.find((node) => node.id === input.sourceNodeId);
-  if (!sourceNode) throw new Error('The source Node could not be found.');
+  if (!sourceNode)
+    throw new PublicApiError('The source Node could not be found.', 400);
   const revisionTarget = await resolveRevisionTarget(project, input);
   const operation = revisionTarget
     ? 'revise-candidate'
@@ -417,16 +418,20 @@ export async function acceptTaskDecompositionCandidate(
         ['running', 'validating'].includes(active.record.status),
     )
   ) {
-    throw new Error('Wait for the active Candidate revision to finish.');
+    throw new PublicApiError(
+      'Wait for the active Candidate revision to finish.',
+      400,
+    );
   }
   const run = await readTaskDecompositionRun(project, runId);
   if (run.result?.outcome !== 'proposal') {
-    throw new Error('The Candidate proposal is unavailable.');
+    throw new PublicApiError('The Candidate proposal is unavailable.', 400);
   }
   const candidate = run.result.candidates.find(
     (value) => value.candidateId === candidateId,
   );
-  if (!candidate) throw new Error('The Candidate could not be found.');
+  if (!candidate)
+    throw new PublicApiError('The Candidate could not be found.', 400);
 
   const existingNodes = await listTaskGraphNodes(project);
   const accepted = existingNodes.find((node) => node.uid === candidate.uid);
@@ -437,7 +442,8 @@ export async function acceptTaskDecompositionCandidate(
     existingNodes,
   );
 
-  if (!candidate.uid) throw new Error('Candidate stable identity is missing.');
+  if (!candidate.uid)
+    throw new PublicApiError('Candidate stable identity is missing.', 400);
   const { id: nodeId } = await reserveNodeIdentity(
     project.planningPath,
     'task-graph',
@@ -522,16 +528,20 @@ export async function discardTaskDecompositionCandidate(
         ['running', 'validating'].includes(active.record.status),
     )
   ) {
-    throw new Error('Cancel or finish the active Candidate revision first.');
+    throw new PublicApiError(
+      'Cancel or finish the active Candidate revision first.',
+      400,
+    );
   }
   const requestedRun = await readTaskDecompositionRun(project, runId);
   if (requestedRun.result?.outcome !== 'proposal') {
-    throw new Error('The Candidate proposal is unavailable.');
+    throw new PublicApiError('The Candidate proposal is unavailable.', 400);
   }
   const requestedCandidate = requestedRun.result.candidates.find(
     (candidate) => candidate.candidateId === candidateId,
   );
-  if (!requestedCandidate) throw new Error('The Candidate could not be found.');
+  if (!requestedCandidate)
+    throw new PublicApiError('The Candidate could not be found.', 400);
   if (
     [...activeRuns.values()].some(
       (active) =>
@@ -539,13 +549,19 @@ export async function discardTaskDecompositionCandidate(
         ['running', 'validating'].includes(active.record.status),
     )
   ) {
-    throw new Error('Cancel or finish the active Agent Run first.');
+    throw new PublicApiError(
+      'Cancel or finish the active Agent Run first.',
+      400,
+    );
   }
   const accepted = (await listTaskGraphNodes(project)).some(
     (node) => node.provenance?.candidateId === candidateId,
   );
   if (accepted) {
-    throw new Error('An accepted Candidate must be managed as a formal Node.');
+    throw new PublicApiError(
+      'An accepted Candidate must be managed as a formal Node.',
+      400,
+    );
   }
   const blockers = candidateDependencyBlockers(
     candidateId,
@@ -670,8 +686,9 @@ async function finishTaskDecompositionRun(
       (result.candidates.length !== 1 ||
         result.candidates[0]?.candidateId !== revisionTarget.candidateId)
     ) {
-      throw new Error(
+      throw new PublicApiError(
         'A revision must return exactly the requested Candidate identifier.',
+        400,
       );
     }
     const endedAt = new Date().toISOString();
@@ -801,10 +818,16 @@ async function saveUploadedResources(
   const resources: ContextWorkspaceInput[] = [];
   for (const file of files) {
     if (!/\.(md|markdown)$/i.test(file.name)) {
-      throw new Error('Only Markdown Resources can be added to an Agent Run.');
+      throw new PublicApiError(
+        'Only Markdown Resources can be added to an Agent Run.',
+        400,
+      );
     }
     if (file.size > 2 * 1024 * 1024) {
-      throw new Error('Each Markdown Resource must be 2 MB or smaller.');
+      throw new PublicApiError(
+        'Each Markdown Resource must be 2 MB or smaller.',
+        400,
+      );
     }
     const fileName = chooseUniqueFileName(file.name, usedNames);
     const content = await file.text();
@@ -857,30 +880,40 @@ async function writeRunRecord(
 
 function validateRunRequest(input: RunRequest) {
   if (!/^NODE-[0-9a-f]{8,32}$/.test(input.sourceNodeId)) {
-    throw new Error('The source Node is invalid.');
+    throw new PublicApiError('The source Node is invalid.', 400);
   }
   const instruction = input.instruction.trim();
-  if (!instruction) throw new Error('An Instruction is required.');
+  if (!instruction)
+    throw new PublicApiError('An Instruction is required.', 400);
   if (instruction.length > 1_000) {
-    throw new Error('The Instruction must be 1,000 characters or fewer.');
+    throw new PublicApiError(
+      'The Instruction must be 1,000 characters or fewer.',
+      400,
+    );
   }
   if (input.contextRefs.length > 50) {
-    throw new Error('Select no more than 50 additional Context Resources.');
+    throw new PublicApiError(
+      'Select no more than 50 additional Context Resources.',
+      400,
+    );
   }
   if (input.files.length > 20) {
-    throw new Error('Upload no more than 20 Markdown Resources.');
+    throw new PublicApiError('Upload no more than 20 Markdown Resources.', 400);
   }
   if (
     (input.revisionRunId && !input.revisionCandidateId) ||
     (!input.revisionRunId && input.revisionCandidateId)
   ) {
-    throw new Error('A complete Candidate revision target is required.');
+    throw new PublicApiError(
+      'A complete Candidate revision target is required.',
+      400,
+    );
   }
   if (
     input.operation !== undefined &&
     !['propose', 'append-candidates'].includes(input.operation)
   ) {
-    throw new Error('The decomposition operation is invalid.');
+    throw new PublicApiError('The decomposition operation is invalid.', 400);
   }
 }
 
@@ -891,13 +924,16 @@ async function resolveRevisionTarget(
   if (!input.revisionRunId || !input.revisionCandidateId) return null;
   const run = await readTaskDecompositionRun(project, input.revisionRunId);
   if (run.result?.outcome !== 'proposal') {
-    throw new Error('The Candidate revision source is unavailable.');
+    throw new PublicApiError(
+      'The Candidate revision source is unavailable.',
+      400,
+    );
   }
   const candidate = run.result.candidates.find(
     (value) => value.candidateId === input.revisionCandidateId,
   );
   if (!candidate || run.sourceNodeId !== input.sourceNodeId) {
-    throw new Error('The Candidate revision target is invalid.');
+    throw new PublicApiError('The Candidate revision target is invalid.', 400);
   }
   return { run, candidate };
 }
@@ -1000,7 +1036,7 @@ function chooseUniqueFileName(value: string, usedNames: Set<string>) {
       return fileName;
     }
   }
-  throw new Error('Could not choose a unique Run Resource name.');
+  throw new PublicApiError('Could not choose a unique Run Resource name.', 400);
 }
 
 function taskDecompositionRunPath(project: RegisteredProject, runId: string) {
@@ -1010,7 +1046,7 @@ function taskDecompositionRunPath(project: RegisteredProject, runId: string) {
 
 function validateRunId(runId: string) {
   if (!/^RUN-[0-9a-f-]{36}$/i.test(runId)) {
-    throw new Error('The Agent Run identifier is invalid.');
+    throw new PublicApiError('The Agent Run identifier is invalid.', 400);
   }
 }
 

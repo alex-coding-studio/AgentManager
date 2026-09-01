@@ -1,3 +1,4 @@
+import { PublicApiError } from './api-errors.ts';
 import {
   readFile,
   readdir,
@@ -47,7 +48,7 @@ async function instructionsDirectory(
   try {
     const info = await lstat(directory);
     if (!info.isDirectory() || info.isSymbolicLink())
-      throw new Error('Invalid What’s Next context directory.');
+      throw new PublicApiError('Invalid What’s Next context directory.', 400);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
@@ -62,10 +63,10 @@ export async function readWhatsNextInstructions(project: RegisteredProject) {
   try {
     const info = await lstat(file);
     if (!info.isFile() || info.isSymbolicLink() || info.size > 80_000)
-      throw new Error('Invalid What’s Next instructions file.');
+      throw new PublicApiError('Invalid What’s Next instructions file.', 400);
     const instructions = await readFile(file, 'utf8');
     if (instructions.length > 20_000)
-      throw new Error('Instructions exceed 20000 characters.');
+      throw new PublicApiError('Instructions exceed 20000 characters.', 400);
     return instructions;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return '';
@@ -78,7 +79,10 @@ export async function saveWhatsNextInstructions(
   instructions: string,
 ) {
   if (typeof instructions !== 'string' || instructions.length > 20_000)
-    throw new Error('Instructions must be at most 20000 characters.');
+    throw new PublicApiError(
+      'Instructions must be at most 20000 characters.',
+      400,
+    );
   if ((await readWhatsNextInstructions(project)) === instructions)
     return { instructions };
   const directory = await instructionsDirectory(project, true);
@@ -149,8 +153,9 @@ function validateAttachmentName(value: string) {
     fileName.includes('\n') ||
     !/\.(md|markdown|json)$/i.test(fileName)
   ) {
-    throw new Error(
+    throw new PublicApiError(
       'Only named Markdown or JSON context attachments are supported.',
+      400,
     );
   }
   return fileName;

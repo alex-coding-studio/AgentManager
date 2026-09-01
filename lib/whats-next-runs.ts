@@ -203,7 +203,7 @@ async function startWhatsNextRunUnlocked(
     sourceNodes.some((node) => node.role === 'start') &&
     sourceNodes.length !== 1
   )
-    throw new Error('A Source must be selected by itself.');
+    throw new PublicApiError('A Source must be selected by itself.', 400);
   if (
     intention === 'feature-synthesis' &&
     sourceNodes.some(
@@ -211,14 +211,18 @@ async function startWhatsNextRunUnlocked(
         node.role !== 'start' && (node.layer ?? 'discovery') !== 'discovery',
     )
   )
-    throw new Error('Feature Synthesis currently accepts Discovery sources.');
+    throw new PublicApiError(
+      'Feature Synthesis currently accepts Discovery sources.',
+      400,
+    );
   if (
     intention === 'product-design-completion' &&
     !input.revisionCandidateId &&
     (sourceNodes.length !== 1 || sourceNodes[0]?.role !== 'start')
   )
-    throw new Error(
+    throw new PublicApiError(
       'Product Design Completion must start from the Product Source.',
+      400,
     );
   const revisionTarget = await resolveRevisionTarget(project, input);
   if (revisionTarget && input.feedback?.length) {
@@ -619,8 +623,9 @@ export async function recoverWhatsNextRunResult(
 ) {
   const record = await readWhatsNextRun(project, runId);
   if (record.status !== 'failed' || record.result) {
-    throw new Error(
+    throw new PublicApiError(
       'Only a failed Run without a validated result can recover.',
+      400,
     );
   }
   const nodes = await listTaskGraphNodes(project, GRAPH_ROOT);
@@ -719,7 +724,10 @@ async function acceptWhatsNextCandidateUnlocked(
   const allRuns = await readAllWhatsNextRuns(project);
   const availableRun = allRuns.find((run) => run.runId === runId);
   if (!availableRun)
-    throw new Error('The Candidate proposal is no longer available.');
+    throw new PublicApiError(
+      'The Candidate proposal is no longer available.',
+      400,
+    );
   if (
     [...activeRuns.values()].some(
       (active) =>
@@ -727,16 +735,20 @@ async function acceptWhatsNextCandidateUnlocked(
         ['running', 'validating'].includes(active.record.status),
     )
   ) {
-    throw new Error('Wait for the active Candidate revision to finish.');
+    throw new PublicApiError(
+      'Wait for the active Candidate revision to finish.',
+      400,
+    );
   }
   const run = await readWhatsNextRun(project, runId);
   if (run.result?.outcome !== 'proposal') {
-    throw new Error('The Candidate proposal is unavailable.');
+    throw new PublicApiError('The Candidate proposal is unavailable.', 400);
   }
   const candidate = run.result.candidates.find(
     (value) => value.candidateId === candidateId,
   );
-  if (!candidate) throw new Error('The Candidate could not be found.');
+  if (!candidate)
+    throw new PublicApiError('The Candidate could not be found.', 400);
 
   const existingNodes = await listTaskGraphNodes(project, GRAPH_ROOT);
   const accepted = existingNodes.find((node) => node.uid === candidate.uid);
@@ -748,7 +760,8 @@ async function acceptWhatsNextCandidateUnlocked(
     existingNodes,
   );
 
-  if (!candidate.uid) throw new Error('Candidate stable identity is missing.');
+  if (!candidate.uid)
+    throw new PublicApiError('Candidate stable identity is missing.', 400);
   const { id: nodeId } = await reserveNodeIdentity(
     project.planningPath,
     GRAPH_ROOT,
@@ -837,7 +850,10 @@ async function discardWhatsNextCandidateUnlocked(
   const allRuns = await readAllWhatsNextRuns(project);
   const availableRun = allRuns.find((run) => run.runId === runId);
   if (!availableRun)
-    throw new Error('The Candidate proposal is no longer available.');
+    throw new PublicApiError(
+      'The Candidate proposal is no longer available.',
+      400,
+    );
   if (
     [...activeRuns.values()].some(
       (active) =>
@@ -845,24 +861,30 @@ async function discardWhatsNextCandidateUnlocked(
         ['running', 'validating'].includes(active.record.status),
     )
   ) {
-    throw new Error('Cancel or finish the active Candidate revision first.');
+    throw new PublicApiError(
+      'Cancel or finish the active Candidate revision first.',
+      400,
+    );
   }
   const requestedRun = await readWhatsNextRun(project, runId);
   if (requestedRun.result?.outcome !== 'proposal') {
-    throw new Error('The Candidate proposal is unavailable.');
+    throw new PublicApiError('The Candidate proposal is unavailable.', 400);
   }
   if (
     !requestedRun.result.candidates.some(
       (candidate) => candidate.candidateId === candidateId,
     )
   ) {
-    throw new Error('The Candidate could not be found.');
+    throw new PublicApiError('The Candidate could not be found.', 400);
   }
   const accepted = (await listTaskGraphNodes(project, GRAPH_ROOT)).some(
     (node) => node.provenance?.candidateId === candidateId,
   );
   if (accepted) {
-    throw new Error('An accepted Candidate must be managed as a formal Node.');
+    throw new PublicApiError(
+      'An accepted Candidate must be managed as a formal Node.',
+      400,
+    );
   }
   const blockers = candidateDependencyBlockers(
     candidateId,
@@ -992,8 +1014,9 @@ async function finishWhatsNextRun(
       (result.candidates.length !== 1 ||
         result.candidates[0]?.candidateId !== revisionTarget.candidateId)
     ) {
-      throw new Error(
+      throw new PublicApiError(
         'Refine must return exactly the requested Candidate identifier.',
+        400,
       );
     }
     const endedAt = new Date().toISOString();
@@ -1149,12 +1172,16 @@ async function saveUploadedResources(
   const resources: ContextWorkspaceInput[] = [];
   for (const file of files) {
     if (!/\.(md|markdown)$/i.test(file.name)) {
-      throw new Error(
+      throw new PublicApiError(
         "Only Markdown Resources can be added to a What's next Run.",
+        400,
       );
     }
     if (file.size > 2 * 1024 * 1024) {
-      throw new Error('Each Markdown Resource must be 2 MB or smaller.');
+      throw new PublicApiError(
+        'Each Markdown Resource must be 2 MB or smaller.',
+        400,
+      );
     }
     const fileName = chooseUniqueFileName(file.name, usedNames);
     const content = await file.text();
@@ -1215,26 +1242,28 @@ function validateRunRequest(input: RunRequest) {
     input.redoProposal &&
     (input.revisionRunId || input.revisionCandidateId || input.feedback?.length)
   )
-    throw new Error(
+    throw new PublicApiError(
       'Redo a proposal separately from single-Candidate refinement.',
+      400,
     );
   if (input.redoProposal && !input.instruction.trim())
-    throw new Error(
+    throw new PublicApiError(
       'Describe what the whole proposal misunderstood and what you want instead.',
+      400,
     );
   if (input.sourceNodeIds.length === 0) {
-    throw new Error('Select at least one origin Node.');
+    throw new PublicApiError('Select at least one origin Node.', 400);
   }
   if (input.sourceNodeIds.length > 10) {
-    throw new Error('Select no more than 10 origin Nodes.');
+    throw new PublicApiError('Select no more than 10 origin Nodes.', 400);
   }
   if (new Set(input.sourceNodeIds).size !== input.sourceNodeIds.length) {
-    throw new Error('Origin Nodes must be unique.');
+    throw new PublicApiError('Origin Nodes must be unique.', 400);
   }
   if (
     input.sourceNodeIds.some((nodeId) => !/^NODE-[0-9a-f]{8,32}$/.test(nodeId))
   ) {
-    throw new Error('An origin Node is invalid.');
+    throw new PublicApiError('An origin Node is invalid.', 400);
   }
   const instruction = input.instruction.trim();
   if (
@@ -1242,16 +1271,25 @@ function validateRunRequest(input: RunRequest) {
     !instruction &&
     (input.feedback?.length ?? 0) === 0
   ) {
-    throw new Error('Refine requires feedback or an Instruction.');
+    throw new PublicApiError(
+      'Refine requires feedback or an Instruction.',
+      400,
+    );
   }
   if (instruction.length > 1_000) {
-    throw new Error('The Instruction must be 1,000 characters or fewer.');
+    throw new PublicApiError(
+      'The Instruction must be 1,000 characters or fewer.',
+      400,
+    );
   }
   if (input.contextRefs.length > 50) {
-    throw new Error('Select no more than 50 additional Context Resources.');
+    throw new PublicApiError(
+      'Select no more than 50 additional Context Resources.',
+      400,
+    );
   }
   if (input.files.length > 20) {
-    throw new Error('Upload no more than 20 Markdown Resources.');
+    throw new PublicApiError('Upload no more than 20 Markdown Resources.', 400);
   }
   for (const feedback of input.feedback ?? []) {
     if (
@@ -1264,14 +1302,17 @@ function validateRunRequest(input: RunRequest) {
       !feedback.excerptHash ||
       !feedback.instruction.trim()
     ) {
-      throw new Error('Inline feedback is invalid.');
+      throw new PublicApiError('Inline feedback is invalid.', 400);
     }
   }
   if (
     (input.revisionRunId && !input.revisionCandidateId) ||
     (!input.revisionRunId && input.revisionCandidateId)
   ) {
-    throw new Error('A complete Candidate revision target is required.');
+    throw new PublicApiError(
+      'A complete Candidate revision target is required.',
+      400,
+    );
   }
 }
 
@@ -1282,12 +1323,16 @@ async function resolveRevisionTarget(
   if (!input.revisionRunId || !input.revisionCandidateId) return null;
   const run = await readWhatsNextRun(project, input.revisionRunId);
   if (run.result?.outcome !== 'proposal') {
-    throw new Error('The Candidate revision source is unavailable.');
+    throw new PublicApiError(
+      'The Candidate revision source is unavailable.',
+      400,
+    );
   }
   const candidate = run.result.candidates.find(
     (value) => value.candidateId === input.revisionCandidateId,
   );
-  if (!candidate) throw new Error('The Candidate revision target is invalid.');
+  if (!candidate)
+    throw new PublicApiError('The Candidate revision target is invalid.', 400);
   return { run, candidate };
 }
 
@@ -1318,8 +1363,9 @@ async function validateInlineFeedback(
       selfHash !== item.excerptHash ||
       !normalizeExcerpt(currentExcerpt).includes(normalizeExcerpt(item.excerpt))
     ) {
-      throw new Error(
+      throw new PublicApiError(
         'Inline feedback is stale. Reopen the current Candidate and select the text again.',
+        400,
       );
     }
   }
@@ -1440,7 +1486,7 @@ function chooseUniqueFileName(value: string, usedNames: Set<string>) {
       return fileName;
     }
   }
-  throw new Error('Could not choose a unique Run Resource name.');
+  throw new PublicApiError('Could not choose a unique Run Resource name.', 400);
 }
 
 function whatsNextRunPath(project: RegisteredProject, runId: string) {
@@ -1450,7 +1496,7 @@ function whatsNextRunPath(project: RegisteredProject, runId: string) {
 
 function validateRunId(runId: string) {
   if (!/^RUN-[0-9a-f-]{36}$/i.test(runId)) {
-    throw new Error("The What's next Run identifier is invalid.");
+    throw new PublicApiError("The What's next Run identifier is invalid.", 400);
   }
 }
 
@@ -1529,7 +1575,10 @@ async function writeWhatsNextCheckpoint(
 ) {
   if (!record.result) return;
   if (!/^SESSION-[0-9a-f-]{36}$/i.test(record.sessionId)) {
-    throw new Error("The What's Next Session identifier is invalid.");
+    throw new PublicApiError(
+      "The What's Next Session identifier is invalid.",
+      400,
+    );
   }
   const sessionPath = path.join(
     project.planningPath,

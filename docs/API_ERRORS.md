@@ -92,12 +92,27 @@ messages and extra fields still reach the client while unknown errors cannot.
 
 ## Choosing what is public
 
-The rule is positional, not editorial: an entry guard that rejects a value the user
-submitted is public; anything raised while doing the work is not. Wording is not
-evidence — a friendly-sounding message from a failed subprocess is still unknown.
+The rule is about what a message _contains_, not how it reads: **a throw whose message
+is a plain string literal is public; a throw that interpolates runtime values is not.**
 
-The safe default for an ordinary `Error` is the generic response. Adding a message to
-the public set is a deliberate act at the throw site.
+A string literal is text the author wrote. It cannot contain an absolute path, a
+filename, an identifier, a command line or a credential, because nothing is
+substituted into it. An interpolated message can, and those are exactly the ones this
+boundary exists to stop — `` `${fileName} is not a valid Task Graph node.` `` and
+`` `The selected source ${ref} could not be read.` `` stay unknown.
+
+This also preserves behaviour rather than expanding exposure. Before this change every
+caught message was forwarded, so these literals were already what the user saw. Keeping
+them public keeps validation actionable; the change is that interpolated and
+unrecognized errors stop being forwarded.
+
+Wording is not evidence either way. A friendly-sounding message produced by a failed
+subprocess is still unknown, because it is not a literal at a throw site in this
+codebase.
+
+Status codes follow the same principle. Routes used to derive 409 by matching the error
+text (`/already has an active Agent Run/`); the throw site now carries `409` and no
+Route inspects wording.
 
 ## Verification
 

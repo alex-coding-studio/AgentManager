@@ -140,8 +140,9 @@ export async function createStartNode(
     );
   }
   if (input.contextRefs.length + input.files.length === 0 && !idea) {
-    throw new Error(
+    throw new PublicApiError(
       'Write a starting idea, or select or upload at least one source document.',
+      400,
     );
   }
   if (input.contextRefs.length > 50) {
@@ -300,7 +301,7 @@ export async function updateStartNode(
     node.id !== input.id ||
     node.role !== 'start'
   ) {
-    throw new Error('The start node could not be edited.');
+    throw new PublicApiError('The start node could not be edited.', 400);
   }
 
   const contextRefs = await validateContextRefs(project, input.contextRefs);
@@ -325,8 +326,9 @@ export async function updateStartNode(
     !idea &&
     !ideaResource
   ) {
-    throw new Error(
+    throw new PublicApiError(
       'Write a starting idea, or select or upload at least one source document.',
+      400,
     );
   }
 
@@ -417,7 +419,7 @@ export async function deleteTaskGraphNode(
 
   const nodes = await listTaskGraphNodes(project, graphRoot);
   if (!nodes.some((node) => node.id === nodeId)) {
-    throw new Error('The node could not be found.');
+    throw new PublicApiError('The node could not be found.', 400);
   }
   assertTaskGraphNodeCanBeDeleted(nodes, nodeId);
 
@@ -456,7 +458,7 @@ export async function readTaskGraphMarkdownResource(
       resourcePath,
     )
   ) {
-    throw new Error('The source document path is invalid.');
+    throw new PublicApiError('The source document path is invalid.', 400);
   }
 
   const planningRoot = await realpath(project.planningPath);
@@ -464,7 +466,7 @@ export async function readTaskGraphMarkdownResource(
     path.resolve(project.planningPath, resourcePath),
   );
   if (!absolutePath.startsWith(`${planningRoot}${path.sep}`)) {
-    throw new Error('The source document path is invalid.');
+    throw new PublicApiError('The source document path is invalid.', 400);
   }
   return {
     fileName: path.basename(resourcePath),
@@ -482,11 +484,17 @@ async function validateContextRefs(project: RegisteredProject, refs: string[]) {
         ref,
       )
     ) {
-      throw new Error('A selected Context Library reference is invalid.');
+      throw new PublicApiError(
+        'A selected Context Library reference is invalid.',
+        400,
+      );
     }
     const absolutePath = path.resolve(project.planningPath, ref);
     if (!absolutePath.startsWith(`${contextRoot}${path.sep}`)) {
-      throw new Error('A selected Context Library reference is invalid.');
+      throw new PublicApiError(
+        'A selected Context Library reference is invalid.',
+        400,
+      );
     }
     try {
       await readFile(absolutePath, 'utf8');
@@ -506,19 +514,23 @@ function chooseUniqueName(baseName: string, usedNames: Set<string>) {
       return fileName;
     }
   }
-  throw new Error('Could not choose a unique source file name.');
+  throw new PublicApiError('Could not choose a unique source file name.', 400);
 }
 
 async function prepareUploads(files: File[]) {
   return Promise.all(
     files.map(async (file) => {
       if (!/\.(md|markdown)$/i.test(file.name)) {
-        throw new Error(
+        throw new PublicApiError(
           'Only Markdown source files can be uploaded right now.',
+          400,
         );
       }
       if (file.size > 2 * 1024 * 1024) {
-        throw new Error('Each Markdown source file must be 2 MB or smaller.');
+        throw new PublicApiError(
+          'Each Markdown source file must be 2 MB or smaller.',
+          400,
+        );
       }
       return {
         baseName: slugify(path.parse(path.basename(file.name)).name),

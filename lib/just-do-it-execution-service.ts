@@ -304,7 +304,7 @@ export function createExecutionService(
           );
         }
         if (result.stage !== 'execution')
-          throw new Error('Expected an execution response.');
+          throw new PublicApiError('Expected an execution response.', 400);
         const outputRef = reference(card, 'output.md');
         nextRun = {
           ...nextRun,
@@ -436,9 +436,12 @@ export function createExecutionService(
       typeof input.instruction !== 'string' ||
       input.instruction.length > 20000
     )
-      throw new Error('Invalid execution input.');
+      throw new PublicApiError('Invalid execution input.', 400);
     if (active.has(project.rootPath))
-      throw new Error('This project already has a running Action.');
+      throw new PublicApiError(
+        'This project already has a running Action.',
+        400,
+      );
     const reservation: Active = {
       id: randomUUID(),
       cardId: input.cardId,
@@ -451,7 +454,10 @@ export function createExecutionService(
       for (const item of cards) {
         const current = await refresh(project, item);
         if (current.execution?.runs.at(-1)?.status === 'running')
-          throw new Error('This project already has a running Action.');
+          throw new PublicApiError(
+            'This project already has a running Action.',
+            400,
+          );
       }
       let card = await store.read(project, input.cardId);
       if (card.revision !== input.expectedRevision)
@@ -460,7 +466,7 @@ export function createExecutionService(
           409,
         );
       if (card.run?.status === 'running')
-        throw new Error('Stop planning before executing.');
+        throw new PublicApiError('Stop planning before executing.', 400);
       const dependencyReview = await store.dependencyReview(project, card);
       if (dependencyReview.length)
         throw new Error(
@@ -841,10 +847,11 @@ export function createExecutionService(
     if (!run || run.id !== outputId)
       throw new PublicApiError('The current Action output changed.', 409);
     if (action === 'cancel') {
-      if (run.status !== 'running') throw new Error('No execution is running.');
+      if (run.status !== 'running')
+        throw new PublicApiError('No execution is running.', 400);
       const handle = active.get(project.rootPath);
       if (handle?.id !== run.id)
-        throw new Error('Execution is owned by another server.');
+        throw new PublicApiError('Execution is owned by another server.', 400);
       const saved = await commit(
         project,
         replaceRun(card, {
@@ -936,8 +943,9 @@ export function createExecutionService(
       }
     }
     if (action !== 'accept' || !hasReviewableReport(run) || !run.result)
-      throw new Error(
+      throw new PublicApiError(
         'A valid current Action report is required for acceptance.',
+        400,
       );
     if (
       !assessRequiredChecks(
@@ -946,15 +954,16 @@ export function createExecutionService(
         card.execution?.acceptanceOverrides?.[run.actionId],
       ).passed
     )
-      throw new Error(
+      throw new PublicApiError(
         'Required acceptance checks are incomplete or failed. Record an explicit user decision for any waived item.',
+        400,
       );
     const accepted = card.execution!.acceptedActionIds;
     if (
       card.actions.find((item) => !accepted.includes(item.id))?.id !==
       run.actionId
     )
-      throw new Error('Only the current Action can be accepted.');
+      throw new PublicApiError('Only the current Action can be accepted.', 400);
     const outputRef = reference(card, 'output.md');
     return commit(
       project,
@@ -989,8 +998,9 @@ export function createExecutionService(
       .filter((run): run is ActionRun => Boolean(run && !run.outputRef));
     if (!missing.length) return card;
     if (missing.some((run) => !hasReviewableReport(run)))
-      throw new Error(
+      throw new PublicApiError(
         'An accepted Action is missing its original report; restore the record before continuing.',
+        400,
       );
     const files: Record<string, string> = {};
     const refs = new Map<string, string>();
@@ -1046,13 +1056,15 @@ export function createExecutionService(
       card.execution?.runs.at(-1)?.status === 'running' ||
       card.execution?.acceptedActionIds.includes(actionId)
     )
-      throw new Error(
+      throw new PublicApiError(
         'Only a legacy unaccepted Action without a checklist can be upgraded.',
+        400,
       );
     validateAcceptanceCriteria(criteria);
     if (typeof note !== 'string' || !note.trim())
-      throw new Error(
+      throw new PublicApiError(
         'Record the explicit user authorization for this upgrade.',
+        400,
       );
     const upgrade = (item: typeof action) =>
       item.id === actionId
@@ -1087,7 +1099,8 @@ export function createExecutionService(
         409,
       );
     const workspace = card.execution?.workspace;
-    if (!workspace) throw new Error('This Card has no workspace yet.');
+    if (!workspace)
+      throw new PublicApiError('This Card has no workspace yet.', 400);
     await verifyCardWorkspace(workspace);
     const command =
       process.platform === 'darwin'
@@ -1098,7 +1111,10 @@ export function createExecutionService(
             ? 'xdg-open'
             : null;
     if (!command)
-      throw new Error('Opening the system file manager is unsupported.');
+      throw new PublicApiError(
+        'Opening the system file manager is unsupported.',
+        400,
+      );
     await promisify(execFile)(command, [workspace.path], { timeout: 10000 });
     return card;
   }
@@ -1124,8 +1140,9 @@ export function createExecutionService(
       active.has(project.rootPath) ||
       card.execution!.acceptedActionIds.includes(run.actionId)
     )
-      throw new Error(
+      throw new PublicApiError(
         'User decisions require a finished, unaccepted Round with a fixed checklist.',
+        400,
       );
     if (
       !run.acceptanceChecklist.items.some((item) => item.id === criterionId) ||
@@ -1133,8 +1150,9 @@ export function createExecutionService(
       !note.trim() ||
       note.length > 4000
     )
-      throw new Error(
+      throw new PublicApiError(
         'Select a required criterion and record the user decision.',
+        400,
       );
     const decision = {
       note,
@@ -1180,10 +1198,16 @@ export function createExecutionService(
         409,
       );
     if (card.execution?.runs.at(-1)?.status === 'running')
-      throw new Error('Wait for execution to finish before refreshing GitHub.');
+      throw new PublicApiError(
+        'Wait for execution to finish before refreshing GitHub.',
+        400,
+      );
     const run = card.execution?.runs.find((item) => item.id === outputId);
     if (!run?.github)
-      throw new Error('No captured GitHub delivery for this output.');
+      throw new PublicApiError(
+        'No captured GitHub delivery for this output.',
+        400,
+      );
     const github = await refreshGitHubDelivery(run.github, reader);
     return commit(
       project,
@@ -1219,8 +1243,9 @@ export function createExecutionService(
     assertCardUuid(cardId);
     assertCardUuid(outputId);
     if (active.has(project.rootPath))
-      throw new Error(
+      throw new PublicApiError(
         'Wait for project execution to finish before rechecking.',
+        400,
       );
     const reservation: Active = {
       id: randomUUID(),
@@ -1244,12 +1269,14 @@ export function createExecutionService(
         !run.evidenceErrors ||
         card.execution!.acceptedActionIds.includes(run.actionId)
       )
-        throw new Error(
+        throw new PublicApiError(
           'Only the latest unaccepted report rejected for evidence can be rechecked.',
+          400,
         );
       if (hasUnsupportedAppArtifact(run))
-        throw new Error(
+        throw new PublicApiError(
           'App bundle verification is unsupported. Retrying cannot resolve this until support is added.',
+          400,
         );
       if (card.execution?.workspace)
         await verifyCardWorkspace(card.execution.workspace);
@@ -1292,7 +1319,10 @@ export function createExecutionService(
         if (request && raw && recorded) break;
       }
       if (!request || !raw || !recorded)
-        throw new Error('Original report evidence is unavailable.');
+        throw new PublicApiError(
+          'Original report evidence is unavailable.',
+          400,
+        );
       if (JSON.stringify(card.plan) !== JSON.stringify(request.context.plan))
         throw new PublicApiError('Plan changed since this report.', 409);
       const current = await snapshotWorkspace(workingProject);
@@ -1308,8 +1338,9 @@ export function createExecutionService(
             ),
           )
       )
-        throw new Error(
+        throw new PublicApiError(
           'Workspace changed since this report. Rechecking cannot certify a different output.',
+          400,
         );
       let result;
       let versions: string[] = [];
@@ -1354,7 +1385,7 @@ export function createExecutionService(
         );
       }
       if (result.stage !== 'execution')
-        throw new Error('Expected an execution report.');
+        throw new PublicApiError('Expected an execution report.', 400);
       const github =
         run.github?.outputHead === recorded.head &&
         run.github.repositoryUrl === getGitHubRepositoryUrl(workingProject)
@@ -1419,7 +1450,10 @@ export function createExecutionService(
   ) {
     assertCardUuid(cardId);
     if (active.has(project.rootPath))
-      throw new Error('Stop project execution before resetting a Card.');
+      throw new PublicApiError(
+        'Stop project execution before resetting a Card.',
+        400,
+      );
     const reservation: Active = {
       id: randomUUID(),
       cardId,
@@ -1443,8 +1477,9 @@ export function createExecutionService(
         card.run?.status === 'running' ||
         !['failed', 'canceled', 'succeeded'].includes(last.status)
       )
-        throw new Error(
+        throw new PublicApiError(
           'Only unaccepted Cards with a completed Round can restart from their base.',
+          400,
         );
       await verifyCardWorkspace(workspace);
       const snapshot = await snapshotWorkspace(
@@ -1459,8 +1494,9 @@ export function createExecutionService(
           workspace.branch,
         );
         if (prs.some((pr) => pr.state === 'MERGED'))
-          throw new Error(
+          throw new PublicApiError(
             'This Card branch has a merged PR. Use a revert PR instead of a local restart.',
+            400,
           );
       }
       const token = createHash('sha256')
@@ -1541,7 +1577,7 @@ async function optionalRecordFile(file: string) {
   try {
     const stat = await lstat(file);
     if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 8000000)
-      throw new Error('Invalid recorded output file.');
+      throw new PublicApiError('Invalid recorded output file.', 400);
     return await readFile(file, 'utf8');
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;

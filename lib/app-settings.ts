@@ -1,3 +1,4 @@
+import { PublicApiError } from './api-errors.ts';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
@@ -61,7 +62,7 @@ export async function saveAppLanguage(
   home = settingsHome(),
 ): Promise<AppSettings> {
   if (!isUiLanguage(language))
-    throw new Error('Unsupported interface language.');
+    throw new PublicApiError('Unsupported interface language.', 400);
   return updateAppSettings({ language }, home);
 }
 
@@ -70,7 +71,7 @@ export async function updateAppSettings(
   home = settingsHome(),
 ): Promise<AppSettings> {
   if (!isSettingsPatch(patch))
-    throw new Error('Unsupported application settings.');
+    throw new PublicApiError('Unsupported application settings.', 400);
   const file = path.join(home, 'settings.json');
   const previous = writes.get(file) ?? Promise.resolve();
   const next = previous

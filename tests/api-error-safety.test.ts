@@ -249,8 +249,90 @@ void test('a rejected request creates no project and starts no Agent Run', async
   assert.equal((await registry.listProjects()).length, before + 1);
 });
 
+void test('environment-variable secret forms are redacted in Host diagnostics', () => {
+  const cases: Array<[string, string]> = [
+    ['DB_PASSWORD=hunter2', 'DB_PASSWORD=[redacted]'],
+    ['ACCESS_TOKEN=abc123secret', 'ACCESS_TOKEN=[redacted]'],
+    ['AWS_SECRET_ACCESS_KEY=secretvalue', 'AWS_SECRET_ACCESS_KEY=[redacted]'],
+    ['GITHUB_TOKEN=ghp_realistic_value_here', 'GITHUB_TOKEN=[redacted]'],
+    ['my_api_key: swordfish', 'my_api_key: [redacted]'],
+  ];
+  for (const [input, expected] of cases)
+    assert.equal(redactSecrets(input), expected, input);
+
+  const environmentDump =
+    'spawn gh ENOENT (env: PATH=/usr/bin GITHUB_TOKEN=ghp_abcdefghijklmnop DB_PASSWORD=hunter2 HOME=/Users/someone)';
+  const redacted = redactSecrets(environmentDump);
+  assert.ok(!redacted.includes('ghp_abcdefghijklmnop'));
+  assert.ok(!redacted.includes('hunter2'));
+  assert.ok(redacted.includes('spawn gh ENOENT'));
+  assert.ok(redacted.includes('PATH=/usr/bin'));
+});
+
+void test('a caught start-node guard keeps its exact actionable 400', async () => {
+  const registry = await import('../lib/project-registry.ts');
+  const root = await mkdtemp(path.join(os.tmpdir(), 'am-api-error-node-'));
+  const project = await registry.createProject({
+    kind: 'standalone',
+    name: 'guard probe',
+    description: '',
+    rootPath: root,
+  });
+  const { POST } =
+    await import('../app/api/projects/[projectId]/nodes/route.ts');
+  const body = new FormData();
+  body.set('title', 'A node with no source');
+
+  const response = await POST(
+    new Request('http://localhost:3000/api/nodes', {
+      method: 'POST',
+      headers: { host: LOCAL },
+      body,
+    }),
+    { params: Promise.resolve({ projectId: project.id }) },
+  );
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), {
+    error:
+      'Write a starting idea, or select or upload at least one source document.',
+  });
+});
+
+void test('a caught Run guard keeps its exact actionable 400', async () => {
+  const registry = await import('../lib/project-registry.ts');
+  const root = await mkdtemp(path.join(os.tmpdir(), 'am-api-error-run-'));
+  const project = await registry.createProject({
+    kind: 'standalone',
+    name: 'run guard probe',
+    description: '',
+    rootPath: root,
+  });
+  const { POST } =
+    await import('../app/api/projects/[projectId]/decomposition-runs/route.ts');
+  const body = new FormData();
+  body.set('sourceNodeId', 'NODE-abcdef12');
+  body.set('instruction', '');
+  body.set('agent', 'codex');
+
+  const response = await POST(
+    new Request('http://localhost:3000/api/run', {
+      method: 'POST',
+      headers: { host: LOCAL },
+      body,
+    }),
+    { params: Promise.resolve({ projectId: project.id }) },
+  );
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), {
+    error: 'An Instruction is required.',
+  });
+});
+
 const MESSAGE_READ = /\berror\s*\.\s*message\b/;
 const NARROWED = /instanceof\s+[A-Z]\w*Error/;
+const IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
 
 function catchBlocks(source: string) {
   const blocks: Array<{ line: number; body: string }> = [];
@@ -270,32 +352,99 @@ function catchBlocks(source: string) {
   return blocks;
 }
 
-function publishedErrorExpressions(body: string) {
-  return [...body.matchAll(/\berror\s*:\s*([^,}]+)/g)].map((m) => m[1]!.trim());
+function balancedArguments(body: string, openIndex: number) {
+  let depth = 0;
+  let index = openIndex;
+  while (index < body.length) {
+    if (body[index] === '(') depth += 1;
+    else if (body[index] === ')') {
+      depth -= 1;
+      if (depth === 0) return body.slice(openIndex + 1, index);
+    }
+    index += 1;
+  }
+  return body.slice(openIndex + 1);
+}
+
+function withoutStringContent(text: string) {
+  let result = '';
+  let index = 0;
+  while (index < text.length) {
+    const character = text[index]!;
+    if (character === "'" || character === '"') {
+      const end = text.indexOf(character, index + 1);
+      result += character.repeat(2);
+      index = end === -1 ? text.length : end + 1;
+      continue;
+    }
+    if (character === '`') {
+      let cursor = index + 1;
+      let template = '``';
+      while (cursor < text.length && text[cursor] !== '`') {
+        if (text[cursor] === '$' && text[cursor + 1] === '{') {
+          const close = text.indexOf('}', cursor);
+          template += text.slice(
+            cursor,
+            close === -1 ? text.length : close + 1,
+          );
+          cursor = close === -1 ? text.length : close + 1;
+          continue;
+        }
+        cursor += 1;
+      }
+      result += template;
+      index = cursor + 1;
+      continue;
+    }
+    result += character;
+    index += 1;
+  }
+  return result;
+}
+
+function publishedRegions(body: string) {
+  const regions: string[] = [];
+  for (const call of body.matchAll(
+    /(?:Response\.json|new Response|Response)\s*\(/g,
+  ))
+    regions.push(balancedArguments(body, call.index + call[0].length - 1));
+  for (const statement of body.matchAll(/\breturn\b([^;]*);/g))
+    regions.push(statement[1]!);
+  return regions;
+}
+
+function bindingFor(body: string, identifier: string) {
+  const binding = new RegExp(
+    `(?:const|let|var)\\s+${identifier}\\s*=([\\s\\S]*?);`,
+  ).exec(body);
+  return binding ? { text: binding[1]!, index: binding.index } : null;
+}
+
+function narrowedBefore(body: string, index: number) {
+  return NARROWED.test(body.slice(0, index));
 }
 
 function exposesUnknownMessage(body: string) {
-  const published = publishedErrorExpressions(body);
-  for (const expression of published) {
-    if (MESSAGE_READ.test(expression)) {
-      const preceding = body.slice(0, body.indexOf(expression));
-      if (!NARROWED.test(preceding)) return true;
-      continue;
+  for (const region of publishedRegions(body)) {
+    for (const usage of region.matchAll(MESSAGE_READ_GLOBAL)) {
+      const absolute = body.indexOf(region) + usage.index;
+      if (!narrowedBefore(body, absolute)) return true;
     }
-    const identifier = /^[A-Za-z_$][\w$]*$/.test(expression)
-      ? expression
-      : null;
-    if (!identifier) continue;
-    const binding = new RegExp(
-      `(?:const|let|var)\\s+${identifier}\\s*=([\\s\\S]*?);`,
-    ).exec(body);
-    if (binding && MESSAGE_READ.test(binding[1]!)) {
-      const preceding = body.slice(0, binding.index);
-      if (!NARROWED.test(preceding)) return true;
+    const code = withoutStringContent(region);
+    for (const token of code.matchAll(/[A-Za-z_$][\w$]*/g)) {
+      const identifier = token[0];
+      if (!IDENTIFIER.test(identifier)) continue;
+      const after = code.slice(token.index + identifier.length).trimStart();
+      if (after.startsWith('?')) continue;
+      const binding = bindingFor(body, identifier);
+      if (!binding || !MESSAGE_READ.test(binding.text)) continue;
+      if (!narrowedBefore(body, binding.index)) return true;
     }
   }
   return false;
 }
+
+const MESSAGE_READ_GLOBAL = /\berror\s*\.\s*message\b/g;
 
 function leakingHandlers(source: string, file = 'source') {
   return catchBlocks(source)
@@ -328,22 +477,85 @@ void test('no API catch block publishes an unknown error message', async () => {
   assert.deepEqual(findings, []);
 });
 
-void test('the leak assertion rejects a synthetic direct exposure', () => {
-  const direct = `export async function GET() {
+void test('the leak assertion rejects every direct publication form', () => {
+  const cases: Array<[string, string, number]> = [
+    [
+      'direct',
+      `export async function GET() {
   try {
     return Response.json({});
   } catch (error) {
     return Response.json({ error: error.message }, { status: 400 });
   }
-}`;
-  const ternary = `export async function POST() {
+}`,
+      1,
+    ],
+    [
+      'aliased',
+      `export async function POST() {
   try {
     return Response.json({});
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Could not act.';
     return Response.json({ error: message }, { status: 400 });
   }
-}`;
+}`,
+      1,
+    ],
+    [
+      'other-field',
+      `export async function PUT() {
+  try {
+    return Response.json({});
+  } catch (error) {
+    return Response.json({ error: 'Could not act.', detail: error.message });
+  }
+}`,
+      1,
+    ],
+    [
+      'raw-response',
+      `export async function DELETE() {
+  try {
+    return Response.json({});
+  } catch (error) {
+    return new Response(error.message, { status: 500 });
+  }
+}`,
+      1,
+    ],
+    [
+      'interpolated',
+      `export async function PATCH() {
+  try {
+    return Response.json({});
+  } catch (error) {
+    return new Response(\`Could not act: \${error.message}\`, { status: 500 });
+  }
+}`,
+      1,
+    ],
+    [
+      'interpolated-alias',
+      `export async function GET() {
+  try {
+    return Response.json({});
+  } catch (error) {
+    const detail = \`cause: \${error.message}\`;
+    return Response.json({ error: detail });
+  }
+}`,
+      1,
+    ],
+  ];
+
+  for (const [label, source, expected] of cases)
+    assert.equal(
+      leakingHandlers(source, label).length,
+      expected,
+      `${label} should be reported`,
+    );
+
   const narrowed = `export async function PATCH() {
   try {
     return Response.json({});
@@ -351,6 +563,17 @@ void test('the leak assertion rejects a synthetic direct exposure', () => {
     if (error instanceof NodeReferencedError)
       return Response.json({ error: error.message }, { status: 409 });
     return apiErrorResponse(error, 'Could not act.', 'PATCH /api/test');
+  }
+}`;
+  const decisionOnly = `export async function POST() {
+  try {
+    return Response.json({});
+  } catch (error) {
+    const cancelled =
+      error instanceof Error && error.message.toLowerCase().includes('cancel');
+    return Response.json({
+      error: cancelled ? 'Cancelled.' : 'Could not act.',
+    });
   }
 }`;
   const clean = `export async function DELETE() {
@@ -361,8 +584,7 @@ void test('the leak assertion rejects a synthetic direct exposure', () => {
   }
 }`;
 
-  assert.equal(leakingHandlers(direct, 'direct').length, 1);
-  assert.equal(leakingHandlers(ternary, 'ternary').length, 1);
   assert.deepEqual(leakingHandlers(narrowed, 'narrowed'), []);
+  assert.deepEqual(leakingHandlers(decisionOnly, 'decision-only'), []);
   assert.deepEqual(leakingHandlers(clean, 'clean'), []);
 });
