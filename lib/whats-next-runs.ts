@@ -69,6 +69,13 @@ import {
   readTaskGraphMarkdownResource,
   type TaskGraphNode,
 } from './task-graph.ts';
+import {
+  assertWhatsNextIntention,
+  assertWhatsNextMotion,
+  intentionDestination,
+  type WhatsNextIntention,
+  type WhatsNextMotion,
+} from './whats-next-intention.ts';
 
 const GRAPH_ROOT = 'whats-next' as const;
 
@@ -97,6 +104,8 @@ export type WhatsNextRunRecord = {
   agentSessionMode?: 'persistent';
   sourceNodeIds: string[];
   operation: 'explore' | 'refine-candidate';
+  intention: WhatsNextIntention;
+  motion: WhatsNextMotion;
   parentRunId?: string;
   revisionOf?: string;
   replacement?: ProposalReplacement;
@@ -114,6 +123,8 @@ export type WhatsNextRunRecord = {
     resourcePaths: string[];
     feedback: WhatsNextFeedbackAnchor[];
     requestArtifact: 'request.json';
+    intention: WhatsNextIntention;
+    motion: WhatsNextMotion;
   };
   inputFingerprint: string;
   startedAt: string;
@@ -147,6 +158,8 @@ type RunRequest = {
   revisionRunId?: string;
   revisionCandidateId?: string;
   redoProposal?: boolean;
+  intention?: WhatsNextIntention;
+  motion?: WhatsNextMotion;
 };
 
 type ActiveRun = { record: WhatsNextRunRecord; agent: LocalAgentRun };
@@ -167,6 +180,8 @@ async function startWhatsNextRunUnlocked(
   input: RunRequest,
 ) {
   validateRunRequest(input);
+  const intention = input.intention ?? 'mvp-exploration';
+  const motion = input.motion ?? 'diverge';
   const profile: AgentProfile = {
     agent: input.agent,
     model: input.model ?? '',
@@ -183,6 +198,19 @@ async function startWhatsNextRunUnlocked(
     if (!node) throw new Error(`${nodeId} could not be found.`);
     return node;
   });
+  if (
+    sourceNodes.some((node) => node.role === 'start') &&
+    sourceNodes.length !== 1
+  )
+    throw new Error('A Source must be selected by itself.');
+  if (
+    intention === 'feature-synthesis' &&
+    sourceNodes.some(
+      (node) =>
+        node.role !== 'start' && (node.layer ?? 'discovery') !== 'discovery',
+    )
+  )
+    throw new Error('Feature Synthesis currently accepts Discovery sources.');
   const revisionTarget = await resolveRevisionTarget(project, input);
   if (revisionTarget && input.feedback?.length) {
     await validateInlineFeedback(project, revisionTarget, input.feedback);
@@ -196,7 +224,9 @@ async function startWhatsNextRunUnlocked(
     !redo &&
     coordinatorCandidate &&
     canReuseWhatsNextSession(coordinatorCandidate, transport) &&
-    sameModelSelection(coordinatorCandidate.profile, profile)
+    sameModelSelection(coordinatorCandidate.profile, profile) &&
+    coordinatorCandidate.intention === intention &&
+    coordinatorCandidate.motion === motion
       ? coordinatorCandidate
       : null;
   const continuesExistingSession = Boolean(coordinatorRun?.agentSessionId);
@@ -209,7 +239,9 @@ async function startWhatsNextRunUnlocked(
             coordinatorRun?.result?.reflection.continuationAdvice
               .recommendedFocus,
           )
-        : 'Explore the most useful next directions from the selected origin.');
+        : intention === 'feature-synthesis'
+          ? 'Synthesize the selected Discovery evidence into useful Product Features.'
+          : 'Explore useful MVP directions from the selected origin.');
   const reservedCandidateIds = await collectReservedCandidateIds(project);
   if (
     [...activeRuns.values()].some(
@@ -313,6 +345,9 @@ async function startWhatsNextRunUnlocked(
   const packet = {
     request: requestIdentity,
     operation,
+    intention,
+    motion,
+    destination: intentionDestination(intention),
     proposalCorrection: redo
       ? {
           intent:
@@ -351,8 +386,8 @@ async function startWhatsNextRunUnlocked(
   const prompt =
     continuesExistingSession &&
     coordinatorRun?.harness.revision === WHATS_NEXT_HARNESS_REVISION
-      ? buildWhatsNextContinuationPrompt(packet)
-      : buildWhatsNextPrompt(packet);
+      ? buildWhatsNextContinuationPrompt(packet, intention, motion)
+      : buildWhatsNextPrompt(packet, intention, motion);
   const timestamp = new Date().toISOString();
   await writeFile(
     path.join(runPath, 'request.json'),
@@ -372,6 +407,8 @@ async function startWhatsNextRunUnlocked(
     agentSessionMode: 'persistent',
     sourceNodeIds: input.sourceNodeIds,
     operation,
+    intention,
+    motion,
     parentRunId: coordinatorCandidate?.runId,
     revisionOf: revisionTarget?.candidate.candidateId,
     replacement: redo
@@ -394,6 +431,8 @@ async function startWhatsNextRunUnlocked(
       resourcePaths: resources.map((resource) => resource.logicalPath),
       feedback: input.feedback ?? [],
       requestArtifact: 'request.json',
+      intention,
+      motion,
     },
     inputFingerprint: requestIdentity.inputFingerprint,
     startedAt: timestamp,
@@ -466,7 +505,17 @@ export async function readWhatsNextRun(
   }
   stored.operation ??= stored.revisionOf ? 'refine-candidate' : 'explore';
   const record = stored as WhatsNextRunRecord;
+  record.intention ??= 'mvp-exploration';
+  record.motion ??= 'diverge';
+  if (record.input) {
+    record.input.intention ??= record.intention;
+    record.input.motion ??= record.motion;
+  }
   if (record.result?.outcome === 'proposal') {
+    for (const candidate of record.result.candidates) {
+      candidate.layer ??= 'discovery';
+      candidate.artifactKind ??= 'direction';
+    }
     record.result.candidates = await readIdentifiedEntities(
       project.planningPath,
       GRAPH_ROOT,
@@ -578,6 +627,8 @@ export async function recoverWhatsNextRunResult(
           ? []
           : await collectReservedCandidateIds(project),
       knownCandidates: await collectLatestUnacceptedCandidates(project),
+      intention: record.intention,
+      motion: record.motion,
     },
     parseWhatsNextHarnessResult,
     revisionTarget ?? undefined,
@@ -690,6 +741,8 @@ async function acceptWhatsNextCandidateUnlocked(
       relations: candidate.relations,
       role: 'node',
       type: candidate.type,
+      layer: candidate.layer,
+      artifactKind: candidate.artifactKind,
       title: candidate.title,
       summary: candidate.summary,
       status: 'accepted',
@@ -881,6 +934,8 @@ async function finishWhatsNextRun(
         operation: record.operation,
         revisionCandidateId: revisionTarget?.candidateId,
         revisionTarget,
+        intention: record.intention,
+        motion: record.motion,
       },
       parseWhatsNextHarnessResult,
       revisionTarget,
@@ -1065,6 +1120,9 @@ function graphMapEntry(node: TaskGraphNode) {
     relations: node.relations,
     role: node.role,
     type: node.type,
+    layer: node.layer ?? 'discovery',
+    artifactKind:
+      node.artifactKind ?? (node.role === 'start' ? 'source' : 'direction'),
     title: node.title,
     summary: node.summary ?? '',
     derivedFrom: node.derivedFrom ?? [],
@@ -1087,6 +1145,8 @@ async function writeRunRecord(
 }
 
 function validateRunRequest(input: RunRequest) {
+  assertWhatsNextIntention(input.intention ?? 'mvp-exploration');
+  assertWhatsNextMotion(input.motion ?? 'diverge');
   if (
     input.redoProposal &&
     (input.revisionRunId || input.revisionCandidateId || input.feedback?.length)

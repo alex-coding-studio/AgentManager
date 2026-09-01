@@ -52,7 +52,9 @@ export function TaskGraphCanvas({
   plusLabel,
   edgeAlignedOverlays = false,
   readOnly = false,
+  selectionEnabled = false,
   onMultiSelect,
+  onToggleSelection,
   onFocusNode,
   onInspectNode,
   onSelectPreview,
@@ -67,7 +69,9 @@ export function TaskGraphCanvas({
   plusLabel?: string;
   edgeAlignedOverlays?: boolean;
   readOnly?: boolean;
+  selectionEnabled?: boolean;
   onMultiSelect?: (nodeId: string) => void;
+  onToggleSelection?: (nodeId: string) => void;
   onFocusNode: (nodeId: string) => void;
   onInspectNode: (nodeId: string) => void;
   onSelectPreview: (previewId: string) => void;
@@ -101,6 +105,8 @@ export function TaskGraphCanvas({
         selectionKey ? selectionKey.split(',') : [],
         plusLabel,
         readOnly,
+        selectionEnabled,
+        onToggleSelection,
       ),
     [
       focusedNodeId,
@@ -114,6 +120,8 @@ export function TaskGraphCanvas({
       previews,
       selectionKey,
       readOnly,
+      selectionEnabled,
+      onToggleSelection,
     ],
   );
   const [flowNodes, setFlowNodes, onNodesChange] = useNodesState(graph.nodes);
@@ -294,6 +302,8 @@ function buildFlowGraph(
   selectedNodeIds: string[] = [],
   plusLabel?: string,
   readOnly = false,
+  selectionEnabled = false,
+  onToggleSelection?: (nodeId: string) => void,
 ) {
   const layout = buildTaskGraphLayout(nodes, previews);
   const focusedNodeId =
@@ -353,7 +363,9 @@ function buildFlowGraph(
             ? transientColor(preview)
             : nodeTypeColor(node?.type ?? 'node')),
         selectedForRun: selectedIds.has(layoutNode.id),
+        selectionEnabled: selectionEnabled && layoutNode.kind === 'formal',
         plusLabel,
+        onToggleSelection: onToggleSelection ?? (() => {}),
         onDecompose,
         onInspect,
         onCancelRun,

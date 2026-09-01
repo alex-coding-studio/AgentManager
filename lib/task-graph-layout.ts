@@ -27,6 +27,7 @@ export type TaskGraphPreview = GraphIdentityFields & {
   previousMarkdown?: string;
   runId?: string;
   revisionOf?: string;
+  layer?: 'discovery' | 'product-design';
 };
 
 export type TaskGraphLayoutNode = {

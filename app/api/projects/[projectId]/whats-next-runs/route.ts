@@ -28,6 +28,8 @@ export async function POST(
     const revisionRunId = formData.get('revisionRunId');
     const revisionCandidateId = formData.get('revisionCandidateId');
     const redoProposal = formData.get('redoProposal') === 'true';
+    const intention = formData.get('intention');
+    const motion = formData.get('motion');
     const feedbackValue = formData.get('feedback');
     const sourceNodeIds = formData
       .getAll('sourceNodeIds')
@@ -62,6 +64,14 @@ export async function POST(
       files,
       feedback,
       redoProposal,
+      intention:
+        typeof intention === 'string' && intention
+          ? (intention as 'mvp-exploration' | 'feature-synthesis')
+          : undefined,
+      motion:
+        typeof motion === 'string' && motion
+          ? (motion as 'diverge' | 'converge')
+          : undefined,
       revisionRunId:
         typeof revisionRunId === 'string' && revisionRunId
           ? revisionRunId

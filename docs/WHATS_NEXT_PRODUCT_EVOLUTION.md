@@ -1,7 +1,8 @@
 # What’s Next Product Evolution
 
-Status: product and architecture proposal. This document preserves the agreed direction
-before implementation. It does not change the current What’s Next Harness or graph data.
+Status: Phase 1 implementation. Discovery and Product Design projections, MVP Exploration,
+Feature Synthesis, Diverge and Converge form the first delivered slice. Domain Model and
+Break It Down reuse remain future directions.
 
 ## Problem
 
@@ -82,11 +83,6 @@ Discovery node kinds may include:
 - Hypothesis
 - MVP
 - Validated Finding
-- Feature
-- Module
-
-An MVP does not have to remain a short sentence. Several validated MVP nodes may converge
-into a detailed Feature node while remaining in Discovery.
 
 Example:
 
@@ -95,20 +91,13 @@ Product Source
 ├── Exact-search MVP
 ├── Container-note-search MVP
 ├── Entry-independent-search MVP
-└── Unified Search Feature
+└── other validated search experiments
 ```
 
-The Unified Search Feature can carry rich Markdown describing:
-
-- the user problem;
-- evidence from each prototype;
-- why the capability belongs in the product;
-- boundaries and excluded experiments;
-- interactions with already validated features;
-- unresolved assumptions.
-
 Discovery is therefore an organized product-learning space, not merely a collection of
-small disposable cards.
+small disposable cards. A formal Feature is generated directly in Product Design; an
+intermediate Discovery Feature would only add another translation step without adding
+meaning.
 
 ## Product Design Layer
 
@@ -125,18 +114,18 @@ Product Source
 └── Correction Product Design
 ```
 
-A Product Design node may be generated from one or more validated Discovery nodes by a
-dedicated Product Design intent and Skill. It is a new node, not a moved or retyped
-Discovery node.
+A Product Design Feature may be generated directly from one or more validated Discovery
+nodes by Feature Synthesis. It is a new node, not a moved or retyped Discovery node, and it
+does not require an intermediate Discovery Feature.
 
 The global graph retains provenance:
 
 ```json
 {
   "layer": "product-design",
-  "artifactKind": "design-doc",
+  "artifactKind": "feature",
   "productRoot": "source-uid",
-  "derivedFrom": ["discovery-feature-uid"]
+  "derivedFrom": ["discovery-mvp-uid-1", "discovery-mvp-uid-2"]
 }
 ```
 
@@ -212,16 +201,12 @@ leaving storage technology open until a material choice actually matters.
 Intention determines the semantic goal, destination Layer and output artifact kind. It is
 selected per Run; the project does not have one globally locked maturity phase.
 
-Initial What’s Next intentions should include:
+The first What’s Next intentions are:
 
-| Intention                      | Destination    | Typical output                     |
-| ------------------------------ | -------------- | ---------------------------------- |
-| Prototype exploration          | Discovery      | MVPs or experience hypotheses      |
-| Product hypothesis exploration | Discovery      | user/value assumptions             |
-| Feature synthesis              | Discovery      | one validated Feature or Module    |
-| Product Design                 | Product Design | one formal Product Design document |
-| Domain Model exploration       | Domain Model   | alternative concepts or models     |
-| Domain Model synthesis         | Domain Model   | one accepted conceptual model      |
+| Intention         | Destination    | Typical output                                 |
+| ----------------- | -------------- | ---------------------------------------------- |
+| MVP Exploration   | Discovery      | concrete MVPs for product-value discussion     |
+| Feature Synthesis | Product Design | lightweight, rich Product Design Feature nodes |
 
 Document synthesis may later create a Product Context candidate, but direct repository
 document writes remain outside What’s Next.
@@ -248,11 +233,8 @@ destination Layer.
 Examples:
 
 ```text
-Several MVPs + Feature synthesis + Converge
-→ one Discovery Feature
-
-Several Discovery Features + Product Design + Converge
-→ one Product Design document
+Several MVPs + Feature Synthesis + Converge
+→ one Product Design Feature
 
 Several MVPs + Domain Model synthesis + Converge
 → one Domain Model proposal
@@ -298,10 +280,10 @@ inventing near-duplicates solely because Append was requested.
 
 ## Canvas interaction
 
-The What’s Next Canvas uses a Layer switcher:
+The first What’s Next Canvas uses a Layer switcher:
 
 ```text
-[Discovery] [Product Design] [Domain Model]
+[Discovery] [Product Design]
 ```
 
 The global Source remains visible in every Layer. The rest of the rendered nodes and
@@ -318,9 +300,15 @@ Selecting the portal switches Layer and highlights the referenced nodes. An opti
 Overview may later show a read-only high-level cross-Layer projection, but it is not the
 default work surface.
 
-A temporary selection basket supports cross-Layer synthesis. Users can select nodes in one
-Layer, switch Layer, add more sources, then choose Intention and Motion. The generated
-artifact is placed in the destination owned by Intention.
+The node plus action is replaced in What’s Next by a persistent check-mark control. Single
+and multiple selections use the same fixed bottom-right action card. The card owns optional
+guidance, Intention, Motion and Agent settings. The generated artifact is placed in the
+destination owned by Intention.
+
+Source is the shared anchor and has an exclusive selection rule: it may be selected only by
+itself and cannot be combined with another node. Repeated Runs from Source, including the
+same Intention, append new meaning rather than replacing earlier nodes. Redo remains the
+explicit replacement operation.
 
 ## Relationship semantics
 
@@ -465,26 +453,29 @@ Delivered:
 - explicit prerequisite versus conceptual-source decisions;
 - deletion of an unconfirmed Just Do It Card through system Trash.
 
-### Phase 1: neutral What’s Next request model
+### Phase 1: Discovery and Product Design slice
 
 - add Intention, Motion and Append/Redo/Refine/Converge operations;
 - remove prototype-only wording from the Core Harness;
 - make output cardinality depend on Motion;
-- preserve backward compatibility by treating existing nodes as Discovery directions.
+- preserve backward compatibility by treating existing nodes as Discovery directions;
+- provide MVP Exploration and Feature Synthesis profiles;
+- generate Product Design Features directly from Discovery evidence;
+- replace node plus actions with persistent check-mark selection and one fixed action card;
+- keep Source selection exclusive and repeated Source exploration additive.
 
-### Phase 2: Layer projections and Product Anchor
+### Phase 2: broader Layer projections and Product Anchor
 
 - introduce global Source identity and Layer metadata;
-- render Discovery, Product Design and Domain Model projections;
+- extend Discovery and Product Design projections when dogfooding supports it;
+- consider Domain Model as a separate projection only after concrete use earns it;
 - retain separate layout state per Layer;
 - show cross-Layer provenance through compact portals;
 - add the cross-Layer selection basket.
 
-### Phase 3: Product Design and Domain Model profiles
+### Phase 3: optional Domain Model profiles
 
 - add intent-specific Harness profiles and Skills;
-- support rich Feature convergence inside Discovery;
-- support Discovery-to-Product-Design translation;
 - support Domain Model divergence and convergence;
 - persist artifact kind and execution-readiness metadata.
 
@@ -502,9 +493,9 @@ Delivered:
 The following remain intentionally unresolved for focused follow-up discussion:
 
 1. Final user-facing Intention labels and how many appear in the first release.
-2. Whether Product Design defaults to one document per Feature or supports one whole-product
-   Design Doc from the start.
-3. Whether Domain concepts always use individual nodes or may remain one aggregate proposal
+2. Whether a later Product Design intention should support one whole-product Design Doc in
+   addition to Feature Synthesis.
+3. Whether future Domain concepts use individual nodes or may remain one aggregate proposal
    before convergence.
 4. How the cross-Layer selection basket behaves when source nodes conflict.
 5. Which concrete conditions trigger a lightweight Implementation Approach instead of
@@ -518,7 +509,8 @@ The redesign is successful when:
 - one Source can append several non-duplicative explorations under different intentions;
 - Diverge yields several useful alternatives and Converge yields exactly one honest
   aggregate;
-- a validated Discovery Feature can become a rich but visually simple Product Design node;
+- selected Discovery evidence can become a rich but visually simple Product Design Feature
+  without an intermediate translation node;
 - Domain Model explains concepts without prematurely choosing storage technology;
 - straightforward personal-app work reaches execution without a mandatory technical-design
   document;

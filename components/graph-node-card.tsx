@@ -1,6 +1,14 @@
 'use client';
 
-import { GitFork, Info, LoaderCircle, Plus, X } from 'lucide-react';
+import {
+  CheckSquare2,
+  GitFork,
+  Info,
+  LoaderCircle,
+  Plus,
+  Square,
+  X,
+} from 'lucide-react';
 import { useUiText } from '@/components/ui-language-provider';
 import { cn } from '@/lib/utils';
 import { graphCardLabel } from '@/lib/graph-identity';
@@ -26,8 +34,10 @@ export type GraphNodeCardData = Record<string, unknown> & {
   dependenciesFocused?: boolean;
   onFocusDependencies: (nodeId: string) => void;
   selectedForRun?: boolean;
+  selectionEnabled?: boolean;
   plusLabel?: string;
   onDecompose: (nodeId: string) => void;
+  onToggleSelection: (nodeId: string) => void;
   onInspect: (nodeId: string) => void;
   onCancelRun: (runId: string) => void;
 };
@@ -96,6 +106,28 @@ export function GraphNodeCard({
           {running ? runningLabel : data.type}
         </span>
         <span className="flex shrink-0 items-center gap-1.5">
+          {data.selectionEnabled ? (
+            <button
+              type="button"
+              className="nodrag nopan grid size-8 shrink-0 place-items-center rounded-full text-muted-foreground transition hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
+              aria-label={
+                data.selectedForRun
+                  ? t('Remove {title} from selection', { title: data.title })
+                  : t('Select {title}', { title: data.title })
+              }
+              aria-pressed={Boolean(data.selectedForRun)}
+              onClick={(event) => {
+                event.stopPropagation();
+                data.onToggleSelection(id);
+              }}
+            >
+              {data.selectedForRun ? (
+                <CheckSquare2 className="size-4 text-violet-600" />
+              ) : (
+                <Square className="size-4" />
+              )}
+            </button>
+          ) : null}
           {data.relationshipCount > 0 ? (
             <button
               type="button"
@@ -177,7 +209,7 @@ export function GraphNodeCard({
           {graphCardLabel(id)}
         </span>
       </div>
-      {!preview && !data.readOnly ? (
+      {!preview && !data.readOnly && !data.selectionEnabled ? (
         <button
           type="button"
           className={cn(

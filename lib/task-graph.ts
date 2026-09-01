@@ -17,11 +17,11 @@ import {
   readIdentifiedEntities,
   reserveNodeIdentity,
 } from './graph-identity-store.ts';
-import type { RegisteredProject } from '@/lib/project-registry';
+import type { RegisteredProject } from './project-registry.ts';
 import {
   assertCanvasCanCreateStartNode,
   assertTaskGraphNodeCanBeDeleted,
-} from '@/lib/task-graph-rules';
+} from './task-graph-rules.ts';
 
 export type GraphRoot = 'task-graph' | 'whats-next';
 
@@ -50,6 +50,8 @@ export type TaskGraphNode = GraphIdentityFields & {
   dependsOn: string[];
   typeTemplateRef: string;
   metadata: Record<string, unknown>;
+  layer?: 'discovery' | 'product-design';
+  artifactKind?: string;
   presentation?: {
     color?: string;
   };
@@ -80,8 +82,9 @@ export async function listTaskGraphNodes(
 
   const nodes = await Promise.all(
     fileNames.map(async (fileName) => {
+      const nodeFile = path.join(nodesPath, fileName, 'node.json');
       const node = JSON.parse(
-        await readFile(path.join(nodesPath, fileName, 'node.json'), 'utf8'),
+        await readFile(nodeFile, 'utf8'),
       ) as TaskGraphNode;
       if (
         node.schemaVersion !== 1 ||
@@ -94,6 +97,15 @@ export async function listTaskGraphNodes(
         !Array.isArray(node.resources)
       ) {
         throw new Error(`${fileName} is not a valid Task Graph node.`);
+      }
+      if (graphRoot === 'whats-next' && (!node.layer || !node.artifactKind)) {
+        node.layer ??= 'discovery';
+        node.artifactKind ??= node.role === 'start' ? 'source' : 'direction';
+        const temporary = `${nodeFile}.${randomUUID()}.tmp`;
+        await writeFile(temporary, `${JSON.stringify(node, null, 2)}\n`, {
+          flag: 'wx',
+        });
+        await rename(temporary, nodeFile);
       }
       return node;
     }),
@@ -198,6 +210,8 @@ export async function createStartNode(
       dependsOn: [],
       typeTemplateRef: id,
       metadata: {},
+      layer: graphRoot === 'whats-next' ? 'discovery' : undefined,
+      artifactKind: graphRoot === 'whats-next' ? 'source' : undefined,
       presentation: {
         color: '#525252',
       },
