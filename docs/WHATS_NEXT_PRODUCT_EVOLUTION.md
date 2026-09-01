@@ -302,6 +302,11 @@ and multiple selections use the same fixed bottom-right action card. The card ow
 guidance, Intention, Motion and Agent settings. The generated artifact is placed in the
 destination owned by Intention.
 
+The top-left Latest Response follows the shared
+[Latest Response presentation contract](LATEST_RESPONSE.md). Ordinary results remain quiet;
+clarification, decision-required, warning and error outcomes communicate their state in the
+collapsed row and use the shared attention behavior.
+
 Source is the shared anchor and has an exclusive selection rule: it may be selected only by
 itself and cannot be combined with another node. Repeated Runs from Source, including the
 same Intention, append new meaning rather than replacing earlier nodes. Redo remains the

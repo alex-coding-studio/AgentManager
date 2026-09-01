@@ -19,15 +19,14 @@ The module answers questions such as:
 - What changes when an Item moves, is deleted or is restored?
 - Which relationships are explicit product facts and which are derived from other facts?
 
-It is useful when Product Design is clear enough to name capabilities but implementation
-still lacks stable concepts and relationships. It remains optional. Straightforward work
-may continue directly to Break It Down or Just Do It.
+It is useful when the user wants to make product concepts and relationships explicit. It
+remains optional; a project does not need a Domain Model merely to look complete.
 
 ## Independent module boundary
 
-What’s That? is not a Domain Layer inside What’s Next. The two modules share product
-context, stable identity, Agent transport, run observability and local versioning
-mechanisms, but their work surfaces have different semantics.
+What’s That? is not a Domain Layer inside What’s Next. The two modules may share stable
+identity, Agent transport, run observability and local versioning mechanisms, but their
+content and work surfaces have different semantics.
 
 What’s Next uses Source-oriented product exploration, Intention, Motion and generated
 Cards. What’s That? uses entities, fields, relationships, constraints and a continuously
@@ -37,19 +36,17 @@ Layer switching, Diverge or Converge.
 The user-facing module name is `What’s That?`. Internal paths and code use `domain-model`
 so storage and implementation terminology remain precise.
 
-## Product context
+## Standalone context boundary
 
-The Product Source and accepted Product Design Features are implicit primary context for
-the Agent. Source is provenance, not a visible root Entity. It is hidden from the model
-Canvas by default and available through a compact context disclosure.
+The first slice treats What’s That? as an independent Data Model module. It does not require
+What’s Next, Product Design, Break It Down or Just Do It, and it does not render or import
+their Nodes. The required Context is the user's current Instruction and the current Domain
+Model. A project may begin with an empty model.
 
-The Domain Canvas displays domain objects and domain relationships only. It does not draw
-Source-to-Entity edges or reproduce the Product Design tree. A details surface may show
-which Source, Features, instructions and prior revisions informed an element.
-
-A project with only a Source may still use What’s That? when the user supplies a concrete
-modeling instruction. A vague Source alone must not cause the Agent to manufacture a
-complete schema.
+Cross-module inputs and handoffs remain future possibilities rather than first-slice
+behavior. The persisted model keeps stable identities and revisions so another module may
+consume it later without requiring a storage migration, but no workflow or dependency is
+promised now.
 
 ## Living current model
 
@@ -71,6 +68,18 @@ Only runtime state is transient:
 One operation applies atomically. A failed, canceled, stale or ambiguous result must not
 leave partial Entities, fields, relationships or layout changes.
 
+## Latest Response
+
+The top-left response surface follows the shared
+[Latest Response presentation contract](LATEST_RESPONSE.md). Ordinary applied and no-change
+results remain quiet. Clarification, decision-required, warning and error outcomes expose
+their state in the collapsed row and use the shared attention behavior.
+
+For an applied model revision, the expanded response summarizes added, updated, removed and
+derived Entities, relationships and Constraints, plus any change outside the selected
+discussion boundary. It may offer `Undo this change`. The provider's raw response and
+private chain-of-thought are never presented as the model change summary.
+
 ## Domain elements
 
 The canonical model begins with three concepts rather than a complete UML vocabulary.
@@ -90,12 +99,11 @@ infers to keep identity, persistence or lifecycle coherent.
 
 ```text
 Item
-├── Primary fields
-│   ├── title: required text
-│   ├── note: optional text
-│   └── photos: zero or more attachments
-├── Other fields · 2                     collapsed
-└── System fields                        hidden
+├── title: required text
+├── note: optional text
+├── photos: zero or more attachments
+├── id: stable identity
+└── createdAt: creation time when justified
 ```
 
 The Agent must not add a generic template of `id`, `createdAt`, `updatedAt`, soft-delete,
@@ -106,10 +114,11 @@ Field data rules and display importance are separate. A field may be optional bu
 primary because the user cares about it. A technically required field may remain hidden
 because the Host owns it rather than the product experience.
 
-- primary business fields appear directly on the Entity card;
-- secondary business fields appear under one collapsed `Other fields · N` row;
+- primary business fields appear first in the Entity property panel;
+- secondary business fields appear under one collapsed `Other fields · N` section in that
+  panel;
 - system fields such as stable IDs, schema revision and storage coordination remain hidden
-  from the normal card and do not contribute to the secondary-field count.
+  from the ordinary UI and do not contribute to the secondary-field count.
 
 The Agent assigns display importance from the user's language and current product meaning.
 The user may correct that judgment in natural language, for example, "Quantity is important;
@@ -117,10 +126,18 @@ show it as a primary Item field." The user does not maintain a presentation sche
 
 ### Relationship
 
-A Relationship has stable identity, two Entity endpoints, a semantic name, direction,
-optional inverse name, cardinality and relevant lifecycle or ownership rules. Relationship
-vocabulary is open-ended but common meanings include `is-a`, `contains`, `references`,
-`owns`, `produces` and `affects`.
+A Relationship has stable identity, two Entity endpoints, a concise text label, optional
+direction, cardinality and relevant lifecycle or ownership rules. The visible vocabulary is
+open-ended. The Agent chooses the shortest phrase that makes the relationship read clearly,
+such as `is a`, `contains`, `belongs to`, `records`, `attached to` or `located in`.
+
+The Harness does not expose a closed relationship-type picker. A broad internal semantic
+role may support mechanical validation such as inheritance-cycle or containment-cycle
+checks, but it does not constrain the visible wording. A user may ask the Agent to replace
+`manages` with the more precise `contains` without recreating the relationship identity.
+
+Labels prefer one to four words, express one relationship, avoid repeating Entity names and
+leave reasons, conditions and lifecycle detail to the property panel or Constraints.
 
 The relationship stores whether its meaning came directly from user instruction or was
 derived from current canonical model facts. This is provenance, not an acceptance state.
@@ -198,10 +215,11 @@ one operation and must not add nominal Entities merely to make the Canvas look c
 
 ## Entity editing
 
-Selecting an Entity opens details with its business description, primary and secondary
-business fields, relationships and constraints. The primary edit control remains natural
-language rather than a database property grid. System fields are not part of the ordinary
-details surface.
+Selecting an Entity's details control opens the established property panel pattern used by
+the other graph modules. The panel owns the Entity meaning, primary fields, collapsed
+secondary fields, relationships, constraints, provenance and revision. The Canvas Card does
+not expand fields. The primary edit control remains natural language rather than a database
+property grid. System fields are not part of the ordinary details surface.
 
 For example:
 
@@ -287,18 +305,27 @@ SwiftData model inheritance or a particular table layout. Implementation may lat
 same current meaning to inheritance, a common model with a kind discriminator, a protocol,
 a capability or composition.
 
-## Explicit and derived visualization
+## Relationship reading and provenance
 
-Every visible node and edge belongs to the current formal model, but the UI distinguishes
-how its meaning was established:
+Every visible node and edge belongs to the current formal model. Relationship meaning comes
+from its concise text label and the graph's existing focus interaction rather than a large
+visual taxonomy. Focusing an Entity keeps it and its direct relationships prominent while
+unrelated Entities and edges dim. With several checked Entities, selected Entities and the
+relationships among them are strongest; direct neighbors remain secondary Context.
 
-- explicit: directly stated by the user or an accepted product source;
+Resting Cards and edges use one neutral visual language. There is no relationship-type
+color, source color or complex legend. Directional meaning may use an arrow; the label does
+the explanatory work. Self-containment remains visible as a labeled self-loop.
+
+The property panel still records how meaning was established:
+
+- explicit: directly stated by the user in the current or earlier Domain instruction;
 - inferred: added by the Agent because it is necessary for a coherent model;
 - derived: calculated from other canonical model facts for visualization.
 
-This origin appears in details and a compact visual treatment. It must not look like a
-pass/fail state or a Candidate awaiting acceptance. Removing or changing a canonical fact
-recomputes its derived visual relationships atomically.
+Provenance is textual detail, not a Card or edge color. It must not look like a pass/fail
+state or a Candidate awaiting acceptance. Removing or changing a canonical fact recomputes
+its derived visual relationships atomically.
 
 ## Canvas and inspection
 
@@ -308,22 +335,22 @@ with Domain semantics. A separate `DomainModelCanvas` may share low-level contro
 tokens, run status, dialogs and inspector primitives.
 
 The initial layout may use the installed Dagre projection. Domain graphs introduce
-self-loops, multiple edge types, labels, ports and potentially denser topology; move to ELK
-only when measured examples show that Dagre cannot keep them readable. The canonical model
-never stores renderer-owned geometry as product meaning.
+self-loops, multiple labeled edges and potentially denser topology; move to ELK only when
+measured examples show that Dagre cannot keep them readable. The canonical model never
+stores renderer-owned geometry as product meaning.
 
-Unlike the lineage-oriented What’s Next Canvas, Domain Entities may be dragged so the user
-can clarify a dense UML-like view. User positions persist as separate presentation metadata.
-Automatic layout remains available for the first arrangement, newly generated elements and
-an explicit reset; it must not overwrite a user arrangement on every model revision.
+Entity Nodes are not draggable. Multi-selection, focus and details reuse the already
+validated graph interactions without adding manual layout state. The same model produces a
+deterministic layout; field-only changes do not move Nodes; new Entities appear near their
+relationships; deletion or relationship changes disturb only the smallest possible area.
+The user may pan, zoom and fit the viewport but does not arrange, lock or persist Entity
+positions.
 
-An Entity card shows its name, one concise meaning and primary business fields. One collapsed
-row owns all secondary business fields. System fields stay hidden. Relationship labels show
-semantic meaning and cardinality. Self-containment is visible rather than hidden in
-Markdown.
-
-Source remains hidden by default. A compact context control reveals the Source, accepted
-Product Design Features and other evidence available to the current Agent operation.
+An Entity Card remains compact because the Canvas exists to show relationships. It contains
+the neutral round checkmark, Entity kind, title, optional one-line meaning and established
+details control. Fields, Constraints, provenance and revision stay in the property panel.
+Relationship labels show concise meaning; self-containment remains visible rather than
+hidden in Markdown.
 
 Renaming preserves stable identity. Removing an Entity or relationship is also a model
 operation: the Agent identifies affected references and derived views, applies the deletion
@@ -339,9 +366,8 @@ two projections synchronized.
 
 The structured model may include semantic field types and relationships useful to later
 implementation, but the normal Canvas remains product-facing. Storage-specific indexes,
-foreign keys, migrations or SwiftData choices appear in Entity details only when they
-materially affect product meaning, or in a lightweight Implementation Approach before Just
-Do It. They do not create another Layer.
+foreign keys, migrations or framework choices appear in Entity details only when they
+materially affect product meaning. They do not create another Layer.
 
 ## Agent Harness
 
@@ -350,8 +376,8 @@ enforces these high-level rules:
 
 1. Treat the user's current instruction as the highest modeling authority.
 2. Read the current model before adding or changing meaning.
-3. Use Source and accepted Product Design as evidence without rendering them as Domain
-   Entities.
+3. Use the current Instruction, compact model index, selected Entity definitions and
+   on-demand related Entity files as the complete first-slice Context boundary.
 4. Resolve references by stable identity and treat display names as renameable labels.
 5. Translate natural language into structured Entities, fields, relationships and
    constraints.
@@ -368,10 +394,7 @@ enforces these high-level rules:
     Finalize states.
 13. Retain the user instruction, affected identifiers and concise change summary without
     exposing private chain-of-thought.
-14. Never silently rewrite Source or Product Design. When a Domain change exposes a conflict
-    with upstream product meaning, apply only the requested Domain change and report the
-    upstream inconsistency for explicit follow-up.
-15. Use the compact whole-model index for discovery, selected Entity definitions as primary
+14. Use the compact whole-model index for discovery, selected Entity definitions as primary
     Context and related Entity bodies on demand. Selection narrows cost but never supplies
     relationship semantics or blocks a required consistency update.
 
@@ -406,49 +429,36 @@ relationships inconsistent. Shared companion-repository Git versioning may later
 the mechanical revision substrate; the product requirement is atomic revision and restore,
 not a particular implementation.
 
-## Integration with other modules
+## Independent module output
 
-- What’s Next supplies Source and accepted Product Design context but does not own Domain
-  elements.
-- What’s That? may be opened directly from the project navigation or from relevant Product
-  Design context.
-- Break It Down may consume the current Domain Model when it helps define delivery
-  boundaries, but it does not require What’s That? as a predecessor.
-- Just Do It receives the current relevant Domain Model as implementation context. It does
-  not treat every Domain relationship as an execution dependency.
-- Implementation results may reveal a product-model correction, but code structure does
-  not silently rewrite the Domain Model.
+The first slice opens What’s That? directly from project navigation and produces one
+standalone, revisioned Domain Model. No first-slice control opens the module from a Product
+Design Card, sends an Entity to Break It Down, attaches a revision to Just Do It or converts
+a Domain relationship into an execution dependency.
 
-Because the Domain Model remains editable and has no Finalize boundary, every downstream
-handoff pins the exact model revision it received. A later Domain edit does not silently
-change an active Break It Down request, Plan or Action. A new run may explicitly refresh to
-the latest revision.
-
-Likewise, each Domain revision records the Source and Product Design revisions used as
-context. When those upstream facts change, the UI reports that newer context is available;
-it does not automatically rewrite or invalidate the current model. The user may ask the
-Agent to reconcile the model against that new context.
+Other modules may consume an exact Domain Model revision in the future. That possibility
+justifies stable identity and revision records, but cross-module freshness, handoff and
+navigation behavior remain deferred until real use proves the need.
 
 ## First implementation slice
 
 The first slice should prove one complete modeling loop:
 
 1. Open What’s That? as an independent project module.
-2. Load hidden Source and accepted Product Design context.
-3. Show an empty Canvas with only the persistent Composer when no model exists.
-4. Accept a required Canvas-level natural-language instruction with no selection.
-5. Run one Agent and display objective elapsed time.
-6. Validate and atomically apply generated Entities, fields, relationships and constraints.
-7. Render explicit relationships, inheritance and one derived self-containment loop.
-8. Allow the user to arrange Entities without changing semantic model facts.
-9. Show primary business fields, collapse secondary fields and hide system fields.
-10. Select one Entity and revise it through natural language.
-11. Select Item and Container through round checkmarks, describe their relationship in the
-    Composer and create the valid labeled relationship without drag direction.
-12. Preserve stable identity and revision history across both changes.
-13. Cancel or fail one Run without changing the current model.
-14. Restore the most recent successful model change.
-15. Pin one exact model revision in a downstream handoff.
+2. Show an empty Canvas with only the persistent Composer when no model exists.
+3. Accept a required Canvas-level natural-language instruction with no selection.
+4. Run one Agent and display objective elapsed time.
+5. Validate and atomically apply generated Entities, fields, relationships and constraints.
+6. Render labeled relationships, inheritance and one derived self-containment loop.
+7. Keep Cards compact and put primary, secondary and hidden-system field policy in the
+   property panel.
+8. Select one Entity and revise it through natural language.
+9. Select Item and Container through round checkmarks, describe their relationship in the
+   Composer and create the valid labeled relationship without drag direction.
+10. Preserve stable identity and revision history across both changes.
+11. Cancel or fail one Run without changing the current model.
+12. Restore the most recent successful model change.
+13. Keep automatic layout stable across field-only and selection changes.
 
 Use HereItIs as the first scenario: create Item and Container, make Container an Item with
 child-management capability, and express that a Container can contain both ordinary Items
@@ -468,6 +478,8 @@ The first slice does not require:
 - Candidate acceptance or Finalize states;
 - a second Conceptual, Storage or ERD Canvas;
 - blank-Canvas creation, plus buttons, drag-to-connect or manual relationship-type controls;
+- manual Entity layout or persisted presentation coordinates;
+- cross-module import, navigation, freshness or downstream handoff;
 - automatic synchronization from source code back into product meaning.
 
 ## Evaluation
@@ -476,7 +488,7 @@ The first slice succeeds when a user who does not maintain UML or database schem
 
 - describe one Entity in ordinary language and receive a useful current model;
 - see primary business fields directly, secondary business fields on demand and no normal
-  system-field noise;
+  system-field noise in the property panel while Cards remain compact;
 - optionally select several Entities to bound Context, then describe their relationship
   without encoding direction in the UI;
 - state a relationship with no selection and see every relevant visual relationship;
@@ -485,7 +497,7 @@ The first slice succeeds when a user who does not maintain UML or database schem
 - correct the model through another natural-language instruction without a Finalize flow;
 - cancel, fail or undo safely without leaving partial graph state; and
 - provide the resulting model to an implementation Agent without prematurely choosing a
-  storage technology.
+  storage technology in a future integration without requiring a model migration.
 
 ## Remaining implementation decisions
 
