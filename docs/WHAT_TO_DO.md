@@ -133,6 +133,11 @@ The snapshot contains:
   mechanically from existing files;
 - hashes over the evidence included in the snapshot.
 
+A snapshot is reusable only when its bounded file, top-level, and dirty-state
+evidence is complete. Praxis marks a truncated snapshot as non-reusable and
+refreshes Repository Context on every request until a complete snapshot is
+available.
+
 The Host does not decide what the project does, which architecture it uses,
 which files are important, or which standards govern the work. It does not need
 an iOS, Web, backend, database, or framework-specific detector.
