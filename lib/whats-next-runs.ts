@@ -54,6 +54,7 @@ import {
 import {
   redoProposalPlan,
   redoProposalContext,
+  redoProposalInputRun,
   type ProposalReplacement,
 } from './whats-next-redo.ts';
 import {
@@ -316,9 +317,7 @@ async function startWhatsNextRunUnlocked(
         content: resource.markdown,
       });
     }
-    const previousRun = [...redo.histories]
-      .sort((left, right) => right.startedAt.localeCompare(left.startedAt))
-      .find((run) => run.operation === 'explore');
+    const previousRun = redoProposalInputRun(redo);
     const previousUserInput = previousRun?.input?.userInputPath
       ? await readFile(
           path.join(

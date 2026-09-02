@@ -773,7 +773,7 @@ export const chineseUi: Record<string, string> = {
   'Optional sources': '可选资料',
   'Out Of Scope': '范围外',
   Outputs: '输出',
-  'Previous instruction': '上一轮指令',
+  'Previous User Input': '上一轮用户输入',
   'Previous outputs ·': '上一轮输出 ·',
   'Previous proposal': '上一轮提案',
   'Previous proposal context': '上一轮提案上下文',
@@ -967,8 +967,8 @@ export const chineseUi: Record<string, string> = {
   'Move this card to Trash': '将卡片移到回收站',
   'New start node': '新建起点',
   'No description yet.': '尚无说明。',
-  'No instruction was recorded for this proposal.':
-    '此提案没有记录上一轮指令。',
+  'No User Input was recorded for this proposal.':
+    '此提案没有记录上一轮用户输入。',
   'Not configured': '尚未配置',
   Nothing: '无',
   'Open output.md': '打开 output.md',

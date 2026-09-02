@@ -123,6 +123,13 @@ export const TASK_GRAPH_MARKDOWN_SHAPES: readonly PlanningPathShape[] = [
       'i',
     ),
   },
+  {
+    name: 'What’s Next Run User Input',
+    pattern: new RegExp(
+      String.raw`^whats-next\/runs\/${RUN_ID}\/context\/input\/user-input\.md$`,
+      'i',
+    ),
+  },
 ];
 
 export const ANY_PLANNING_RELATIVE_PATH: PlanningPathShape = {

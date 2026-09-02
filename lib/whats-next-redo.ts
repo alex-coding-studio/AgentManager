@@ -8,6 +8,15 @@ export type ProposalReplacement = {
   runIds: string[];
 };
 
+export function redoProposalInputRun(
+  plan: Pick<ReturnType<typeof redoProposalPlan>, 'histories'>,
+) {
+  const histories = [...plan.histories].sort((a, b) =>
+    b.startedAt.localeCompare(a.startedAt),
+  );
+  return histories.find((run) => run.operation === 'explore') ?? histories[0];
+}
+
 export function redoProposalContext(
   plan: Pick<ReturnType<typeof redoProposalPlan>, 'histories' | 'targets'>,
   packagedUserInput?: string,
@@ -15,8 +24,7 @@ export function redoProposalContext(
   const histories = [...plan.histories].sort((a, b) =>
     b.startedAt.localeCompare(a.startedAt),
   );
-  const previousRun =
-    histories.find((run) => run.operation === 'explore') ?? histories[0];
+  const previousRun = redoProposalInputRun(plan);
   const userInput =
     packagedUserInput?.trim() ||
     (previousRun?.input?.instruction
@@ -40,7 +48,7 @@ export function redoProposalContext(
       ),
   );
   return {
-    instruction: userInput,
+    userInput,
     outputs,
     responseMarkdown,
     markdown: `# Previous User Input\n\n${userInput || '_No explicit User Input was supplied._'}\n\n# Last response\n\n${responseMarkdown}${additionalOutputs.length ? `\n\n# Other current unaccepted directions\n\n${additionalOutputs.map((output) => output.markdown).join('\n\n---\n\n')}` : ''}`,

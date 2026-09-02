@@ -157,7 +157,7 @@ void test('redo keeps the proposal instruction and complete last response withou
     '# User Input\n\nBuild a personal local website\n',
   );
   assert.equal(
-    context.instruction,
+    context.userInput,
     '# User Input\n\nBuild a personal local website',
   );
   assert.match(context.responseMarkdown, /Last full reflection/);
