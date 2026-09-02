@@ -168,6 +168,23 @@ void test('What to Do rejects missing or stale Feature selections', async (t) =>
   );
 });
 
+void test('Feature metadata and output come from the same frozen snapshot', async (t) => {
+  const { project, planningPath } = await fixture(t);
+  const feature = await writeNode(planningPath, 'NODE-00000001');
+  const selected = await selectWhatToDoFeatureSources(project, [feature.uid!]);
+  const nodeFile = path.join(
+    planningPath,
+    'whats-next/nodes/NODE-00000001/node.json',
+  );
+  const node = JSON.parse(await readFile(nodeFile, 'utf8'));
+  node.title = 'Changed title';
+  await writeFile(nodeFile, `${JSON.stringify(node, null, 2)}\n`);
+  await assert.rejects(
+    whatToDoFeatureWorkspaceInputs(project, selected),
+    /changed.*Reload/,
+  );
+});
+
 void test('a source snapshot serializes with supported graph deletion', async (t) => {
   const { project, planningPath } = await fixture(t);
   await writeNode(planningPath, 'NODE-00000001');
