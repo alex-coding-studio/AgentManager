@@ -25,6 +25,7 @@ import {
 import { AgentRunControls } from '@/components/agent-run-controls';
 import { AgentGraphComposerCard } from '@/components/agent-graph-composer-card';
 import { AgentGraphIntentionSelect } from '@/components/agent-graph-intention-select';
+import { AgentGraphMotionSelect } from '@/components/agent-graph-motion-select';
 import { ContextAttachmentPicker } from '@/components/context-attachment-picker';
 import { LatestResponse } from '@/components/latest-response';
 import {
@@ -1253,22 +1254,14 @@ export function TaskDecompositionWorkspace({
                     label="Decomposition purpose"
                   />
                 </div>
-                <label className="mt-4 block text-[10px] font-medium text-muted-foreground">
-                  {t('Adjustment')}
-                  <select
+                <div className="mt-4">
+                  <AgentGraphMotionSelect
+                    profiles={taskDecompositionMotionRegistry.profiles}
                     value={motion}
-                    onChange={(event) =>
-                      setMotion(event.target.value as TaskDecompositionMotion)
-                    }
-                    className="mt-1 h-10 w-full rounded-xl border border-border bg-background px-3 text-xs font-medium text-foreground"
-                  >
-                    {taskDecompositionMotionRegistry.profiles.map((profile) => (
-                      <option key={profile.id} value={profile.id}>
-                        {t(profile.label)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                    onChange={setMotion}
+                    label="Adjustment"
+                  />
+                </div>
                 <div className="mt-4">
                   <ContextAttachmentPicker
                     folders={folders}
@@ -1686,23 +1679,13 @@ export function TaskDecompositionWorkspace({
                 disabled={Boolean(revisionTarget)}
               />
 
-              <label className="block text-[10px] font-medium text-muted-foreground">
-                {t('Adjustment')}
-                <select
-                  value={motion}
-                  disabled={Boolean(revisionTarget)}
-                  onChange={(event) =>
-                    setMotion(event.target.value as TaskDecompositionMotion)
-                  }
-                  className="mt-1 h-10 w-full rounded-xl border border-border bg-background px-3 text-xs font-medium text-foreground"
-                >
-                  {taskDecompositionMotionRegistry.profiles.map((profile) => (
-                    <option key={profile.id} value={profile.id}>
-                      {t(profile.label)}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <AgentGraphMotionSelect
+                profiles={taskDecompositionMotionRegistry.profiles}
+                value={motion}
+                onChange={setMotion}
+                label="Adjustment"
+                disabled={Boolean(revisionTarget)}
+              />
 
               <ContextAttachmentPicker
                 folders={folders}

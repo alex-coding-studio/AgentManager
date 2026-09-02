@@ -15,6 +15,7 @@ import { AgentProfileSelector } from '@/components/agent-profile-selector';
 import { AgentRunControls } from '@/components/agent-run-controls';
 import { AgentGraphComposerCard } from '@/components/agent-graph-composer-card';
 import { AgentGraphIntentionSelect } from '@/components/agent-graph-intention-select';
+import { AgentGraphMotionSelect } from '@/components/agent-graph-motion-select';
 import { sameModelSelection, type AgentProfile } from '@/lib/agent-profile';
 import { ContextAttachmentPicker } from '@/components/context-attachment-picker';
 import { WhatsNextContextToolbar } from '@/components/whats-next-context-toolbar';
@@ -66,6 +67,7 @@ import type {
 import {
   intentionDestination,
   whatsNextIntentionRegistry,
+  whatsNextMotionRegistry,
 } from '@/lib/whats-next-intention';
 import { toggleWhatsNextSelection } from '@/lib/whats-next-selection';
 import { LatestResponse } from '@/components/latest-response';
@@ -1157,20 +1159,11 @@ function WhatsNextCanvas({
               label="Exploration purpose"
               showDescription={false}
             />
-            <label className="space-y-1 text-[10px] font-medium text-muted-foreground">
-              {t('Motion')}
-              <select
-                value={motion}
-                onChange={(event) =>
-                  setMotion(event.target.value as WhatsNextMotion)
-                }
-                className="h-9 w-full rounded-lg border border-border bg-background px-2 text-xs text-foreground"
-              >
-                <option value="unspecified">{t('Unspecified')}</option>
-                <option value="diverge">{t('Diverge')}</option>
-                <option value="converge">{t('Converge')}</option>
-              </select>
-            </label>
+            <AgentGraphMotionSelect
+              profiles={whatsNextMotionRegistry.profiles}
+              value={motion}
+              onChange={setMotion}
+            />
             <p className="col-span-2 text-[10px] leading-4 text-muted-foreground">
               {t(
                 whatsNextIntentionRegistry.profiles.find(
