@@ -18,7 +18,10 @@ import {
 } from '../lib/what-to-do-context.ts';
 import type { RegisteredProject } from '../lib/project-registry.ts';
 import type { TaskGraphNode } from '../lib/task-graph.ts';
-import { whatToDoRunDirectory } from '../lib/what-to-do-storage.ts';
+import {
+  whatToDoRunDirectory,
+  writeWhatToDoRepositorySummary,
+} from '../lib/what-to-do-storage.ts';
 
 const runId = 'RUN-00000000-0000-4000-8000-000000000001';
 const featureUid = '00000000-0000-4000-8000-000000000002';
@@ -220,24 +223,16 @@ void test('What to Do rejects incomplete input before publishing a Run workspace
 });
 
 void test('Repository Summary is included only for its exact reusable Facts fingerprint', async (t) => {
-  const { project, planningPath, rootPath } = await fixture(t);
+  const { project, rootPath } = await fixture(t);
   const initial = await prepareWhatToDoContext(project, runId, {
     instruction: 'Prepare delivery.',
     sourceUids: [featureUid],
     profile: { agent: 'codex', model: '', effort: '' },
   });
-  const summaryPath = path.join(planningPath, 'what-to-do/repository-context');
-  await mkdir(summaryPath, { recursive: true });
-  await writeFile(path.join(summaryPath, 'summary.md'), '# Current summary\n');
-  await writeFile(
-    path.join(summaryPath, 'summary.json'),
-    `${JSON.stringify({
-      schemaVersion: 1,
-      repositoryFingerprint: initial.repositoryFacts.fingerprint,
-      markdownSha256: createHash('sha256')
-        .update('# Current summary\n')
-        .digest('hex'),
-    })}\n`,
+  await writeWhatToDoRepositorySummary(
+    project,
+    '# Current summary\n',
+    initial.repositoryFacts.fingerprint,
   );
   const matching = await prepareWhatToDoContext(
     project,

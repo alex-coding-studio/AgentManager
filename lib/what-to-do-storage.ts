@@ -1,6 +1,13 @@
-import { randomUUID } from 'node:crypto';
-import { createHash } from 'node:crypto';
-import { lstat, mkdir, readFile, realpath, rename, rm } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
+import {
+  lstat,
+  mkdir,
+  readFile,
+  realpath,
+  rename,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
 import path from 'node:path';
 import type { RegisteredProject } from './project-registry.ts';
 
@@ -40,41 +47,20 @@ export async function readWhatToDoRepositorySummary(
 ) {
   const directory = await whatToDoDirectory(project, ['repository-context']);
   const file = path.join(directory, 'summary.md');
-  const metadataFile = path.join(directory, 'summary.json');
   try {
-    const [info, metadataInfo] = await Promise.all([
-      lstat(file),
-      lstat(metadataFile),
-    ]);
-    if (
-      !info.isFile() ||
-      info.isSymbolicLink() ||
-      info.size > 512 * 1024 ||
-      !metadataInfo.isFile() ||
-      metadataInfo.isSymbolicLink() ||
-      metadataInfo.size > 16 * 1024
-    )
+    const info = await lstat(file);
+    if (!info.isFile() || info.isSymbolicLink() || info.size > 512 * 1024)
       throw new Error('Invalid What to Do Repository Summary.');
-    const [markdown, metadataText] = await Promise.all([
-      readFile(file, 'utf8'),
-      readFile(metadataFile, 'utf8'),
-    ]);
-    const metadata = JSON.parse(metadataText) as unknown;
-    if (
-      !metadata ||
-      typeof metadata !== 'object' ||
-      !('schemaVersion' in metadata) ||
-      metadata.schemaVersion !== 1 ||
-      !('repositoryFingerprint' in metadata) ||
-      typeof metadata.repositoryFingerprint !== 'string' ||
-      !/^[0-9a-f]{64}$/.test(metadata.repositoryFingerprint) ||
-      !('markdownSha256' in metadata) ||
-      typeof metadata.markdownSha256 !== 'string' ||
-      metadata.markdownSha256 !==
-        createHash('sha256').update(markdown).digest('hex')
-    )
+    const stored = await readFile(file, 'utf8');
+    const match = stored.match(
+      /^---\nrepositoryFingerprint: ([0-9a-f]{64})\nmarkdownSha256: ([0-9a-f]{64})\n---\n\n([\s\S]+)$/,
+    );
+    if (!match)
       throw new Error('Invalid What to Do Repository Summary metadata.');
-    return { markdown, repositoryFingerprint: metadata.repositoryFingerprint };
+    const markdown = match[3]!;
+    if (createHash('sha256').update(markdown).digest('hex') !== match[2])
+      throw new Error('Invalid What to Do Repository Summary metadata.');
+    return { markdown, repositoryFingerprint: match[1]! };
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
     throw error;
@@ -115,4 +101,33 @@ export async function stageWhatToDoRunDirectory(
       if (!published) await rm(stagingPath, { recursive: true, force: true });
     },
   };
+}
+
+export async function writeWhatToDoRepositorySummary(
+  project: RegisteredProject,
+  markdown: string,
+  repositoryFingerprint: string,
+) {
+  if (!markdown.trim() || !/^[0-9a-f]{64}$/.test(repositoryFingerprint))
+    throw new Error('Invalid What to Do Repository Summary update.');
+  const directory = await whatToDoDirectory(
+    project,
+    ['repository-context'],
+    true,
+  );
+  const markdownSha256 = createHash('sha256').update(markdown).digest('hex');
+  await atomicText(
+    path.join(directory, 'summary.md'),
+    `---\nrepositoryFingerprint: ${repositoryFingerprint}\nmarkdownSha256: ${markdownSha256}\n---\n\n${markdown}`,
+  );
+}
+
+export async function atomicWhatToDoText(file: string, content: string) {
+  await atomicText(file, content);
+}
+
+async function atomicText(file: string, content: string) {
+  const temporary = `${file}.${randomUUID()}.tmp`;
+  await writeFile(temporary, content, { flag: 'wx' });
+  await rename(temporary, file);
 }

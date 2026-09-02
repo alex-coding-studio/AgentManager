@@ -1,4 +1,6 @@
 import Ajv2020 from 'ajv/dist/2020.js';
+import { createHash } from 'node:crypto';
+import type { AgentGraphContentPacket } from './agent-graph-context-workspace.ts';
 import {
   validateAgentGraphRecomposeDependencies,
   validateAgentGraphRecomposePlan,
@@ -31,6 +33,75 @@ export type WhatToDoRequestIdentity = {
   requestId: string;
   inputFingerprint: string;
 };
+
+export type WhatToDoHarnessRequest = {
+  schemaVersion: 1;
+  harness: {
+    id: typeof WHAT_TO_DO_HARNESS_ID;
+    revision: typeof WHAT_TO_DO_HARNESS_REVISION;
+  };
+  request: WhatToDoRequestIdentity;
+  operation: 'create-map';
+  contextRoot: string;
+  content: AgentGraphContentPacket;
+  sourceFeatures: Array<{
+    nodeId: string;
+    uid: string;
+    title: string;
+    summary: string;
+    outputPath: string;
+    outputSha256: string;
+  }>;
+  repository: {
+    factsPath: string;
+    fingerprint: string;
+    reusable: boolean;
+    summaryPath: string | null;
+  };
+  domain: {
+    stateVersion: number;
+    summaryPath: string;
+    modelPath: string;
+  };
+};
+
+export function createWhatToDoHarnessRequest(input: {
+  sessionId: string;
+  requestId: string;
+  contextRoot: string;
+  content: AgentGraphContentPacket;
+  sourceFeatures: WhatToDoHarnessRequest['sourceFeatures'];
+  repository: WhatToDoHarnessRequest['repository'];
+  domain: WhatToDoHarnessRequest['domain'];
+}): WhatToDoHarnessRequest {
+  const payload = {
+    schemaVersion: 1 as const,
+    harness: {
+      id: WHAT_TO_DO_HARNESS_ID,
+      revision: WHAT_TO_DO_HARNESS_REVISION,
+    } as const,
+    operation: 'create-map' as const,
+    contextRoot: input.contextRoot,
+    content: structuredClone(input.content),
+    sourceFeatures: structuredClone(input.sourceFeatures),
+    repository: structuredClone(input.repository),
+    domain: structuredClone(input.domain),
+  };
+  return {
+    ...payload,
+    request: {
+      sessionId: input.sessionId,
+      requestId: input.requestId,
+      inputFingerprint: createHash('sha256')
+        .update(JSON.stringify(payload))
+        .digest('hex'),
+    },
+  };
+}
+
+export function whatToDoHarnessPrompt(request: WhatToDoHarnessRequest) {
+  return `${WHAT_TO_DO_HARNESS_PROMPT}\n\nCONTEXT ROOT: ${request.contextRoot}\n\nREQUEST:\n${JSON.stringify(request)}\n\nOUTPUT SCHEMA:\n${JSON.stringify(WHAT_TO_DO_HARNESS_OUTPUT_SCHEMA)}`;
+}
 
 export type WhatToDoDomainImpact = {
   kind: 'none' | 'reuse' | 'change' | 'add' | 'uncertain';
@@ -250,7 +321,7 @@ const base = {
   responseMarkdown: { ...text, maxLength: 100_000 },
   repositorySummary: object({
     markdown: { ...text, maxLength: 100_000 },
-    evidencePaths: strings,
+    evidencePaths: { ...strings, minItems: 1 },
   }),
   reviewedEvidence: {
     type: 'array',
