@@ -8,6 +8,7 @@ import {
   buildClaudeSessionArguments,
   claudeMcpServerName,
 } from '../lib/claude-session-driver.ts';
+import { coordinationLimits } from '../lib/just-do-it-coordination-runner.ts';
 import { HostJobBroker } from '../lib/host-job-broker.ts';
 import { startPushCoordinatorSession } from '../lib/event-driven-agent-transport.ts';
 import type {
@@ -29,6 +30,7 @@ async function fixture(
   const driver = new ClaudeSessionDriver({
     command: process.execPath,
     arguments: [fakeClaude],
+    suspensionGraceMs: 400,
     environment: {
       ...process.env,
       FAKE_CLAUDE_SCENARIO: scenario,
@@ -133,11 +135,16 @@ void test('a suspending Host tool over loopback MCP ends the physical turn and r
     hostJobs: false,
   });
   const events: AgentRuntimeEvent['type'][] = [];
+  const perTurnUsage: Array<number | null> = [];
   const turn = f.driver.startTurn(thread, {
     prompt: 'prepare',
-    onEvent: (event) => events.push(event.type),
+    onEvent: (event) => {
+      events.push(event.type);
+      if (event.type === 'turn-completed')
+        perTurnUsage.push(event.usage?.inputTokens ?? null);
+    },
   });
-  await new Promise((resolve) => setTimeout(resolve, 400));
+  await new Promise((resolve) => setTimeout(resolve, 300));
   assert.equal(calls, 1);
   assert.ok(events.includes('tool-suspended'));
   assert.equal(events.at(-1), 'turn-completed');
@@ -146,8 +153,17 @@ void test('a suspending Host tool over loopback MCP ends the physical turn and r
   const result = await turn.completion;
   assert.equal(result.threadId, thread.threadId);
   assert.equal(result.finalOutput, 'RESUMED:WORKER_COMPLETED {"checks":[]}');
-  assert.equal(result.usage?.inputTokens, 10);
-  assert.equal(result.usage?.cachedInputTokens, 4);
+  assert.deepEqual(
+    perTurnUsage,
+    [10, 10],
+    'each physical turn reports its own usage',
+  );
+  assert.equal(
+    result.usage?.inputTokens,
+    20,
+    'the logical result accumulates every physical turn',
+  );
+  assert.equal(result.usage?.cachedInputTokens, 8);
   const resumed = events.indexOf('tool-resumed');
   assert.ok(resumed > events.indexOf('turn-completed'));
   assert.equal(events[resumed + 1], 'turn-started');
@@ -290,4 +306,75 @@ void test('a Claude coordinator profile receives the push driver without touchin
   assert.equal(session.driver.capabilities.pushToolResults, true);
   assert.equal(session.decoratePrompt('p'), 'p');
   await session.driver.close();
+});
+
+void test('a model that never ends its physical turn after a suspension fails on the Host grace deadline', async (t) => {
+  const f = await fixture(t, 'nofinish', [
+    {
+      name: 'dispatch_worker',
+      description: 'Dispatch',
+      inputSchema: { type: 'object' },
+      call: async () => ({
+        suspend: true as const,
+        acknowledgement: 'Worker dispatched.',
+        continuation: Promise.resolve({ prompt: 'WORKER_COMPLETED' }),
+      }),
+    },
+  ]);
+  const thread = await f.driver.startThread({
+    profile: { agent: 'claude', model: 'fixture', effort: 'low' },
+    workingDirectory: f.root,
+    access: 'read-only',
+    hostJobs: false,
+  });
+  const started = Date.now();
+  await assert.rejects(
+    () => f.driver.startTurn(thread, { prompt: 'prepare' }).completion,
+    /did not end its physical turn/,
+  );
+  assert.ok(
+    Date.now() - started < 5000,
+    'the Host bounds the wait instead of hanging until the Action deadline',
+  );
+  const runs = await f.invocations();
+  assert.equal(runs.length, 1, 'no continuation process is started');
+});
+
+void test('every Claude Host-tool call emits activity before validation so the coordinator cap applies', async (t) => {
+  const f = await fixture(t, 'cap', [
+    {
+      name: 'dispatch_worker',
+      description: 'Dispatch',
+      inputSchema: { type: 'object' },
+      call: async () => {
+        throw new Error('Coordinator response does not match its contract.');
+      },
+    },
+  ]);
+  const thread = await f.driver.startThread({
+    profile: { agent: 'claude', model: 'fixture', effort: 'low' },
+    workingDirectory: f.root,
+    access: 'read-only',
+    hostJobs: false,
+  });
+  const activity: string[] = [];
+  const turn = f.driver.startTurn(thread, {
+    prompt: 'prepare',
+    onEvent: (event) => {
+      if (event.type === 'activity') activity.push(event.summary);
+      if (
+        activity.filter(
+          (summary) => summary === 'Running tool: dispatch_worker',
+        ).length > coordinationLimits.maxCoordinatorToolCalls
+      )
+        turn.interrupt();
+    },
+  });
+  await assert.rejects(() => turn.completion, /interrupted/);
+  assert.equal(
+    activity.filter((summary) => summary === 'Running tool: dispatch_worker')
+      .length,
+    coordinationLimits.maxCoordinatorToolCalls + 1,
+    'a rejected Host-tool call still counts against the cap',
+  );
 });

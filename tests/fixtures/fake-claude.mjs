@@ -92,6 +92,16 @@ if (resume) {
     content: [{ type: 'text', text: error.message }],
   }));
   finish(result.isError ? 'REJECTED' : 'STARTED');
+} else if (scenario === 'nofinish') {
+  const result = await callTool('dispatch_worker', { decision: {} });
+  if (result.isError) throw new Error(result.content[0].text);
+  setInterval(() => {}, 1000);
+} else if (scenario === 'cap') {
+  for (let attempt = 0; attempt < 60; attempt++) {
+    const result = await callTool('dispatch_worker', { decision: {} });
+    if (!result.isError) throw new Error('malformed dispatch was accepted');
+  }
+  finish('CAP_NOT_REACHED');
 } else if (scenario === 'hang') {
   setInterval(() => {}, 1000);
 } else if (scenario === 'error') {

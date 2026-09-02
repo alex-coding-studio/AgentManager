@@ -77,6 +77,14 @@ for the process to exit, then starts the continuation process with `--resume`. S
 process group. A second Host tool call while one suspension is pending is refused. Killing the
 process mid-turn is avoided during suspension so the resumed transcript keeps its tool result.
 
+Because ending the turn is the model's action rather than a Host RPC, the Host bounds it: a
+suspension arms a grace deadline (`claudeSuspensionGraceMs`, 60 s by default). If the process
+has not exited by then, the Host stops the process group and the logical turn fails with an
+explicit message instead of waiting for the Action lease. Every Claude Host-tool call emits a
+`Running tool: <name>` activity before validation, so rejected calls count against the
+Coordinator tool cap exactly as they do on Codex. The logical turn result accumulates usage
+across every physical turn, while each `turn-completed` event keeps its own process usage.
+
 The Claude worker path in `startEventDrivenWorkerRun` now uses this driver for every
 workspace-write Claude execution, with `run_job` and, when a Candidate can be published,
 `publish_candidate`. Deterministic fixtures exercise the loopback endpoint end to end with a

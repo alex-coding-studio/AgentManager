@@ -28,6 +28,7 @@ import {
 } from './local-agent-transport.ts';
 
 export const claudeMcpServerName = 'agentmanager';
+export const claudeSuspensionGraceMs = 60000;
 const mcpProtocolVersion = '2025-06-18';
 const runJobTool = {
   name: 'run_job',
@@ -53,6 +54,7 @@ export type ClaudeSessionDriverOptions = {
   environment?: NodeJS.ProcessEnv;
   brokerFactory: (input: AgentRuntimeThreadInput) => HostJobBroker;
   hostTools?: HostTool[];
+  suspensionGraceMs?: number;
 };
 type ThreadState = {
   thread: AgentRuntimeThread;
@@ -71,6 +73,8 @@ type TurnState = {
   reject: (error: Error) => void;
   stopped: boolean;
   child?: ChildProcessWithoutNullStreams;
+  graceTimer?: ReturnType<typeof setTimeout>;
+  suspensionExpired?: boolean;
   pendingSuspension?: {
     tool: string;
     completion: Promise<HostToolContinuation & { jobResult?: HostJobEvent }>;
@@ -240,6 +244,8 @@ export class ClaudeSessionDriver implements AgentSessionDriver {
       state.broker.cancelAll();
       if (state.turn) {
         state.turn.stopped = true;
+        if (state.turn.graceTimer) clearTimeout(state.turn.graceTimer);
+        state.turn.graceTimer = undefined;
         terminate(state.turn.child);
       }
     }
@@ -333,7 +339,9 @@ export class ClaudeSessionDriver implements AgentSessionDriver {
     }
     const exitCode = await exit;
     turn.child = undefined;
-    turn.usage = turnUsage;
+    if (turn.graceTimer) clearTimeout(turn.graceTimer);
+    turn.graceTimer = undefined;
+    turn.usage = addUsage(turn.usage, turnUsage);
     turn.onEvent?.({
       type: 'turn-completed',
       threadId: turn.threadId,
@@ -342,6 +350,10 @@ export class ClaudeSessionDriver implements AgentSessionDriver {
       at: new Date().toISOString(),
     });
     if (turn.stopped) throw new Error('Agent turn interrupted.');
+    if (turn.suspensionExpired)
+      throw new Error(
+        'Claude did not end its physical turn after a Host operation was suspended. The Host stopped the process instead of waiting for the Action deadline.',
+      );
     if (exitCode !== 0 || reportedError)
       throw new Error(
         reportedError || stderr.trim() || 'Claude did not complete.',
@@ -509,12 +521,28 @@ export class ClaudeSessionDriver implements AgentSessionDriver {
     );
   }
 
+  private armSuspensionGrace(turn: TurnState) {
+    if (turn.graceTimer) clearTimeout(turn.graceTimer);
+    turn.graceTimer = setTimeout(() => {
+      turn.suspensionExpired = true;
+      terminate(turn.child);
+    }, this.options.suspensionGraceMs ?? claudeSuspensionGraceMs);
+    turn.graceTimer.unref?.();
+  }
+
   private async callTool(
     state: ThreadState,
     name: string,
     arguments_: Record<string, unknown>,
   ): Promise<{ success: boolean; text: string }> {
     const turn = state.turn;
+    turn?.onEvent?.({
+      type: 'activity',
+      threadId: turn.threadId,
+      turnId: turn.turnId,
+      summary: `Running tool: ${name}`,
+      at: new Date().toISOString(),
+    });
     if (!turn || turn.stopped)
       return { success: false, text: 'No active Claude turn.' };
     if (turn.pendingSuspension)
@@ -542,6 +570,7 @@ export class ClaudeSessionDriver implements AgentSessionDriver {
               ? request.timeoutMs
               : undefined,
         });
+        this.armSuspensionGrace(turn);
         turn.pendingSuspension = {
           tool: 'run_job',
           completion: job.completion.then((result) => ({
@@ -573,6 +602,7 @@ export class ClaudeSessionDriver implements AgentSessionDriver {
     try {
       const result = await tool.call(arguments_);
       if (isHostToolSuspension(result)) {
+        this.armSuspensionGrace(turn);
         turn.pendingSuspension = {
           tool: tool.name,
           completion: result.continuation,
@@ -597,6 +627,23 @@ export class ClaudeSessionDriver implements AgentSessionDriver {
       };
     }
   }
+}
+
+function addUsage(
+  total: AgentRuntimeTurnResult['usage'],
+  next: AgentRuntimeTurnResult['usage'],
+): AgentRuntimeTurnResult['usage'] {
+  if (!next) return total;
+  if (!total) return next;
+  return {
+    inputTokens: total.inputTokens + next.inputTokens,
+    cachedInputTokens: total.cachedInputTokens + next.cachedInputTokens,
+    cacheWriteInputTokens:
+      total.cacheWriteInputTokens + next.cacheWriteInputTokens,
+    outputTokens: total.outputTokens + next.outputTokens,
+    reasoningOutputTokens:
+      total.reasoningOutputTokens + next.reasoningOutputTokens,
+  };
 }
 
 function pendingSuspensionOf(turn: TurnState) {
