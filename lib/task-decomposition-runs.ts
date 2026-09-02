@@ -57,6 +57,7 @@ import {
   type LocalAgentUsage,
 } from './local-agent-transport.ts';
 import {
+  agentGraphErrorMessage,
   createAgentGraphActivityRecorder,
   initialAgentGraphActivity,
   initializeAgentGraphActivity,
@@ -675,11 +676,20 @@ async function discardTaskDecompositionCandidateUnlocked(
       ),
   );
   let requestedRunDeleted = false;
+  const deletedRunIds: string[] = [];
+  const updatedRuns: TaskDecompositionRunRecord[] = [];
   for (const run of candidateRuns) {
     const runDeleted = await discardCandidateFromRun(project, run, candidateId);
+    if (runDeleted) deletedRunIds.push(run.runId);
+    else updatedRuns.push(run);
     if (run.runId === runId) requestedRunDeleted = runDeleted;
   }
-  return { candidateId, runDeleted: requestedRunDeleted };
+  return {
+    candidateId,
+    runDeleted: requestedRunDeleted,
+    deletedRunIds,
+    runs: updatedRuns,
+  };
 }
 
 async function discardCandidateFromRun(
@@ -708,6 +718,7 @@ async function discardCandidateFromRun(
     run.result.candidates.splice(candidateIndex, 1);
     run.updatedAt = new Date().toISOString();
     await writeRunRecord(project, run);
+    await ensureCandidateArtifacts(project, run);
   } catch (error) {
     await rename(stagedPath, candidatePath);
     throw error;
@@ -806,8 +817,7 @@ async function finishTaskDecompositionRun(
     if (isRunCanceled(record)) return;
     const endedAt = new Date().toISOString();
     record.status = 'failed';
-    record.error =
-      error instanceof Error ? error.message : 'The Agent Run failed.';
+    record.error = agentGraphErrorMessage(error, 'The Agent Run failed.');
     const active = activeRuns.get(runKey(project, record.runId));
     await active?.activityRecorder.flush();
     await writeAgentGraphRunEvidence(

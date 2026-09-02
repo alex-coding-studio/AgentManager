@@ -485,6 +485,53 @@ void test('a concurrent accept and discard settle into one legal ordering', asyn
   }
 });
 
+void test('discard refreshes response evidence and reports every affected Run', async () => {
+  const { project, runId, cleanup } = await makeProject([
+    candidate(CANDIDATE_A),
+    candidate(CANDIDATE_B),
+  ]);
+  try {
+    await readTaskDecompositionRun(project, runId);
+    const result = await discardTaskDecompositionCandidate(
+      project,
+      runId,
+      CANDIDATE_A,
+    );
+    assert.deepEqual(result.deletedRunIds, []);
+    assert.equal(result.runs[0]?.runId, runId);
+    assert.deepEqual(
+      result.runs[0]?.result?.outcome === 'proposal'
+        ? result.runs[0].result.candidates.map(
+            (candidate) => candidate.candidateId,
+          )
+        : [],
+      [CANDIDATE_B],
+    );
+    const response = await realFs.readFile(
+      path.join(
+        project.planningPath,
+        'task-decomposition',
+        'runs',
+        runId,
+        'response.md',
+      ),
+      'utf8',
+    );
+    assert.doesNotMatch(response, new RegExp(CANDIDATE_A));
+    assert.match(response, new RegExp(CANDIDATE_B));
+
+    const deleted = await discardTaskDecompositionCandidate(
+      project,
+      runId,
+      CANDIDATE_B,
+    );
+    assert.deepEqual(deleted.deletedRunIds, [runId]);
+    assert.deepEqual(deleted.runs, []);
+  } finally {
+    await cleanup();
+  }
+});
+
 void test('dependency ordering survives overlap and the dependent accepts cleanly on retry', async () => {
   const { project, runId, cleanup } = await makeProject([
     candidate(CANDIDATE_A),

@@ -18,6 +18,16 @@ export type LatestResponsePresentation = {
   icon: 'success' | 'neutral' | 'attention' | 'warning' | 'error';
 };
 
+export function latestTerminalTaskDecompositionRun(
+  runs: TaskDecompositionRunRecord[],
+) {
+  return (
+    [...runs]
+      .sort((left, right) => right.startedAt.localeCompare(left.startedAt))
+      .find((run) => !['running', 'validating'].includes(run.status)) ?? null
+  );
+}
+
 export function latestWhatsNextResponse(
   run: WhatsNextRunRecord,
 ): LatestResponsePresentation {

@@ -4,11 +4,22 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {
+  agentGraphErrorMessage,
   createAgentGraphActivityRecorder,
   initialAgentGraphActivity,
   initializeAgentGraphActivity,
   writeAgentGraphRunEvidence,
 } from '../lib/agent-graph-run.ts';
+
+void test('shared Agent Graph errors are bounded and redacted', () => {
+  const message = agentGraphErrorMessage(
+    new Error(`token=ghp_abcdefghijklmnop ${'x'.repeat(3_000)}`),
+    'The Agent Run failed.',
+  );
+  assert.match(message, /token=\[redacted\]/);
+  assert.doesNotMatch(message, /ghp_abcdefghijklmnop/);
+  assert.equal(message.length, 2_000);
+});
 
 void test('shared Agent Graph evidence is bounded, redacted and readable', async (t) => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'agent-graph-run-'));

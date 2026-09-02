@@ -64,7 +64,10 @@ import type {
   TaskDecompositionRunTransport,
 } from '@/lib/task-decomposition-runs';
 import { replaceRunWithPreviewsInPlace } from '@/lib/task-graph-preview-state';
-import { latestTaskDecompositionResponse } from '@/lib/latest-response';
+import {
+  latestTaskDecompositionResponse,
+  latestTerminalTaskDecompositionRun,
+} from '@/lib/latest-response';
 import { cn } from '@/lib/utils';
 
 type DecompositionRequestPreview = TaskGraphPreview & {
@@ -114,11 +117,7 @@ export function TaskDecompositionWorkspace({
 }) {
   const { t } = useUiText();
   const [nodes, setNodes] = useState(initialNodes);
-  const [latestRun, setLatestRun] = useState<TaskDecompositionRunRecord | null>(
-    [...initialRuns].sort((left, right) =>
-      right.startedAt.localeCompare(left.startedAt),
-    )[0] ?? null,
-  );
+  const [runs, setRuns] = useState(initialRuns);
   const [title, setTitle] = useState('');
   const [selectedRefs, setSelectedRefs] = useState<string[]>([]);
   const [selectedFolderPath, setSelectedFolderPath] = useState(
@@ -229,10 +228,17 @@ export function TaskDecompositionWorkspace({
     : [];
   const decomposeSource =
     nodes.find((node) => node.id === decomposeSourceId) ?? null;
-  const latestRunPresentation =
-    latestRun && !['running', 'validating'].includes(latestRun.status)
-      ? latestTaskDecompositionResponse(latestRun)
-      : null;
+  const latestRun = latestTerminalTaskDecompositionRun(runs);
+  const latestRunPresentation = latestRun
+    ? latestTaskDecompositionResponse(latestRun)
+    : null;
+
+  function upsertRun(run: TaskDecompositionRunRecord) {
+    setRuns((current) => [
+      ...current.filter((candidate) => candidate.runId !== run.runId),
+      run,
+    ]);
+  }
 
   function toggleSource(ref: string, selected: boolean) {
     setSelectedRefs((current) =>
@@ -468,7 +474,7 @@ export function TaskDecompositionWorkspace({
         return;
       }
       const run = result.run;
-      setLatestRun(run);
+      upsertRun(run);
       runSnapshots.current.set(run.runId, snapshot);
       const runningPreview = runPreview(
         run,
@@ -522,7 +528,7 @@ export function TaskDecompositionWorkspace({
   }
 
   function applyRunRecord(run: TaskDecompositionRunRecord) {
-    setLatestRun(run);
+    upsertRun(run);
     if (['running', 'validating'].includes(run.status)) {
       const activity = run.activity.at(-1)?.summary;
       setRequestPreviews((current) =>
@@ -628,7 +634,7 @@ export function TaskDecompositionWorkspace({
     const payload = (await response.json()) as {
       run?: TaskDecompositionRunRecord;
     };
-    if (payload.run) setLatestRun(payload.run);
+    if (payload.run) upsertRun(payload.run);
     setRequestPreviews((current) =>
       snapshot?.revisionPreview
         ? replaceRunWithPreviewsInPlace(current, runId, [
@@ -753,7 +759,12 @@ export function TaskDecompositionWorkspace({
         }),
       },
     );
-    const payload = (await response.json()) as { error?: string };
+    const payload = (await response.json()) as {
+      error?: string;
+      runDeleted?: boolean;
+      deletedRunIds?: string[];
+      runs?: TaskDecompositionRunRecord[];
+    };
     setDiscardingCandidate(false);
     if (!response.ok) {
       setCandidateActionError(
@@ -764,6 +775,21 @@ export function TaskDecompositionWorkspace({
     setRequestPreviews((current) =>
       current.filter((preview) => preview.id !== selectedCandidate.candidateId),
     );
+    setRuns((current) => {
+      const deleted = new Set(
+        payload.deletedRunIds ??
+          (payload.runDeleted ? [selectedCandidatePreview.runId] : []),
+      );
+      const updated = payload.runs ?? [];
+      return [
+        ...current.filter(
+          (run) =>
+            !deleted.has(run.runId) &&
+            !updated.some((candidate) => candidate.runId === run.runId),
+        ),
+        ...updated,
+      ];
+    });
     finishCandidateDiscard();
   }
 

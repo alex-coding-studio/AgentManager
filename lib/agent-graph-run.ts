@@ -23,6 +23,11 @@ export type AgentGraphActivityRecorder = {
   flush: () => Promise<void>;
 };
 
+export function agentGraphErrorMessage(error: unknown, fallback: string) {
+  const message = error instanceof Error ? error.message : fallback;
+  return redactRecord(message).slice(0, 2_000) || fallback;
+}
+
 export function initialAgentGraphActivity(
   summary: string,
   at = new Date().toISOString(),

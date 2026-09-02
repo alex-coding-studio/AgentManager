@@ -4,6 +4,7 @@ import type { WhatsNextRunRecord } from '../lib/whats-next-runs.ts';
 import type { TaskDecompositionRunRecord } from '../lib/task-decomposition-runs.ts';
 import {
   latestTaskDecompositionResponse,
+  latestTerminalTaskDecompositionRun,
   latestWhatsNextResponse,
 } from '../lib/latest-response.ts';
 
@@ -106,4 +107,21 @@ void test('decomposition outcomes use the shared response tones', () => {
   } as TaskDecompositionRunRecord);
   assert.equal(canceled.tone, 'neutral');
   assert.equal(canceled.statusLabel, 'Canceled');
+});
+
+void test('a running decomposition keeps the newest terminal response visible', () => {
+  const terminal = {
+    runId: 'RUN-terminal',
+    status: 'no-change',
+    startedAt: '2026-09-02T00:00:00.000Z',
+  } as TaskDecompositionRunRecord;
+  const running = {
+    runId: 'RUN-running',
+    status: 'running',
+    startedAt: '2026-09-02T00:01:00.000Z',
+  } as TaskDecompositionRunRecord;
+  assert.equal(
+    latestTerminalTaskDecompositionRun([terminal, running])?.runId,
+    terminal.runId,
+  );
 });

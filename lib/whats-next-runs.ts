@@ -43,6 +43,7 @@ import {
   renderWhatsNextSummaryMarkdown,
 } from './whats-next-response.ts';
 import {
+  agentGraphErrorMessage,
   createAgentGraphActivityRecorder,
   initialAgentGraphActivity,
   initializeAgentGraphActivity,
@@ -1081,8 +1082,7 @@ async function finishWhatsNextRun(
     if (isRunCanceled(record)) return;
     const endedAt = new Date().toISOString();
     record.status = 'failed';
-    record.error =
-      error instanceof Error ? error.message : "The What's next Run failed.";
+    record.error = agentGraphErrorMessage(error, "The What's next Run failed.");
     const active = activeRuns.get(runKey(project, record.runId));
     await active?.activityRecorder.flush();
     await writeAgentGraphRunEvidence(whatsNextRunPath(project, record.runId), {
