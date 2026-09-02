@@ -1,6 +1,6 @@
 'use client';
 
-import { Sparkles } from 'lucide-react';
+import { LoaderCircle, Sparkles } from 'lucide-react';
 import { AgentProfileSelector } from '@/components/agent-profile-selector';
 import { Button } from '@/components/ui/button';
 import { useUiText } from '@/components/ui-language-provider';
@@ -15,6 +15,7 @@ export function AgentRunControls({
   label = 'Agent configuration',
   actionLabel = 'Ask',
   actionType = 'button',
+  running = false,
 }: {
   value: AgentProfile;
   onChange: (profile: AgentProfile) => void;
@@ -24,6 +25,7 @@ export function AgentRunControls({
   label?: string;
   actionLabel?: string;
   actionType?: 'button' | 'submit';
+  running?: boolean;
 }) {
   const { t } = useUiText();
   return (
@@ -42,7 +44,11 @@ export function AgentRunControls({
         disabled={disabled}
         onClick={onRun}
       >
-        <Sparkles className="size-3.5" />
+        {running ? (
+          <LoaderCircle className="size-3.5 animate-spin" />
+        ) : (
+          <Sparkles className="size-3.5" />
+        )}
         {t(actionLabel)}
       </Button>
     </div>

@@ -1,8 +1,8 @@
 # Break It Down Product Evolution
 
-Status: agreed staged direction. Break It Down's existing decomposition semantics remain the
-baseline while shared Run infrastructure, proposal presentation and composable Harness
-profiles are introduced in separate slices.
+Status: shared Run infrastructure and the shared Proposal workspace are delivered. Break It
+Down's existing decomposition semantics remain the baseline while composable Harness
+profiles are introduced in later slices.
 
 ## Current product boundary
 
@@ -27,6 +27,31 @@ Both modules share:
 - Markdown output, feedback, refine, accept and discard flows;
 - Intention and Motion controls; and
 - proposal working-set visibility and batch management.
+
+## Standard Agent Graph input
+
+Every Agent Graph module receives one standard Input Packet rather than defining a text-only
+request shape:
+
+```text
+instruction
+selectedContext
+contextRefs
+attachments
+profile
+moduleOperation
+```
+
+`instruction` is the user's direct language. Selected graph objects, Context Library
+documents and temporary attachments are equally valid input evidence. Attachment bodies are
+written to the Run's Context Workspace; the packet carries bounded metadata and logical and
+workspace paths instead of embedding file bodies in JSON. Markdown is the first supported
+attachment adapter, not a permanent restriction on the packet.
+
+The standard Composer presents the same order in What’s Next, Break It Down and What’s That:
+primary instruction, collapsed optional sources, Agent/model/reasoning controls and the
+primary action. A module supplies operation wording and Harness semantics without forking the
+Composer structure.
 
 Their differences belong behind those surfaces:
 
@@ -230,6 +255,14 @@ Acceptance:
 - focus the active proposal without shrinking the complete graph into unreadability;
 - present one proposal-level Response; and
 - render Candidate metadata as product sections through shared components.
+
+Delivered behavior:
+
+- What’s Next and Break It Down use the same compact Proposal status control;
+- the complete graph remains available through the Canvas Fit View control while proposal
+  focus keeps the current working set at a readable zoom;
+- Candidate metadata is rendered as named product sections rather than raw JSON; and
+- Candidate discard reconciles persisted proposal evidence with the in-memory working set.
 
 ### Slice 3: Intention profiles
 

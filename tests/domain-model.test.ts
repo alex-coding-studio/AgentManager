@@ -1,6 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { chmod, mkdtemp, mkdir, readFile, rm, symlink } from 'node:fs/promises';
+import {
+  chmod,
+  mkdtemp,
+  mkdir,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {
@@ -475,6 +483,58 @@ void test('a controlled Agent Run applies one model and cancellation changes not
     ),
     /not changed/,
   );
+});
+
+void test('a Domain Model Run receives the standard text and attachment Context packet', async (t) => {
+  const project = await fixture(t);
+  const contextPath = path.join(
+    project.planningPath,
+    'context',
+    'Product',
+    'item.md',
+  );
+  await mkdir(path.dirname(contextPath), { recursive: true });
+  await writeFile(contextPath, '# Item\n\nAn Item has a title.\n');
+  let rejectCompletion!: (error: Error) => void;
+  let request!: DomainModelRequest;
+  const hanging: typeof startLocalAgentRun = (_agent, options) => {
+    request = JSON.parse(
+      options.prompt.split('\nREQUEST:\n')[1],
+    ) as DomainModelRequest;
+    return {
+      completion: new Promise((_, reject) => {
+        rejectCompletion = reject;
+      }),
+      cancel: () => rejectCompletion(new Error('canceled')),
+    };
+  };
+  const started = await startDomainModelRun(
+    project,
+    {
+      instruction: 'Use the supplied product rules.',
+      selectedIds: [],
+      profile: { agent: 'codex', model: '', effort: '' },
+      contextRefs: ['context/Product/item.md'],
+      files: [new File(['# Lifecycle'], 'lifecycle.md')],
+    },
+    hanging,
+  );
+  assert.equal(request.context.length, 2);
+  assert.deepEqual(request.context.map((item) => item.kind).sort(), [
+    'context',
+    'run-attachment',
+  ]);
+  for (const item of request.context) {
+    assert.ok(
+      (
+        await readFile(
+          path.join(project.rootPath, request.contextRoot, item.workspacePath),
+          'utf8',
+        )
+      ).length > 0,
+    );
+  }
+  await cancelDomainModelRun(project, started.id);
 });
 
 void test('concurrent starts reserve one Agent Run slot before asynchronous setup', async (t) => {

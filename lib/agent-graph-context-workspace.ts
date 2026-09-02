@@ -73,11 +73,12 @@ export function relatedContextNodeIds(
   );
 }
 
-export async function writeTaskDecompositionContextWorkspace(
+export async function writeAgentGraphContextWorkspace(
   runPath: string,
   inputs: ContextWorkspaceInput[],
 ) {
   const contextPath = path.join(runPath, 'context');
+  await mkdir(contextPath, { recursive: true });
   const selected = deduplicateInputs(inputs);
   const entries: ContextWorkspaceEntry[] = [];
 

@@ -1,5 +1,5 @@
-import { validateAgentProfile, type AgentProfile } from '@/lib/agent-profile';
 import { apiErrorResponse } from '@/lib/api-errors';
+import { readAgentGraphInputPacket } from '@/lib/agent-graph-input';
 import {
   cancelDomainModelRun,
   listLatestDomainModelRuns,
@@ -7,7 +7,7 @@ import {
   startDomainModelRun,
 } from '@/lib/domain-model-runs';
 import { getProject } from '@/lib/project-registry';
-import { guardJsonRequest } from '@/lib/request-boundary';
+import { guardJsonRequest, guardRequest } from '@/lib/request-boundary';
 
 export const runtime = 'nodejs';
 
@@ -43,32 +43,23 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ projectId: string }> },
 ) {
-  const denied = guardJsonRequest(request);
+  const denied = guardRequest(request);
   if (denied) return denied;
   const project = await getProject((await params).projectId);
   if (!project)
     return Response.json({ error: 'Project not found.' }, { status: 404 });
   try {
-    const input = (await request.json()) as {
-      instruction?: unknown;
-      selectedIds?: unknown;
-      profile?: AgentProfile;
-    };
-    if (
-      typeof input.instruction !== 'string' ||
-      !Array.isArray(input.selectedIds) ||
-      !input.selectedIds.every((item) => typeof item === 'string') ||
-      !input.profile
-    )
-      return Response.json(
-        { error: 'A Domain Model instruction and Agent profile are required.' },
-        { status: 400 },
-      );
-    validateAgentProfile(input.profile);
+    const formData = await request.formData();
+    const input = readAgentGraphInputPacket(formData);
+    const selectedIds = formData
+      .getAll('selectedIds')
+      .filter((item): item is string => typeof item === 'string');
     const run = await startDomainModelRun(project, {
       instruction: input.instruction,
-      selectedIds: input.selectedIds,
+      selectedIds,
       profile: input.profile,
+      contextRefs: input.contextRefs,
+      files: input.files,
     });
     return Response.json({ run }, { status: 202 });
   } catch (error) {

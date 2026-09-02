@@ -6,8 +6,8 @@ import test from 'node:test';
 import {
   primarySourceResourcePaths,
   relatedContextNodeIds,
-  writeTaskDecompositionContextWorkspace,
-} from '../lib/task-decomposition-context-workspace.ts';
+  writeAgentGraphContextWorkspace,
+} from '../lib/agent-graph-context-workspace.ts';
 
 void test('uses Start Resources as primary and narrows descendants to output.md', () => {
   const resources = [
@@ -73,7 +73,7 @@ void test('limits related Context to the selected Node neighborhood', () => {
 
 void test('writes primary and related Context without embedding content in the manifest', async () => {
   const runPath = await mkdtemp(path.join(tmpdir(), 'agent-manager-context-'));
-  const workspace = await writeTaskDecompositionContextWorkspace(runPath, [
+  const workspace = await writeAgentGraphContextWorkspace(runPath, [
     {
       role: 'related',
       kind: 'context',
@@ -110,7 +110,7 @@ void test('writes primary and related Context without embedding content in the m
 
 void test('promotes an explicitly selected duplicate Resource to primary', async () => {
   const runPath = await mkdtemp(path.join(tmpdir(), 'agent-manager-context-'));
-  const workspace = await writeTaskDecompositionContextWorkspace(runPath, [
+  const workspace = await writeAgentGraphContextWorkspace(runPath, [
     {
       role: 'related',
       kind: 'context',
@@ -133,7 +133,7 @@ void test('promotes an explicitly selected duplicate Resource to primary', async
 void test('keeps inherited outputs from one related Node collision-free', async () => {
   const runPath = await mkdtemp(path.join(tmpdir(), 'agent-manager-context-'));
   const nodeId = 'NODE-eef14eef';
-  const workspace = await writeTaskDecompositionContextWorkspace(runPath, [
+  const workspace = await writeAgentGraphContextWorkspace(runPath, [
     {
       role: 'related',
       kind: 'node-output',

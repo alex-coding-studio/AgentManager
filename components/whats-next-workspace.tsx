@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { AgentProfileSelector } from '@/components/agent-profile-selector';
 import { AgentRunControls } from '@/components/agent-run-controls';
+import { AgentGraphComposerCard } from '@/components/agent-graph-composer-card';
 import { sameModelSelection, type AgentProfile } from '@/lib/agent-profile';
 import { ContextAttachmentPicker } from '@/components/context-attachment-picker';
 import { WhatsNextContextToolbar } from '@/components/whats-next-context-toolbar';
@@ -61,6 +62,16 @@ import { intentionDestination } from '@/lib/whats-next-intention';
 import { toggleWhatsNextSelection } from '@/lib/whats-next-selection';
 import { LatestResponse } from '@/components/latest-response';
 import { latestWhatsNextResponse } from '@/lib/latest-response';
+import {
+  proposalFocusNodeIds,
+  reconcileProposalRuns,
+} from '@/lib/agent-graph-proposal';
+import { titleFromAgentGraphIdea } from '@/lib/agent-graph-source';
+import {
+  CandidateMetadataSections,
+  CandidateResourceList,
+  ProposalWorkspaceStatus,
+} from '@/components/agent-graph-proposal-workspace';
 
 const AGENT_LABELS: Record<LocalAgentKind, string> = {
   codex: 'Codex',
@@ -154,6 +165,7 @@ function WhatsNextCanvas({
     nodeId: string;
     sequence: number;
   } | null>(null);
+  const [proposalFocusSequence, setProposalFocusSequence] = useState(0);
   const [revisionTarget, setRevisionTarget] = useState<{
     runId: string;
     candidateId: string;
@@ -272,6 +284,23 @@ function WhatsNextCanvas({
     );
   const latestResponsePresentation = latestResponse
     ? latestWhatsNextResponse(latestResponse)
+    : null;
+  const visibleCandidatePreviews = visiblePreviews.filter(
+    (preview) => preview.kind === 'candidate',
+  );
+  const visibleCandidateIds = new Set(
+    visibleCandidatePreviews.map((preview) => preview.id),
+  );
+  const activeProposalNodeIds = proposalFocusNodeIds(visibleCandidatePreviews, {
+    visibleNodeIds,
+    projectedRootId: sharedSourceId,
+  });
+  const activeProposalKey = activeProposalNodeIds.join('|');
+  const fitRequest = activeProposalKey
+    ? {
+        nodeIds: activeProposalNodeIds,
+        sequence: `${activeLayer}:${activeProposalKey}:${proposalFocusSequence}`,
+      }
     : null;
   const continuingGrow = growSource
     ? runs.some(
@@ -454,7 +483,7 @@ function WhatsNextCanvas({
     setError('');
     try {
       const body = new FormData();
-      body.append('title', titleFromIdea(sentence));
+      body.append('title', titleFromAgentGraphIdea(sentence));
       body.append('idea', sentence);
       body.append('graph', 'whats-next');
       for (const ref of startRefs) body.append('contextRefs', ref);
@@ -585,6 +614,9 @@ function WhatsNextCanvas({
       );
       const payload = (await response.json()) as {
         nodes?: TaskGraphNode[];
+        runDeleted?: boolean;
+        deletedRunIds?: string[];
+        runs?: WhatsNextRunRecord[];
         error?: string;
       };
       if (!response.ok) {
@@ -594,6 +626,16 @@ function WhatsNextCanvas({
       setPreviews((current) =>
         current.filter((item) => item.id !== selectedCandidatePreview.id),
       );
+      if (action === 'discard') {
+        setRuns((current) =>
+          reconcileProposalRuns(current, {
+            requestedRunId: selectedCandidatePreview.runId!,
+            runDeleted: payload.runDeleted,
+            deletedRunIds: payload.deletedRunIds,
+            runs: payload.runs,
+          }),
+        );
+      }
       setInspectorId('');
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Something failed.');
@@ -701,7 +743,7 @@ function WhatsNextCanvas({
     try {
       const body = new FormData();
       body.append('id', editStart.id);
-      body.append('title', titleFromIdea(editText));
+      body.append('title', titleFromAgentGraphIdea(editText));
       body.append('idea', editText.trim());
       body.append('graph', 'whats-next');
       for (const resource of editStart.resources) {
@@ -834,21 +876,23 @@ function WhatsNextCanvas({
 
   if (!hasGraph) {
     return (
-      <div className="grid h-full place-items-center overflow-y-auto px-6 py-6">
-        <div className="w-full max-w-3xl">
-          <div className="mb-6 flex items-center gap-2 text-sm text-muted-foreground">
-            <Sparkles className="size-4" />
-            {t("What's Next")}
-          </div>
-          <h2 className="text-2xl font-semibold tracking-tight">
-            {t('What do you want to build?')}
-          </h2>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            {t(
-              'Write the idea in your own words. It becomes the Start of this Canvas, and',
-            )}
-            {AGENT_LABELS[selectedAgent]} {t('answers it straight away.')}
-          </p>
+      <div className="relative h-full overflow-hidden bg-[radial-gradient(circle,var(--border)_1px,transparent_1px)] bg-[size:22px_22px]">
+        <AgentGraphComposerCard
+          title={
+            <span className="flex items-center gap-2">
+              <Sparkles className="size-4 text-muted-foreground" />
+              {t('What do you want to build?')}
+            </span>
+          }
+          description={
+            <>
+              {t(
+                'Write the idea in your own words. It becomes the Start of this Canvas, and',
+              )}
+              {AGENT_LABELS[selectedAgent]} {t('answers it straight away.')}
+            </>
+          }
+        >
           <Textarea
             value={idea}
             onChange={(event) => setIdea(event.target.value)}
@@ -857,7 +901,7 @@ function WhatsNextCanvas({
               'A manager that helps one developer grow and decompose product intent…',
             )}
             maxLength={4_000}
-            className="mt-5 resize-none text-sm"
+            className="mt-3 resize-none text-sm"
             aria-label={t('Your idea')}
           />
           <p className="mt-2 text-right text-[11px] text-muted-foreground">
@@ -885,29 +929,21 @@ function WhatsNextCanvas({
               label={t('Optional sources')}
             />
           </div>
-          <div className="mt-4 flex flex-col items-stretch gap-3">
-            <AgentProfileSelector
+          <div className="mt-3">
+            <AgentRunControls
               value={agentProfile}
               onChange={setAgentProfile}
-              disabled={starting}
               mode={developmentPreview ? 'demo' : 'live'}
-            />
-            <Button
-              onClick={() => void beginFromIdea()}
               disabled={!idea.trim() || starting || developmentPreview}
-            >
-              {starting ? (
-                <LoaderCircle className="size-4 animate-spin" />
-              ) : (
-                <Sparkles className="size-4" />
-              )}
-              {t('Start and ask')}
-            </Button>
+              running={starting}
+              actionLabel="Start and ask"
+              onRun={() => void beginFromIdea()}
+            />
           </div>
           {error ? (
             <p className="mt-4 text-xs text-destructive">{error}</p>
           ) : null}
-        </div>
+        </AgentGraphComposerCard>
       </div>
     );
   }
@@ -919,6 +955,7 @@ function WhatsNextCanvas({
         previews={visiblePreviews}
         focusedNodeId={focusedNodeId}
         locateRequest={locateRequest}
+        fitRequest={fitRequest}
         selectedNodeIds={combineIds}
         edgeAlignedOverlays
         avoidBottomRightPanel={combineIds.length >= 1}
@@ -954,6 +991,16 @@ function WhatsNextCanvas({
           </button>
         ))}
       </div>
+
+      <ProposalWorkspaceStatus
+        className="absolute top-[4.25rem] right-4 z-10"
+        formalCount={visibleNodes.length}
+        candidateCount={visibleCandidateIds.size}
+        activeProposalCount={activeProposalNodeIds.length}
+        onFocusProposal={() =>
+          setProposalFocusSequence((current) => current + 1)
+        }
+      />
 
       {latestResponse && latestResponsePresentation ? (
         <LatestResponse
@@ -996,20 +1043,14 @@ function WhatsNextCanvas({
       </div>
 
       {combineIds.length >= 1 ? (
-        <div className="absolute right-5 bottom-5 w-[360px] rounded-2xl border border-border bg-background p-4 shadow-[0_18px_50px_rgb(15_23_42/12%)]">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-xs font-semibold">
-                {combineIds.length}{' '}
-                {combineIds.length === 1 ? t('card') : t('cards')}{' '}
-                {t('selected')}
-              </p>
-              <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
-                {combineNodes[0]?.role === 'start'
-                  ? t('Choose what this Source should generate.')
-                  : t('Choose what these cards should become.')}
-              </p>
-            </div>
+        <AgentGraphComposerCard
+          title={`${combineIds.length} ${combineIds.length === 1 ? t('card') : t('cards')} ${t('selected')}`}
+          description={
+            combineNodes[0]?.role === 'start'
+              ? t('Choose what this Source should generate.')
+              : t('Choose what these cards should become.')
+          }
+          action={
             <button
               type="button"
               className="text-muted-foreground transition hover:text-foreground"
@@ -1021,9 +1062,9 @@ function WhatsNextCanvas({
             >
               <X className="size-4" />
             </button>
-          </div>
-
-          <div className="mt-3 grid grid-cols-2 gap-2">
+          }
+        >
+          <div className="grid grid-cols-2 gap-2">
             <label className="space-y-1 text-[10px] font-medium text-muted-foreground">
               {t('Intention')}
               <select
@@ -1116,7 +1157,7 @@ function WhatsNextCanvas({
               onRun={() => void submitCombine()}
             />
           </div>
-        </div>
+        </AgentGraphComposerCard>
       ) : null}
 
       <Dialog
@@ -1530,6 +1571,17 @@ function WhatsNextCanvas({
                     ))}
                   </div>
                 </details>
+
+                <CandidateResourceList
+                  resources={selectedCandidate.resources}
+                  onOpen={(path) =>
+                    void openMarkdown(path, path.split('/').at(-1) ?? path)
+                  }
+                />
+
+                <CandidateMetadataSections
+                  metadata={selectedCandidate.metadata}
+                />
 
                 <Dialog
                   open={feedbackDraft !== null}
@@ -2085,14 +2137,6 @@ function toggle(current: string[], value: string) {
 
 function resourceName(resourcePath: string) {
   return resourcePath.split('/').at(-1) ?? resourcePath;
-}
-
-function titleFromIdea(idea: string) {
-  const firstLine = idea
-    .split('\n')
-    .map((line) => line.replace(/^#+\s*/, '').trim())
-    .find(Boolean);
-  return (firstLine || 'Untitled idea').slice(0, 160);
 }
 
 function withoutFirstHeading(markdown: string) {

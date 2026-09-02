@@ -3,6 +3,8 @@
 import { RotateCcw, Square, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AgentRunControls } from '@/components/agent-run-controls';
+import { AgentGraphComposerCard } from '@/components/agent-graph-composer-card';
+import { ContextAttachmentPicker } from '@/components/context-attachment-picker';
 import { DomainModelCanvas } from '@/components/domain-model-canvas';
 import { LatestResponse } from '@/components/latest-response';
 import { Button } from '@/components/ui/button';
@@ -25,6 +27,7 @@ import type {
 import type { DomainModelRunRecord } from '@/lib/domain-model-runs';
 import { deriveDomainRelationships } from '@/lib/domain-model-view';
 import { latestDomainModelResponse } from '@/lib/latest-response';
+import type { ContextBrowserFolder } from '@/lib/product-context';
 
 export function DomainModelWorkspace({
   projectId,
@@ -32,18 +35,25 @@ export function DomainModelWorkspace({
   initialRuns,
   initialCanUndo,
   initialLastChange,
+  folders,
 }: {
   projectId: string;
   initialModel: DomainModel;
   initialRuns: DomainModelRunRecord[];
   initialCanUndo: boolean;
   initialLastChange: DomainChange | null;
+  folders: ContextBrowserFolder[];
 }) {
   const [model, setModel] = useState(initialModel);
   const [runs, setRuns] = useState(initialRuns);
   const [canUndo, setCanUndo] = useState(initialCanUndo);
   const [lastModelChange, setLastModelChange] = useState(initialLastChange);
   const [instruction, setInstruction] = useState('');
+  const [contextFolderPath, setContextFolderPath] = useState(
+    folders[0]?.path ?? '',
+  );
+  const [contextRefs, setContextRefs] = useState<string[]>([]);
+  const [contextFiles, setContextFiles] = useState<File[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [focusedId, setFocusedId] = useState('');
   const [inspectedEntityId, setInspectedEntityId] = useState('');
@@ -133,13 +143,17 @@ export function DomainModelWorkspace({
     setSubmitting(true);
     setError('');
     try {
+      const body = new FormData();
+      body.set('instruction', instruction);
+      body.set('agent', profile.agent);
+      body.set('model', profile.model);
+      body.set('effort', profile.effort);
+      for (const id of selectedIds) body.append('selectedIds', id);
+      for (const ref of contextRefs) body.append('contextRefs', ref);
+      for (const file of contextFiles) body.append('files', file);
       const response = await fetch(
         `/api/projects/${projectId}/domain-model-runs`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ instruction, selectedIds, profile }),
-        },
+        { method: 'POST', body },
       );
       const data = (await response.json()) as {
         run?: DomainModelRunRecord;
@@ -150,6 +164,8 @@ export function DomainModelWorkspace({
         return;
       }
       setRuns((current) => [data.run!, ...current]);
+      setContextRefs([]);
+      setContextFiles([]);
       setNow(Date.now());
     } catch {
       setError('Could not start the Domain Model Agent.');
@@ -265,90 +281,115 @@ export function DomainModelWorkspace({
           <LatestDomainResponse run={latest} canUndo={canUndo} onUndo={undo} />
         ) : null}
 
-        <div className="pointer-events-none absolute right-5 bottom-5 z-20">
-          <div className="pointer-events-auto w-[min(360px,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-border bg-background shadow-[0_18px_50px_rgb(15_23_42/12%)]">
-            {running ? (
-              <div className="flex min-h-16 items-center gap-3 px-4 py-3 text-sm">
+        {running ? (
+          <AgentGraphComposerCard
+            className="z-20"
+            title={
+              <span className="flex items-center gap-3 text-sm">
                 <span className="relative flex size-2.5">
                   <span className="absolute inline-flex size-full animate-ping rounded-full bg-sky-400 opacity-60" />
                   <span className="relative inline-flex size-2.5 rounded-full bg-sky-500" />
                 </span>
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium">
-                    {profile.agent === 'codex' ? 'Codex' : 'Claude'} running ·{' '}
-                    {formatDuration(elapsed)}
-                  </p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {lastActivity}
-                  </p>
-                </div>
-                <Button variant="outline" onClick={cancelRun}>
-                  <Square className="size-3.5" /> Cancel
-                </Button>
-              </div>
-            ) : (
-              <>
-                <div className="p-4">
-                  {selectedContext.length ? (
-                    <div className="mb-3 flex flex-wrap gap-1.5">
-                      {selectedContext.map((item) => (
-                        <button
-                          key={item.id}
-                          type="button"
-                          className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-1 text-[10px]"
-                          onClick={() => toggleSelection(item.id)}
-                        >
-                          {item.label} <X className="size-3" />
-                        </button>
-                      ))}
-                      <button
-                        type="button"
-                        className="ml-auto text-[10px] text-muted-foreground hover:text-foreground"
-                        onClick={() => setSelectedIds([])}
-                      >
-                        Clear context
-                      </button>
-                    </div>
-                  ) : null}
-                  <Textarea
-                    ref={textarea}
-                    value={instruction}
-                    rows={3}
-                    placeholder="Describe an entity, field, relationship or rule to add or change…"
-                    className="min-h-24 resize-none text-sm"
-                    onChange={(event) => setInstruction(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (
-                        (event.metaKey || event.ctrlKey) &&
-                        event.key === 'Enter'
-                      ) {
-                        event.preventDefault();
-                        void startRun();
-                      }
-                    }}
-                  />
-                  <div className="mt-3">
-                    <AgentRunControls
-                      value={profile}
-                      onChange={setProfile}
-                      label="Domain Model Agent"
-                      disabled={!instruction.trim() || submitting}
-                      onRun={startRun}
-                    />
-                  </div>
-                </div>
-                {error ? (
-                  <p
-                    role="alert"
-                    className="border-t border-destructive/30 px-3 py-2 text-xs text-destructive"
+                {profile.agent === 'codex' ? 'Codex' : 'Claude'} running ·{' '}
+                {formatDuration(elapsed)}
+              </span>
+            }
+            description={lastActivity}
+            action={
+              <Button variant="outline" size="sm" onClick={cancelRun}>
+                <Square className="size-3.5" /> Cancel
+              </Button>
+            }
+          />
+        ) : (
+          <AgentGraphComposerCard
+            className="z-20"
+            title="Describe the model change"
+            description={
+              selectedContext.length
+                ? `${selectedContext.length} selected model entries will be treated as primary context.`
+                : 'Describe an entity, field, relationship or rule to add or change.'
+            }
+          >
+            {selectedContext.length ? (
+              <div className="mb-3 flex flex-wrap gap-1.5">
+                {selectedContext.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-1 text-[10px]"
+                    onClick={() => toggleSelection(item.id)}
                   >
-                    {error}
-                  </p>
-                ) : null}
-              </>
-            )}
-          </div>
-        </div>
+                    {item.label} <X className="size-3" />
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  className="ml-auto text-[10px] text-muted-foreground hover:text-foreground"
+                  onClick={() => setSelectedIds([])}
+                >
+                  Clear context
+                </button>
+              </div>
+            ) : null}
+            <Textarea
+              ref={textarea}
+              value={instruction}
+              rows={3}
+              placeholder="Describe an entity, field, relationship or rule to add or change…"
+              className="min-h-24 resize-none text-sm"
+              onChange={(event) => setInstruction(event.target.value)}
+              onKeyDown={(event) => {
+                if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+                  event.preventDefault();
+                  void startRun();
+                }
+              }}
+            />
+            <div className="mt-3">
+              <ContextAttachmentPicker
+                folders={folders}
+                folderPath={contextFolderPath}
+                onFolderPath={setContextFolderPath}
+                refs={contextRefs}
+                onToggleRef={(ref) =>
+                  setContextRefs((current) =>
+                    current.includes(ref)
+                      ? current.filter((item) => item !== ref)
+                      : [...current, ref],
+                  )
+                }
+                files={contextFiles}
+                onAddFiles={(files) =>
+                  setContextFiles((current) =>
+                    [...current, ...files].slice(0, 20),
+                  )
+                }
+                onRemoveFile={(index) =>
+                  setContextFiles((current) =>
+                    current.filter((_, itemIndex) => itemIndex !== index),
+                  )
+                }
+                label="Optional sources"
+              />
+            </div>
+            <div className="mt-3">
+              <AgentRunControls
+                value={profile}
+                onChange={setProfile}
+                label="Domain Model Agent"
+                disabled={!instruction.trim() || submitting}
+                running={submitting}
+                onRun={startRun}
+              />
+            </div>
+            {error ? (
+              <p role="alert" className="mt-3 text-xs text-destructive">
+                {error}
+              </p>
+            ) : null}
+          </AgentGraphComposerCard>
+        )}
       </div>
 
       <DomainInspector

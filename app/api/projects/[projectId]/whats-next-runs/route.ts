@@ -1,7 +1,7 @@
 import { getProject } from '@/lib/project-registry';
 import { apiErrorResponse } from '@/lib/api-errors';
 import { guardJsonRequest, guardRequest } from '@/lib/request-boundary';
-import { readAgentProfile } from '@/lib/agent-profile';
+import { readAgentGraphInputPacket } from '@/lib/agent-graph-input';
 import {
   acceptWhatsNextCandidate,
   cancelWhatsNextRun,
@@ -27,8 +27,9 @@ export async function POST(
 
   try {
     const formData = await request.formData();
-    const instruction = formData.get('instruction');
-    const agent = formData.get('agent');
+    const input = readAgentGraphInputPacket(formData, {
+      instructionRequired: false,
+    });
     const revisionRunId = formData.get('revisionRunId');
     const revisionCandidateId = formData.get('revisionCandidateId');
     const redoProposal = formData.get('redoProposal') === 'true';
@@ -38,34 +39,21 @@ export async function POST(
     const sourceNodeIds = formData
       .getAll('sourceNodeIds')
       .filter((entry): entry is string => typeof entry === 'string');
-    if (sourceNodeIds.length === 0 || typeof instruction !== 'string') {
+    if (sourceNodeIds.length === 0) {
       return Response.json(
         { error: 'At least one origin Node is required.' },
         { status: 400 },
       );
     }
-    if (agent !== 'codex' && agent !== 'claude') {
-      return Response.json(
-        { error: 'This MVP currently supports Codex and Claude only.' },
-        { status: 400 },
-      );
-    }
-    const contextRefs = formData
-      .getAll('contextRefs')
-      .filter((entry): entry is string => typeof entry === 'string');
-    const files = formData
-      .getAll('files')
-      .filter((entry): entry is File => entry instanceof File);
     const feedback = parseFeedback(feedbackValue);
-    const profile = readAgentProfile(formData);
     const run = await startWhatsNextRun(project, {
       sourceNodeIds,
-      agent,
-      model: profile.model,
-      effort: profile.effort,
-      instruction,
-      contextRefs,
-      files,
+      agent: input.profile.agent,
+      model: input.profile.model,
+      effort: input.profile.effort,
+      instruction: input.instruction,
+      contextRefs: input.contextRefs,
+      files: input.files,
       feedback,
       redoProposal,
       intention:

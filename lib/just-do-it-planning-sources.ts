@@ -9,7 +9,7 @@ import {
   resolvePlanningPath,
 } from './planning-paths.ts';
 import { assertCardUuid } from './just-do-it-harness.ts';
-import { primarySourceResourcePaths } from './task-decomposition-context-workspace.ts';
+import { primarySourceResourcePaths } from './agent-graph-context-workspace.ts';
 
 export type PlanningSource = {
   module: 'whats-next' | 'task-graph';

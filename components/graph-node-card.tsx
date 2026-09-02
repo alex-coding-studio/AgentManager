@@ -4,8 +4,8 @@ import { useEffect, useState } from 'react';
 import {
   CheckCircle2,
   Circle,
+  CircleEllipsis,
   GitFork,
-  Info,
   LoaderCircle,
   Plus,
   X,
@@ -178,7 +178,7 @@ export function GraphNodeCard({
               data.onInspect(id);
             }}
           >
-            <Info className="size-4" />
+            <CircleEllipsis className="size-4" />
           </button>
         ) : null
       }

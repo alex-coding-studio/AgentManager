@@ -1,7 +1,7 @@
 import { getProject } from '@/lib/project-registry';
 import { apiErrorResponse } from '@/lib/api-errors';
 import { guardJsonRequest, guardRequest } from '@/lib/request-boundary';
-import { readAgentProfile } from '@/lib/agent-profile';
+import { readAgentGraphInputPacket } from '@/lib/agent-graph-input';
 import {
   acceptTaskDecompositionCandidate,
   cancelTaskDecompositionRun,
@@ -27,38 +27,24 @@ export async function POST(
   try {
     const formData = await request.formData();
     const sourceNodeId = formData.get('sourceNodeId');
-    const instruction = formData.get('instruction');
-    const agent = formData.get('agent');
+    const input = readAgentGraphInputPacket(formData);
     const revisionRunId = formData.get('revisionRunId');
     const revisionCandidateId = formData.get('revisionCandidateId');
     const operation = formData.get('operation');
-    if (typeof sourceNodeId !== 'string' || typeof instruction !== 'string') {
+    if (typeof sourceNodeId !== 'string') {
       return Response.json(
         { error: 'A source Node and Instruction are required.' },
         { status: 400 },
       );
     }
-    if (agent !== 'codex' && agent !== 'claude') {
-      return Response.json(
-        { error: 'This MVP currently supports Codex and Claude only.' },
-        { status: 400 },
-      );
-    }
-    const contextRefs = formData
-      .getAll('contextRefs')
-      .filter((entry): entry is string => typeof entry === 'string');
-    const files = formData
-      .getAll('files')
-      .filter((entry): entry is File => entry instanceof File);
-    const profile = readAgentProfile(formData);
     const run = await startTaskDecompositionRun(project, {
       sourceNodeId,
-      agent,
-      model: profile.model,
-      effort: profile.effort,
-      instruction,
-      contextRefs,
-      files,
+      agent: input.profile.agent,
+      model: input.profile.model,
+      effort: input.profile.effort,
+      instruction: input.instruction,
+      contextRefs: input.contextRefs,
+      files: input.files,
       revisionRunId:
         typeof revisionRunId === 'string' && revisionRunId
           ? revisionRunId

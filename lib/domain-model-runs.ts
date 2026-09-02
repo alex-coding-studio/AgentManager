@@ -1,5 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
+import {
+  mkdir,
+  readFile,
+  readdir,
+  realpath,
+  rename,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
 import path from 'node:path';
 import type { AgentProfile } from './agent-profile.ts';
 import { validateAgentProfile } from './agent-profile.ts';
@@ -31,6 +39,11 @@ import {
   type LocalAgentActivity,
 } from './local-agent-activity.ts';
 import type { RegisteredProject } from './project-registry.ts';
+import { readTaskGraphMarkdownResource } from './task-graph.ts';
+import {
+  writeAgentGraphContextWorkspace,
+  type ContextWorkspaceInput,
+} from './agent-graph-context-workspace.ts';
 
 export type DomainModelRunRecord = {
   schemaVersion: 1;
@@ -38,6 +51,8 @@ export type DomainModelRunRecord = {
   status: 'running' | 'succeeded' | 'failed' | 'canceled';
   instruction: string;
   selectedIds: string[];
+  contextRefs?: string[];
+  attachmentNames?: string[];
   profile: AgentProfile;
   baseVersion: number;
   startedAt: string;
@@ -69,6 +84,8 @@ export async function startDomainModelRun(
     instruction: string;
     selectedIds: string[];
     profile: AgentProfile;
+    contextRefs?: string[];
+    files?: File[];
   },
   transport = startLocalAgentRun,
 ) {
@@ -81,6 +98,12 @@ export async function startDomainModelRun(
     );
   if (input.selectedIds.length > 20)
     throw new PublicApiError('Select no more than 20 Domain elements.', 400);
+  const contextRefs = [...new Set(input.contextRefs ?? [])];
+  const files = input.files ?? [];
+  if (contextRefs.length > 50)
+    throw new PublicApiError('Select no more than 50 Context documents.', 400);
+  if (files.length > 20)
+    throw new PublicApiError('Attach no more than 20 Markdown files.', 400);
   const key = project.planningPath;
   if (activeRuns.has(key))
     throw new PublicApiError(
@@ -114,53 +137,74 @@ export async function startDomainModelRun(
         'A selected Domain element is no longer available.',
         409,
       );
-    const request = createDomainModelRequest({
-      requestId: runId,
-      instruction,
-      selectedIds,
-      model,
-      previousSummary: await latestSummary(project),
-    });
-    const run: DomainModelRunRecord = {
-      schemaVersion: 1,
-      id: runId,
-      status: 'running',
-      instruction,
-      selectedIds,
-      profile: structuredClone(input.profile),
-      baseVersion: model.stateVersion,
-      startedAt,
-      endedAt: null,
-      agentSessionId: null,
-      usage: null,
-      activity,
-      result: null,
-      change: null,
-      error: null,
-    };
-    await writeRun(project, run, {
-      'request.json': JSON.stringify(request),
-      'context/index.json': JSON.stringify(contextIndex(request)),
-    });
-    const agentRun = transport(input.profile.agent, {
-      workingDirectory: project.rootPath,
-      protectedPath: project.planningPath,
-      prompt: domainModelPrompt(request),
-      model: input.profile.model || undefined,
-      effort: input.profile.effort || undefined,
-      access: 'read-only',
-      disableDelegation: true,
-      isolatedProcessGroup: true,
-      onActivity: (event) => recordActivity(activity, event),
-    });
-    active.cancel = agentRun.cancel;
-    void agentRun.completion
-      .then((result) => settle(project, request, run, active, result))
-      .catch((error: unknown) => fail(project, run, active, error))
-      .finally(() => {
-        if (activeRuns.get(key) === active) activeRuns.delete(key);
+    const previousSummary = await latestSummary(project);
+    const contextPath = path.join(await runPath(project, runId), 'context');
+    try {
+      const workspace = await writeAgentGraphContextWorkspace(
+        await runPath(project, runId),
+        await domainModelContextInputs(project, runId, contextRefs, files),
+      );
+      const request = createDomainModelRequest({
+        requestId: runId,
+        instruction,
+        selectedIds,
+        model,
+        previousSummary,
+        contextRoot: await relativeContextRoot(project, contextPath),
+        context: workspace.manifest.primary.map((entry) => ({
+          kind: entry.kind,
+          logicalPath: entry.logicalPath,
+          workspacePath: entry.workspacePath,
+        })),
       });
-    return run;
+      const run: DomainModelRunRecord = {
+        schemaVersion: 1,
+        id: runId,
+        status: 'running',
+        instruction,
+        selectedIds,
+        contextRefs,
+        attachmentNames: files.map((file) => file.name),
+        profile: structuredClone(input.profile),
+        baseVersion: model.stateVersion,
+        startedAt,
+        endedAt: null,
+        agentSessionId: null,
+        usage: null,
+        activity,
+        result: null,
+        change: null,
+        error: null,
+      };
+      await writeRun(project, run, {
+        'request.json': JSON.stringify(request),
+      });
+      const agentRun = transport(input.profile.agent, {
+        workingDirectory: project.rootPath,
+        protectedPath: project.planningPath,
+        prompt: domainModelPrompt(request),
+        model: input.profile.model || undefined,
+        effort: input.profile.effort || undefined,
+        access: 'read-only',
+        disableDelegation: true,
+        isolatedProcessGroup: true,
+        onActivity: (event) => recordActivity(activity, event),
+      });
+      active.cancel = agentRun.cancel;
+      void agentRun.completion
+        .then((result) => settle(project, request, run, active, result))
+        .catch((error: unknown) => fail(project, run, active, error))
+        .finally(() => {
+          if (activeRuns.get(key) === active) activeRuns.delete(key);
+        });
+      return run;
+    } catch (error) {
+      await rm(await runPath(project, runId, false), {
+        recursive: true,
+        force: true,
+      }).catch(() => undefined);
+      throw error;
+    }
   } catch (error) {
     if (activeRuns.get(key) === active) activeRuns.delete(key);
     throw error;
@@ -350,23 +394,71 @@ async function fail(
   await writeRun(project, run, files).catch(() => undefined);
 }
 
-function contextIndex(request: DomainModelRequest) {
-  return {
-    baseVersion: request.baseVersion,
-    selectedIds: request.selectedIds,
-    entityIndex: request.model.entities.map((item) => ({
-      id: item.id,
-      name: item.name,
-      meaning: item.meaning,
-    })),
-    relationships: request.model.relationships.map((item) => ({
-      id: item.id,
-      sourceEntityId: item.sourceEntityId,
-      targetEntityId: item.targetEntityId,
-      label: item.label,
-    })),
-    previousSummary: request.previousSummary,
-  };
+async function domainModelContextInputs(
+  project: RegisteredProject,
+  runId: string,
+  contextRefs: string[],
+  files: File[],
+): Promise<ContextWorkspaceInput[]> {
+  const references = await Promise.all(
+    contextRefs.map(async (resourcePath) => {
+      const resource = await readTaskGraphMarkdownResource(
+        project,
+        resourcePath,
+      );
+      return {
+        role: 'primary' as const,
+        kind: 'context',
+        logicalPath: resource.path,
+        content: resource.markdown,
+      };
+    }),
+  );
+  const uploads = await Promise.all(
+    files.map(async (file, index) => {
+      if (!/\.(md|markdown)$/i.test(file.name))
+        throw new PublicApiError(
+          'Only Markdown files can be attached to a Domain Model Run.',
+          400,
+        );
+      if (file.size > 2 * 1024 * 1024)
+        throw new PublicApiError(
+          'Each Domain Model attachment must be 2 MB or smaller.',
+          400,
+        );
+      return {
+        role: 'primary' as const,
+        kind: 'run-attachment',
+        logicalPath: path.posix.join(
+          'domain-model',
+          'runs',
+          runId,
+          'attachments',
+          `${String(index + 1).padStart(3, '0')}-${file.name}`,
+        ),
+        content: await file.text(),
+      };
+    }),
+  );
+  return [...references, ...uploads];
+}
+
+async function relativeContextRoot(
+  project: RegisteredProject,
+  contextPath: string,
+) {
+  const relative = path.relative(await realpath(project.rootPath), contextPath);
+  if (
+    !relative ||
+    relative === '..' ||
+    relative.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relative)
+  )
+    throw new PublicApiError(
+      'Domain Model Context must remain inside the project.',
+      400,
+    );
+  return relative.split(path.sep).join('/');
 }
 
 function recordActivity(
