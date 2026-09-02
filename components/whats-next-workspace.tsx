@@ -12,6 +12,7 @@ import {
   X,
 } from 'lucide-react';
 import { AgentProfileSelector } from '@/components/agent-profile-selector';
+import { AgentRunControls } from '@/components/agent-run-controls';
 import { sameModelSelection, type AgentProfile } from '@/lib/agent-profile';
 import { ContextAttachmentPicker } from '@/components/context-attachment-picker';
 import { WhatsNextContextToolbar } from '@/components/whats-next-context-toolbar';
@@ -1102,20 +1103,14 @@ function WhatsNextCanvas({
             />
           </label>
 
-          <div className="mt-3 flex flex-col items-stretch gap-3">
-            <AgentProfileSelector
+          <div className="mt-3">
+            <AgentRunControls
               value={agentProfile}
               onChange={setAgentProfile}
               mode={developmentPreview ? 'demo' : 'live'}
-            />
-            <Button
-              size="sm"
               disabled={!combineInstruction.trim() || developmentPreview}
-              onClick={() => void submitCombine()}
-            >
-              <Sparkles className="size-3.5" />
-              {t('Ask')}
-            </Button>
+              onRun={() => void submitCombine()}
+            />
           </div>
         </div>
       ) : null}

@@ -13,12 +13,14 @@ export function AgentProfileSelector({
   disabled = false,
   mode = 'live',
   label = 'Agent configuration',
+  showStatus = true,
 }: {
   value: AgentProfile;
   onChange: (profile: AgentProfile) => void;
   disabled?: boolean;
   mode?: 'live' | 'demo';
   label?: string;
+  showStatus?: boolean;
 }) {
   const { t } = useUiText();
   const [catalog, setCatalog] = useState<ModelCatalog | null>(null);
@@ -186,38 +188,40 @@ export function AgentProfileSelector({
           </select>
         </label>
       </fieldset>
-      <div className="text-xs text-muted-foreground" aria-live="polite">
-        {mode === 'demo' ? (
-          t(
-            'Demo profiles only, not a live model catalog. Nothing is sent to a provider.',
-          )
-        ) : reading ? (
-          t('Loading local models…')
-        ) : failed ? (
-          <span>
-            {t(
-              'Could not load models. Use Agent default or enter a custom model.',
-            )}{' '}
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={disabled}
-              onClick={() => {
-                setLoading(true);
-                setRetry((old) => old + 1);
-              }}
-            >
-              {t('Retry')}
-            </Button>
-          </span>
-        ) : models.length === 0 ? (
-          t('No models returned. Use Agent default or enter a custom model.')
-        ) : (
-          t(
-            'Models reported by your local Agent. Availability is checked when running.',
-          )
-        )}
-      </div>
+      {showStatus || (mode === 'live' && (reading || failed)) ? (
+        <div className="text-xs text-muted-foreground" aria-live="polite">
+          {mode === 'demo' ? (
+            t(
+              'Demo profiles only, not a live model catalog. Nothing is sent to a provider.',
+            )
+          ) : reading ? (
+            t('Loading local models…')
+          ) : failed ? (
+            <span>
+              {t(
+                'Could not load models. Use Agent default or enter a custom model.',
+              )}{' '}
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={disabled}
+                onClick={() => {
+                  setLoading(true);
+                  setRetry((old) => old + 1);
+                }}
+              >
+                {t('Retry')}
+              </Button>
+            </span>
+          ) : models.length === 0 ? (
+            t('No models returned. Use Agent default or enter a custom model.')
+          ) : (
+            t(
+              'Models reported by your local Agent. Availability is checked when running.',
+            )
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }

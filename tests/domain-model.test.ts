@@ -10,7 +10,10 @@ import {
   undoLastDomainModelChange,
   type ProposedDomainModel,
 } from '../lib/domain-model.ts';
-import { deriveDomainRelationships } from '../lib/domain-model-view.ts';
+import {
+  deriveDomainRelationships,
+  domainModelTopologyKey,
+} from '../lib/domain-model-view.ts';
 import {
   createDomainModelRequest,
   parseDomainModelResult,
@@ -367,6 +370,25 @@ void test('the Harness binds responses to one exact model state', () => {
   );
 });
 
+void test('the topology key ignores equivalent Entity and relationship ordering', () => {
+  const model = {
+    schemaVersion: 1 as const,
+    stateVersion: 1,
+    ...initialProposal(),
+    lastRunId: null,
+    updatedAt: null,
+  };
+  const reordered = {
+    ...model,
+    entities: [...model.entities].reverse(),
+    relationships: [...model.relationships].reverse(),
+  };
+  assert.equal(
+    domainModelTopologyKey(model),
+    domainModelTopologyKey(reordered),
+  );
+});
+
 void test('a controlled Agent Run applies one model and cancellation changes nothing', async (t) => {
   const project = await fixture(t);
   const transport: typeof startLocalAgentRun = (_agent, options) => {
@@ -551,4 +573,66 @@ void test('a committed model is never reported as unchanged when Run evidence fa
   const historical = await readDomainModelRun(project, started.id);
   assert.equal(historical.status, 'succeeded');
   assert.doesNotMatch(historical.error ?? '', /not changed/i);
+});
+
+void test('a rejected Agent model retains the raw response for diagnosis', async (t) => {
+  const project = await fixture(t);
+  const transport: typeof startLocalAgentRun = (_agent, options) => {
+    const request = JSON.parse(
+      options.prompt.split('\nREQUEST:\n')[1],
+    ) as DomainModelRequest;
+    const model = initialProposal();
+    model.constraints[0].target = {
+      kind: 'field' as never,
+      id: 'NEW_FIELD_TITLE',
+    };
+    return {
+      completion: Promise.resolve({
+        agentSessionId: 'fixture-session',
+        usage: null,
+        finalOutput: JSON.stringify({
+          harnessVersion: 1,
+          requestId: request.requestId,
+          baseVersion: request.baseVersion,
+          inputFingerprint: request.inputFingerprint,
+          outcome: 'applied',
+          summary:
+            'Returned an invalid field constraint with token=ghp_abcdefghijklmnop.',
+          model,
+        }),
+      }),
+      cancel: () => {},
+    };
+  };
+  const started = await startDomainModelRun(
+    project,
+    {
+      instruction: 'Create an invalid field constraint.',
+      selectedIds: [],
+      profile: { agent: 'codex', model: '', effort: '' },
+    },
+    transport,
+  );
+  let run = await readDomainModelRun(project, started.id);
+  for (let attempt = 0; attempt < 50 && run.status === 'running'; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    run = await readDomainModelRun(project, started.id);
+  }
+  assert.equal(run.status, 'failed');
+  const output = path.join(
+    project.planningPath,
+    'domain-model',
+    'runs',
+    started.id,
+    'agent-output.txt',
+  );
+  let raw = '';
+  for (let attempt = 0; attempt < 50 && !raw; attempt++) {
+    raw = await readFile(output, 'utf8').catch(() => '');
+    if (!raw) await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  assert.match(raw, /invalid field constraint/);
+  assert.doesNotMatch(raw, /ghp_abcdefghijklmnop/);
+  assert.match(raw, /token=\[redacted\]/);
+  assert.equal((await readDomainModel(project)).stateVersion, 0);
 });

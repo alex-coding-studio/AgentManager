@@ -15,10 +15,11 @@ import {
   type EdgeProps,
   type Node,
   type NodeProps,
+  type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Check, CircleEllipsis } from 'lucide-react';
-import { memo, useMemo } from 'react';
+import { memo, useEffect, useMemo, useRef } from 'react';
 import { CanvasNodeCardFrame } from '@/components/canvas-node-card-frame';
 import {
   type DerivedDomainRelationship,
@@ -26,7 +27,10 @@ import {
   type DomainModel,
   type DomainRelationship,
 } from '@/lib/domain-model';
-import { deriveDomainRelationships } from '@/lib/domain-model-view';
+import {
+  deriveDomainRelationships,
+  domainModelTopologyKey,
+} from '@/lib/domain-model-view';
 import { cn } from '@/lib/utils';
 
 type EntityNodeData = {
@@ -40,6 +44,8 @@ type EntityNodeData = {
 type EntityFlowNode = Node<EntityNodeData, 'entity'>;
 const nodeTypes = { entity: memo(EntityCard) };
 const edgeTypes = { domain: memo(DomainEdge) };
+const entityNodeWidth = 288;
+const entityNodeHeight = 104;
 
 export function DomainModelCanvas({
   model,
@@ -58,6 +64,7 @@ export function DomainModelCanvas({
   onInspectEntity: (id: string) => void;
   onInspectRelationship: (id: string) => void;
 }) {
+  const flow = useRef<ReactFlowInstance<EntityFlowNode, Edge> | null>(null);
   const graph = useMemo(
     () =>
       buildGraph(
@@ -69,6 +76,13 @@ export function DomainModelCanvas({
       ),
     [focusedId, model, onInspectEntity, onToggleSelection, selectedIds],
   );
+  const topologyKey = useMemo(() => domainModelTopologyKey(model), [model]);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      void flow.current?.fitView({ padding: 0.34, minZoom: 0.3, maxZoom: 1 });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [topologyKey]);
   return (
     <div className="h-full min-h-[560px] w-full bg-[radial-gradient(circle_at_center,color-mix(in_oklch,var(--foreground),transparent_98%)_0,transparent_64%)]">
       <ReactFlow<EntityFlowNode, Edge>
@@ -83,6 +97,9 @@ export function DomainModelCanvas({
         nodesDraggable={false}
         nodesConnectable={false}
         elementsSelectable
+        onInit={(instance) => {
+          flow.current = instance;
+        }}
         onNodeClick={(_, node) => onFocus(node.id)}
         onEdgeClick={(_, edge) => onInspectRelationship(edge.id)}
         onPaneClick={() => onFocus('')}
@@ -212,10 +229,15 @@ function buildGraph(
   onToggle: (id: string) => void,
   onInspect: (id: string) => void,
 ) {
+  const entities = [...model.entities].sort((left, right) =>
+    left.id.localeCompare(right.id),
+  );
   const relationships: Array<DomainRelationship | DerivedDomainRelationship> = [
     ...model.relationships,
     ...deriveDomainRelationships(model),
-  ];
+  ].sort((left, right) =>
+    relationshipOrder(left).localeCompare(relationshipOrder(right)),
+  );
   const neighbors = new Set<string>();
   if (focusedId)
     for (const item of relationships)
@@ -232,18 +254,26 @@ function buildGraph(
     marginy: 30,
   });
   dagreGraph.setDefaultEdgeLabel(() => ({}));
-  for (const entity of model.entities)
-    dagreGraph.setNode(entity.id, { width: 288, height: 126 });
+  for (const entity of entities)
+    dagreGraph.setNode(entity.id, {
+      width: entityNodeWidth,
+      height: entityNodeHeight,
+    });
   for (const item of relationships)
     if (item.sourceEntityId !== item.targetEntityId)
       dagreGraph.setEdge(item.sourceEntityId, item.targetEntityId, {}, item.id);
   dagre.layout(dagreGraph);
-  const nodes: EntityFlowNode[] = model.entities.map((entity) => {
+  const nodes: EntityFlowNode[] = entities.map((entity) => {
     const position = dagreGraph.node(entity.id) ?? { x: 0, y: 0 };
     return {
       id: entity.id,
       type: 'entity',
-      position: { x: position.x - 144, y: position.y - 63 },
+      position: {
+        x: position.x - entityNodeWidth / 2,
+        y: position.y - entityNodeHeight / 2,
+      },
+      initialWidth: entityNodeWidth,
+      initialHeight: entityNodeHeight,
       data: {
         entity,
         selectedForContext: selected.has(entity.id),
@@ -294,4 +324,10 @@ function buildGraph(
     };
   });
   return { nodes, edges };
+}
+
+function relationshipOrder(
+  relationship: DomainRelationship | DerivedDomainRelationship,
+) {
+  return `${relationship.sourceEntityId}:${relationship.targetEntityId}:${relationship.semanticRole}:${relationship.id}`;
 }

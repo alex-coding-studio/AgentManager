@@ -34,3 +34,15 @@ export function deriveDomainRelationships(
   }
   return derived;
 }
+
+export function domainModelTopologyKey(model: DomainModel) {
+  return [
+    ...model.entities.map((item) => item.id).sort(),
+    ...model.relationships
+      .map(
+        (item) =>
+          `${item.id}:${item.sourceEntityId}:${item.targetEntityId}:${item.semanticRole}`,
+      )
+      .sort(),
+  ].join('|');
+}

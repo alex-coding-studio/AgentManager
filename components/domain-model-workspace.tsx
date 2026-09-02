@@ -1,8 +1,8 @@
 'use client';
 
-import { RotateCcw, Send, Settings2, Square, X } from 'lucide-react';
+import { RotateCcw, Square, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AgentProfileSelector } from '@/components/agent-profile-selector';
+import { AgentRunControls } from '@/components/agent-run-controls';
 import { DomainModelCanvas } from '@/components/domain-model-canvas';
 import { LatestResponse } from '@/components/latest-response';
 import { Button } from '@/components/ui/button';
@@ -50,8 +50,15 @@ export function DomainModelWorkspace({
     model: '',
     effort: '',
   });
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [showUndoNotice, setShowUndoNotice] = useState(
+    Boolean(
+      initialModel.lastRunId === null &&
+      !initialCanUndo &&
+      initialRuns[0]?.change &&
+      initialModel.stateVersion > initialRuns[0].change.stateVersion,
+    ),
+  );
   const [error, setError] = useState('');
   const [now, setNow] = useState(0);
   const textarea = useRef<HTMLTextAreaElement | null>(null);
@@ -145,6 +152,7 @@ export function DomainModelWorkspace({
         setError(data.error ?? 'Could not start the Domain Model Agent.');
         return;
       }
+      setShowUndoNotice(false);
       setRuns((current) => [data.run!, ...current]);
       setNow(Date.now());
     } catch {
@@ -191,6 +199,7 @@ export function DomainModelWorkspace({
     }
     setModel(data.model);
     setCanUndo(Boolean(data.canUndo));
+    setShowUndoNotice(true);
     setFocusedId('');
     setSelectedIds([]);
   }
@@ -239,12 +248,22 @@ export function DomainModelWorkspace({
           onInspectRelationship={inspectRelationship}
         />
 
-        {latest && latest.status !== 'running' ? (
+        {showUndoNotice ? (
+          <LatestResponse
+            title="Latest Response"
+            statusLabel="Undone"
+            summary="The last model change was undone."
+            tone="neutral"
+            attention="none"
+            icon="neutral"
+            className="absolute top-4 left-4 z-20 w-[min(360px,calc(100%-2rem))]"
+          />
+        ) : latest && latest.status !== 'running' ? (
           <LatestDomainResponse run={latest} canUndo={canUndo} onUndo={undo} />
         ) : null}
 
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-end p-4 lg:p-6">
-          <div className="pointer-events-auto w-full max-w-2xl overflow-hidden rounded-2xl border border-border bg-[color-mix(in_oklch,var(--background),var(--foreground)_7%)] shadow-[0_22px_60px_rgb(0_0_0/28%)]">
+        <div className="pointer-events-none absolute right-5 bottom-5 z-20">
+          <div className="pointer-events-auto w-[min(360px,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-border bg-background shadow-[0_18px_50px_rgb(15_23_42/12%)]">
             {running ? (
               <div className="flex min-h-16 items-center gap-3 px-4 py-3 text-sm">
                 <span className="relative flex size-2.5">
@@ -266,34 +285,34 @@ export function DomainModelWorkspace({
               </div>
             ) : (
               <>
-                {selectedContext.length ? (
-                  <div className="flex flex-wrap gap-1.5 border-b border-border px-3 py-2">
-                    {selectedContext.map((item) => (
+                <div className="p-4">
+                  {selectedContext.length ? (
+                    <div className="mb-3 flex flex-wrap gap-1.5">
+                      {selectedContext.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-1 text-[10px]"
+                          onClick={() => toggleSelection(item.id)}
+                        >
+                          {item.label} <X className="size-3" />
+                        </button>
+                      ))}
                       <button
-                        key={item.id}
                         type="button"
-                        className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-1 text-[10px]"
-                        onClick={() => toggleSelection(item.id)}
+                        className="ml-auto text-[10px] text-muted-foreground hover:text-foreground"
+                        onClick={() => setSelectedIds([])}
                       >
-                        {item.label} <X className="size-3" />
+                        Clear context
                       </button>
-                    ))}
-                    <button
-                      type="button"
-                      className="ml-auto text-[10px] text-muted-foreground hover:text-foreground"
-                      onClick={() => setSelectedIds([])}
-                    >
-                      Clear context
-                    </button>
-                  </div>
-                ) : null}
-                <div className="flex items-end gap-2 p-3">
+                    </div>
+                  ) : null}
                   <Textarea
                     ref={textarea}
                     value={instruction}
-                    rows={2}
+                    rows={3}
                     placeholder="Describe an entity, field, relationship or rule to add or change…"
-                    className="min-h-14 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0"
+                    className="min-h-24 resize-none text-sm"
                     onChange={(event) => setInstruction(event.target.value)}
                     onKeyDown={(event) => {
                       if (
@@ -305,32 +324,16 @@ export function DomainModelWorkspace({
                       }
                     }}
                   />
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label="Agent settings"
-                    onClick={() => setSettingsOpen((current) => !current)}
-                  >
-                    <Settings2 />
-                  </Button>
-                  <Button
-                    size="icon-lg"
-                    aria-label="Run Domain Model Agent"
-                    disabled={!instruction.trim() || submitting}
-                    onClick={startRun}
-                  >
-                    <Send />
-                  </Button>
-                </div>
-                {settingsOpen ? (
-                  <div className="border-t border-border p-3">
-                    <AgentProfileSelector
+                  <div className="mt-3">
+                    <AgentRunControls
                       value={profile}
                       onChange={setProfile}
                       label="Domain Model Agent"
+                      disabled={!instruction.trim() || submitting}
+                      onRun={startRun}
                     />
                   </div>
-                ) : null}
+                </div>
                 {error ? (
                   <p
                     role="alert"

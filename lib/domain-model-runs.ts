@@ -27,6 +27,7 @@ import {
 } from './local-agent-transport.ts';
 import {
   redactActivity,
+  redactRecord,
   type LocalAgentActivity,
 } from './local-agent-activity.ts';
 import type { RegisteredProject } from './project-registry.ts';
@@ -54,6 +55,7 @@ type ActiveRun = {
   canceled: boolean;
   settling: boolean;
   terminal: DomainModelRunRecord | null;
+  agentOutput: string | null;
   activity: Array<{ at: string; summary: string }>;
 };
 const runtime = globalThis as typeof globalThis & {
@@ -86,13 +88,17 @@ export async function startDomainModelRun(
       409,
     );
   const runId = `RUN-${randomUUID()}`;
-  const activity: ActiveRun['activity'] = [];
+  const startedAt = new Date().toISOString();
+  const activity: ActiveRun['activity'] = [
+    { at: startedAt, summary: 'Generating the Domain Model.' },
+  ];
   const active: ActiveRun = {
     runId,
     cancel: () => undefined,
     canceled: false,
     settling: false,
     terminal: null,
+    agentOutput: null,
     activity,
   };
   activeRuns.set(key, active);
@@ -123,7 +129,7 @@ export async function startDomainModelRun(
       selectedIds,
       profile: structuredClone(input.profile),
       baseVersion: model.stateVersion,
-      startedAt: new Date().toISOString(),
+      startedAt,
       endedAt: null,
       agentSessionId: null,
       usage: null,
@@ -261,6 +267,7 @@ async function settle(
 ) {
   if (active.canceled) return;
   active.settling = true;
+  active.agentOutput = agent.finalOutput;
   let result = parseDomainModelResult(agent.finalOutput, request);
   let change: DomainChange | null = null;
   if (result.outcome === 'applied') {
@@ -297,7 +304,7 @@ async function settle(
   active.terminal = run;
   await writeRun(project, run, {
     'activity.jsonl': activityJsonl(run.activity),
-    'agent-output.txt': agent.finalOutput.slice(0, 1_500_000),
+    'agent-output.txt': redactRecord(agent.finalOutput).slice(0, 1_500_000),
     'change.json': JSON.stringify(change),
     'summary.md': summaryMarkdown(result, change),
   });
@@ -330,11 +337,17 @@ async function fail(
       'The Domain Model Agent did not complete. The current model was not changed.',
   };
   active.terminal = run;
-  await writeRun(project, run, {
+  const files: Record<string, string> = {
     'activity.jsonl': activityJsonl(run.activity),
     'failure.txt': redactActivity(String(error)).slice(0, 100_000),
     'summary.md': `# Failed\n\n${run.error}\n`,
-  }).catch(() => undefined);
+  };
+  if (active.agentOutput)
+    files['agent-output.txt'] = redactRecord(active.agentOutput).slice(
+      0,
+      1_500_000,
+    );
+  await writeRun(project, run, files).catch(() => undefined);
 }
 
 function contextIndex(request: DomainModelRequest) {
