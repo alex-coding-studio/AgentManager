@@ -237,7 +237,10 @@ export function TaskDecompositionWorkspace({
     Number(
       nodes
         .find((node) => node.id === editingId)
-        ?.resources.some((resource) => resource.kind === 'idea'),
+        ?.resources.some(
+          (resource) =>
+            resource.kind === 'user-input' || resource.kind === 'idea',
+        ),
     );
   const selectedNode =
     nodes.find((node) => node.id === inspectorNodeId) ?? null;
@@ -409,7 +412,7 @@ export function TaskDecompositionWorkspace({
       setFiles([]);
       const started = await startDecompositionRun({
         source: result.node,
-        instruction,
+        instruction: '',
         contextRefs: [],
         files: [],
         operation: 'propose',
@@ -1144,17 +1147,12 @@ export function TaskDecompositionWorkspace({
                   value={startIdea}
                   onChange={(event) => setStartIdea(event.target.value)}
                   rows={4}
-                  maxLength={4_000}
                   placeholder={t(
                     'A product, feature or technical scope that should become coherent boundaries…',
                   )}
                   className="resize-none text-sm"
                   aria-label={t('Decomposition scope')}
                 />
-                <p className="mt-2 text-right text-[11px] text-muted-foreground">
-                  {startIdea.trim().length}
-                  {t('/4,000 characters')}
-                </p>
                 <div className="mt-4">
                   <AgentGraphIntentionSelect
                     profiles={taskDecompositionIntentionRegistry.profiles}
@@ -1537,12 +1535,11 @@ export function TaskDecompositionWorkspace({
                   htmlFor="decomposition-goal"
                   className="text-xs font-medium"
                 >
-                  {t('Instruction')}
+                  {t('User Input')}
                 </label>
                 <Textarea
                   id="decomposition-goal"
                   value={decompositionGoal}
-                  maxLength={1_000}
                   placeholder={
                     revisionTarget
                       ? t('Describe how this Candidate itself should change.')

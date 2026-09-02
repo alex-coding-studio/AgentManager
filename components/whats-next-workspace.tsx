@@ -789,7 +789,9 @@ function WhatsNextCanvas({
   }
 
   async function beginEditSource(node: TaskGraphNode) {
-    const source = node.resources.find((resource) => resource.kind === 'idea');
+    const source = node.resources.find(
+      (resource) => resource.kind === 'user-input' || resource.kind === 'idea',
+    );
     if (!source) return;
     const response = await fetch(
       `/api/projects/${projectId}/resources?path=${encodeURIComponent(source.path)}`,
@@ -913,14 +915,9 @@ function WhatsNextCanvas({
             placeholder={t(
               'A manager that helps one developer grow and decompose product intent…',
             )}
-            maxLength={4_000}
             className="mt-3 resize-none text-sm"
             aria-label={t('Your idea')}
           />
-          <p className="mt-2 text-right text-[11px] text-muted-foreground">
-            {idea.trim().length}
-            {t('/4,000 characters')}
-          </p>
           <div className="mt-4">
             <AgentGraphIntentionSelect
               profiles={whatsNextIntentionRegistry.profiles}
@@ -1091,6 +1088,7 @@ function WhatsNextCanvas({
               value={intention}
               onChange={changeIntention}
               label="Exploration purpose"
+              showDescription={false}
             />
             <label className="space-y-1 text-[10px] font-medium text-muted-foreground">
               {t('Motion')}
@@ -1106,6 +1104,13 @@ function WhatsNextCanvas({
                 <option value="converge">{t('Converge')}</option>
               </select>
             </label>
+            <p className="col-span-2 text-[10px] leading-4 text-muted-foreground">
+              {t(
+                whatsNextIntentionRegistry.profiles.find(
+                  (profile) => profile.id === intention,
+                )?.description ?? '',
+              )}
+            </p>
           </div>
 
           {intention === 'product-design-completion' ? (
@@ -1139,12 +1144,11 @@ function WhatsNextCanvas({
           </div>
 
           <label className="mt-3 block text-[10px] font-medium text-muted-foreground">
-            {t('Instruction')} · {t('required')}
+            {t('User Input')} · {t('required')}
             <Textarea
               value={combineInstruction}
               onChange={(event) => setCombineInstruction(event.target.value)}
               rows={3}
-              maxLength={1_000}
               required
               placeholder={t('Describe the result you want from these cards.')}
               className="mt-1 resize-none text-sm"
@@ -1323,7 +1327,7 @@ function WhatsNextCanvas({
                   htmlFor="whats-next-instruction"
                   className="text-xs font-medium"
                 >
-                  {redoProposal ? t('Correction') : t('Instruction')}{' '}
+                  {redoProposal ? t('Correction') : t('User Input')}{' '}
                   <span className="font-normal text-muted-foreground">
                     {redoProposal ? t('required') : t('optional')}
                   </span>
@@ -1331,7 +1335,6 @@ function WhatsNextCanvas({
                 <Textarea
                   id="whats-next-instruction"
                   value={growInstruction}
-                  maxLength={1_000}
                   placeholder={
                     redoProposal
                       ? t(
@@ -1467,15 +1470,10 @@ function WhatsNextCanvas({
                 value={editText}
                 onChange={(event) => setEditText(event.target.value)}
                 rows={10}
-                maxLength={4_000}
                 className="text-sm"
                 aria-label={t('Source Markdown')}
               />
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-[11px] text-muted-foreground">
-                  {editText.trim().length}
-                  {t('/4,000 characters')}
-                </span>
+              <div className="flex justify-end">
                 <Button
                   type="submit"
                   disabled={!editText.trim() || savingStart}
@@ -2257,7 +2255,7 @@ function lineDiff(previous: string, current: string) {
 function runToPreviews(run: WhatsNextRunRecord): TaskGraphPreview[] {
   const base = {
     sourceNodeId: run.sourceNodeIds[0] ?? '',
-    instruction: run.input?.instruction ?? '',
+    instruction: '',
     inheritedResourceCount: run.input?.resourcePaths.length ?? 0,
     additionalResourceCount: 0,
     runId: run.runId,
@@ -2276,8 +2274,7 @@ function runToPreviews(run: WhatsNextRunRecord): TaskGraphPreview[] {
         kind: 'run',
         title: run.revisionOf ? 'Refining direction' : agentLabel,
         type: run.revisionOf ? 'Refining' : 'Running',
-        description:
-          run.activity?.at(-1)?.summary ?? run.input?.instruction ?? '',
+        description: run.activity?.at(-1)?.summary ?? '',
         agentLabel,
         status: run.status,
         revisionOf: run.revisionOf,

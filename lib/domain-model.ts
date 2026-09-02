@@ -63,7 +63,8 @@ export type DomainChange = {
   runId: string | null;
   baseVersion: number;
   stateVersion: number;
-  instruction: string;
+  instruction?: string;
+  userInputPath?: string | null;
   summary: string;
   added: string[];
   updated: string[];
@@ -185,7 +186,8 @@ export async function applyProposedDomainModel(
   input: {
     baseVersion: number;
     runId: string;
-    instruction: string;
+    instruction?: string;
+    userInputPath?: string | null;
     summary: string;
     proposed: ProposedDomainModel;
   },
@@ -208,7 +210,9 @@ export async function applyProposedDomainModel(
     const change = changeBetween(current, next, {
       kind: 'applied',
       runId: input.runId,
-      instruction: input.instruction,
+      ...(input.userInputPath !== undefined
+        ? { userInputPath: input.userInputPath }
+        : { instruction: input.instruction ?? '' }),
       summary: input.summary,
     });
     if (
@@ -255,7 +259,7 @@ export async function undoLastDomainModelChange(project: RegisteredProject) {
     const change = changeBetween(current, next, {
       kind: 'restored',
       runId: null,
-      instruction: 'Undo the last Domain Model change.',
+      userInputPath: null,
       summary: 'Undid the last Domain Model change.',
     });
     await writeDomainState(project, {
@@ -452,7 +456,8 @@ function assertNoInheritanceCycle(relationships: DomainRelationship[]) {
 function changeBetween(
   current: DomainModel,
   next: DomainModel,
-  input: Pick<DomainChange, 'kind' | 'runId' | 'instruction' | 'summary'>,
+  input: Pick<DomainChange, 'kind' | 'runId' | 'summary'> &
+    Pick<DomainChange, 'instruction' | 'userInputPath'>,
 ): DomainChange {
   const flatten = (model: DomainModel) => [
     ...model.entities,

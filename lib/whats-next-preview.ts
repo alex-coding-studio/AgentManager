@@ -123,7 +123,7 @@ Turn an accepted product direction into reviewable delivery slices without pollu
     },
     input: {
       instruction: 'Explore the most immediate product value.',
-      projectInstructions: '',
+      moduleInstructionsState: 'cleared',
       resourcePaths: [],
       feedback: [],
       requestArtifact: 'request.json',

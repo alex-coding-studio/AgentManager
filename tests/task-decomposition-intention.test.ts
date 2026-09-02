@@ -57,7 +57,7 @@ function proposal(
     schemaVersion: 1,
     harness: {
       id: 'agent-manager.task-decomposition',
-      revision: 6,
+      revision: 7,
     },
     request: {
       sessionId: 'SESSION-test',

@@ -738,6 +738,7 @@ export const chineseUi: Record<string, string> = {
   'Input from': '输入来源',
   Inputs: '输入',
   Instruction: '指令',
+  'User Input': '用户输入',
   Instructions: '说明',
   'Latest Response': '最新回答',
   'Open full response': '查看完整回答',
@@ -1003,7 +1004,6 @@ export const chineseUi: Record<string, string> = {
   '. Existing directions and dependencies remain unchanged.':
     '。现有方向和依赖关系保持不变。',
   '/ 100,000 characters': '/ 100,000 字符',
-  '/4,000 characters': '/4,000 字符',
   'A captured': '已记录的',
   'This removes the Markdown file from the project. The':
     '这会移除项目中的 Markdown 文件，但',

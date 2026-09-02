@@ -9,19 +9,10 @@ export type AgentGraphInputPacket = {
   profile: AgentProfile;
 };
 
-export type AgentGraphInputSnapshot = Omit<AgentGraphInputPacket, 'files'> & {
-  attachments: Array<{
-    name: string;
-    type: string;
-    size: number;
-  }>;
-};
-
 export function readAgentGraphInputPacket(
   formData: FormData,
   options: {
     instructionRequired?: boolean;
-    maxInstructionBytes?: number;
     allowedExtensions?: string[];
     maxContextRefs?: number;
     maxFiles?: number;
@@ -34,9 +25,6 @@ export function readAgentGraphInputPacket(
   const instruction = value.trim();
   if (options.instructionRequired !== false && !instruction)
     throw new PublicApiError('An Instruction is required.', 400);
-  if (Buffer.byteLength(instruction) > (options.maxInstructionBytes ?? 20_000))
-    throw new PublicApiError('The Agent instruction is too large.', 400);
-
   const contextRefs = [
     ...new Set(
       formData
@@ -66,20 +54,5 @@ export function readAgentGraphInputPacket(
     contextRefs,
     files,
     profile: readAgentProfile(formData),
-  };
-}
-
-export function snapshotAgentGraphInput(
-  input: AgentGraphInputPacket,
-): AgentGraphInputSnapshot {
-  return {
-    instruction: input.instruction,
-    contextRefs: [...input.contextRefs],
-    profile: structuredClone(input.profile),
-    attachments: input.files.map((file) => ({
-      name: file.name,
-      type: file.type,
-      size: file.size,
-    })),
   };
 }

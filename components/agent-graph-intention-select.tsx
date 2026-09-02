@@ -8,12 +8,14 @@ export function AgentGraphIntentionSelect<Id extends string>({
   onChange,
   label = 'Intention',
   disabled = false,
+  showDescription = true,
 }: {
   profiles: readonly { id: Id; label: string; description: string }[];
   value: Id;
   onChange: (value: Id) => void;
   label?: string;
   disabled?: boolean;
+  showDescription?: boolean;
 }) {
   const { t } = useUiText();
   const selected = profiles.find((profile) => profile.id === value);
@@ -32,7 +34,7 @@ export function AgentGraphIntentionSelect<Id extends string>({
           </option>
         ))}
       </select>
-      {selected ? (
+      {selected && showDescription ? (
         <span className="mt-1.5 block text-[10px] font-normal leading-4 text-muted-foreground">
           {t(selected.description)}
         </span>

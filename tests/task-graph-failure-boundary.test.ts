@@ -210,7 +210,7 @@ for (const [label, arm] of [
     () =>
       injectOnce(
         'writeFile',
-        (t) => t.includes('.tmp') && t.endsWith('idea.md'),
+        (t) => t.includes('.tmp') && t.endsWith('user-input.md'),
       ),
   ],
   [
@@ -321,7 +321,7 @@ void test('createStartNode commits without any fallible work after publication',
     const resources = await readdir(
       path.join(nodesPath(project), created.node.id, 'resources'),
     );
-    assert.deepEqual(resources.sort(), ['a.md', 'b.md', 'idea.md']);
+    assert.deepEqual(resources.sort(), ['a.md', 'b.md', 'user-input.md']);
 
     await assert.rejects(
       () => createSecond(project),
@@ -482,7 +482,7 @@ for (const [label, arm, files] of [
   ],
   [
     'the staged idea',
-    () => injectOnce('writeFile', (t) => /idea-\d+\.md$/.test(t)),
+    () => injectOnce('writeFile', (t) => /user-input-\d+\.md$/.test(t)),
     [markdown('first.md', '# 1\n')],
   ],
   [

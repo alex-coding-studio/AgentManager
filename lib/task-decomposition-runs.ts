@@ -42,6 +42,9 @@ import {
 import {
   primarySourceResourcePaths,
   relatedContextNodeIds,
+  agentGraphContentPacket,
+  assembleAgentGraphWorkspaceInputs,
+  userInputWorkspaceInput,
   writeAgentGraphContextWorkspace,
   type ContextWorkspaceEntry,
   type ContextWorkspaceInput,
@@ -118,8 +121,8 @@ export type TaskDecompositionRunRecord = {
     revision: typeof TASK_DECOMPOSITION_HARNESS_REVISION;
   };
   input?: {
-    instruction: string;
-    projectInstructions: string;
+    userInputPath: string | null;
+    moduleInstructionsState?: 'present' | 'cleared';
     resourcePaths: string[];
     requestArtifact: 'request.json';
   };
@@ -188,6 +191,13 @@ async function startTaskDecompositionRunUnlocked(
   const sourceNode = nodes.find((node) => node.id === input.sourceNodeId);
   if (!sourceNode)
     throw new PublicApiError('The source Node could not be found.', 400);
+  if (
+    !input.instruction.trim() &&
+    !sourceNode.resources.some(
+      (resource) => resource.kind === 'user-input' || resource.kind === 'idea',
+    )
+  )
+    throw new PublicApiError('A User Input is required.', 400);
   const revisionTarget = await resolveRevisionTarget(project, input);
   if (revisionTarget) {
     const revisionIntention = taskDecompositionIntentionProfile(
@@ -268,10 +278,26 @@ async function startTaskDecompositionRunUnlocked(
         }
       : undefined,
   );
+  const userInput = userInputWorkspaceInput(
+    `task-decomposition/runs/${runId}/context/input/user-input.md`,
+    input.instruction,
+  );
+  const moduleInstructions = featureContext.instructions.trim()
+    ? {
+        role: 'primary' as const,
+        kind: 'module-instructions',
+        logicalPath: 'task-decomposition/instructions.md',
+        content: featureContext.instructions,
+      }
+    : null;
   const contextWorkspace = await writeAgentGraphContextWorkspace(
     runPath,
-    contextInputs,
+    assembleAgentGraphWorkspaceInputs(userInput, [
+      ...(moduleInstructions ? [moduleInstructions] : []),
+      ...contextInputs,
+    ]),
   );
+  const content = agentGraphContentPacket(contextWorkspace.manifest);
   const resources = [
     ...contextWorkspace.manifest.primary,
     ...contextWorkspace.manifest.related,
@@ -285,17 +311,13 @@ async function startTaskDecompositionRunUnlocked(
     request: requestIdentity,
     operation,
     intention,
-    instruction: input.instruction.trim(),
-    projectInstructions: continuesExistingSession
-      ? undefined
-      : featureContext.instructions,
+    content,
+    moduleInstructionsState: moduleInstructions ? 'present' : 'cleared',
     graphMap: continuesExistingSession ? undefined : nodes.map(graphMapEntry),
     currentNode: continuesExistingSession ? undefined : sourceNode,
     contextWorkspace: {
       root: contextWorkspace.root,
       indexPath: contextWorkspace.indexPath,
-      primary: contextWorkspace.manifest.primary,
-      related: contextWorkspace.manifest.related,
     },
     revisionTarget: revisionTarget
       ? candidatePromptView(revisionTarget.candidate)
@@ -320,12 +342,6 @@ async function startTaskDecompositionRunUnlocked(
             ]
           : [...formalChildren.map(graphMapEntry), ...existingCandidateChildren]
         : undefined,
-    resources: resources.map((resource) => ({
-      kind: resource.kind,
-      path: resource.logicalPath,
-      role: resource.role,
-      workspacePath: resource.workspacePath,
-    })),
   };
   requestIdentity.inputFingerprint = createHash('sha256')
     .update(JSON.stringify(packetWithoutFingerprint))
@@ -373,8 +389,8 @@ async function startTaskDecompositionRunUnlocked(
       revision: TASK_DECOMPOSITION_HARNESS_REVISION,
     },
     input: {
-      instruction: input.instruction.trim(),
-      projectInstructions: featureContext.instructions,
+      userInputPath: content.input?.workspacePath ?? null,
+      moduleInstructionsState: moduleInstructions ? 'present' : 'cleared',
       resourcePaths: resources.map((resource) => resource.logicalPath),
       requestArtifact: 'request.json',
     },
@@ -907,7 +923,10 @@ async function collectContextWorkspaceInputs(
       role: primarySourcePaths.has(resource.path)
         ? ('primary' as const)
         : ('related' as const),
-      kind: resource.kind,
+      kind:
+        resource.kind === 'user-input' || resource.kind === 'idea'
+          ? 'source-input'
+          : resource.kind,
       nodeId: sourceOutputPaths.has(resource.path) ? sourceNode.id : undefined,
     })),
     ...contextRefs.map((resourcePath) => ({
@@ -1046,15 +1065,6 @@ async function writeRunRecord(
 function validateRunRequest(input: RunRequest) {
   if (!/^NODE-[0-9a-f]{8,32}$/.test(input.sourceNodeId)) {
     throw new PublicApiError('The source Node is invalid.', 400);
-  }
-  const instruction = input.instruction.trim();
-  if (!instruction)
-    throw new PublicApiError('An Instruction is required.', 400);
-  if (instruction.length > 1_000) {
-    throw new PublicApiError(
-      'The Instruction must be 1,000 characters or fewer.',
-      400,
-    );
   }
   if (input.contextRefs.length > 50) {
     throw new PublicApiError(
