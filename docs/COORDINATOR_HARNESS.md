@@ -12,9 +12,13 @@ an already dispatched run is not migrated in place.
 
 The coordinator profile defaults to the Plan profile, then the selected worker profile
 when an older Card has no Plan profile. A saved coordinator choice persists independently
-of the worker choice. Provider calls start fresh sessions; logical continuity comes from
-the confirmed Plan, accepted output references, the latest coordination summary and
-addressable records, not an indefinitely growing provider conversation.
+of the worker choice. Within one Round, a Codex Coordinator under the Full Access pilot runs
+as one read-only App Server thread that is suspended when it dispatches a Worker and resumed
+with the Worker's settlement event; see the coordinator suspension boundary in
+[Event-Driven Agent Runtime](EVENT_DRIVEN_AGENT_RUNTIME.md). Other profiles start a fresh
+provider session per call. Across Rounds, logical continuity comes from the confirmed Plan,
+accepted output references, the latest coordination summary and addressable records, not an
+indefinitely growing provider conversation.
 
 The coordinator uses read-only transport permissions. The worker retains the existing
 local execution-permission resolution and Card worktree boundaries. Neither role gains

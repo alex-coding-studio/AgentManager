@@ -15,6 +15,29 @@ export type AgentRuntimeThread = {
   workingDirectory: string;
   access: 'read-only' | 'workspace-write' | 'full-access';
 };
+export type HostToolContinuation = { prompt: string } | { finalOutput: string };
+export type HostToolSuspension = {
+  suspend: true;
+  acknowledgement: string;
+  continuation: Promise<HostToolContinuation>;
+};
+export type HostTool = {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+  call: (arguments_: Record<string, unknown>) => Promise<unknown>;
+};
+export function isHostToolSuspension(
+  value: unknown,
+): value is HostToolSuspension {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    (value as HostToolSuspension).suspend === true &&
+    typeof (value as HostToolSuspension).acknowledgement === 'string' &&
+    (value as HostToolSuspension).continuation instanceof Promise
+  );
+}
 export type AgentRuntimeEvent =
   | { type: 'turn-started'; threadId: string; turnId: string; at: string }
   | {
@@ -40,7 +63,27 @@ export type AgentRuntimeEvent =
       exitCode: number | null;
       at: string;
     }
-  | { type: 'turn-completed'; threadId: string; turnId: string; at: string };
+  | {
+      type: 'tool-suspended';
+      threadId: string;
+      turnId: string;
+      tool: string;
+      at: string;
+    }
+  | {
+      type: 'tool-resumed';
+      threadId: string;
+      turnId: string;
+      tool: string;
+      at: string;
+    }
+  | {
+      type: 'turn-completed';
+      threadId: string;
+      turnId: string;
+      usage: LocalAgentUsage | null;
+      at: string;
+    };
 export type AgentRuntimeTurnResult = {
   threadId: string;
   turnId: string;
@@ -55,6 +98,8 @@ export type AgentRuntimeThreadInput = {
   profile: AgentProfile;
   workingDirectory: string;
   access: 'read-only' | 'workspace-write' | 'full-access';
+  instructions?: string;
+  hostJobs?: boolean;
 };
 export type AgentRuntimeTurnInput = {
   prompt: string;
