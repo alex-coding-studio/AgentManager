@@ -418,4 +418,16 @@ void test('every Agent Graph module adopts the standard Composer and attachment 
     decomposition,
     /avoidBottomRightPanel=\{decomposeSource !== null\}/,
   );
+  const whatsNext = await readFile(
+    new URL('../components/whats-next-workspace.tsx', import.meta.url),
+    'utf8',
+  );
+  const emptyStateSubmission = whatsNext.slice(
+    whatsNext.indexOf('async function beginFromIdea()'),
+    whatsNext.indexOf('async function submitGrow()'),
+  );
+  assert.match(
+    emptyStateSubmission,
+    /setActiveLayer\(intentionDestination\(intention\)\.layer\)/,
+  );
 });

@@ -189,6 +189,18 @@ async function startTaskDecompositionRunUnlocked(
   if (!sourceNode)
     throw new PublicApiError('The source Node could not be found.', 400);
   const revisionTarget = await resolveRevisionTarget(project, input);
+  if (revisionTarget) {
+    const revisionIntention = taskDecompositionIntentionProfile(
+      revisionTarget.run.intention,
+    ).id;
+    if (input.intention !== undefined && intention !== revisionIntention) {
+      throw new PublicApiError(
+        'A Candidate revision must keep its original Intention Profile.',
+        409,
+      );
+    }
+    intention = revisionIntention;
+  }
   const operation = revisionTarget
     ? 'revise-candidate'
     : (input.operation ?? 'propose');

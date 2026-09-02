@@ -633,6 +633,33 @@ void test('a rejected mutation releases the process-local queue for the next cal
   }
 });
 
+void test('a Candidate revision keeps the original Intention Profile', async () => {
+  const { project, runId, cleanup } = await makeProject([
+    candidate(CANDIDATE_A),
+  ]);
+  try {
+    await assert.rejects(
+      () =>
+        startTaskDecompositionRun(project, {
+          ...revisionRequest(runId),
+          intention: 'delivery',
+        }),
+      (error: unknown) => {
+        assert.ok(error instanceof PublicApiError);
+        assert.equal(error.status, 409);
+        assert.equal(
+          error.message,
+          'A Candidate revision must keep its original Intention Profile.',
+        );
+        return true;
+      },
+    );
+  } finally {
+    clearActiveRuns();
+    await cleanup();
+  }
+});
+
 void test('a Candidate revision start blocks acceptance until it is registered', async () => {
   const { project, runId, cleanup } = await makeProject([
     candidate(CANDIDATE_A),

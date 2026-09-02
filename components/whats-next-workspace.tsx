@@ -514,6 +514,7 @@ function WhatsNextCanvas({
         intention,
         motion: 'unspecified',
       });
+      setActiveLayer(intentionDestination(intention).layer);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Something failed.');
     } finally {
