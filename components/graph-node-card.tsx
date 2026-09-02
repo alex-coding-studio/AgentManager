@@ -89,7 +89,7 @@ export function GraphNodeCard({
             aria-pressed={Boolean(data.selectedForRun)}
             onClick={(event) => {
               event.stopPropagation();
-              data.onToggleSelection(id);
+              data.onToggleSelection(data.displayId);
             }}
           >
             {data.selectedForRun ? (

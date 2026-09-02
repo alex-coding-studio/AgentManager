@@ -3,6 +3,7 @@ import { apiErrorResponse } from '@/lib/api-errors';
 import { guardJsonRequest, guardRequest } from '@/lib/request-boundary';
 import { readAgentGraphInputPacket } from '@/lib/agent-graph-input';
 import type { TaskDecompositionIntention } from '@/lib/task-decomposition-intention';
+import type { TaskDecompositionMotion } from '@/lib/task-decomposition-motion';
 import {
   acceptTaskDecompositionCandidate,
   cancelTaskDecompositionRun,
@@ -35,6 +36,10 @@ export async function POST(
     const revisionCandidateId = formData.get('revisionCandidateId');
     const operation = formData.get('operation');
     const intention = formData.get('intention');
+    const motion = formData.get('motion');
+    const recomposeCandidateIds = formData
+      .getAll('recomposeCandidateIds')
+      .filter((value): value is string => typeof value === 'string');
     if (typeof sourceNodeId !== 'string') {
       return Response.json(
         { error: 'A source Node is required.' },
@@ -53,6 +58,11 @@ export async function POST(
         typeof intention === 'string'
           ? (intention as TaskDecompositionIntention)
           : undefined,
+      motion:
+        typeof motion === 'string'
+          ? (motion as TaskDecompositionMotion)
+          : undefined,
+      recomposeCandidateIds,
       revisionRunId:
         typeof revisionRunId === 'string' && revisionRunId
           ? revisionRunId
@@ -62,7 +72,11 @@ export async function POST(
           ? revisionCandidateId
           : undefined,
       operation:
-        operation === 'append-candidates' ? 'append-candidates' : 'propose',
+        recomposeCandidateIds.length > 0
+          ? undefined
+          : operation === 'append-candidates'
+            ? 'append-candidates'
+            : 'propose',
     });
     return Response.json({ run }, { status: 202 });
   } catch (error) {

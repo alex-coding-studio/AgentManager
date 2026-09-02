@@ -532,6 +532,81 @@ void test('discard refreshes response evidence and reports every affected Run', 
   }
 });
 
+void test('retained and revised Recompose members cannot be discarded individually', async () => {
+  const { project, runId, cleanup } = await makeProject([
+    candidate(CANDIDATE_A),
+  ]);
+  try {
+    const runsPath = path.join(
+      project.planningPath,
+      'task-decomposition',
+      'runs',
+    );
+    const original = JSON.parse(
+      await realFs.readFile(path.join(runsPath, runId, 'run.json'), 'utf8'),
+    );
+    const recomposeRunId = `RUN-${randomUUID()}`;
+    await mkdir(path.join(runsPath, recomposeRunId), { recursive: true });
+    await writeFile(
+      path.join(runsPath, recomposeRunId, 'run.json'),
+      `${JSON.stringify(
+        {
+          ...original,
+          runId: recomposeRunId,
+          operation: 'recompose-candidates',
+          recomposeCandidateIds: [CANDIDATE_A],
+          result: {
+            ...original.result,
+            candidates: [],
+            recomposition: {
+              effects: [
+                {
+                  kind: 'retain',
+                  from: [CANDIDATE_A],
+                  to: [CANDIDATE_A],
+                },
+              ],
+            },
+          },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    const revisionRunId = `RUN-${randomUUID()}`;
+    await mkdir(path.join(runsPath, revisionRunId), { recursive: true });
+    await writeFile(
+      path.join(runsPath, revisionRunId, 'run.json'),
+      `${JSON.stringify(
+        {
+          ...original,
+          runId: revisionRunId,
+          operation: 'revise-candidate',
+          revisionOf: CANDIDATE_A,
+          result: {
+            ...original.result,
+            candidates: [candidate(CANDIDATE_A, { revision: 2 })],
+          },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+
+    await assert.rejects(
+      () => discardTaskDecompositionCandidate(project, runId, CANDIDATE_A),
+      /one atomic working set and cannot be discarded individually/,
+    );
+    await assert.rejects(
+      () =>
+        discardTaskDecompositionCandidate(project, revisionRunId, CANDIDATE_A),
+      /one atomic working set and cannot be discarded individually/,
+    );
+  } finally {
+    await cleanup();
+  }
+});
+
 void test('dependency ordering survives overlap and the dependent accepts cleanly on retry', async () => {
   const { project, runId, cleanup } = await makeProject([
     candidate(CANDIDATE_A),
@@ -633,7 +708,7 @@ void test('a rejected mutation releases the process-local queue for the next cal
   }
 });
 
-void test('a Candidate revision keeps the original Intention Profile', async () => {
+void test('a Candidate revision keeps its original Intention and Motion', async () => {
   const { project, runId, cleanup } = await makeProject([
     candidate(CANDIDATE_A),
   ]);
@@ -650,6 +725,22 @@ void test('a Candidate revision keeps the original Intention Profile', async () 
         assert.equal(
           error.message,
           'A Candidate revision must keep its original Intention Profile.',
+        );
+        return true;
+      },
+    );
+    await assert.rejects(
+      () =>
+        startTaskDecompositionRun(project, {
+          ...revisionRequest(runId),
+          motion: 'diverge',
+        }),
+      (error: unknown) => {
+        assert.ok(error instanceof PublicApiError);
+        assert.equal(error.status, 409);
+        assert.equal(
+          error.message,
+          'A Candidate revision must keep its original Motion.',
         );
         return true;
       },

@@ -2,6 +2,10 @@ import {
   defineAgentGraphIntentionRegistry,
   intentionProfile,
 } from './agent-graph-intention.ts';
+import {
+  defineAgentGraphMotionRegistry,
+  motionProfile,
+} from './agent-graph-motion.ts';
 
 export const whatsNextIntentionRegistry = defineAgentGraphIntentionRegistry({
   module: 'whats-next',
@@ -44,8 +48,40 @@ export const whatsNextIntentions = whatsNextIntentionRegistry.profiles.map(
   (profile) => profile.id,
 );
 
-export const whatsNextMotions = ['unspecified', 'diverge', 'converge'] as const;
-export type WhatsNextMotion = (typeof whatsNextMotions)[number];
+export const whatsNextMotionRegistry = defineAgentGraphMotionRegistry({
+  module: 'whats-next',
+  defaultId: 'unspecified',
+  profiles: [
+    {
+      id: 'unspecified',
+      label: 'Unspecified',
+      description:
+        'Follow every clear semantic boundary without forcing a count.',
+      prompt: `MOTION PROFILE — Unspecified
+Return exactly as many Candidates as the user's actual semantic boundaries require. Use one Candidate for one independent concern. When the User Input or a supplied Product Design document contains several independently useful problems, lifecycles or capabilities, return one Candidate per boundary. Do not split one module to increase count, collapse distinct modules, or truncate a clear design to an arbitrary limit.`,
+    },
+    {
+      id: 'diverge',
+      label: 'Diverge',
+      description: 'Expand materially different product directions.',
+      prompt: `MOTION PROFILE — Diverge
+Return two to five materially distinct Candidates. Expand useful alternatives under the selected Intention without manufacturing near-duplicates.`,
+    },
+    {
+      id: 'converge',
+      label: 'Converge',
+      description: 'Aggregate selected meaning into one product direction.',
+      prompt: `MOTION PROFILE — Converge
+Return exactly one aggregate Candidate. Preserve the important contribution of every selected source, identify exclusions and unresolved conflicts, and ask one bounded clarification instead when honest synthesis is impossible.`,
+    },
+  ] as const,
+});
+
+export type WhatsNextMotion =
+  (typeof whatsNextMotionRegistry.profiles)[number]['id'];
+export const whatsNextMotions = whatsNextMotionRegistry.profiles.map(
+  (profile) => profile.id,
+);
 
 export const whatsNextLayers = ['discovery', 'product-design'] as const;
 export type WhatsNextLayer = (typeof whatsNextLayers)[number];
@@ -76,4 +112,8 @@ export function assertWhatsNextMotion(
 ): asserts value is WhatsNextMotion {
   if (!whatsNextMotions.includes(value as WhatsNextMotion))
     throw new Error("The What's Next Motion is invalid.");
+}
+
+export function whatsNextMotionProfile(value: unknown) {
+  return motionProfile(whatsNextMotionRegistry, value);
 }

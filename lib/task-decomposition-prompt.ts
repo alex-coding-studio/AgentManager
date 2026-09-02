@@ -8,14 +8,21 @@ import {
   taskDecompositionIntentionProfile,
   type TaskDecompositionIntention,
 } from './task-decomposition-intention.ts';
+import {
+  taskDecompositionMotionProfile,
+  type TaskDecompositionMotion,
+} from './task-decomposition-motion.ts';
 
 export function buildTaskDecompositionPrompt(
   packet: unknown,
   intention: TaskDecompositionIntention = taskDecompositionIntentionRegistry.defaultId,
+  motion: TaskDecompositionMotion = 'unspecified',
 ) {
   return `${TASK_DECOMPOSITION_HARNESS_PROMPT}
 
 ${taskDecompositionIntentionProfile(intention).prompt}
+
+${taskDecompositionMotionProfile(motion).prompt}
 
 ${GRAPH_IDENTITY_PROMPT}
 

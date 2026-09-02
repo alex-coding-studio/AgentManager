@@ -29,6 +29,7 @@ import {
   TASK_DECOMPOSITION_HARNESS_ID,
   TASK_DECOMPOSITION_HARNESS_REVISION,
   parseTaskDecompositionHarnessResult,
+  type HarnessCandidate,
   type TaskDecompositionHarnessResult,
 } from './task-decomposition-harness.ts';
 import {
@@ -83,6 +84,16 @@ import {
   validateTaskDecompositionIntentionResult,
   type TaskDecompositionIntention,
 } from './task-decomposition-intention.ts';
+import {
+  taskDecompositionMotionProfile,
+  validateTaskDecompositionMotionResult,
+  type TaskDecompositionMotion,
+} from './task-decomposition-motion.ts';
+import {
+  validateAgentGraphRecomposeDependencies,
+  validateAgentGraphRecomposePlan,
+  successfulRecomposeOutputCandidateIds,
+} from './agent-graph-recompose.ts';
 
 export type TaskDecompositionRunStatus =
   | 'running'
@@ -110,7 +121,13 @@ export type TaskDecompositionRunRecord = {
   agentSessionMode?: 'persistent';
   sourceNodeId: string;
   intention?: TaskDecompositionIntention;
-  operation: 'propose' | 'append-candidates' | 'revise-candidate';
+  motion?: TaskDecompositionMotion;
+  operation:
+    | 'propose'
+    | 'append-candidates'
+    | 'revise-candidate'
+    | 'recompose-candidates';
+  recomposeCandidateIds?: string[];
   parentRunId?: string;
   revisionOf?: string;
   status: TaskDecompositionRunStatus;
@@ -148,6 +165,8 @@ type RunRequest = {
   revisionCandidateId?: string;
   operation?: 'propose' | 'append-candidates';
   intention?: TaskDecompositionIntention;
+  motion?: TaskDecompositionMotion;
+  recomposeCandidateIds?: string[];
 };
 
 type ActiveRun = {
@@ -179,6 +198,7 @@ async function startTaskDecompositionRunUnlocked(
   };
   validateAgentProfile(profile);
   let intention: TaskDecompositionIntention;
+  let motion: TaskDecompositionMotion;
   try {
     intention = taskDecompositionIntentionProfile(input.intention).id;
   } catch {
@@ -186,6 +206,11 @@ async function startTaskDecompositionRunUnlocked(
       'The Break It Down Intention Profile is invalid.',
       400,
     );
+  }
+  try {
+    motion = taskDecompositionMotionProfile(input.motion).id;
+  } catch {
+    throw new PublicApiError('The Break It Down Motion is invalid.', 400);
   }
   const nodes = await listTaskGraphNodes(project);
   const sourceNode = nodes.find((node) => node.id === input.sourceNodeId);
@@ -199,6 +224,13 @@ async function startTaskDecompositionRunUnlocked(
   )
     throw new PublicApiError('A User Input is required.', 400);
   const revisionTarget = await resolveRevisionTarget(project, input);
+  const recomposeWorkingSet = input.recomposeCandidateIds?.length
+    ? await resolveRecomposeWorkingSet(
+        project,
+        sourceNode.id,
+        input.recomposeCandidateIds,
+      )
+    : [];
   if (revisionTarget) {
     const revisionIntention = taskDecompositionIntentionProfile(
       revisionTarget.run.intention,
@@ -210,10 +242,21 @@ async function startTaskDecompositionRunUnlocked(
       );
     }
     intention = revisionIntention;
+    const revisionMotion = taskDecompositionMotionProfile(
+      revisionTarget.run.motion,
+    ).id;
+    if (input.motion !== undefined && motion !== revisionMotion)
+      throw new PublicApiError(
+        'A Candidate revision must keep its original Motion.',
+        409,
+      );
+    motion = revisionMotion;
   }
   const operation = revisionTarget
     ? 'revise-candidate'
-    : (input.operation ?? 'propose');
+    : recomposeWorkingSet.length
+      ? 'recompose-candidates'
+      : (input.operation ?? 'propose');
   const coordinatorCandidate =
     operation === 'propose'
       ? null
@@ -227,6 +270,7 @@ async function startTaskDecompositionRunUnlocked(
       TASK_DECOMPOSITION_HARNESS_REVISION &&
     (coordinatorCandidate.intention ??
       taskDecompositionIntentionRegistry.defaultId) === intention &&
+    (coordinatorCandidate.motion ?? 'unspecified') === motion &&
     sameModelSelection(coordinatorCandidate.profile, profile)
       ? coordinatorCandidate
       : null;
@@ -248,6 +292,28 @@ async function startTaskDecompositionRunUnlocked(
   ) {
     throw new PublicApiError('This Node already has an active Agent Run.', 409);
   }
+  if (
+    input.recomposeCandidateIds?.length &&
+    (input.operation !== undefined ||
+      input.revisionRunId !== undefined ||
+      input.revisionCandidateId !== undefined)
+  )
+    throw new PublicApiError(
+      'Recompose cannot be combined with append or single-Candidate revision.',
+      400,
+    );
+  if ((input.recomposeCandidateIds?.length ?? 0) > 20)
+    throw new PublicApiError('Recompose at most 20 Candidates at once.', 400);
+  if (
+    input.recomposeCandidateIds?.some(
+      (candidateId) =>
+        !/^CANDIDATE-(?:[0-9]{4,}|[0-9a-f]{8,32})$/.test(candidateId),
+    )
+  )
+    throw new PublicApiError(
+      'A Recompose Candidate identifier is invalid.',
+      400,
+    );
 
   const runId = `RUN-${randomUUID()}`;
   const sessionId = coordinatorRun?.sessionId ?? `SESSION-${randomUUID()}`;
@@ -262,6 +328,10 @@ async function startTaskDecompositionRunUnlocked(
     input.files,
   );
   const featureContext = await readTaskDecompositionContext(project);
+  const recomposeContexts = await recomposeCandidateContexts(
+    project,
+    recomposeWorkingSet,
+  );
   const contextInputs = await collectContextWorkspaceInputs(
     project,
     sourceNode,
@@ -277,6 +347,7 @@ async function startTaskDecompositionRunUnlocked(
           ),
         }
       : undefined,
+    recomposeContexts,
   );
   const userInput = userInputWorkspaceInput(
     `task-decomposition/runs/${runId}/context/input/user-input.md`,
@@ -311,6 +382,7 @@ async function startTaskDecompositionRunUnlocked(
     request: requestIdentity,
     operation,
     intention,
+    motion,
     content,
     moduleInstructionsState: moduleInstructions ? 'present' : 'cleared',
     graphMap: continuesExistingSession ? undefined : nodes.map(graphMapEntry),
@@ -322,6 +394,10 @@ async function startTaskDecompositionRunUnlocked(
     revisionTarget: revisionTarget
       ? candidatePromptView(revisionTarget.candidate)
       : null,
+    workingSet:
+      operation === 'recompose-candidates'
+        ? recomposeWorkingSet.map(candidatePromptView)
+        : undefined,
     reservedCandidateIds: reservedCandidateIds.filter(
       (candidateId) => candidateId !== revisionTarget?.candidate.candidateId,
     ),
@@ -348,7 +424,7 @@ async function startTaskDecompositionRunUnlocked(
     .digest('hex');
   const prompt = continuesExistingSession
     ? buildTaskDecompositionContinuationPrompt(packetWithoutFingerprint)
-    : buildTaskDecompositionPrompt(packetWithoutFingerprint, intention);
+    : buildTaskDecompositionPrompt(packetWithoutFingerprint, intention, motion);
   const timestamp = new Date().toISOString();
   const activity = initialAgentGraphActivity(
     'Decomposing the selected scope.',
@@ -378,7 +454,12 @@ async function startTaskDecompositionRunUnlocked(
     agentSessionMode: 'persistent',
     sourceNodeId: sourceNode.id,
     intention,
+    motion,
     operation,
+    recomposeCandidateIds:
+      operation === 'recompose-candidates'
+        ? recomposeWorkingSet.map((candidate) => candidate.candidateId)
+        : undefined,
     parentRunId: coordinatorCandidate?.runId,
     revisionOf: revisionTarget?.candidate.candidateId,
     status: 'running',
@@ -471,6 +552,7 @@ export async function readTaskDecompositionRun(
   ) as TaskDecompositionRunRecord;
   record.operation ??= record.revisionOf ? 'revise-candidate' : 'propose';
   record.intention ??= taskDecompositionIntentionRegistry.defaultId;
+  record.motion ??= 'unspecified';
   record.activity ??= [];
   if (record.result?.outcome === 'proposal') {
     record.result.candidates = await readIdentifiedEntities(
@@ -574,6 +656,15 @@ async function acceptTaskDecompositionCandidateUnlocked(
   const existingNodes = await listTaskGraphNodes(project);
   const accepted = existingNodes.find((node) => node.uid === candidate.uid);
   if (accepted) return { node: accepted, nodes: existingNodes };
+  if (
+    !(await collectLatestUnacceptedCandidates(project)).some(
+      (item) => item.candidateId === candidateId,
+    )
+  )
+    throw new PublicApiError(
+      'This Candidate was replaced or removed by Recompose.',
+      409,
+    );
   const resolvedDependencies = resolveCandidateDependencies(
     candidate.candidateId,
     candidate.dependsOn,
@@ -689,6 +780,12 @@ async function discardTaskDecompositionCandidateUnlocked(
   );
   if (!requestedCandidate)
     throw new PublicApiError('The Candidate could not be found.', 400);
+  const allRuns = await readAllTaskDecompositionRuns(project);
+  if (successfulRecomposeOutputCandidateIds(allRuns).has(candidateId))
+    throw new PublicApiError(
+      'Recompose output Candidates belong to one atomic working set and cannot be discarded individually.',
+      409,
+    );
   if (
     [...activeRuns.values()].some(
       (active) =>
@@ -710,6 +807,15 @@ async function discardTaskDecompositionCandidateUnlocked(
       400,
     );
   }
+  if (
+    !(await collectLatestUnacceptedCandidates(project)).some(
+      (item) => item.candidateId === candidateId,
+    )
+  )
+    throw new PublicApiError(
+      'This Candidate was replaced or removed by Recompose.',
+      409,
+    );
   const blockers = candidateDependencyBlockers(
     candidateId,
     await collectLatestUnacceptedCandidates(project),
@@ -720,7 +826,7 @@ async function discardTaskDecompositionCandidateUnlocked(
     );
   }
 
-  const candidateRuns = (await readAllTaskDecompositionRuns(project)).filter(
+  const candidateRuns = allRuns.filter(
     (run) =>
       run.result?.outcome === 'proposal' &&
       run.result.candidates.some(
@@ -848,6 +954,16 @@ async function finishTaskDecompositionRun(
       parseTaskDecompositionHarnessResult,
       revisionTarget,
     );
+    if (result.outcome === 'proposal' && result.recomposition) {
+      const aliases = result.candidateAliases ?? {};
+      result.recomposition.effects = result.recomposition.effects.map(
+        (effect) => ({
+          ...effect,
+          from: effect.from.map((id) => aliases[id] ?? id),
+          to: effect.to.map((id) => aliases[id] ?? id),
+        }),
+      );
+    }
     if (
       revisionTarget &&
       result.outcome === 'proposal' &&
@@ -861,6 +977,17 @@ async function finishTaskDecompositionRun(
     validateTaskDecompositionIntentionResult(
       record.intention ?? taskDecompositionIntentionRegistry.defaultId,
       result,
+    );
+    validateRecomposeResult(record, result, knownCandidates);
+    const motionOutputCount =
+      result.outcome === 'proposal' && result.recomposition
+        ? new Set(result.recomposition.effects.flatMap((effect) => effect.to))
+            .size
+        : undefined;
+    validateTaskDecompositionMotionResult(
+      record.motion ?? 'unspecified',
+      result,
+      motionOutputCount,
     );
     const endedAt = new Date().toISOString();
     record.status = result.outcome;
@@ -893,6 +1020,73 @@ async function finishTaskDecompositionRun(
   }
 }
 
+function validateRecomposeResult(
+  record: TaskDecompositionRunRecord,
+  result: TaskDecompositionHarnessResult,
+  knownCandidates: Array<
+    Extract<
+      TaskDecompositionHarnessResult,
+      { outcome: 'proposal' }
+    >['candidates'][number]
+  >,
+) {
+  if (record.operation !== 'recompose-candidates') {
+    if (result.outcome === 'proposal' && result.recomposition)
+      throw new Error('Only Recompose may return recomposition effects.');
+    return;
+  }
+  if (result.outcome !== 'proposal') return;
+  if (!result.recomposition)
+    throw new Error('Recompose requires explicit working-set effects.');
+  const selectedIds = record.recomposeCandidateIds ?? [];
+  const retainedIds = result.recomposition.effects
+    .filter((effect) => effect.kind === 'retain')
+    .flatMap((effect) => effect.to);
+  validateAgentGraphRecomposePlan({
+    selectedIds,
+    outputIds: [
+      ...retainedIds,
+      ...result.candidates.map((candidate) => candidate.candidateId),
+    ],
+    effects: result.recomposition.effects,
+  });
+  validateAgentGraphRecomposeDependencies({
+    selectedIds,
+    retainedIds,
+    outputCandidates: result.candidates,
+    knownCandidates,
+  });
+}
+
+async function recomposeCandidateContexts(
+  project: RegisteredProject,
+  candidates: HarnessCandidate[],
+) {
+  if (candidates.length === 0) return [];
+  const runs = (await readAllTaskDecompositionRuns(project)).sort(
+    (left, right) => right.startedAt.localeCompare(left.startedAt),
+  );
+  return candidates.map((candidate) => {
+    const owner = runs.find(
+      (run) =>
+        run.result?.outcome === 'proposal' &&
+        run.result.candidates.some(
+          (item) =>
+            item.candidateId === candidate.candidateId &&
+            item.revision === candidate.revision,
+        ),
+    );
+    if (!owner)
+      throw new Error(
+        `Candidate ${candidate.candidateId} output is unavailable for Recompose.`,
+      );
+    return {
+      outputPath: `task-decomposition/runs/${owner.runId}/candidates/${candidate.candidateId}/output.md`,
+      resourcePaths: candidate.resources.map((resource) => resource.path),
+    };
+  });
+}
+
 async function collectContextWorkspaceInputs(
   project: RegisteredProject,
   sourceNode: TaskGraphNode,
@@ -901,6 +1095,7 @@ async function collectContextWorkspaceInputs(
   uploads: ContextWorkspaceInput[],
   featureAttachmentNames: string[],
   revision?: { outputPath: string; resourcePaths: string[] },
+  workingSet: Array<{ outputPath: string; resourcePaths: string[] }> = [],
 ) {
   const sourceOutputPaths = new Set(
     sourceNode.resources
@@ -948,6 +1143,18 @@ async function collectContextWorkspaceInputs(
           },
         ]
       : []),
+    ...workingSet.flatMap((candidate) => [
+      ...candidate.resourcePaths.map((resourcePath) => ({
+        path: resourcePath,
+        role: 'related' as const,
+        kind: 'candidate-context',
+      })),
+      {
+        path: candidate.outputPath,
+        role: 'primary' as const,
+        kind: 'candidate-output',
+      },
+    ]),
     ...nodes.flatMap((node) =>
       !relatedNodeIds.has(node.id)
         ? []
@@ -1113,6 +1320,67 @@ async function resolveRevisionTarget(
   return { run, candidate };
 }
 
+async function resolveRecomposeWorkingSet(
+  project: RegisteredProject,
+  sourceNodeId: string,
+  candidateIds: string[],
+) {
+  if (new Set(candidateIds).size !== candidateIds.length)
+    throw new PublicApiError('Recompose Candidates must be unique.', 400);
+  const available = await collectLatestUnacceptedCandidates(project);
+  const selected = candidateIds.map((candidateId) => {
+    const candidate = available.find(
+      (item) => item.candidateId === candidateId,
+    );
+    if (!candidate)
+      throw new PublicApiError(
+        `Candidate ${candidateId} is no longer available for Recompose.`,
+        409,
+      );
+    if (!candidate.derivedFrom.includes(sourceNodeId))
+      throw new PublicApiError(
+        'Every Recompose Candidate must belong to the selected source Node.',
+        400,
+      );
+    return candidate;
+  });
+  const selectedIds = new Set(candidateIds);
+  const blocker = available.find(
+    (candidate) =>
+      !selectedIds.has(candidate.candidateId) &&
+      candidate.dependsOn.some((dependencyId) => selectedIds.has(dependencyId)),
+  );
+  if (blocker)
+    throw new PublicApiError(
+      `${blocker.candidateId} depends on the selected working set. Include it or revise that dependency first.`,
+      409,
+    );
+  const selectedOutputPaths = new Set(
+    (await readAllTaskDecompositionRuns(project)).flatMap((run) =>
+      run.result?.outcome === 'proposal' &&
+      run.result.candidates.some((candidate) =>
+        selectedIds.has(candidate.candidateId),
+      )
+        ? run.result.candidates
+            .filter((candidate) => selectedIds.has(candidate.candidateId))
+            .map(
+              (candidate) =>
+                `task-decomposition/runs/${run.runId}/candidates/${candidate.candidateId}/output.md`,
+            )
+        : [],
+    ),
+  );
+  const protectedNode = (await listTaskGraphNodes(project)).find((node) =>
+    node.resources.some((resource) => selectedOutputPaths.has(resource.path)),
+  );
+  if (protectedNode)
+    throw new PublicApiError(
+      `Accepted Node ${protectedNode.id} uses output from the selected working set.`,
+      409,
+    );
+  return selected;
+}
+
 async function findLatestCoordinatorRun(
   project: RegisteredProject,
   sourceNodeId: string,
@@ -1155,6 +1423,15 @@ async function collectLatestUnacceptedCandidates(project: RegisteredProject) {
   )) {
     if (run.result?.outcome !== 'proposal') {
       continue;
+    }
+    if (run.operation === 'recompose-candidates' && run.result.recomposition) {
+      const retained = new Set(
+        run.result.recomposition.effects
+          .filter((effect) => effect.kind === 'retain')
+          .flatMap((effect) => effect.from),
+      );
+      for (const candidateId of run.recomposeCandidateIds ?? [])
+        if (!retained.has(candidateId)) latestByCandidate.delete(candidateId);
     }
     for (const candidate of run.result.candidates) {
       const current = latestByCandidate.get(candidate.candidateId);

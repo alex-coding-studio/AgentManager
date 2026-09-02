@@ -418,8 +418,9 @@ void test('every Agent Graph module adopts the standard Composer and attachment 
   );
   assert.match(
     decomposition,
-    /avoidBottomRightPanel=\{decomposeSource !== null\}/,
+    /avoidBottomRightPanel=\{[\s\S]*decomposeSource !== null[\s\S]*recomposeCandidateIds\.length > 0/,
   );
+  assert.match(decomposition, /selectableKinds=\{\['candidate'\]\}/);
   const whatsNext = await readFile(
     new URL('../components/whats-next-workspace.tsx', import.meta.url),
     'utf8',

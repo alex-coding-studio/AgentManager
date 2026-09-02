@@ -845,6 +845,13 @@ export const chineseUi: Record<string, string> = {
   'Describe the scope in your own words. It becomes the Canvas Start and the first Agent instruction.':
     '用自己的话描述范围。它会成为画布起点和发给 Agent 的第一条指令。',
   'Decomposition purpose': '拆解目的',
+  Adjustment: '调整方式',
+  'Replace the selected unaccepted Candidate working set atomically. Accepted Nodes remain unchanged.':
+    '原子重组所选的未接受候选工作集，已接受节点保持不变。',
+  'Recompose outputs belong to one atomic working set and cannot be discarded individually.':
+    '重组结果属于同一个原子工作集，不能单独丢弃。',
+  'Describe how these Candidates should be retained, replaced, split, merged, added or removed.':
+    '说明这些候选应如何保留、替换、拆分、合并、新增或移除。',
   'Accept these prerequisites first': '请先接受这些前置候选',
   'Pending acceptance': '待接受',
   Stabilized: '已稳定',
@@ -878,6 +885,8 @@ export const chineseUi: Record<string, string> = {
   'What to do with the selected cards': '对选中卡片的要求',
   'Product Design Completion': '产品设计补全',
   Unspecified: '未指定',
+  Diverge: '发散',
+  Converge: '收敛',
   'The Product Source and all current Product Design Features are included automatically.':
     '系统会自动带入 Product Source 和当前所有 Product Design Feature。',
   'Edit feedback': '编辑反馈',
@@ -961,6 +970,7 @@ export const chineseUi: Record<string, string> = {
   'Explore more adds directions without replacing the current proposal.':
     '继续探索会新增方向，不替换当前提案。',
   'Find additional nodes': '寻找补充节点',
+  'Recompose working set': '重组工作集',
   'Initializing…': '正在初始化…',
   'Manual creation': '手动创建',
   'Move node to Trash': '将节点移到回收站',

@@ -1,17 +1,32 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { whatsNextIntentionRegistry } from '../lib/whats-next-intention.ts';
+import {
+  whatsNextIntentionRegistry,
+  whatsNextMotionRegistry,
+} from '../lib/whats-next-intention.ts';
 import {
   taskDecompositionIntentionRegistry,
   validateTaskDecompositionIntentionResult,
 } from '../lib/task-decomposition-intention.ts';
 import { buildTaskDecompositionPrompt } from '../lib/task-decomposition-prompt.ts';
 import type { TaskDecompositionHarnessResult } from '../lib/task-decomposition-harness.ts';
+import {
+  taskDecompositionMotionRegistry,
+  validateTaskDecompositionMotionResult,
+} from '../lib/task-decomposition-motion.ts';
 
 void test('Intention Profile registries are module-scoped', () => {
   assert.deepEqual(
     whatsNextIntentionRegistry.profiles.map((profile) => profile.id),
     ['mvp-exploration', 'feature-synthesis', 'product-design-completion'],
+  );
+  assert.deepEqual(
+    whatsNextMotionRegistry.profiles.map((profile) => profile.id),
+    ['unspecified', 'diverge', 'converge'],
+  );
+  assert.notEqual(
+    whatsNextMotionRegistry.profiles[1]?.prompt,
+    taskDecompositionMotionRegistry.profiles[1]?.prompt,
   );
   assert.deepEqual(
     taskDecompositionIntentionRegistry.profiles.map((profile) => profile.id),
@@ -50,6 +65,21 @@ void test('profile validation keeps delivery metadata executable', () => {
   );
 });
 
+void test('Break It Down owns its Motion profiles and validates their cardinality', () => {
+  assert.deepEqual(
+    taskDecompositionMotionRegistry.profiles.map((profile) => profile.id),
+    ['unspecified', 'diverge', 'converge'],
+  );
+  const one = proposal({});
+  assert.throws(
+    () => validateTaskDecompositionMotionResult('diverge', one),
+    /at least two/,
+  );
+  assert.doesNotThrow(() =>
+    validateTaskDecompositionMotionResult('converge', one),
+  );
+});
+
 function proposal(
   metadata: Record<string, unknown>,
 ): TaskDecompositionHarnessResult {
@@ -57,7 +87,7 @@ function proposal(
     schemaVersion: 1,
     harness: {
       id: 'agent-manager.task-decomposition',
-      revision: 7,
+      revision: 8,
     },
     request: {
       sessionId: 'SESSION-test',

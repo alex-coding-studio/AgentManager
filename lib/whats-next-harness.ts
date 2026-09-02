@@ -6,6 +6,7 @@ import {
 import {
   intentionDestination,
   whatsNextIntentionProfile,
+  whatsNextMotionProfile,
   type WhatsNextIntention,
   type WhatsNextLayer,
   type WhatsNextMotion,
@@ -32,20 +33,11 @@ Read content.input first when present, then every content.references and content
 
 Return only JSON matching the schema. Echo request identity exactly. Only reference Nodes and Resources present in the packet.`;
 
-const motionProfiles: Record<WhatsNextMotion, string> = {
-  diverge: `MOTION PROFILE — Diverge
-Return two to five materially distinct Candidates. Expand useful alternatives under the selected Intention without manufacturing near-duplicates.`,
-  converge: `MOTION PROFILE — Converge
-Return exactly one aggregate Candidate. Preserve the important contribution of every selected source, identify exclusions and unresolved conflicts, and ask one bounded clarification instead when honest synthesis is impossible.`,
-  unspecified: `MOTION PROFILE — Unspecified
-Return exactly as many Candidates as the user's actual semantic boundaries require. Use one Candidate for one independent concern. When the User Input or a supplied Product Design document explicitly names or unambiguously contains several independently useful product problems, lifecycles or capabilities, return one Candidate per boundary even when there are many. Do not split one module to increase count, truncate a clear design to an arbitrary limit, or collapse distinct modules merely to return fewer answers. Ask one bounded clarification when the boundaries cannot be distinguished honestly.`,
-};
-
 export function whatsNextHarnessPrompt(
   intention: WhatsNextIntention,
   motion: WhatsNextMotion,
 ) {
-  return `${WHATS_NEXT_HARNESS_PROMPT}\n\n${whatsNextIntentionProfile(intention).prompt}\n\n${motionProfiles[motion]}`;
+  return `${WHATS_NEXT_HARNESS_PROMPT}\n\n${whatsNextIntentionProfile(intention).prompt}\n\n${whatsNextMotionProfile(motion).prompt}`;
 }
 
 export type WhatsNextRequestIdentity = {

@@ -47,6 +47,7 @@ const proposalFitViewOptions = {
   minZoom: 0.5,
   maxZoom: 1,
 };
+const defaultSelectableKinds: Array<'formal' | 'candidate'> = ['formal'];
 
 export function TaskGraphCanvas({
   nodes,
@@ -61,6 +62,7 @@ export function TaskGraphCanvas({
   projectedRootId,
   readOnly = false,
   selectionEnabled = false,
+  selectableKinds = defaultSelectableKinds,
   onMultiSelect,
   onToggleSelection,
   onFocusNode,
@@ -81,6 +83,7 @@ export function TaskGraphCanvas({
   projectedRootId?: string;
   readOnly?: boolean;
   selectionEnabled?: boolean;
+  selectableKinds?: Array<'formal' | 'candidate'>;
   onMultiSelect?: (nodeId: string) => void;
   onToggleSelection?: (nodeId: string) => void;
   onFocusNode: (nodeId: string) => void;
@@ -117,6 +120,7 @@ export function TaskGraphCanvas({
         plusLabel,
         readOnly,
         selectionEnabled,
+        selectableKinds,
         onToggleSelection,
         projectedRootId,
       ),
@@ -133,6 +137,7 @@ export function TaskGraphCanvas({
       selectionKey,
       readOnly,
       selectionEnabled,
+      selectableKinds,
       onToggleSelection,
       projectedRootId,
     ],
@@ -347,6 +352,7 @@ function buildFlowGraph(
   plusLabel?: string,
   readOnly = false,
   selectionEnabled = false,
+  selectableKinds: Array<'formal' | 'candidate'> = defaultSelectableKinds,
   onToggleSelection?: (nodeId: string) => void,
   projectedRootId?: string,
 ) {
@@ -368,6 +374,12 @@ function buildFlowGraph(
   const flowNodes: TaskFlowNode[] = layout.nodes.map((layoutNode) => {
     const node = nodeById.get(layoutNode.id);
     const preview = previewById.get(layoutNode.id);
+    const selectionKind =
+      layoutNode.kind === 'formal'
+        ? 'formal'
+        : preview?.kind === 'candidate'
+          ? 'candidate'
+          : null;
     return {
       id: layoutNode.uid,
       selected: layoutNode.id === focusedNodeId,
@@ -410,7 +422,10 @@ function buildFlowGraph(
             ? transientColor(preview)
             : nodeTypeColor(node?.type ?? 'node')),
         selectedForRun: selectedIds.has(layoutNode.id),
-        selectionEnabled: selectionEnabled && layoutNode.kind === 'formal',
+        selectionEnabled:
+          selectionEnabled &&
+          selectionKind !== null &&
+          selectableKinds.includes(selectionKind),
         plusLabel,
         onToggleSelection: onToggleSelection ?? (() => {}),
         onDecompose,
