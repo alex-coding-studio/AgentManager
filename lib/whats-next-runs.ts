@@ -38,7 +38,19 @@ import {
   buildWhatsNextContinuationPrompt,
   buildWhatsNextPrompt,
 } from './whats-next-prompt.ts';
-import { renderWhatsNextResponseMarkdown } from './whats-next-response.ts';
+import {
+  renderWhatsNextResponseMarkdown,
+  renderWhatsNextSummaryMarkdown,
+} from './whats-next-response.ts';
+import {
+  agentGraphErrorMessage,
+  createAgentGraphActivityRecorder,
+  initialAgentGraphActivity,
+  initializeAgentGraphActivity,
+  writeAgentGraphRunEvidence,
+  type AgentGraphActivity,
+  type AgentGraphActivityRecorder,
+} from './agent-graph-run.ts';
 import {
   redoProposalPlan,
   redoProposalContext,
@@ -132,6 +144,7 @@ export type WhatsNextRunRecord = {
   updatedAt: string;
   endedAt: string | null;
   usage: LocalAgentUsage | null;
+  activity: AgentGraphActivity[];
   result: WhatsNextHarnessResult | null;
   error: string | null;
 };
@@ -163,7 +176,11 @@ type RunRequest = {
   motion?: WhatsNextMotion;
 };
 
-type ActiveRun = { record: WhatsNextRunRecord; agent: LocalAgentRun };
+type ActiveRun = {
+  record: WhatsNextRunRecord;
+  agent: LocalAgentRun;
+  activityRecorder: AgentGraphActivityRecorder;
+};
 
 const activeRuns = getActiveRuns();
 
@@ -476,10 +493,15 @@ async function startWhatsNextRunUnlocked(
     updatedAt: timestamp,
     endedAt: null,
     usage: null,
+    activity: initialAgentGraphActivity(
+      'Exploring the selected direction.',
+      timestamp,
+    ),
     result: null,
     error: null,
   };
   await writeRunRecord(project, record);
+  await initializeAgentGraphActivity(runPath, record.activity);
 
   if (redo) {
     try {
@@ -505,14 +527,26 @@ async function startWhatsNextRunUnlocked(
     }
   }
 
+  const activityRecorder = createAgentGraphActivityRecorder(
+    runPath,
+    record.activity,
+    (item) => {
+      record.updatedAt = item.at;
+    },
+  );
   const agent = startLocalAgentRun(input.agent, {
     workingDirectory: runPath,
     prompt,
     resumeSessionId: coordinatorRun?.agentSessionId ?? undefined,
     model: profile.model || undefined,
     effort: profile.effort || undefined,
+    onActivity: activityRecorder.onActivity,
   });
-  activeRuns.set(runKey(project, runId), { record, agent });
+  activeRuns.set(runKey(project, runId), {
+    record,
+    agent,
+    activityRecorder,
+  });
   void finishWhatsNextRun(
     project,
     record,
@@ -542,6 +576,7 @@ export async function readWhatsNextRun(
   }
   stored.operation ??= stored.revisionOf ? 'refine-candidate' : 'explore';
   const record = stored as WhatsNextRunRecord;
+  record.activity ??= [];
   record.intention ??= 'mvp-exploration';
   record.motion ??= 'diverge';
   if (record.input) {
@@ -589,6 +624,13 @@ export async function readWhatsNextRun(
     }
   }
   await ensureCandidateArtifacts(project, record);
+  const active = activeRuns.get(runKey(project, runId));
+  if (active)
+    return {
+      ...record,
+      updatedAt: active.record.updatedAt,
+      activity: [...active.record.activity],
+    };
   return record;
 }
 
@@ -701,6 +743,14 @@ export async function cancelWhatsNextRun(
   canceledRecord.updatedAt = timestamp;
   canceledRecord.endedAt = timestamp;
   canceledRecord.error = null;
+  await active?.activityRecorder.flush();
+  await writeAgentGraphRunEvidence(whatsNextRunPath(project, runId), {
+    activity: canceledRecord.activity,
+    summary:
+      '# Canceled\n\nThe Agent Run was canceled. The graph was not changed.\n',
+    response:
+      '# Latest Response\n\nThe Agent Run was canceled. The graph was not changed.\n',
+  });
   await writeRunRecord(project, canceledRecord);
   active?.agent.cancel();
   return canceledRecord;
@@ -954,14 +1004,17 @@ async function finishWhatsNextRun(
   revisionTarget?: WhatsNextCandidate,
   reservedCandidateIds: string[] = [],
 ) {
+  let agentOutput: string | null = null;
   try {
     const agentResult = await agent.completion;
     if (isRunCanceled(record)) return;
-    await writeFile(
-      path.join(whatsNextRunPath(project, record.runId), 'agent-output.txt'),
-      agentResult.finalOutput,
-      { flag: 'wx' },
-    );
+    agentOutput = agentResult.finalOutput;
+    const active = activeRuns.get(runKey(project, record.runId));
+    await active?.activityRecorder.flush();
+    await writeAgentGraphRunEvidence(whatsNextRunPath(project, record.runId), {
+      activity: record.activity,
+      agentOutput,
+    });
     record.status = 'validating';
     record.agentSessionId = agentResult.agentSessionId;
     record.usage = agentResult.usage;
@@ -1029,8 +1082,15 @@ async function finishWhatsNextRun(
     if (isRunCanceled(record)) return;
     const endedAt = new Date().toISOString();
     record.status = 'failed';
-    record.error =
-      error instanceof Error ? error.message : "The What's next Run failed.";
+    record.error = agentGraphErrorMessage(error, "The What's next Run failed.");
+    const active = activeRuns.get(runKey(project, record.runId));
+    await active?.activityRecorder.flush();
+    await writeAgentGraphRunEvidence(whatsNextRunPath(project, record.runId), {
+      activity: record.activity,
+      agentOutput,
+      summary: `# Failed\n\n${record.error}\n`,
+      response: `# Latest Response\n\n## Failed\n\n${record.error}\n`,
+    });
     record.updatedAt = endedAt;
     record.endedAt = endedAt;
     await writeRunRecord(project, record);
@@ -1516,6 +1576,11 @@ async function ensureCandidateArtifacts(
 ) {
   if (!record.result) return;
   const runPath = whatsNextRunPath(project, record.runId);
+  await writeAgentGraphRunEvidence(runPath, {
+    activity: record.activity ?? [],
+    summary: renderWhatsNextSummaryMarkdown(record.result),
+    response: renderWhatsNextResponseMarkdown(record.result),
+  });
   const reflectionPath = path.join(runPath, 'reflection.md');
   if (
     !(await access(reflectionPath)

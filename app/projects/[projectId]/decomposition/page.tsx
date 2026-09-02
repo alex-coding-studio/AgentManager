@@ -14,6 +14,7 @@ import {
   createTaskGraphPreview,
   createTaskGraphRefiningPreview,
 } from '@/lib/task-graph-preview';
+import { listLatestTaskDecompositionRuns } from '@/lib/task-decomposition-runs';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,10 +42,11 @@ export default async function TaskDecompositionPage({
       </ProjectShell>
     );
   }
-  const [projects, folders, nodes] = await Promise.all([
+  const [projects, folders, nodes, runs] = await Promise.all([
     listProjects(),
     readContextBrowser(project),
     listTaskGraphNodes(project),
+    listLatestTaskDecompositionRuns(project),
   ]);
   const graphPreview =
     process.env.NODE_ENV !== 'development'
@@ -66,6 +68,7 @@ export default async function TaskDecompositionPage({
         folders={folders}
         initialNodes={graphPreview?.nodes ?? nodes}
         initialPreviews={graphPreview?.previews ?? []}
+        initialRuns={graphPreview ? [] : runs}
         developmentPreview={graphPreview !== null}
         developmentPreviewSequence={graphPreview?.sequence}
       />

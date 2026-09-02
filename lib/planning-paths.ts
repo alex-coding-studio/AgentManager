@@ -89,6 +89,13 @@ export const TASK_GRAPH_MARKDOWN_SHAPES: readonly PlanningPathShape[] = [
     ),
   },
   {
+    name: 'Break It Down Run response or summary',
+    pattern: new RegExp(
+      String.raw`^task-decomposition\/runs\/${RUN_ID}\/(?:response|summary)\.md$`,
+      'i',
+    ),
+  },
+  {
     name: 'What’s Next Candidate output',
     pattern: new RegExp(
       String.raw`^whats-next\/runs\/${RUN_ID}\/candidates\/${CANDIDATE_ID}\/output\.md$`,
