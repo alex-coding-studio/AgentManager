@@ -1153,6 +1153,7 @@ export function TaskDecompositionWorkspace({
               focusedNodeId={focusedNodeId}
               locateRequest={locateRequest}
               fitRequest={fitRequest}
+              avoidBottomRightPanel={decomposeSource !== null}
               onFocusNode={setFocusedNodeId}
               onInspectNode={(nodeId) => {
                 setFocusedNodeId(nodeId);

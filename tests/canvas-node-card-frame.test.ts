@@ -410,4 +410,12 @@ void test('every Agent Graph module adopts the standard Composer and attachment 
     assert.match(source, /AgentGraphComposerCard/, file);
     assert.match(source, /ContextAttachmentPicker/, file);
   }
+  const decomposition = await readFile(
+    new URL('../components/task-decomposition-workspace.tsx', import.meta.url),
+    'utf8',
+  );
+  assert.match(
+    decomposition,
+    /avoidBottomRightPanel=\{decomposeSource !== null\}/,
+  );
 });
