@@ -46,6 +46,7 @@ export type LocalAgentRunInput = {
   effort?: ReasoningEffort;
   access?: 'read-only' | 'workspace-write';
   protectedPath?: string;
+  environment?: NodeJS.ProcessEnv;
   gitWritePaths?: string[];
   primaryRepositoryPath?: string;
   candidatePublication?: {
@@ -284,7 +285,7 @@ export function buildCodexArguments(
 
 function spawnCodex(input: LocalAgentRunInput, catalog: SkillCatalog) {
   const { workingDirectory } = input;
-  const environment = { ...process.env };
+  const environment = { ...(input.environment ?? process.env) };
   delete environment.OPENAI_API_KEY;
 
   const arguments_ = buildCodexArguments(input, catalog);
@@ -324,7 +325,7 @@ export function buildClaudeArguments(
 
 function spawnClaude(input: LocalAgentRunInput) {
   const { workingDirectory, resumeSessionId } = input;
-  const environment = { ...process.env };
+  const environment = { ...(input.environment ?? process.env) };
   delete environment.ANTHROPIC_API_KEY;
 
   return spawn('claude', buildClaudeArguments(resumeSessionId, input), {

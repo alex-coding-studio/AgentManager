@@ -225,6 +225,12 @@ void test('binds results, evidence and claims to the frozen request', () => {
     () => validateWhatToDoHarnessResult(unknownEvidence, context()),
     /unknown evidence/,
   );
+  const evidenceFreeSummary = proposal();
+  evidenceFreeSummary.repositorySummary.evidencePaths = [];
+  assert.throws(
+    () => validateWhatToDoHarnessResult(evidenceFreeSummary, context()),
+    WhatToDoResultValidationError,
+  );
 });
 
 void test('rejects missing, one-way and unauthorized source coverage', () => {
