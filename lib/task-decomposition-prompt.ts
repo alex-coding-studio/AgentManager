@@ -3,9 +3,19 @@ import {
   TASK_DECOMPOSITION_HARNESS_OUTPUT_SCHEMA,
   TASK_DECOMPOSITION_HARNESS_PROMPT,
 } from './task-decomposition-harness.ts';
+import {
+  taskDecompositionIntentionRegistry,
+  taskDecompositionIntentionProfile,
+  type TaskDecompositionIntention,
+} from './task-decomposition-intention.ts';
 
-export function buildTaskDecompositionPrompt(packet: unknown) {
+export function buildTaskDecompositionPrompt(
+  packet: unknown,
+  intention: TaskDecompositionIntention = taskDecompositionIntentionRegistry.defaultId,
+) {
   return `${TASK_DECOMPOSITION_HARNESS_PROMPT}
+
+${taskDecompositionIntentionProfile(intention).prompt}
 
 ${GRAPH_IDENTITY_PROMPT}
 

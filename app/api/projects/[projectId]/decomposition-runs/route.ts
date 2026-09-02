@@ -2,6 +2,7 @@ import { getProject } from '@/lib/project-registry';
 import { apiErrorResponse } from '@/lib/api-errors';
 import { guardJsonRequest, guardRequest } from '@/lib/request-boundary';
 import { readAgentGraphInputPacket } from '@/lib/agent-graph-input';
+import type { TaskDecompositionIntention } from '@/lib/task-decomposition-intention';
 import {
   acceptTaskDecompositionCandidate,
   cancelTaskDecompositionRun,
@@ -31,6 +32,7 @@ export async function POST(
     const revisionRunId = formData.get('revisionRunId');
     const revisionCandidateId = formData.get('revisionCandidateId');
     const operation = formData.get('operation');
+    const intention = formData.get('intention');
     if (typeof sourceNodeId !== 'string') {
       return Response.json(
         { error: 'A source Node and Instruction are required.' },
@@ -45,6 +47,10 @@ export async function POST(
       instruction: input.instruction,
       contextRefs: input.contextRefs,
       files: input.files,
+      intention:
+        typeof intention === 'string'
+          ? (intention as TaskDecompositionIntention)
+          : undefined,
       revisionRunId:
         typeof revisionRunId === 'string' && revisionRunId
           ? revisionRunId

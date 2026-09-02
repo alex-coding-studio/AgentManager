@@ -74,6 +74,12 @@ import {
   readTaskGraphMarkdownResource,
   type TaskGraphNode,
 } from './task-graph.ts';
+import {
+  taskDecompositionIntentionRegistry,
+  taskDecompositionIntentionProfile,
+  validateTaskDecompositionIntentionResult,
+  type TaskDecompositionIntention,
+} from './task-decomposition-intention.ts';
 
 export type TaskDecompositionRunStatus =
   | 'running'
@@ -100,6 +106,7 @@ export type TaskDecompositionRunRecord = {
   agentSessionId: string | null;
   agentSessionMode?: 'persistent';
   sourceNodeId: string;
+  intention?: TaskDecompositionIntention;
   operation: 'propose' | 'append-candidates' | 'revise-candidate';
   parentRunId?: string;
   revisionOf?: string;
@@ -137,6 +144,7 @@ type RunRequest = {
   revisionRunId?: string;
   revisionCandidateId?: string;
   operation?: 'propose' | 'append-candidates';
+  intention?: TaskDecompositionIntention;
 };
 
 type ActiveRun = {
@@ -167,11 +175,32 @@ async function startTaskDecompositionRunUnlocked(
     effort: input.effort ?? '',
   };
   validateAgentProfile(profile);
+  let intention: TaskDecompositionIntention;
+  try {
+    intention = taskDecompositionIntentionProfile(input.intention).id;
+  } catch {
+    throw new PublicApiError(
+      'The Break It Down Intention Profile is invalid.',
+      400,
+    );
+  }
   const nodes = await listTaskGraphNodes(project);
   const sourceNode = nodes.find((node) => node.id === input.sourceNodeId);
   if (!sourceNode)
     throw new PublicApiError('The source Node could not be found.', 400);
   const revisionTarget = await resolveRevisionTarget(project, input);
+  if (revisionTarget) {
+    const revisionIntention = taskDecompositionIntentionProfile(
+      revisionTarget.run.intention,
+    ).id;
+    if (input.intention !== undefined && intention !== revisionIntention) {
+      throw new PublicApiError(
+        'A Candidate revision must keep its original Intention Profile.',
+        409,
+      );
+    }
+    intention = revisionIntention;
+  }
   const operation = revisionTarget
     ? 'revise-candidate'
     : (input.operation ?? 'propose');
@@ -184,6 +213,10 @@ async function startTaskDecompositionRunUnlocked(
   const coordinatorRun =
     coordinatorCandidate?.agentSessionMode === 'persistent' &&
     coordinatorCandidate.transport === transport &&
+    coordinatorCandidate.harness.revision ===
+      TASK_DECOMPOSITION_HARNESS_REVISION &&
+    (coordinatorCandidate.intention ??
+      taskDecompositionIntentionRegistry.defaultId) === intention &&
     sameModelSelection(coordinatorCandidate.profile, profile)
       ? coordinatorCandidate
       : null;
@@ -251,6 +284,7 @@ async function startTaskDecompositionRunUnlocked(
   const packetWithoutFingerprint = {
     request: requestIdentity,
     operation,
+    intention,
     instruction: input.instruction.trim(),
     projectInstructions: continuesExistingSession
       ? undefined
@@ -298,7 +332,7 @@ async function startTaskDecompositionRunUnlocked(
     .digest('hex');
   const prompt = continuesExistingSession
     ? buildTaskDecompositionContinuationPrompt(packetWithoutFingerprint)
-    : buildTaskDecompositionPrompt(packetWithoutFingerprint);
+    : buildTaskDecompositionPrompt(packetWithoutFingerprint, intention);
   const timestamp = new Date().toISOString();
   const activity = initialAgentGraphActivity(
     'Decomposing the selected scope.',
@@ -327,6 +361,7 @@ async function startTaskDecompositionRunUnlocked(
     agentSessionId: null,
     agentSessionMode: 'persistent',
     sourceNodeId: sourceNode.id,
+    intention,
     operation,
     parentRunId: coordinatorCandidate?.runId,
     revisionOf: revisionTarget?.candidate.candidateId,
@@ -419,6 +454,7 @@ export async function readTaskDecompositionRun(
     ),
   ) as TaskDecompositionRunRecord;
   record.operation ??= record.revisionOf ? 'revise-candidate' : 'propose';
+  record.intention ??= taskDecompositionIntentionRegistry.defaultId;
   record.activity ??= [];
   if (record.result?.outcome === 'proposal') {
     record.result.candidates = await readIdentifiedEntities(
@@ -806,6 +842,10 @@ async function finishTaskDecompositionRun(
         'A revision must return exactly the requested Candidate identifier.',
       );
     }
+    validateTaskDecompositionIntentionResult(
+      record.intention ?? taskDecompositionIntentionRegistry.defaultId,
+      result,
+    );
     const endedAt = new Date().toISOString();
     record.status = result.outcome;
     record.result = result;

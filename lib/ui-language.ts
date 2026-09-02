@@ -843,6 +843,29 @@ export const chineseUi: Record<string, string> = {
   'What do you want to break down?': '你想拆解什么？',
   'Describe the scope in your own words. It becomes the Canvas Start and the first Agent instruction.':
     '用自己的话描述范围。它会成为画布起点和发给 Agent 的第一条指令。',
+  'Decomposition purpose': '拆解目的',
+  'Accept these prerequisites first': '请先接受这些前置候选',
+  'Pending acceptance': '待接受',
+  Stabilized: '已稳定',
+  'Exploration purpose': '探索目的',
+  'Understand the structure': '理清结构',
+  'Form coherent sibling boundaries at a human-manageable resolution.':
+    '在适合人理解和管理的粒度上形成清晰的同级边界。',
+  'Product modules': '产品模块',
+  'Identify product capabilities with clear included and excluded behavior.':
+    '按照产品能力拆分，并明确包含与不包含的行为。',
+  'Implementation approach': '实现方案',
+  'Partition technical responsibility, data flow and integration boundaries.':
+    '拆分技术职责、数据流和集成边界。',
+  'Delivery breakdown': '交付拆分',
+  'Create implementation-ready deliverables with acceptance and validation evidence.':
+    '形成可直接实现、具有验收与验证证据的交付项。',
+  'Explore concrete product value and testable user experiences.':
+    '探索具体的产品价值和可验证的用户体验。',
+  'Synthesize selected Discovery evidence into Product Design Features.':
+    '把选中的 Discovery 证据提炼为 Product Design Feature。',
+  'Complete a known product with justified missing Feature boundaries.':
+    '根据已有产品定义补全有充分依据的 Feature 边界。',
   'A product, feature or technical scope that should become coherent boundaries…':
     '一个需要整理成清晰边界的产品、功能或技术范围…',
   'Decomposition scope': '拆解范围',

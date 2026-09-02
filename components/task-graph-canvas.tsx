@@ -256,7 +256,7 @@ export function TaskGraphCanvas({
         className={cn(
           '!m-3 flex items-center gap-3 rounded-lg border border-border bg-background/90 px-2.5 py-2 text-[10px] text-muted-foreground shadow-sm backdrop-blur',
           edgeAlignedOverlays ? '!-bottom-2' : '!bottom-5',
-          avoidBottomRightPanel && '!right-[380px]',
+          avoidBottomRightPanel ? '!right-[380px]' : '!right-28',
         )}
       >
         <span className="flex items-center gap-1.5">
