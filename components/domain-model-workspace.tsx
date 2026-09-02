@@ -7,6 +7,8 @@ import { AgentGraphComposerCard } from '@/components/agent-graph-composer-card';
 import { ContextAttachmentPicker } from '@/components/context-attachment-picker';
 import { DomainModelCanvas } from '@/components/domain-model-canvas';
 import { LatestResponse } from '@/components/latest-response';
+import { ModuleInstructionsDialog } from '@/components/module-instructions-dialog';
+import { ProjectModuleHeader } from '@/components/project-module-header';
 import { Button } from '@/components/ui/button';
 import {
   Sheet,
@@ -28,6 +30,7 @@ import type { DomainModelRunRecord } from '@/lib/domain-model-runs';
 import { deriveDomainRelationships } from '@/lib/domain-model-view';
 import { latestDomainModelResponse } from '@/lib/latest-response';
 import type { ContextBrowserFolder } from '@/lib/product-context';
+import { useUiText } from '@/components/ui-language-provider';
 
 export function DomainModelWorkspace({
   projectId,
@@ -44,6 +47,7 @@ export function DomainModelWorkspace({
   initialLastChange: DomainChange | null;
   folders: ContextBrowserFolder[];
 }) {
+  const { t } = useUiText();
   const [model, setModel] = useState(initialModel);
   const [runs, setRuns] = useState(initialRuns);
   const [canUndo, setCanUndo] = useState(initialCanUndo);
@@ -247,15 +251,21 @@ export function DomainModelWorkspace({
   );
 
   return (
-    <div className="relative flex h-[calc(100vh-4rem)] min-h-[560px] flex-col overflow-hidden">
-      <header className="flex h-14 shrink-0 items-center border-b border-border px-5 lg:px-8">
-        <div>
-          <h1 className="text-sm font-semibold">What&apos;s That?</h1>
-          <p className="text-[11px] text-muted-foreground">
-            Current Domain Model
-          </p>
-        </div>
-      </header>
+    <div className="relative flex h-dvh min-h-[560px] flex-col overflow-hidden">
+      <ProjectModuleHeader
+        title={t("What's That?")}
+        description={t(
+          'Define the entities, fields and relationships behind the product.',
+        )}
+        actions={
+          <ModuleInstructionsDialog
+            endpoint={`/api/projects/${projectId}/domain-model-context`}
+            title="Domain Model instructions"
+            description="Applies to new Domain Model requests. Running requests keep their original instructions. Leave blank to use only the Harness defaults."
+            triggerLabel="Module instructions"
+          />
+        }
+      />
       <div className="relative min-h-0 flex-1">
         <DomainModelCanvas
           model={model}
