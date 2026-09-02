@@ -1,5 +1,6 @@
 import { apiErrorResponse } from '@/lib/api-errors';
 import { getProject } from '@/lib/project-registry';
+import { collectWhatToDoRepositoryFacts } from '@/lib/what-to-do-repository-facts';
 import { listWhatToDoFeatureSources } from '@/lib/what-to-do-sources';
 
 export const runtime = 'nodejs';
@@ -13,8 +14,12 @@ export async function GET(
   if (!project)
     return Response.json({ error: 'Project not found.' }, { status: 404 });
   try {
+    const [features, repositoryFacts] = await Promise.all([
+      listWhatToDoFeatureSources(project),
+      collectWhatToDoRepositoryFacts(project),
+    ]);
     return Response.json(
-      { features: await listWhatToDoFeatureSources(project) },
+      { features, repositoryFacts },
       { headers: { 'Cache-Control': 'no-store' } },
     );
   } catch (error) {
