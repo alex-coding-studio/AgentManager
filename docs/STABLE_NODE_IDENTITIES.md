@@ -85,29 +85,17 @@ replaces that older object. Refine remains strictly one-to-one and retains its
 target identity. Persisted `candidateAliases` maps local labels to permanent
 aliases; continuation packets provide the preceding proposal's reconciliation.
 
-## Compatibility migration
+## Identity backfill
 
 Each project graph owns an `identities.json` beside its `nodes` directory.
 UUID values are globally unique and portable with the object.
 
-Existing numeric names are converted once with
-`node --experimental-strip-types scripts/migrate-uuid-aliases.mjs <planning-path> <new-backup-path> --apply`
-while the application is stopped. Without `--apply` the command prints a dry run.
-The backup must be outside the planning directory and on the same filesystem.
-The migration stages renamed directories and updated JSON/Markdown references,
-keeps UUIDs and canonical relationships unchanged, and removes the numeric counter.
-Original data is preserved in the explicit backup. Historical request snapshots
-remain unchanged as execution evidence, not live graph references. Existing
-provider Sessions are not resumed after migration; the next request receives a
-fresh Workspace containing current aliases. The live graph has only one naming
-scheme; it does not retain a legacy-name adapter.
-
-On first access, migration reads existing Node JSON and proposal Run JSON,
+On first access, identity backfill reads existing Node JSON and proposal Run JSON,
 unifies all revisions and accepted Nodes through Candidate provenance, then
 adds UUIDs and stable relationships. Existing Markdown, resource paths, content
 revisions, timestamps, and request snapshots are not rewritten.
 
-Before replacing a changed JSON record, migration preserves its original bytes
+Before replacing a changed JSON record, backfill preserves its original bytes
 under `identity-migration-backup` in that graph. Writes use atomic rename. The
 index is persisted before individual records, so interruption and rerun retain
 the same assignments. Conflicting identity claims fail visibly rather than

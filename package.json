@@ -15,7 +15,7 @@
     "cli": "node ./bin/agent-manager.mjs",
     "lint": "oxlint .",
     "format": "oxfmt",
-    "test:graph": "node --experimental-strip-types --test tests/task-graph-layout.test.ts tests/task-graph-rules.test.ts tests/graph-identity.test.ts tests/uuid-alias-migration.test.mjs tests/graph-node-card.test.ts tests/goal-picker-graph.test.ts",
+    "test:graph": "node --experimental-strip-types --test tests/task-graph-layout.test.ts tests/task-graph-rules.test.ts tests/graph-identity.test.ts tests/graph-node-card.test.ts tests/goal-picker-graph.test.ts",
     "test:dependency-audit": "node --experimental-strip-types --test tests/runtime-dependency-audit.test.ts",
     "test:planning-paths": "node --experimental-strip-types --test tests/planning-paths.test.ts",
     "test:canvas-frame": "node --experimental-strip-types --import ./tests/helpers/register-alias.mjs --test tests/canvas-node-card-frame.test.ts",
