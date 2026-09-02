@@ -1,0 +1,27 @@
+import { apiErrorResponse } from '@/lib/api-errors';
+import { getProject } from '@/lib/project-registry';
+import { listWhatToDoFeatureSources } from '@/lib/what-to-do-sources';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ projectId: string }> },
+) {
+  const project = await getProject((await params).projectId);
+  if (!project)
+    return Response.json({ error: 'Project not found.' }, { status: 404 });
+  try {
+    return Response.json(
+      { features: await listWhatToDoFeatureSources(project) },
+      { headers: { 'Cache-Control': 'no-store' } },
+    );
+  } catch (error) {
+    return apiErrorResponse(
+      error,
+      'Could not load What to Do.',
+      'GET /api/projects/[projectId]/what-to-do',
+    );
+  }
+}
