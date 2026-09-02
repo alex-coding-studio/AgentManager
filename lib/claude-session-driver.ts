@@ -60,6 +60,8 @@ type ThreadState = {
   thread: AgentRuntimeThread;
   token: string;
   hostJobs: boolean;
+  instructions?: string;
+  sessionStarted: boolean;
   broker: HostJobBroker;
   turn?: TurnState;
 };
@@ -96,12 +98,14 @@ export function buildClaudeSessionArguments(input: {
   mcpUrl: string;
   token: string;
   toolNames: string[];
+  instructions?: string;
 }) {
   const write = input.access !== 'read-only';
   return [
     '--print',
-    '--safe-mode',
     '--restricted',
+    '--setting-sources',
+    '',
     '--tools',
     write ? 'Read,Glob,Grep,Edit,Write,Bash' : 'Read,Glob,Grep',
     ...(write ? ['--permission-mode', 'acceptEdits'] : []),
@@ -126,6 +130,9 @@ export function buildClaudeSessionArguments(input: {
             .map((name) => `mcp__${claudeMcpServerName}__${name}`)
             .join(','),
         ]
+      : []),
+    ...(input.instructions
+      ? ['--append-system-prompt', input.instructions]
       : []),
     ...(input.model ? ['--model', input.model] : []),
     ...(input.effort ? ['--effort', input.effort] : []),
@@ -169,6 +176,8 @@ export class ClaudeSessionDriver implements AgentSessionDriver {
       thread,
       token: randomUUID(),
       hostJobs: input.hostJobs !== false,
+      instructions: input.instructions,
+      sessionStarted: false,
       broker: this.options.brokerFactory(input),
     });
     await this.listen();
@@ -181,6 +190,7 @@ export class ClaudeSessionDriver implements AgentSessionDriver {
         thread,
         token: randomUUID(),
         hostJobs: true,
+        sessionStarted: true,
         broker: this.options.brokerFactory({
           profile: thread.profile,
           workingDirectory: thread.workingDirectory,
@@ -218,7 +228,7 @@ export class ClaudeSessionDriver implements AgentSessionDriver {
           return;
         }
         state.turn = turn;
-        void this.runPhysicalTurn(state, input.prompt, false)
+        void this.runPhysicalTurn(state, input.prompt, state.sessionStarted)
           .then((result) => {
             state.turn = undefined;
             resolve(result);
@@ -281,6 +291,7 @@ export class ClaudeSessionDriver implements AgentSessionDriver {
         mcpUrl: `http://127.0.0.1:${port}/mcp/${state.thread.threadId}`,
         token: state.token,
         toolNames,
+        instructions: resume ? undefined : state.instructions,
       }),
     ];
     const environment = { ...(this.options.environment ?? process.env) };
@@ -291,6 +302,7 @@ export class ClaudeSessionDriver implements AgentSessionDriver {
       detached: process.platform !== 'win32',
       stdio: ['pipe', 'pipe', 'pipe'],
     });
+    state.sessionStarted = true;
     turn.child = child;
     turn.turnId = `${state.thread.threadId}:${randomUUID().slice(0, 8)}`;
     turn.finalOutput = '';
@@ -317,15 +329,21 @@ export class ClaudeSessionDriver implements AgentSessionDriver {
     for await (const line of lines) {
       const event = parseClaudeEvent(line);
       if (!event) continue;
-      publishActivity(event, (activity) =>
+      publishActivity(event, (activity) => {
+        if (
+          activity.summary.startsWith(
+            `Running tool: mcp__${claudeMcpServerName}__`,
+          )
+        )
+          return;
         turn.onEvent?.({
           type: 'activity',
           threadId: turn.threadId,
           turnId: turn.turnId,
           summary: activity.summary,
           at: new Date().toISOString(),
-        }),
-      );
+        });
+      });
       if (event.type === 'result' && 'subtype' in event) {
         turnUsage = normalizeClaudeUsage(event.usage);
         if (event.is_error || event.subtype !== 'success')

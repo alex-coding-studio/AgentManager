@@ -63,13 +63,20 @@ Access selection); a Claude Coordinator profile always uses the Claude session d
 ## Claude session driver
 
 `lib/claude-session-driver.ts` implements `AgentSessionDriver` on the Claude CLI without an
-SDK dependency. A thread is one Claude session id; a physical turn is one `claude --print`
-process started with `--session-id` and continued with `--resume`. Host tools reach the model
+SDK dependency. A thread is one Claude session id; the first physical turn uses `--session-id`
+and every later one, logical or continuation, uses `--resume`. Host tools reach the model
 through a loopback MCP endpoint owned by the driver: `http://127.0.0.1:<port>/mcp/<thread>`,
 bearer token per thread, `--mcp-config` plus `--strict-mcp-config`, and `--allowedTools`
-naming only the registered `mcp__agentmanager__*` tools. A coordinator thread keeps
+naming only the registered `mcp__agentmanager__*` tools. Thread instructions are injected with
+`--append-system-prompt` on the session-creating process. A coordinator thread keeps
 `--restricted --tools Read,Glob,Grep`, so it cannot poll with a shell; a worker thread adds
 Edit, Write and Bash with `acceptEdits`.
+
+Customizations are disabled with `--restricted --setting-sources '' --strict-mcp-config`
+rather than `--safe-mode`. Safe mode disables every customization _including MCP servers_, so
+a safe-mode session cannot see the Host tools at all; a live smoke against Claude Code 2.1.258
+had the model answer that its only tools were Glob, Grep and Read. The chosen combination was
+verified to expose the Host tool while leaving a project `CLAUDE.md` unread.
 
 Suspension differs from Codex in one way: the Claude CLI has no turn interrupt RPC. A
 suspending tool result tells the model to end the turn with one short line; the driver waits
@@ -88,7 +95,14 @@ across every physical turn, while each `turn-completed` event keeps its own proc
 The Claude worker path in `startEventDrivenWorkerRun` now uses this driver for every
 workspace-write Claude execution, with `run_job` and, when a Candidate can be published,
 `publish_candidate`. Deterministic fixtures exercise the loopback endpoint end to end with a
-fake `claude` binary; a live Claude session against this driver has not been exercised yet.
+fake `claude` binary.
+
+One bounded live smoke against Claude Code 2.1.258 exercised the real Coordinator path: a
+read-only thread received `coordinatorThreadInstructions`, called the Host `dispatch_worker`
+tool rather than returning a decision as text, ended its physical turn inside the suspension
+grace, was resumed on the same session id by a Worker settlement event and returned a terminal
+result. Two physical turns, one Host tool call, about 6.6 s. The Worker path and a multi-round
+Coordinator have not been exercised live.
 
 ## Push execution
 

@@ -9,6 +9,7 @@ import {
   claudeMcpServerName,
 } from '../lib/claude-session-driver.ts';
 import { coordinationLimits } from '../lib/just-do-it-coordination-runner.ts';
+import { coordinatorThreadInstructions } from '../lib/coordinator-events.ts';
 import { HostJobBroker } from '../lib/host-job-broker.ts';
 import { startPushCoordinatorSession } from '../lib/event-driven-agent-transport.ts';
 import type {
@@ -71,6 +72,15 @@ void test('Claude session arguments keep the read-only coordinator without Bash 
     toolNames: ['dispatch_worker'],
   });
   assert.ok(readOnly.includes('--restricted'));
+  assert.ok(
+    !readOnly.includes('--safe-mode'),
+    'safe mode disables every customization including our own MCP server',
+  );
+  assert.equal(
+    readOnly[readOnly.indexOf('--setting-sources') + 1],
+    '',
+    'project, user and local settings stay disabled without safe mode',
+  );
   assert.equal(readOnly[readOnly.indexOf('--tools') + 1], 'Read,Glob,Grep');
   assert.ok(!readOnly.includes('--permission-mode'));
   assert.ok(readOnly.includes('--strict-mcp-config'));
@@ -377,4 +387,62 @@ void test('every Claude Host-tool call emits activity before validation so the c
     coordinationLimits.maxCoordinatorToolCalls + 1,
     'a rejected Host-tool call still counts against the cap',
   );
+  assert.equal(
+    activity.filter((summary) => summary.includes('mcp__agentmanager__'))
+      .length,
+    0,
+    'the model-reported MCP call is not counted a second time',
+  );
+});
+
+void test('coordinator thread instructions reach the real CLI arguments and only the first process', async (t) => {
+  const f = await fixture(t, 'echo');
+  const thread = await f.driver.startThread({
+    profile: { agent: 'claude', model: 'fixture', effort: 'low' },
+    workingDirectory: f.root,
+    access: 'read-only',
+    hostJobs: false,
+    instructions: coordinatorThreadInstructions,
+  });
+  await f.driver.startTurn(thread, { prompt: 'prepare' }).completion;
+  await f.driver.startTurn(thread, { prompt: 'qualify' }).completion;
+  const runs = await f.invocations();
+  assert.equal(runs.length, 2);
+  assert.equal(
+    runs[0].args[runs[0].args.indexOf('--append-system-prompt') + 1],
+    coordinatorThreadInstructions,
+    'the first process carries the exact coordinator instruction',
+  );
+  assert.match(coordinatorThreadInstructions, /dispatch_worker/);
+  assert.equal(
+    runs[0].args[runs[0].args.indexOf('--setting-sources') + 1],
+    '',
+    'project and user customizations stay disabled',
+  );
+  assert.ok(!runs[0].args.includes('--safe-mode'));
+  assert.ok(
+    !runs[1].args.includes('--append-system-prompt'),
+    'a resumed session already carries its instructions',
+  );
+});
+
+void test('a second logical turn resumes the same Claude session instead of recreating it', async (t) => {
+  const f = await fixture(t, 'echo');
+  const thread = await f.driver.startThread({
+    profile: { agent: 'claude', model: 'fixture', effort: 'low' },
+    workingDirectory: f.root,
+    access: 'read-only',
+    hostJobs: false,
+  });
+  const first = await f.driver.startTurn(thread, { prompt: 'one' }).completion;
+  const second = await f.driver.startTurn(thread, { prompt: 'two' }).completion;
+  assert.equal(first.finalOutput, 'ECHO:one');
+  assert.equal(second.finalOutput, 'RESUMED:two');
+  const runs = await f.invocations();
+  assert.equal(runs.length, 2);
+  assert.equal(runs[0].resume, false);
+  assert.deepEqual(runs[0].args.slice(-2), ['--session-id', thread.threadId]);
+  assert.equal(runs[1].resume, true);
+  assert.deepEqual(runs[1].args.slice(-2), ['--resume', thread.threadId]);
+  assert.equal(runs[0].sessionId, runs[1].sessionId);
 });
