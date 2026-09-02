@@ -1531,10 +1531,10 @@ async function mutateTaskDecomposition<T>(
 
 function getActiveRuns() {
   const runtime = globalThis as typeof globalThis & {
-    __agentManagerRuns?: Map<string, ActiveRun>;
+    __praxisRuns?: Map<string, ActiveRun>;
   };
-  runtime.__agentManagerRuns ??= new Map<string, ActiveRun>();
-  return runtime.__agentManagerRuns;
+  runtime.__praxisRuns ??= new Map<string, ActiveRun>();
+  return runtime.__praxisRuns;
 }
 
 async function ensureCandidateArtifacts(

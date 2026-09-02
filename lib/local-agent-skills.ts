@@ -196,7 +196,7 @@ export function readCodexSkills(
       id: 1,
       method: 'initialize',
       params: {
-        clientInfo: { name: 'agent_manager_skills', version: '1.0.0' },
+        clientInfo: { name: 'praxis_skills', version: '1.0.0' },
         capabilities: { experimentalApi: true },
       },
     });

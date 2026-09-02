@@ -429,7 +429,7 @@ void test('execution permissions do not broaden planning and explicit execution 
     access: 'workspace-write',
     protectedPath: '/tmp/example/.praxis',
   });
-  assert.ok(execution.includes('default_permissions="agent_manager_action"'));
+  assert.ok(execution.includes('default_permissions="praxis_action"'));
   assert.ok(
     execution.some((arg) => arg.includes('"/tmp/example/.praxis"="read"')),
   );

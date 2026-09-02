@@ -1606,10 +1606,10 @@ function runKey(project: RegisteredProject, runId: string) {
 
 function getActiveRuns() {
   const runtime = globalThis as typeof globalThis & {
-    __agentManagerWhatsNextRuns?: Map<string, ActiveRun>;
+    __praxisWhatsNextRuns?: Map<string, ActiveRun>;
   };
-  runtime.__agentManagerWhatsNextRuns ??= new Map<string, ActiveRun>();
-  return runtime.__agentManagerWhatsNextRuns;
+  runtime.__praxisWhatsNextRuns ??= new Map<string, ActiveRun>();
+  return runtime.__praxisWhatsNextRuns;
 }
 
 async function ensureCandidateArtifacts(

@@ -181,7 +181,7 @@ export function readLocalModels(
             id: 1,
             method: 'initialize',
             params: {
-              clientInfo: { name: 'agent_manager_models', version: '0.1.0' },
+              clientInfo: { name: 'praxis_models', version: '0.1.0' },
             },
           }
         : {

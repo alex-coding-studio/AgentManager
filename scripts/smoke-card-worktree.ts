@@ -46,7 +46,7 @@ try {
     primaryRepositoryPath: workspace.repository,
   });
   const config = args.find((arg) =>
-    arg.startsWith('permissions.agent_manager_action='),
+    arg.startsWith('permissions.praxis_action='),
   )!;
   const forbidden = [
     path.join(workspace.gitDirectory, 'HEAD'),
@@ -61,7 +61,7 @@ try {
     [
       'sandbox',
       '-P',
-      'agent_manager_action',
+      'praxis_action',
       '-c',
       config,
       '-C',

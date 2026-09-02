@@ -221,7 +221,7 @@ void test('new and resumed Codex sessions receive metadata without removing exec
     catalog,
   );
   assert.ok(args.includes('approval_policy="never"'));
-  assert.ok(args.includes('default_permissions="agent_manager_action"'));
+  assert.ok(args.includes('default_permissions="praxis_action"'));
   assert.ok(
     args.some((arg) => arg.includes('"/tmp/skill-fixture/.praxis"="read"')),
   );
@@ -286,9 +286,7 @@ void test('only explicit local Full Access enables unrestricted execution; plann
     full,
   );
   assert.ok(args.includes('danger-full-access'));
-  assert.ok(
-    !args.some((arg) => arg.startsWith('permissions.agent_manager_action=')),
-  );
+  assert.ok(!args.some((arg) => arg.startsWith('permissions.praxis_action=')));
   const planning = buildCodexArguments(
     { workingDirectory: cwd, prompt: '', access: 'read-only' },
     full,

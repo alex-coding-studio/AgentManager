@@ -16,18 +16,7 @@ void test('Praxis owns the public brand and technical namespace', async () => {
     /^# Praxis\n\n\*\*From intent to action\.\*\*/,
   );
 
-  const files = await textFiles([
-    'README.md',
-    'package.json',
-    'package-lock.json',
-    'app',
-    'bin',
-    'components',
-    'docs',
-    'lib',
-    'scripts',
-    'tests',
-  ]);
+  const files = await textFiles(['.']);
   for (const file of files) {
     if (file.endsWith('tests/praxis-brand.test.ts')) continue;
     const source = await readFile(path.join(root, file), 'utf8');
@@ -38,6 +27,8 @@ void test('Praxis owns the public brand and technical namespace', async () => {
       'AGENT_MANAGER',
       'agent-manager',
       'agentmanager',
+      'agent_manager',
+      'agentManager',
     ])
       assert.doesNotMatch(source, new RegExp(escapeRegExp(legacy)), file);
   }
@@ -45,6 +36,16 @@ void test('Praxis owns the public brand and technical namespace', async () => {
 
 async function textFiles(entries: string[]) {
   const files: string[] = [];
+  const ignoredDirectories = new Set([
+    '.git',
+    '.next',
+    'coverage',
+    'dist',
+    'node_modules',
+    'out',
+    'reports',
+    'work',
+  ]);
   for (const entry of entries) {
     const absolute = path.join(root, entry);
     const children = await readdir(absolute, { withFileTypes: true }).catch(
@@ -56,7 +57,8 @@ async function textFiles(entries: string[]) {
     }
     for (const child of children) {
       const relative = path.join(entry, child.name);
-      if (child.isDirectory()) files.push(...(await textFiles([relative])));
+      if (child.isDirectory() && !ignoredDirectories.has(child.name))
+        files.push(...(await textFiles([relative])));
       else if (/\.(?:md|mjs|json|ts|tsx)$/.test(child.name))
         files.push(relative);
     }

@@ -31,7 +31,7 @@ delivery-sizing signal only when the user explicitly decomposes for delivery.
 
 ## Product ownership
 
-The Harness is an Praxis-owned core capability.
+The Harness is a Praxis-owned core capability.
 
 - Ordinary users cannot edit, replace, disable, or select another Harness from
   the interface or settings.

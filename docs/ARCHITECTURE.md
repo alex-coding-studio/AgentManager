@@ -11,7 +11,7 @@ The initial implementation uses TypeScript and React for the interface and a loc
 A managed product can have two independent Git repositories:
 
 1. The code repository, which contains source code, tests, durable product documents, and pull requests.
-2. An Praxis companion repository, which contains versioned planning data.
+2. A Praxis companion repository, which contains versioned planning data.
 
 Example remotes:
 
