@@ -309,7 +309,13 @@ void test('every Task Graph card scenario still renders its full shell through t
     assert.match(html, /data-density="standard"/, label);
     assert.match(html, /min-height:160px/, label);
     assert.match(html, /A representative product direction/, label);
-    assert.match(html, /In 2 · Out 1|Rev 4 · In 2 · Out 1/, label);
+    assert.match(
+      html,
+      overrides.kind === 'preview' && overrides.transientKind === 'run'
+        ? /Updated 0:00 ago/
+        : /In 2 · Out 1|Rev 4 · In 2 · Out 1/,
+      label,
+    );
   }
 });
 

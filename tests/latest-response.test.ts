@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { WhatsNextRunRecord } from '../lib/whats-next-runs.ts';
-import { latestWhatsNextResponse } from '../lib/latest-response.ts';
+import type { TaskDecompositionRunRecord } from '../lib/task-decomposition-runs.ts';
+import {
+  latestTaskDecompositionResponse,
+  latestWhatsNextResponse,
+} from '../lib/latest-response.ts';
 
 function run(
   status: WhatsNextRunRecord['status'],
@@ -70,4 +74,36 @@ void test('failure is prominent while cancellation remains neutral', () => {
   assert.equal(canceled.tone, 'neutral');
   assert.equal(canceled.attention, 'none');
   assert.equal(canceled.icon, 'neutral');
+});
+
+void test('decomposition outcomes use the shared response tones', () => {
+  const proposal = latestTaskDecompositionResponse({
+    status: 'proposal',
+    result: {
+      outcome: 'proposal',
+      candidates: [{}, {}],
+    },
+    error: null,
+  } as TaskDecompositionRunRecord);
+  assert.equal(proposal.statusLabel, 'Review');
+  assert.match(proposal.summary, /2 Candidate boundaries/);
+
+  const evidence = latestTaskDecompositionResponse({
+    status: 'insufficient-evidence',
+    result: {
+      outcome: 'insufficient-evidence',
+      missingEvidence: ['Product boundary'],
+    },
+    error: null,
+  } as TaskDecompositionRunRecord);
+  assert.equal(evidence.attention, 'action-required');
+  assert.equal(evidence.statusLabel, 'More evidence needed');
+
+  const canceled = latestTaskDecompositionResponse({
+    status: 'canceled',
+    result: null,
+    error: null,
+  } as TaskDecompositionRunRecord);
+  assert.equal(canceled.tone, 'neutral');
+  assert.equal(canceled.statusLabel, 'Canceled');
 });

@@ -21,7 +21,8 @@ import {
   Upload,
   X,
 } from 'lucide-react';
-import { AgentProfileSelector } from '@/components/agent-profile-selector';
+import { AgentRunControls } from '@/components/agent-run-controls';
+import { LatestResponse } from '@/components/latest-response';
 import type { AgentProfile } from '@/lib/agent-profile';
 import { MarkdownReader } from '@/components/markdown-reader';
 import {
@@ -63,6 +64,7 @@ import type {
   TaskDecompositionRunTransport,
 } from '@/lib/task-decomposition-runs';
 import { replaceRunWithPreviewsInPlace } from '@/lib/task-graph-preview-state';
+import { latestTaskDecompositionResponse } from '@/lib/latest-response';
 import { cn } from '@/lib/utils';
 
 type DecompositionRequestPreview = TaskGraphPreview & {
@@ -95,6 +97,7 @@ export function TaskDecompositionWorkspace({
   folders,
   initialNodes,
   initialPreviews,
+  initialRuns,
   developmentPreview,
   developmentPreviewSequence,
 }: {
@@ -102,6 +105,7 @@ export function TaskDecompositionWorkspace({
   folders: ContextBrowserFolder[];
   initialNodes: TaskGraphNode[];
   initialPreviews: TaskGraphPreview[];
+  initialRuns: TaskDecompositionRunRecord[];
   developmentPreview: boolean;
   developmentPreviewSequence?: {
     running: TaskGraphPreview;
@@ -110,6 +114,11 @@ export function TaskDecompositionWorkspace({
 }) {
   const { t } = useUiText();
   const [nodes, setNodes] = useState(initialNodes);
+  const [latestRun, setLatestRun] = useState<TaskDecompositionRunRecord | null>(
+    [...initialRuns].sort((left, right) =>
+      right.startedAt.localeCompare(left.startedAt),
+    )[0] ?? null,
+  );
   const [title, setTitle] = useState('');
   const [selectedRefs, setSelectedRefs] = useState<string[]>([]);
   const [selectedFolderPath, setSelectedFolderPath] = useState(
@@ -220,6 +229,10 @@ export function TaskDecompositionWorkspace({
     : [];
   const decomposeSource =
     nodes.find((node) => node.id === decomposeSourceId) ?? null;
+  const latestRunPresentation =
+    latestRun && !['running', 'validating'].includes(latestRun.status)
+      ? latestTaskDecompositionResponse(latestRun)
+      : null;
 
   function toggleSource(ref: string, selected: boolean) {
     setSelectedRefs((current) =>
@@ -455,6 +468,7 @@ export function TaskDecompositionWorkspace({
         return;
       }
       const run = result.run;
+      setLatestRun(run);
       runSnapshots.current.set(run.runId, snapshot);
       const runningPreview = runPreview(
         run,
@@ -507,46 +521,19 @@ export function TaskDecompositionWorkspace({
     closeDecomposition();
   }
 
-  function replaceRunWithOutcome(
-    runId: string,
-    sourceNodeId: string,
-    title: string,
-    description: string,
-    status: string,
-  ) {
-    const revisionPreview = runSnapshots.current.get(runId)?.revisionPreview;
-    const outcome: DecompositionRequestPreview = {
-      id: runId,
-      sourceNodeId,
-      instruction: description,
-      inheritedResourceCount: 0,
-      additionalResourceCount: 0,
-      contextRefs: [],
-      files: [],
-      kind: 'outcome',
-      title,
-      type: status,
-      description,
-      status,
-    };
-    setRequestPreviews((current) => {
-      const restored = revisionPreview
-        ? replaceRunWithPreviewsInPlace(current, runId, [revisionPreview])
-        : current.filter(
-            (preview) => preview.id !== runId && preview.runId !== runId,
-          );
-      return [...restored, outcome];
-    });
-    if (revisionPreview) setFocusedNodeId('');
-    runSnapshots.current.delete(runId);
-  }
-
   function applyRunRecord(run: TaskDecompositionRunRecord) {
+    setLatestRun(run);
     if (['running', 'validating'].includes(run.status)) {
+      const activity = run.activity.at(-1)?.summary;
       setRequestPreviews((current) =>
         current.map((preview) =>
           preview.id === run.runId || preview.runId === run.runId
-            ? { ...preview, status: run.status }
+            ? {
+                ...preview,
+                status: run.status,
+                description: activity ?? preview.description,
+                updatedAt: run.updatedAt,
+              }
             : preview,
         ),
       );
@@ -609,52 +596,22 @@ export function TaskDecompositionWorkspace({
       runSnapshots.current.delete(run.runId);
       return;
     }
-    if (
-      run.status === 'clarification' &&
-      run.result?.outcome === 'clarification'
-    ) {
-      const options = run.result.clarification.options
-        .map((option) => option.label)
-        .join(' · ');
-      replaceRunWithOutcome(
-        run.runId,
-        run.sourceNodeId,
-        'Clarification needed',
-        `${run.result.clarification.question} ${options}`,
-        run.status,
-      );
-      return;
-    }
-    if (
-      run.status === 'insufficient-evidence' &&
-      run.result?.outcome === 'insufficient-evidence'
-    ) {
-      replaceRunWithOutcome(
-        run.runId,
-        run.sourceNodeId,
-        'More evidence needed',
-        run.result.missingEvidence.join(' · '),
-        run.status,
-      );
-      return;
-    }
-    if (run.status === 'no-change' && run.result?.outcome === 'no-change') {
-      replaceRunWithOutcome(
-        run.runId,
-        run.sourceNodeId,
-        'No new boundary found',
-        run.result.reason,
-        run.status,
-      );
-      return;
-    }
-    replaceRunWithOutcome(
-      run.runId,
-      run.sourceNodeId,
-      'Agent Run failed',
-      run.error ?? 'The Agent did not return a valid result.',
-      'failed',
+    finishRunWithoutCandidates(run.runId);
+  }
+
+  function finishRunWithoutCandidates(runId: string) {
+    const snapshot = runSnapshots.current.get(runId);
+    setRequestPreviews((current) =>
+      snapshot?.revisionPreview
+        ? replaceRunWithPreviewsInPlace(current, runId, [
+            snapshot.revisionPreview,
+          ])
+        : current.filter(
+            (preview) => preview.id !== runId && preview.runId !== runId,
+          ),
     );
+    if (snapshot?.revisionPreview) setFocusedNodeId('');
+    runSnapshots.current.delete(runId);
   }
 
   async function cancelRun(runId: string) {
@@ -668,6 +625,10 @@ export function TaskDecompositionWorkspace({
       },
     );
     if (!response.ok) return;
+    const payload = (await response.json()) as {
+      run?: TaskDecompositionRunRecord;
+    };
+    if (payload.run) setLatestRun(payload.run);
     setRequestPreviews((current) =>
       snapshot?.revisionPreview
         ? replaceRunWithPreviewsInPlace(current, runId, [
@@ -814,7 +775,6 @@ export function TaskDecompositionWorkspace({
   }
 
   const applyRunRecordEvent = useEffectEvent(applyRunRecord);
-  const replaceRunWithOutcomeEvent = useEffectEvent(replaceRunWithOutcome);
 
   useEffect(() => {
     if (developmentPreview || restoredRuns.current) return;
@@ -910,13 +870,8 @@ export function TaskDecompositionWorkspace({
             error?: string;
           };
           if (!response.ok || !payload.run) {
-            replaceRunWithOutcomeEvent(
-              runId,
-              preview.sourceNodeId,
-              'Agent Run unavailable',
-              payload.error ?? 'Could not read the Agent Run.',
-              'failed',
-            );
+            setError(payload.error ?? 'Could not read the Agent Run.');
+            finishRunWithoutCandidates(runId);
             return;
           }
           applyRunRecordEvent(payload.run);
@@ -1077,6 +1032,34 @@ export function TaskDecompositionWorkspace({
               onCancelRun={cancelRun}
             />
           )}
+
+          {latestRun && latestRunPresentation ? (
+            <LatestResponse
+              key={latestRun.runId}
+              className="absolute top-4 left-4 z-10 w-[min(320px,calc(100%-2rem))]"
+              title={t('Latest Response')}
+              statusLabel={t(latestRunPresentation.statusLabel)}
+              summary={latestRunPresentation.summary}
+              tone={latestRunPresentation.tone}
+              attention={latestRunPresentation.attention}
+              icon={latestRunPresentation.icon}
+            >
+              {latestRun.result ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    void previewResource(
+                      `task-decomposition/runs/${latestRun.runId}/response.md`,
+                    )
+                  }
+                >
+                  {t('Open full response')}
+                </Button>
+              ) : null}
+            </LatestResponse>
+          ) : null}
         </section>
 
         <Dialog
@@ -1362,12 +1345,6 @@ export function TaskDecompositionWorkspace({
                   </p>
                 </div>
 
-                <AgentProfileSelector
-                  value={agentProfile}
-                  onChange={setAgentProfile}
-                  mode={developmentPreview ? 'demo' : 'live'}
-                />
-
                 <div className="space-y-2">
                   <label
                     htmlFor="decomposition-goal"
@@ -1639,34 +1616,26 @@ export function TaskDecompositionWorkspace({
                 ) : null}
 
                 <div className="border-t border-border pt-5">
-                  <Button
-                    type="submit"
-                    size="lg"
-                    className="w-full"
+                  <AgentRunControls
+                    value={agentProfile}
+                    onChange={setAgentProfile}
+                    mode={developmentPreview ? 'demo' : 'live'}
+                    actionType="submit"
                     disabled={!decompositionGoal.trim()}
-                  >
-                    {developmentPreview
-                      ? t('Create fixture request')
-                      : revisionTarget
-                        ? t('Send revision to {agent}', {
-                            agent: AGENT_LABELS[selectedAgent],
-                          })
-                        : runOperation === 'append-candidates'
-                          ? t('Find additional nodes')
-                          : t('Send to {agent}', {
+                    actionLabel={
+                      developmentPreview
+                        ? t('Create fixture request')
+                        : revisionTarget
+                          ? t('Send revision to {agent}', {
                               agent: AGENT_LABELS[selectedAgent],
-                            })}
-                  </Button>
-                  <p className="mt-2 text-center text-[10px] leading-4 text-muted-foreground">
-                    {developmentPreview
-                      ? t(
-                          'Development fixture only. Nothing is sent to an Agent.',
-                        )
-                      : t(
-                          '{agent} runs locally with your existing subscription login.',
-                          { agent: AGENT_LABELS[selectedAgent] },
-                        )}
-                  </p>
+                            })
+                          : runOperation === 'append-candidates'
+                            ? t('Find additional nodes')
+                            : t('Send to {agent}', {
+                                agent: AGENT_LABELS[selectedAgent],
+                              })
+                    }
+                  />
                 </div>
               </form>
             ) : null}
@@ -2114,10 +2083,12 @@ function runPreview(
     title: `${TRANSPORT_LABELS[run.transport]} decomposition`,
     agentLabel: TRANSPORT_LABELS[run.transport],
     type: 'Running',
-    description: snapshot.instruction,
+    description: run.activity.at(-1)?.summary ?? snapshot.instruction,
     status: run.status,
     revisionOf: run.revisionOf,
     runId: run.runId,
+    startedAt: run.startedAt,
+    updatedAt: run.updatedAt,
   };
 }
 

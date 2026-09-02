@@ -374,6 +374,7 @@ function buildFlowGraph(
         agentLabel: preview?.agentLabel,
         runId: preview?.runId,
         startedAt: preview?.startedAt,
+        updatedAt: preview?.updatedAt,
         revision: preview?.candidate?.revision,
         color:
           node?.presentation?.color ??

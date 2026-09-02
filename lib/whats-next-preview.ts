@@ -135,6 +135,7 @@ Turn an accepted product direction into reviewable delivery slices without pollu
     updatedAt: timestamp,
     endedAt: timestamp,
     usage: null,
+    activity: [{ at: timestamp, summary: 'The proposal is ready for review.' }],
     result: {
       schemaVersion: 1,
       harness: {

@@ -360,7 +360,11 @@ function WhatsNextCanvas({
       ).catch(() => null);
       if (!response?.ok) continue;
       const { run } = (await response.json()) as { run: WhatsNextRunRecord };
-      if (['running', 'validating'].includes(run.status)) continue;
+      if (['running', 'validating'].includes(run.status)) {
+        setRuns((current) => upsertRun(current, run));
+        setPreviews((current) => mergePreviews(current, runToPreviews(run)));
+        continue;
+      }
       if (run.revisionOf && run.result?.outcome !== 'proposal') {
         setFocusedNodeId('');
         await loadRunsFromServer();
@@ -2210,6 +2214,7 @@ function runToPreviews(run: WhatsNextRunRecord): TaskGraphPreview[] {
     additionalResourceCount: 0,
     runId: run.runId,
     startedAt: run.startedAt,
+    updatedAt: run.updatedAt,
     derivedFrom: run.sourceNodeIds,
     layer: intentionDestination(run.intention).layer,
   };
@@ -2223,7 +2228,8 @@ function runToPreviews(run: WhatsNextRunRecord): TaskGraphPreview[] {
         kind: 'run',
         title: run.revisionOf ? 'Refining direction' : agentLabel,
         type: run.revisionOf ? 'Refining' : 'Running',
-        description: run.input?.instruction ?? '',
+        description:
+          run.activity?.at(-1)?.summary ?? run.input?.instruction ?? '',
         agentLabel,
         status: run.status,
         revisionOf: run.revisionOf,

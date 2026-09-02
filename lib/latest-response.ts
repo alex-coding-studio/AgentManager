@@ -1,5 +1,6 @@
 import type { WhatsNextRunRecord } from './whats-next-runs.ts';
 import type { DomainModelRunRecord } from './domain-model-runs.ts';
+import type { TaskDecompositionRunRecord } from './task-decomposition-runs.ts';
 
 export type LatestResponseTone = 'neutral' | 'attention' | 'warning' | 'error';
 
@@ -103,6 +104,62 @@ export function latestDomainModelResponse(
     attention: 'none',
     statusLabel: 'Applied',
     summary: run.result?.summary ?? 'The current Domain Model was updated.',
+    icon: 'success',
+  };
+}
+
+export function latestTaskDecompositionResponse(
+  run: TaskDecompositionRunRecord,
+): LatestResponsePresentation {
+  if (run.status === 'failed')
+    return {
+      tone: 'error',
+      attention: 'action-required',
+      statusLabel: 'Failed',
+      summary: run.error?.trim() || 'The Agent Run failed.',
+      icon: 'error',
+    };
+  if (run.status === 'canceled')
+    return {
+      tone: 'neutral',
+      attention: 'none',
+      statusLabel: 'Canceled',
+      summary: 'The Agent Run was canceled. The graph was not changed.',
+      icon: 'neutral',
+    };
+  if (run.result?.outcome === 'clarification')
+    return {
+      tone: 'attention',
+      attention: 'action-required',
+      statusLabel: 'Answer needed',
+      summary: run.result.clarification.question,
+      icon: 'attention',
+    };
+  if (run.result?.outcome === 'insufficient-evidence')
+    return {
+      tone: 'attention',
+      attention: 'action-required',
+      statusLabel: 'More evidence needed',
+      summary: run.result.missingEvidence.join(' · '),
+      icon: 'attention',
+    };
+  if (run.result?.outcome === 'no-change')
+    return {
+      tone: 'neutral',
+      attention: 'none',
+      statusLabel: 'No change',
+      summary: run.result.reason,
+      icon: 'neutral',
+    };
+  return {
+    tone: 'neutral',
+    attention: 'none',
+    statusLabel: 'Review',
+    summary:
+      run.result?.impactReview?.notes[0] ??
+      (run.result?.outcome === 'proposal' && run.result.candidates.length
+        ? `Proposed ${run.result.candidates.length} Candidate boundaries for review.`
+        : 'The decomposition proposal is ready for review.'),
     icon: 'success',
   };
 }

@@ -740,6 +740,8 @@ export const chineseUi: Record<string, string> = {
   'Latest Response': '最新回答',
   'Open full response': '查看完整回答',
   'Answer needed': '需要回答',
+  'More evidence needed': '需要补充资料',
+  'Updated {elapsed} ago': '{elapsed} 前更新',
   'No change': '无需修改',
   Lineage: '派生关系',
   Lines: '行',

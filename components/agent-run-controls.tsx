@@ -14,14 +14,16 @@ export function AgentRunControls({
   mode = 'live',
   label = 'Agent configuration',
   actionLabel = 'Ask',
+  actionType = 'button',
 }: {
   value: AgentProfile;
   onChange: (profile: AgentProfile) => void;
-  onRun: () => void;
+  onRun?: () => void;
   disabled?: boolean;
   mode?: 'live' | 'demo';
   label?: string;
   actionLabel?: string;
+  actionType?: 'button' | 'submit';
 }) {
   const { t } = useUiText();
   return (
@@ -34,6 +36,7 @@ export function AgentRunControls({
         showStatus={false}
       />
       <Button
+        type={actionType}
         size="sm"
         aria-label={t(actionLabel)}
         disabled={disabled}

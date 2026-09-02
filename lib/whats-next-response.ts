@@ -46,6 +46,10 @@ ${result.reason}
 `;
 }
 
+export function renderWhatsNextSummaryMarkdown(result: WhatsNextHarnessResult) {
+  return `${result.reflection.markdown.trim()}\n\n${renderNextStep(result.reflection.continuationAdvice)}`;
+}
+
 function renderNextStep(
   advice: WhatsNextHarnessResult['reflection']['continuationAdvice'],
 ) {

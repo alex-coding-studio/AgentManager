@@ -57,6 +57,18 @@ import {
   type LocalAgentUsage,
 } from './local-agent-transport.ts';
 import {
+  createAgentGraphActivityRecorder,
+  initialAgentGraphActivity,
+  initializeAgentGraphActivity,
+  writeAgentGraphRunEvidence,
+  type AgentGraphActivity,
+  type AgentGraphActivityRecorder,
+} from './agent-graph-run.ts';
+import {
+  renderTaskDecompositionResponseMarkdown,
+  renderTaskDecompositionSummaryMarkdown,
+} from './task-decomposition-response.ts';
+import {
   listTaskGraphNodes,
   readTaskGraphMarkdownResource,
   type TaskGraphNode,
@@ -108,6 +120,7 @@ export type TaskDecompositionRunRecord = {
   updatedAt: string;
   endedAt: string | null;
   usage: LocalAgentUsage | null;
+  activity: AgentGraphActivity[];
   result: TaskDecompositionHarnessResult | null;
   error: string | null;
 };
@@ -128,6 +141,7 @@ type RunRequest = {
 type ActiveRun = {
   record: TaskDecompositionRunRecord;
   agent: LocalAgentRun;
+  activityRecorder: AgentGraphActivityRecorder;
 };
 
 const activeRuns = getActiveRuns();
@@ -285,6 +299,10 @@ async function startTaskDecompositionRunUnlocked(
     ? buildTaskDecompositionContinuationPrompt(packetWithoutFingerprint)
     : buildTaskDecompositionPrompt(packetWithoutFingerprint);
   const timestamp = new Date().toISOString();
+  const activity = initialAgentGraphActivity(
+    'Decomposing the selected scope.',
+    timestamp,
+  );
   await writeFile(
     path.join(runPath, 'request.json'),
     `${JSON.stringify(
@@ -329,19 +347,33 @@ async function startTaskDecompositionRunUnlocked(
     updatedAt: timestamp,
     endedAt: null,
     usage: null,
+    activity,
     result: null,
     error: null,
   };
   await writeRunRecord(project, record);
+  await initializeAgentGraphActivity(runPath, activity);
 
+  const activityRecorder = createAgentGraphActivityRecorder(
+    runPath,
+    activity,
+    (item) => {
+      record.updatedAt = item.at;
+    },
+  );
   const agent = startLocalAgentRun(input.agent, {
     workingDirectory: runPath,
     prompt,
     resumeSessionId: coordinatorRun?.agentSessionId ?? undefined,
     model: profile.model || undefined,
     effort: profile.effort || undefined,
+    onActivity: activityRecorder.onActivity,
   });
-  activeRuns.set(runKey(project, runId), { record, agent });
+  activeRuns.set(runKey(project, runId), {
+    record,
+    agent,
+    activityRecorder,
+  });
   void finishTaskDecompositionRun(
     project,
     record,
@@ -386,6 +418,7 @@ export async function readTaskDecompositionRun(
     ),
   ) as TaskDecompositionRunRecord;
   record.operation ??= record.revisionOf ? 'revise-candidate' : 'propose';
+  record.activity ??= [];
   if (record.result?.outcome === 'proposal') {
     record.result.candidates = await readIdentifiedEntities(
       project.planningPath,
@@ -394,6 +427,13 @@ export async function readTaskDecompositionRun(
     );
   }
   await ensureCandidateArtifacts(project, record);
+  const active = activeRuns.get(runKey(project, runId));
+  if (active)
+    return {
+      ...record,
+      updatedAt: active.record.updatedAt,
+      activity: [...active.record.activity],
+    };
   return record;
 }
 
@@ -428,6 +468,14 @@ export async function cancelTaskDecompositionRun(
   canceledRecord.updatedAt = timestamp;
   canceledRecord.endedAt = timestamp;
   canceledRecord.error = null;
+  await active?.activityRecorder.flush();
+  await writeAgentGraphRunEvidence(taskDecompositionRunPath(project, runId), {
+    activity: canceledRecord.activity,
+    summary:
+      '# Canceled\n\nThe Agent Run was canceled. No Candidate or Formal Node was changed.\n',
+    response:
+      '# Decomposition Response\n\nThe Agent Run was canceled. No Candidate or Formal Node was changed.\n',
+  });
   await writeRunRecord(project, canceledRecord);
   active?.agent.cancel();
   return canceledRecord;
@@ -686,9 +734,20 @@ async function finishTaskDecompositionRun(
   >['candidates'][number],
   reservedCandidateIds: string[] = [],
 ) {
+  let agentOutput: string | null = null;
   try {
     const agentResult = await agent.completion;
     if (isRunCanceled(record)) return;
+    agentOutput = agentResult.finalOutput;
+    const active = activeRuns.get(runKey(project, record.runId));
+    await active?.activityRecorder.flush();
+    await writeAgentGraphRunEvidence(
+      taskDecompositionRunPath(project, record.runId),
+      {
+        activity: record.activity,
+        agentOutput,
+      },
+    );
     record.status = 'validating';
     record.agentSessionId = agentResult.agentSessionId;
     record.usage = agentResult.usage;
@@ -749,6 +808,17 @@ async function finishTaskDecompositionRun(
     record.status = 'failed';
     record.error =
       error instanceof Error ? error.message : 'The Agent Run failed.';
+    const active = activeRuns.get(runKey(project, record.runId));
+    await active?.activityRecorder.flush();
+    await writeAgentGraphRunEvidence(
+      taskDecompositionRunPath(project, record.runId),
+      {
+        activity: record.activity,
+        agentOutput,
+        summary: `# Failed\n\n${record.error}\n`,
+        response: `# Decomposition Response\n\n## Failed\n\n${record.error}\n`,
+      },
+    );
     record.updatedAt = endedAt;
     record.endedAt = endedAt;
     await writeRunRecord(project, record);
@@ -1134,7 +1204,16 @@ async function ensureCandidateArtifacts(
   project: RegisteredProject,
   record: TaskDecompositionRunRecord,
 ) {
-  if (record.result?.outcome !== 'proposal') return;
+  if (!record.result) return;
+  await writeAgentGraphRunEvidence(
+    taskDecompositionRunPath(project, record.runId),
+    {
+      activity: record.activity ?? [],
+      summary: renderTaskDecompositionSummaryMarkdown(record.result),
+      response: renderTaskDecompositionResponseMarkdown(record.result),
+    },
+  );
+  if (record.result.outcome !== 'proposal') return;
   await Promise.all(
     record.result.candidates.map(async (candidate) => {
       const candidatePath = path.join(

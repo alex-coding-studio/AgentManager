@@ -32,6 +32,7 @@ export type GraphNodeCardData = Record<string, unknown> & {
   agentLabel?: string;
   runId?: string;
   startedAt?: string;
+  updatedAt?: string;
   relationshipCount: number;
   dependenciesFocused?: boolean;
   onFocusDependencies: (nodeId: string) => void;
@@ -56,6 +57,7 @@ export function GraphNodeCard({
   const preview = data.kind === 'preview';
   const running = data.transientKind === 'run';
   const elapsed = useRunElapsed(data.startedAt, running);
+  const sinceUpdate = useRunElapsed(data.updatedAt, running);
   const runningBaseLabel = t('{agent} is running', {
     agent: data.agentLabel?.trim() || 'Agent',
   });
@@ -187,16 +189,18 @@ export function GraphNodeCard({
       footer={
         <>
           <span className="shrink-0 text-[9px] leading-3 text-muted-foreground">
-            {data.revision !== undefined
-              ? t('Rev {revision} · In {inputs} · Out {outputs}', {
-                  revision: data.revision,
-                  inputs: data.inputCount,
-                  outputs: data.outputCount,
-                })
-              : t('In {inputs} · Out {outputs}', {
-                  inputs: data.inputCount,
-                  outputs: data.outputCount,
-                })}
+            {running
+              ? t('Updated {elapsed} ago', { elapsed: sinceUpdate || '0:00' })
+              : data.revision !== undefined
+                ? t('Rev {revision} · In {inputs} · Out {outputs}', {
+                    revision: data.revision,
+                    inputs: data.inputCount,
+                    outputs: data.outputCount,
+                  })
+                : t('In {inputs} · Out {outputs}', {
+                    inputs: data.inputCount,
+                    outputs: data.outputCount,
+                  })}
           </span>
           <span
             className="ml-auto min-w-0 break-all text-right font-mono text-[8px] font-normal leading-3 text-muted-foreground"
