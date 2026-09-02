@@ -1,0 +1,554 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { chmod, mkdtemp, mkdir, readFile, rm, symlink } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import {
+  applyProposedDomainModel,
+  readDomainModel,
+  readDomainModelView,
+  undoLastDomainModelChange,
+  type ProposedDomainModel,
+} from '../lib/domain-model.ts';
+import { deriveDomainRelationships } from '../lib/domain-model-view.ts';
+import {
+  createDomainModelRequest,
+  parseDomainModelResult,
+  type DomainModelRequest,
+} from '../lib/domain-model-harness.ts';
+import {
+  cancelDomainModelRun,
+  readDomainModelRun,
+  startDomainModelRun,
+} from '../lib/domain-model-runs.ts';
+import type { RegisteredProject } from '../lib/project-registry.ts';
+import type { startLocalAgentRun } from '../lib/local-agent-transport.ts';
+
+async function fixture(t: { after: (fn: () => Promise<void>) => void }) {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'domain-model-'));
+  t.after(() => rm(rootPath, { recursive: true, force: true }));
+  const project: RegisteredProject = {
+    id: 'domain-fixture',
+    kind: 'standalone',
+    name: 'Domain fixture',
+    description: '',
+    rootPath,
+    codePath: null,
+    planningPath: path.join(rootPath, '.agent-manager'),
+    createdAt: '',
+  };
+  await mkdir(project.planningPath);
+  return project;
+}
+
+function initialProposal(): ProposedDomainModel {
+  return {
+    entities: [
+      {
+        id: 'NEW_ENTITY_ITEM',
+        name: 'Item',
+        meaning: 'A physical thing the user wants to locate.',
+        provenance: 'explicit',
+        fields: [
+          {
+            id: 'NEW_FIELD_TITLE',
+            name: 'title',
+            meaning: 'The name shown to the user.',
+            valueType: 'text',
+            required: true,
+            multiple: false,
+            display: 'primary',
+            provenance: 'explicit',
+          },
+        ],
+      },
+      {
+        id: 'NEW_ENTITY_CONTAINER',
+        name: 'Container',
+        meaning: 'An Item that can manage child Items.',
+        provenance: 'explicit',
+        fields: [],
+      },
+    ],
+    relationships: [
+      {
+        id: 'NEW_RELATIONSHIP_IS_A',
+        sourceEntityId: 'NEW_ENTITY_CONTAINER',
+        targetEntityId: 'NEW_ENTITY_ITEM',
+        label: 'is a',
+        meaning: 'Container shares Item identity and fields.',
+        semanticRole: 'inheritance',
+        direction: 'directed',
+        sourceCardinality: '1',
+        targetCardinality: '1',
+        provenance: 'explicit',
+      },
+      {
+        id: 'NEW_RELATIONSHIP_CONTAINS',
+        sourceEntityId: 'NEW_ENTITY_CONTAINER',
+        targetEntityId: 'NEW_ENTITY_ITEM',
+        label: 'contains',
+        meaning: 'A Container manages zero or more Items.',
+        semanticRole: 'containment',
+        direction: 'directed',
+        sourceCardinality: '1',
+        targetCardinality: '0..*',
+        provenance: 'explicit',
+      },
+    ],
+    constraints: [
+      {
+        id: 'NEW_CONSTRAINT_PARENT',
+        target: { kind: 'model', id: null },
+        text: 'An Item has at most one parent Container.',
+        provenance: 'inferred',
+      },
+    ],
+  };
+}
+
+void test('an applied model allocates stable identities and derives self-containment', async (t) => {
+  const project = await fixture(t);
+  const applied = await applyProposedDomainModel(project, {
+    baseVersion: 0,
+    runId: 'RUN-11111111-1111-4111-8111-111111111111',
+    instruction: 'A Container is an Item and contains Items.',
+    summary: 'Created Item and Container.',
+    proposed: initialProposal(),
+  });
+  assert.equal(applied.canUndo, true);
+  assert.equal(applied.model.stateVersion, 1);
+  assert.deepEqual(
+    applied.model.entities.map((item) => item.name),
+    ['Item', 'Container'],
+  );
+  assert.ok(
+    applied.model.entities.every((item) => item.id.startsWith('ENTITY-')),
+  );
+  assert.ok(
+    applied.model.relationships.every(
+      (item) =>
+        item.id.startsWith('RELATIONSHIP-') &&
+        applied.model.entities.some(
+          (entity) => entity.id === item.sourceEntityId,
+        ) &&
+        applied.model.entities.some(
+          (entity) => entity.id === item.targetEntityId,
+        ),
+    ),
+  );
+  const derived = deriveDomainRelationships(applied.model);
+  assert.equal(derived.length, 1);
+  assert.equal(derived[0].sourceEntityId, derived[0].targetEntityId);
+  assert.equal(derived[0].label, 'contains');
+  assert.equal(derived[0].provenance, 'derived');
+  assert.deepEqual(
+    new Set(derived[0].derivedFrom),
+    new Set(applied.model.relationships.map((item) => item.id)),
+  );
+  assert.ok(applied.change);
+  assert.ok(applied.change.added.length >= 6);
+});
+
+void test('an empty applied result preserves the one available undo', async (t) => {
+  const project = await fixture(t);
+  const first = await applyProposedDomainModel(project, {
+    baseVersion: 0,
+    runId: 'RUN-11111111-1111-4111-8111-111111111111',
+    instruction: 'Create Item and Container.',
+    summary: 'Initial model.',
+    proposed: initialProposal(),
+  });
+  const repeated = await applyProposedDomainModel(project, {
+    baseVersion: first.model.stateVersion,
+    runId: 'RUN-22222222-2222-4222-8222-222222222222',
+    instruction: 'Do the same thing again.',
+    summary: 'No effective change.',
+    proposed: {
+      entities: structuredClone(first.model.entities),
+      relationships: structuredClone(first.model.relationships),
+      constraints: structuredClone(first.model.constraints),
+    },
+  });
+  assert.equal(repeated.change, null);
+  assert.equal(repeated.model.stateVersion, first.model.stateVersion);
+  assert.equal(repeated.canUndo, true);
+  const restored = await undoLastDomainModelChange(project);
+  assert.equal(restored.model.entities.length, 0);
+});
+
+void test('Domain Model storage rejects a linked module directory', async (t) => {
+  const project = await fixture(t);
+  const outside = await mkdtemp(path.join(os.tmpdir(), 'domain-outside-'));
+  t.after(() => rm(outside, { recursive: true, force: true }));
+  await symlink(outside, path.join(project.planningPath, 'domain-model'));
+  await assert.rejects(
+    () => readDomainModel(project),
+    /storage is not available/,
+  );
+});
+
+void test('a later change preserves Entity identity and undo restores the previous model atomically', async (t) => {
+  const project = await fixture(t);
+  const first = (
+    await applyProposedDomainModel(project, {
+      baseVersion: 0,
+      runId: 'RUN-11111111-1111-4111-8111-111111111111',
+      instruction: 'Create Item and Container.',
+      summary: 'Initial model.',
+      proposed: initialProposal(),
+    })
+  ).model;
+  const item = first.entities.find((entity) => entity.name === 'Item')!;
+  const container = first.entities.find(
+    (entity) => entity.name === 'Container',
+  )!;
+  const secondProposal: ProposedDomainModel = {
+    entities: [
+      {
+        id: item.id,
+        name: item.name,
+        meaning: item.meaning,
+        provenance: item.provenance,
+        fields: [
+          ...item.fields,
+          {
+            id: 'NEW_FIELD_NOTE',
+            name: 'note',
+            meaning: 'An optional user note.',
+            valueType: 'text',
+            required: false,
+            multiple: false,
+            display: 'secondary',
+            provenance: 'explicit',
+          },
+        ],
+      },
+      {
+        id: container.id,
+        name: container.name,
+        meaning: container.meaning,
+        fields: [],
+        provenance: container.provenance,
+      },
+    ],
+    relationships: first.relationships,
+    constraints: first.constraints,
+  };
+  const second = (
+    await applyProposedDomainModel(project, {
+      baseVersion: 1,
+      runId: 'RUN-22222222-2222-4222-8222-222222222222',
+      instruction: 'Item also has an optional note.',
+      summary: 'Added Item note.',
+      proposed: secondProposal,
+    })
+  ).model;
+  assert.equal(second.entities[0].id, item.id);
+  assert.ok(second.entities[0].fields.some((field) => field.name === 'note'));
+  const restored = await undoLastDomainModelChange(project);
+  assert.equal(restored.model.stateVersion, 3);
+  assert.equal(restored.canUndo, false);
+  assert.equal(
+    restored.model.entities
+      .find((entity) => entity.id === item.id)!
+      .fields.some((field) => field.name === 'note'),
+    false,
+  );
+  assert.equal((await readDomainModel(project)).stateVersion, 3);
+  await assert.rejects(
+    () => undoLastDomainModelChange(project),
+    /no Domain Model change to undo/i,
+  );
+});
+
+void test('stale and cyclic changes fail without replacing the current model', async (t) => {
+  const project = await fixture(t);
+  const current = (
+    await applyProposedDomainModel(project, {
+      baseVersion: 0,
+      runId: 'RUN-11111111-1111-4111-8111-111111111111',
+      instruction: 'Create Item and Container.',
+      summary: 'Initial model.',
+      proposed: initialProposal(),
+    })
+  ).model;
+  await assert.rejects(
+    () =>
+      applyProposedDomainModel(project, {
+        baseVersion: 0,
+        runId: 'RUN-22222222-2222-4222-8222-222222222222',
+        instruction: 'Stale change.',
+        summary: 'Stale.',
+        proposed: initialProposal(),
+      }),
+    /changed while the Agent was running/,
+  );
+  const [item, container] = current.entities;
+  const cycle = initialProposal();
+  cycle.entities = structuredClone(current.entities);
+  cycle.relationships = [
+    {
+      id: 'NEW_RELATIONSHIP_CYCLE_A',
+      sourceEntityId: item.id,
+      targetEntityId: container.id,
+      label: 'is a',
+      meaning: '',
+      semanticRole: 'inheritance',
+      direction: 'directed',
+      sourceCardinality: '1',
+      targetCardinality: '1',
+      provenance: 'inferred',
+    },
+    {
+      id: 'NEW_RELATIONSHIP_CYCLE_B',
+      sourceEntityId: container.id,
+      targetEntityId: item.id,
+      label: 'is a',
+      meaning: '',
+      semanticRole: 'inheritance',
+      direction: 'directed',
+      sourceCardinality: '1',
+      targetCardinality: '1',
+      provenance: 'inferred',
+    },
+  ];
+  cycle.constraints = [];
+  await assert.rejects(
+    () =>
+      applyProposedDomainModel(project, {
+        baseVersion: 1,
+        runId: 'RUN-33333333-3333-4333-8333-333333333333',
+        instruction: 'Create an invalid cycle.',
+        summary: 'Cycle.',
+        proposed: cycle,
+      }),
+    /inheritance cannot contain a cycle/,
+  );
+  assert.equal((await readDomainModel(project)).stateVersion, 1);
+});
+
+void test('the Harness binds responses to one exact model state', () => {
+  const request = createDomainModelRequest({
+    requestId: 'RUN-11111111-1111-4111-8111-111111111111',
+    instruction: 'Create Item and Container.',
+    selectedIds: [],
+    model: {
+      schemaVersion: 1,
+      stateVersion: 0,
+      entities: [],
+      relationships: [],
+      constraints: [],
+      lastRunId: null,
+      updatedAt: null,
+    },
+    previousSummary: '',
+  });
+  const result = parseDomainModelResult(
+    JSON.stringify({
+      harnessVersion: 1,
+      requestId: request.requestId,
+      baseVersion: 0,
+      inputFingerprint: request.inputFingerprint,
+      outcome: 'applied',
+      summary: 'Created the model.',
+      model: initialProposal(),
+    }),
+    request,
+  );
+  assert.equal(result.outcome, 'applied');
+  assert.throws(
+    () =>
+      parseDomainModelResult(
+        JSON.stringify({ ...result, baseVersion: 1 }),
+        request,
+      ),
+    /does not match/,
+  );
+});
+
+void test('a controlled Agent Run applies one model and cancellation changes nothing', async (t) => {
+  const project = await fixture(t);
+  const transport: typeof startLocalAgentRun = (_agent, options) => {
+    const request = JSON.parse(
+      options.prompt.split('\nREQUEST:\n')[1],
+    ) as DomainModelRequest;
+    return {
+      completion: Promise.resolve({
+        agentSessionId: 'fixture-session',
+        usage: null,
+        finalOutput: JSON.stringify({
+          harnessVersion: 1,
+          requestId: request.requestId,
+          baseVersion: request.baseVersion,
+          inputFingerprint: request.inputFingerprint,
+          outcome: 'applied',
+          summary: 'Created Item and Container.',
+          model: initialProposal(),
+        }),
+      }),
+      cancel: () => {},
+    };
+  };
+  const started = await startDomainModelRun(
+    project,
+    {
+      instruction: 'Create Item and Container.',
+      selectedIds: [],
+      profile: { agent: 'codex', model: '', effort: '' },
+    },
+    transport,
+  );
+  let run = await readDomainModelRun(project, started.id);
+  for (let attempt = 0; attempt < 50 && run.status === 'running'; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    run = await readDomainModelRun(project, started.id);
+  }
+  assert.equal(run.status, 'succeeded', run.error ?? '');
+  assert.equal((await readDomainModel(project)).stateVersion, 1);
+
+  let reject!: (error: Error) => void;
+  let canceled = false;
+  const hanging: typeof startLocalAgentRun = () => ({
+    completion: new Promise((_, fail) => {
+      reject = fail;
+    }),
+    cancel: () => {
+      canceled = true;
+      reject(new Error('canceled'));
+    },
+  });
+  const second = await startDomainModelRun(
+    project,
+    {
+      instruction: 'Add a quantity.',
+      selectedIds: [],
+      profile: { agent: 'codex', model: '', effort: '' },
+    },
+    hanging,
+  );
+  const stopped = await cancelDomainModelRun(project, second.id);
+  assert.equal(canceled, true);
+  assert.equal(stopped.status, 'canceled');
+  assert.equal((await readDomainModel(project)).stateVersion, 1);
+  assert.equal((await readDomainModelView(project)).canUndo, true);
+  assert.match(
+    await readFile(
+      path.join(
+        project.planningPath,
+        'domain-model/runs',
+        second.id,
+        'summary.md',
+      ),
+      'utf8',
+    ),
+    /not changed/,
+  );
+});
+
+void test('concurrent starts reserve one Agent Run slot before asynchronous setup', async (t) => {
+  const project = await fixture(t);
+  let transports = 0;
+  let rejectCompletion!: (error: Error) => void;
+  const hanging: typeof startLocalAgentRun = () => {
+    transports += 1;
+    return {
+      completion: new Promise((_, reject) => {
+        rejectCompletion = reject;
+      }),
+      cancel: () => rejectCompletion(new Error('canceled')),
+    };
+  };
+  const input = {
+    instruction: 'Create Item.',
+    selectedIds: [],
+    profile: { agent: 'codex' as const, model: '', effort: '' as const },
+  };
+  const [first, second] = await Promise.allSettled([
+    startDomainModelRun(project, input, hanging),
+    startDomainModelRun(project, input, hanging),
+  ]);
+  assert.equal(first.status, 'fulfilled');
+  assert.equal(second.status, 'rejected');
+  assert.match(String(second.reason), /already active/);
+  assert.equal(transports, 1);
+  if (first.status === 'fulfilled')
+    await cancelDomainModelRun(project, first.value.id);
+});
+
+void test('a committed model is never reported as unchanged when Run evidence fails', async (t) => {
+  const project = await fixture(t);
+  let resolveCompletion!: (value: {
+    agentSessionId: string | null;
+    usage: null;
+    finalOutput: string;
+  }) => void;
+  let request!: DomainModelRequest;
+  const deferred: typeof startLocalAgentRun = (_agent, options) => {
+    request = JSON.parse(
+      options.prompt.split('\nREQUEST:\n')[1],
+    ) as DomainModelRequest;
+    return {
+      completion: new Promise((resolve) => {
+        resolveCompletion = resolve;
+      }),
+      cancel: () => {},
+    };
+  };
+  const started = await startDomainModelRun(
+    project,
+    {
+      instruction: 'Create Item and Container.',
+      selectedIds: [],
+      profile: { agent: 'codex', model: '', effort: '' },
+    },
+    deferred,
+  );
+  const directory = path.join(
+    project.planningPath,
+    'domain-model',
+    'runs',
+    started.id,
+  );
+  await chmod(directory, 0o500);
+  try {
+    resolveCompletion({
+      agentSessionId: 'fixture-session',
+      usage: null,
+      finalOutput: JSON.stringify({
+        harnessVersion: 1,
+        requestId: request.requestId,
+        baseVersion: request.baseVersion,
+        inputFingerprint: request.inputFingerprint,
+        outcome: 'applied',
+        summary: 'Created Item and Container.',
+        model: initialProposal(),
+      }),
+    });
+    await new Promise((resolve) => setTimeout(resolve, 40));
+  } finally {
+    await chmod(directory, 0o700);
+  }
+  const model = await readDomainModel(project);
+  const immediate = await readDomainModelRun(project, started.id);
+  assert.equal(model.lastRunId, started.id);
+  assert.equal(immediate.status, 'succeeded');
+  assert.doesNotMatch(immediate.error ?? '', /not changed/i);
+  const revised: ProposedDomainModel = {
+    entities: structuredClone(model.entities),
+    relationships: structuredClone(model.relationships),
+    constraints: structuredClone(model.constraints),
+  };
+  revised.entities[0].meaning = 'A physical thing with a durable identity.';
+  await applyProposedDomainModel(project, {
+    baseVersion: model.stateVersion,
+    runId: 'RUN-99999999-9999-4999-8999-999999999999',
+    instruction: 'Clarify Item identity.',
+    summary: 'Clarified Item.',
+    proposed: revised,
+  });
+  await undoLastDomainModelChange(project);
+  const historical = await readDomainModelRun(project, started.id);
+  assert.equal(historical.status, 'succeeded');
+  assert.doesNotMatch(historical.error ?? '', /not changed/i);
+});

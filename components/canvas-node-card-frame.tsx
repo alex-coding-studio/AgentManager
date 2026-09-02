@@ -17,6 +17,7 @@ export type CanvasNodeCardFrameProps = {
   focused?: boolean;
   dimmed?: boolean;
   busy?: boolean;
+  bodyInset?: boolean;
   selectionControl?: ReactNode;
   kindLabel?: ReactNode;
   headerActions?: ReactNode;
@@ -36,6 +37,7 @@ export function CanvasNodeCardFrame({
   focused,
   dimmed,
   busy,
+  bodyInset,
   selectionControl,
   kindLabel,
   headerActions,
@@ -65,7 +67,7 @@ export function CanvasNodeCardFrame({
       aria-busy={busy}
       className={cn(
         'group relative flex w-72 flex-col rounded-2xl border border-t-[3px] bg-card',
-        density === 'compact' ? 'px-4 py-2.5' : 'px-4 py-3',
+        density === 'compact' ? 'px-3 py-2' : 'px-3 py-2.5',
         'text-left shadow-[0_10px_30px_rgb(15_23_42/6%)] transition',
         focused && 'ring-3 ring-ring/20',
         selected && 'ring-2 ring-foreground/35',
@@ -74,8 +76,13 @@ export function CanvasNodeCardFrame({
       )}
       style={style}
     >
-      <div className="flex min-h-8 items-center justify-between gap-3">
-        <span className="flex min-w-0 items-center gap-1.5">
+      <div
+        className={cn(
+          'flex items-center justify-between',
+          density === 'compact' ? 'min-h-6 gap-2' : 'min-h-7 gap-2',
+        )}
+      >
+        <span className={cn('flex min-w-0 items-center', 'gap-1')}>
           {selectionControl}
           {kindLabel}
         </span>
@@ -86,19 +93,20 @@ export function CanvasNodeCardFrame({
       </div>
       <h2
         className={cn(
-          'mt-1',
-          density === 'compact' ? 'line-clamp-2' : 'line-clamp-3',
+          density === 'compact' ? 'mt-0.5 line-clamp-2' : 'mt-0.5 line-clamp-3',
+          bodyInset && 'pl-5',
           'text-sm font-semibold leading-5',
         )}
       >
         {title}
       </h2>
       {summary === undefined || summary === null ? null : (
-        <div className="mt-1.5">
+        <div className={cn('mt-1', bodyInset && 'pl-5')}>
           <p
             className={cn(
               density === 'compact' ? 'line-clamp-1' : 'line-clamp-3',
-              'text-[11px] leading-5 text-muted-foreground',
+              density === 'compact' ? 'leading-4' : 'leading-5',
+              'text-[11px] text-muted-foreground',
             )}
           >
             {summary}
@@ -106,10 +114,16 @@ export function CanvasNodeCardFrame({
         </div>
       )}
       {status === undefined || status === null ? null : (
-        <div className="mt-1.5">{status}</div>
+        <div className={cn('mt-1.5', bodyInset && 'pl-5')}>{status}</div>
       )}
       {footer ? (
-        <div className="mt-auto flex items-baseline justify-between gap-2 pt-1">
+        <div
+          className={cn(
+            'mt-auto flex items-baseline justify-between gap-2',
+            density === 'compact' ? 'pt-0.5' : 'pt-1',
+            bodyInset && 'pl-5',
+          )}
+        >
           {footer}
         </div>
       ) : null}

@@ -185,8 +185,8 @@ void test('a dimmed card reads as de-emphasised without losing its content', () 
 void test('an explicitly empty summary keeps its slot so height does not jump', () => {
   const empty = render({ title: 'Item', summary: '' });
   const absent = render({ title: 'Item' });
-  assert.match(empty, /class="mt-1\.5"/);
-  assert.doesNotMatch(absent, /class="mt-1\.5"/);
+  assert.match(empty, /class="mt-1"/);
+  assert.doesNotMatch(absent, /class="mt-1"/);
 });
 
 void test('the shared Frame requires no Task Graph data', async () => {
@@ -333,6 +333,6 @@ void test('a running card without a summary keeps the summary slot so height is 
         ),
       ),
     );
-  assert.match(render(undefined), /class="mt-1\.5"><p class="line-clamp-3/);
-  assert.match(render('Present.'), /class="mt-1\.5"><p class="line-clamp-3/);
+  assert.match(render(undefined), /class="mt-1"><p class="line-clamp-3/);
+  assert.match(render('Present.'), /class="mt-1"><p class="line-clamp-3/);
 });

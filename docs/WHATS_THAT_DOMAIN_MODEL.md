@@ -44,7 +44,7 @@ their Nodes. The required Context is the user's current Instruction and the curr
 Model. A project may begin with an empty model.
 
 Cross-module inputs and handoffs remain future possibilities rather than first-slice
-behavior. The persisted model keeps stable identities and revisions so another module may
+behavior. The persisted model keeps stable identities and a Host-owned state token so another module may
 consume it later without requiring a storage migration, but no workflow or dependency is
 promised now.
 
@@ -54,16 +54,16 @@ What’s That? has no Candidate, Accepted or Finalized lifecycle. Every valid su
 generation becomes the current formal model immediately. Formal means usable now, not
 immutable.
 
-Later natural-language changes create new revisions while preserving stable element
-identity. The system records the instruction, structured change and affected identifiers.
-The user may continue editing any generated Entity or relationship and may restore an
-earlier revision.
+Later natural-language changes replace the current formal model while preserving stable element
+identity. The system records the instruction, structured change and affected identifiers. There
+is no user-facing revision, version browser, Draft or Finalize state. The latest successful
+change may be undone once; a later successful change creates a new single Undo opportunity.
 
 Only runtime state is transient:
 
 - `running`: an Agent operation is in progress;
 - `error`: validation or execution failed and the current model is unchanged;
-- `current`: the element belongs to the current model revision.
+- `current`: the element belongs to the current formal model.
 
 One operation applies atomically. A failed, canceled, stale or ambiguous result must not
 leave partial Entities, fields, relationships or layout changes.
@@ -75,9 +75,9 @@ The top-left response surface follows the shared
 results remain quiet. Clarification, decision-required, warning and error outcomes expose
 their state in the collapsed row and use the shared attention behavior.
 
-For an applied model revision, the expanded response summarizes added, updated, removed and
+For an applied model change, the expanded response summarizes added, updated, removed and
 derived Entities, relationships and Constraints, plus any change outside the selected
-discussion boundary. It may offer `Undo this change`. The provider's raw response and
+discussion boundary. It may offer `Undo last change`. The provider's raw response and
 private chain-of-thought are never presented as the model change summary.
 
 ## Summary and log context
@@ -90,15 +90,16 @@ others.
 The default Agent packet contains:
 
 - the current Instruction;
-- the compact whole-model identity, title, summary and relationship index;
-- full definitions for checked Entities and the relationships among them;
-- direct-neighbor summaries available for on-demand reading;
+- the complete current formal Domain Model so an applied response can safely return one
+  coherent replacement model;
+- the checked Entity and relationship identifiers as the primary discussion boundary;
 - the latest bounded model Summary and references to relevant earlier Runs;
-- the exact current model revision and Harness revision.
+- the opaque current Host state token and Harness revision.
 
-It does not eagerly inject raw logs, every prior Instruction, full unrelated Entity bodies
-or complete provider transcripts. When one concrete ambiguity, failure or prior decision
-matters, the Agent reads a bounded excerpt through the referenced Run or event.
+It does not eagerly inject raw logs, every prior Instruction or complete provider
+transcripts. The complete current model is bounded by the Host's Entity, relationship,
+Constraint and text limits. When one concrete prior decision matters, the latest Summary
+provides continuity without replaying every Run.
 
 Every Run retains enough local evidence to recover without the provider Session:
 
@@ -114,7 +115,7 @@ domain-model/runs/RUN-<uuid>/
 ```
 
 `change.json` is the Host-validated structured model change used by Latest Response and
-revision history. `summary.md` records the concise result, current unresolved questions and
+single-step Undo evidence. `summary.md` records the concise result, current unresolved questions and
 relevant next context. `activity.jsonl` and raw output remain local evidence and never become
 the user-facing response by default.
 
@@ -124,7 +125,7 @@ old provider transcript to understand settled meaning. A continued Session recei
 the current Instruction, model delta, selected Context and Summary changes rather than the
 unchanged complete history.
 
-Summary claims retain evidence references and applicability to a model revision. User input
+Summary claims retain evidence references and applicability to the current model state. User input
 and current canonical model state override stale Summary text. Later correction records a
 new event instead of rewriting a failed or superseded Run as successful.
 
@@ -165,7 +166,7 @@ because the Host owns it rather than the product experience.
 - primary business fields appear first in the Entity property panel;
 - secondary business fields appear under one collapsed `Other fields · N` section in that
   panel;
-- system fields such as stable IDs, schema revision and storage coordination remain hidden
+- system fields such as stable IDs and storage coordination remain hidden
   from the ordinary UI and do not contribute to the secondary-field count.
 
 The Agent assigns display importance from the user's language and current product meaning.
@@ -242,12 +243,12 @@ Selection does not encode edge direction, dependency, inheritance or containment
 meanings come from the user's Instruction and the Agent's supported interpretation. Two or
 more selected Entities define primary Context, not a user-drawn relationship.
 
-To keep Context cost bounded:
+To keep Context complete without replaying execution history:
 
-- the model's compact identity, title, summary and relationship index is always available;
-- selected Entities, their full definitions and relationships among them are primary;
-- direct neighbors are related summaries available for on-demand reading;
-- unrelated full Entity definitions are not injected eagerly;
+- the complete current formal model is always available;
+- selected Entities and relationships are identified as the primary focus;
+- the latest bounded Summary carries prior decisions;
+- raw Run Logs and provider transcripts stay out of the default packet;
 - the Agent may read or update an unselected Entity only when model consistency requires it,
   and the change summary must name that expansion.
 
@@ -265,7 +266,7 @@ one operation and must not add nominal Entities merely to make the Canvas look c
 
 Selecting an Entity's details control opens the established property panel pattern used by
 the other graph modules. The panel owns the Entity meaning, primary fields, collapsed
-secondary fields, relationships, constraints, provenance and revision. The Canvas Card does
+secondary fields, relationships, constraints and provenance. The Canvas Card does
 not expand fields. The primary edit control remains natural language rather than a database
 property grid. System fields are not part of the ordinary details surface.
 
@@ -274,7 +275,7 @@ For example:
 > Item should also have a quantity. Most Items have a quantity of one.
 
 A successful operation updates the existing Item identifier, adds the field and default,
-increments the model revision and shows a concise change record. Direct structured field
+replaces the current formal model and shows a concise change record. Direct structured field
 editing may be added later for precise corrections, but it is not required for the first
 slice.
 
@@ -296,7 +297,7 @@ The selected pair or group narrows primary Context but does not predetermine who
 whom. More than two Entities may participate in one modeling instruction. Clicking an
 existing edge focuses that relationship in the Composer. The Agent revises it in place and
 retains stable identity when its conceptual meaning remains the same. Replacing one meaning
-with another creates an explicit relationship change in revision history.
+with another creates an explicit relationship change in the Run evidence.
 
 Drag-to-connect, handles and a manual relationship-type picker remain deferred efficiency
 shortcuts. They are not part of the first slice.
@@ -396,7 +397,7 @@ positions.
 
 An Entity Card remains compact because the Canvas exists to show relationships. It contains
 the neutral round checkmark, Entity kind, title, optional one-line meaning and established
-details control. Fields, Constraints, provenance and revision stay in the property panel.
+details control. Fields, Constraints and provenance stay in the property panel.
 Relationship labels show concise meaning; self-containment remains visible rather than
 hidden in Markdown.
 
@@ -443,8 +444,8 @@ enforces these high-level rules:
 9. Ask one bounded clarification only when ambiguity would materially change the model.
 10. Return a structured atomic change, not advice-only prose.
 11. Preserve unchanged identifiers and reject dangling references, inheritance cycles,
-    invalid cardinality and stale input revisions.
-12. Apply a valid result directly as the current model revision; do not create Candidate or
+    invalid cardinality and stale input state.
+12. Apply a valid result directly as the current formal model; do not create Candidate or
     Finalize states.
 13. Retain the user instruction, affected identifiers and concise change summary without
     exposing private chain-of-thought.
@@ -454,46 +455,41 @@ enforces these high-level rules:
 15. Use the current bounded Summary for continuity and read detailed Run Logs only through a
     concrete evidence need. Do not reinject complete history merely because it exists.
 
-The Host validates schema, referenced identifiers, base revision and atomicity before
-changing canonical state. A late result from an older base revision is stale and cannot
+The Host validates schema, referenced identifiers, its opaque base state token and atomicity before
+changing canonical state. A late result from an older state is stale and cannot
 overwrite newer user work.
 
 ## Persistence direction
 
-Canonical state remains small, versionable JSON and optional human-readable Markdown in the
+Canonical state remains small JSON and optional human-readable Markdown in the
 project companion repository. A plausible first layout is:
 
 ```text
 .agent-manager/domain-model/
-├── model.json
-├── entities/
-│   └── ENTITY-<uuid>/
-│       ├── entity.json
-│       └── definition.md
-└── relationships/
-    └── RELATIONSHIP-<uuid>.json
+├── state.json
+└── runs/
+    └── RUN-<uuid>/
 ```
 
-`model.json` owns schema version, model revision and context references. Each Entity and
-Relationship owns stable identity and provenance. Reverse edges and derived visual
+One atomic state file owns the current model, an opaque concurrency token and at most one
+internal Undo snapshot. Each Entity and Relationship owns stable identity and provenance. Reverse edges and derived visual
 relationships are computed rather than stored twice. Exact file boundaries may change
 during implementation, but no SQLite database or opaque Canvas state becomes canonical.
 
-Each successful Agent operation records one coherent model revision. Undo restores the
-entire affected change rather than independently rolling back one field while leaving its
-relationships inconsistent. Shared companion-repository Git versioning may later provide
-the mechanical revision substrate; the product requirement is atomic revision and restore,
-not a particular implementation.
+Each successful Agent operation atomically replaces the current model and overwrites the prior
+Undo slot. Undo restores that whole prior model once and consumes the slot rather than independently
+rolling back one field while leaving its relationships inconsistent. There is no revision browser,
+Redo stack or product-visible version history.
 
 ## Independent module output
 
 The first slice opens What’s That? directly from project navigation and produces one
-standalone, revisioned Domain Model. No first-slice control opens the module from a Product
-Design Card, sends an Entity to Break It Down, attaches a revision to Just Do It or converts
+standalone current Domain Model. No first-slice control opens the module from a Product
+Design Card, sends an Entity to Break It Down, attaches a model snapshot to Just Do It or converts
 a Domain relationship into an execution dependency.
 
-Other modules may consume an exact Domain Model revision in the future. That possibility
-justifies stable identity and revision records, but cross-module freshness, handoff and
+Other modules may consume an exact Domain Model state in the future. That possibility
+justifies stable identity and state tokens, but cross-module freshness, handoff and
 navigation behavior remain deferred until real use proves the need.
 
 ## First implementation slice
@@ -511,11 +507,11 @@ The first slice should prove one complete modeling loop:
 8. Select one Entity and revise it through natural language.
 9. Select Item and Container through round checkmarks, describe their relationship in the
    Composer and create the valid labeled relationship without drag direction.
-10. Preserve stable identity and revision history across both changes.
+10. Preserve stable identity across both changes without introducing a revision UI.
 11. Cancel or fail one Run without changing the current model.
 12. Restore the most recent successful model change.
 13. Keep automatic layout stable across field-only and selection changes.
-14. Start a fresh Agent Session from the saved Summary and model revision without replaying
+14. Start a fresh Agent Session from the saved Summary and current model state without replaying
     the full prior transcript.
 
 Use HereItIs as the first scenario: create Item and Container, make Container an Item with
@@ -564,5 +560,4 @@ expanding the product contract now:
 
 1. The smallest visual distinction between explicit, inferred and derived meaning that does
    not resemble acceptance status.
-2. The exact revision substrate before shared companion-repository Git versioning exists.
-3. The measured topology threshold for replacing Dagre with ELK.
+2. The measured topology threshold for replacing Dagre with ELK.

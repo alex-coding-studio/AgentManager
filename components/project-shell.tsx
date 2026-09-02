@@ -11,6 +11,7 @@ import {
   FolderGit2,
   Play,
   LayoutDashboard,
+  Network,
   Settings,
   Sparkles,
 } from 'lucide-react';
@@ -37,6 +38,12 @@ const navigation = [
     label: 'Break It Down',
     icon: Boxes,
     path: '/decomposition',
+    available: true,
+  },
+  {
+    label: "What's That?",
+    icon: Network,
+    path: '/domain-model',
     available: true,
   },
   {

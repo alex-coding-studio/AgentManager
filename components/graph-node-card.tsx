@@ -71,13 +71,14 @@ export function GraphNodeCard({
       appearance={preview ? 'provisional' : 'default'}
       accentColor={data.color}
       busy={running}
+      bodyInset={data.selectionEnabled}
       focused={selected}
       selected={data.selectedForRun}
       selectionControl={
         data.selectionEnabled ? (
           <button
             type="button"
-            className="nodrag nopan grid size-7 shrink-0 place-items-center rounded-full text-muted-foreground transition hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
+            className="nodrag nopan relative -ml-1 mr-1 grid size-4 shrink-0 place-items-center rounded-full text-muted-foreground transition after:absolute after:-inset-1 after:content-[''] hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
             aria-label={
               data.selectedForRun
                 ? t('Remove {title} from selection', { title: data.title })
@@ -101,7 +102,7 @@ export function GraphNodeCard({
         <span
           data-node-type-label
           className={cn(
-            'min-w-0 rounded-lg px-2 py-0.5 text-[9px] font-medium leading-3.5 whitespace-normal capitalize [overflow-wrap:anywhere]',
+            'min-w-0 rounded-lg px-1.5 py-0.5 text-[9px] font-medium leading-3.5 whitespace-normal capitalize [overflow-wrap:anywhere]',
             preview
               ? 'bg-secondary text-secondary-foreground'
               : 'bg-foreground text-background',
@@ -130,7 +131,7 @@ export function GraphNodeCard({
           {data.relationshipCount > 0 ? (
             <button
               type="button"
-              className="nodrag nopan flex h-8 shrink-0 items-center gap-1 rounded-full px-1.5 text-[9px] leading-3 text-muted-foreground transition hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
+              className="nodrag nopan flex h-6 shrink-0 items-center gap-1 rounded-full px-1 text-[9px] leading-3 text-muted-foreground transition hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
               title={t('Show only {count} direct dependencies', {
                 count: data.relationshipCount,
               })}
@@ -150,7 +151,7 @@ export function GraphNodeCard({
           {running ? (
             <button
               type="button"
-              className="nodrag nopan grid size-8 shrink-0 place-items-center rounded-full text-muted-foreground transition hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
+              className="nodrag nopan relative grid size-4 shrink-0 place-items-center rounded-full text-muted-foreground transition after:absolute after:-inset-1 after:content-[''] hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
               aria-label={t('Cancel Agent Run')}
               title={t('Cancel Agent Run')}
               onClick={(event) => {
@@ -158,7 +159,7 @@ export function GraphNodeCard({
                 data.onCancelRun(data.runId ?? id);
               }}
             >
-              <X className="size-4" />
+              <X className="size-3.5" />
             </button>
           ) : null}
         </>
@@ -167,7 +168,7 @@ export function GraphNodeCard({
         showDetails ? (
           <button
             type="button"
-            className="nodrag nopan grid size-8 shrink-0 place-items-center rounded-full text-muted-foreground transition hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
+            className="nodrag nopan relative -mr-1 grid size-4 shrink-0 place-items-center rounded-full text-muted-foreground transition after:absolute after:-inset-1 after:content-[''] hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
             aria-label={t('Open details for {title}', { title: data.title })}
             title={t('Open details')}
             onClick={(event) => {
@@ -175,7 +176,7 @@ export function GraphNodeCard({
               data.onInspect(id);
             }}
           >
-            <Info className="size-3.5" />
+            <Info className="size-4" />
           </button>
         ) : null
       }
