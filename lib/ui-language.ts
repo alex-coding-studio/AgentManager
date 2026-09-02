@@ -848,6 +848,8 @@ export const chineseUi: Record<string, string> = {
   Adjustment: '调整方式',
   'Replace the selected unaccepted Candidate working set atomically. Accepted Nodes remain unchanged.':
     '原子重组所选的未接受候选工作集，已接受节点保持不变。',
+  'Recompose outputs belong to one atomic working set and cannot be discarded individually.':
+    '重组结果属于同一个原子工作集，不能单独丢弃。',
   'Describe how these Candidates should be retained, replaced, split, merged, added or removed.':
     '说明这些候选应如何保留、替换、拆分、合并、新增或移除。',
   'Accept these prerequisites first': '请先接受这些前置候选',

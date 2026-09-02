@@ -13,6 +13,21 @@ export type AgentGraphRecomposeEffect = {
   to: string[];
 };
 
+type RecomposeCandidate = {
+  candidateId: string;
+  dependsOn: string[];
+};
+
+type RecomposeRun = {
+  operation: string;
+  status: string;
+  recomposeCandidateIds?: string[];
+  result?: {
+    outcome: string;
+    recomposition?: { effects: AgentGraphRecomposeEffect[] };
+  } | null;
+};
+
 export function validateAgentGraphRecomposePlan(input: {
   selectedIds: string[];
   outputIds: string[];
@@ -45,6 +60,73 @@ export function validateAgentGraphRecomposePlan(input: {
   for (const id of outputs)
     if (produced.get(id) !== 1)
       throw new Error(`Output Candidate ${id} must have exactly one effect.`);
+}
+
+export function validateAgentGraphRecomposeDependencies(input: {
+  selectedIds: string[];
+  retainedIds: string[];
+  outputCandidates: RecomposeCandidate[];
+  knownCandidates: RecomposeCandidate[];
+}) {
+  const selected = new Set(input.selectedIds);
+  const retained = new Set(input.retainedIds);
+  const knownById = new Map(
+    input.knownCandidates.map((candidate) => [
+      candidate.candidateId,
+      candidate,
+    ]),
+  );
+  const postRecomposeCandidates = [...input.outputCandidates];
+
+  for (const candidateId of retained) {
+    const candidate = knownById.get(candidateId);
+    if (!candidate)
+      throw new Error(`Retained Candidate ${candidateId} is unavailable.`);
+    postRecomposeCandidates.push(candidate);
+  }
+
+  for (const candidate of postRecomposeCandidates)
+    if (
+      candidate.dependsOn.some(
+        (dependencyId) =>
+          selected.has(dependencyId) && !retained.has(dependencyId),
+      )
+    )
+      throw new Error(
+        `Candidate ${candidate.candidateId} depends on a replaced or removed Candidate.`,
+      );
+
+  for (const candidate of input.knownCandidates)
+    if (
+      !selected.has(candidate.candidateId) &&
+      candidate.dependsOn.some((dependencyId) => selected.has(dependencyId))
+    )
+      throw new Error(
+        `Candidate ${candidate.candidateId} still depends on the selected working set.`,
+      );
+}
+
+export function successfulRecomposeSupersededCandidateIds(
+  runs: RecomposeRun[],
+) {
+  const superseded = new Set<string>();
+  for (const run of runs) {
+    if (
+      run.operation !== 'recompose-candidates' ||
+      run.status !== 'proposal' ||
+      run.result?.outcome !== 'proposal' ||
+      !run.result.recomposition
+    )
+      continue;
+    const retained = new Set(
+      run.result.recomposition.effects
+        .filter((effect) => effect.kind === 'retain')
+        .flatMap((effect) => effect.from),
+    );
+    for (const candidateId of run.recomposeCandidateIds ?? [])
+      if (!retained.has(candidateId)) superseded.add(candidateId);
+  }
+  return superseded;
 }
 
 function validateEffectShape(effect: AgentGraphRecomposeEffect) {

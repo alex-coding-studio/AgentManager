@@ -30,6 +30,7 @@ const {
   startTaskDecompositionRun,
   readTaskDecompositionRun,
   acceptTaskDecompositionCandidate,
+  discardTaskDecompositionCandidate,
 } = await import('../lib/task-decomposition-runs.ts');
 
 void test('continued Runs receive current Instructions, clearing is explicit, and running snapshots stay unchanged', async () =>
@@ -686,6 +687,15 @@ void test('Break It Down atomically recomposes an unaccepted Candidate working s
     assert.deepEqual(recomposed.recomposeCandidateIds, selectedIds);
     assert.equal(recomposed.result.candidates.length, 1);
     assert.equal(recomposed.result.recomposition.effects[0].kind, 'merge');
+    await assert.rejects(
+      () =>
+        discardTaskDecompositionCandidate(
+          project,
+          recomposed.runId,
+          recomposed.result.candidates[0].candidateId,
+        ),
+      /one atomic working set and cannot be discarded individually/,
+    );
     await assert.rejects(
       () =>
         acceptTaskDecompositionCandidate(

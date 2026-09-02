@@ -94,6 +94,7 @@ import {
   taskDecompositionMotionRegistry,
   type TaskDecompositionMotion,
 } from '@/lib/task-decomposition-motion';
+import { successfulRecomposeSupersededCandidateIds } from '@/lib/agent-graph-recompose';
 
 type DecompositionRequestPreview = TaskGraphPreview & {
   contextRefs: string[];
@@ -266,6 +267,10 @@ export function TaskDecompositionWorkspace({
         preview.id === inspectorNodeId && preview.kind === 'candidate',
     ) ?? null;
   const selectedCandidate = selectedCandidatePreview?.candidate ?? null;
+  const selectedCandidateIsRecomposeOutput = Boolean(
+    runs.find((run) => run.runId === selectedCandidatePreview?.runId)
+      ?.operation === 'recompose-candidates',
+  );
   const unresolvedAcceptanceDependencies = selectedCandidate
     ? unresolvedCandidateDependencies(selectedCandidate.dependsOn, nodes).map(
         (dependencyId) => {
@@ -1996,10 +2001,17 @@ export function TaskDecompositionWorkspace({
                     disabled={
                       accepting ||
                       discardingCandidate ||
-                      selectedCandidateIsRevising
+                      selectedCandidateIsRevising ||
+                      selectedCandidateIsRecomposeOutput
                     }
                     aria-label={t('Discard Candidate')}
-                    title={t('Discard Candidate')}
+                    title={
+                      selectedCandidateIsRecomposeOutput
+                        ? t(
+                            'Recompose outputs belong to one atomic working set and cannot be discarded individually.',
+                          )
+                        : t('Discard Candidate')
+                    }
                     onClick={() => setCandidateDeleteOpen(true)}
                   >
                     <Trash2 />
@@ -2237,20 +2249,7 @@ function taskDecompositionProposalPreviews(
 }
 
 function supersededCandidateIds(runs: TaskDecompositionRunRecord[]) {
-  const superseded = new Set<string>();
-  for (const run of runs) {
-    if (run.operation !== 'recompose-candidates') continue;
-    const retained = new Set(
-      run.result?.outcome === 'proposal'
-        ? (run.result.recomposition?.effects
-            .filter((effect) => effect.kind === 'retain')
-            .flatMap((effect) => effect.from) ?? [])
-        : [],
-    );
-    for (const candidateId of run.recomposeCandidateIds ?? [])
-      if (!retained.has(candidateId)) superseded.add(candidateId);
-  }
-  return superseded;
+  return successfulRecomposeSupersededCandidateIds(runs);
 }
 
 function CandidateRelationshipList({

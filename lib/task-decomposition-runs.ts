@@ -89,7 +89,10 @@ import {
   validateTaskDecompositionMotionResult,
   type TaskDecompositionMotion,
 } from './task-decomposition-motion.ts';
-import { validateAgentGraphRecomposePlan } from './agent-graph-recompose.ts';
+import {
+  validateAgentGraphRecomposeDependencies,
+  validateAgentGraphRecomposePlan,
+} from './agent-graph-recompose.ts';
 
 export type TaskDecompositionRunStatus =
   | 'running'
@@ -776,6 +779,11 @@ async function discardTaskDecompositionCandidateUnlocked(
   );
   if (!requestedCandidate)
     throw new PublicApiError('The Candidate could not be found.', 400);
+  if (requestedRun.operation === 'recompose-candidates')
+    throw new PublicApiError(
+      'Recompose output Candidates belong to one atomic working set and cannot be discarded individually.',
+      409,
+    );
   if (
     [...activeRuns.values()].some(
       (active) =>
@@ -1040,26 +1048,12 @@ function validateRecomposeResult(
     ],
     effects: result.recomposition.effects,
   });
-  const retained = new Set(retainedIds);
-  for (const candidate of result.candidates)
-    if (
-      candidate.dependsOn.some(
-        (dependencyId) =>
-          selectedIds.includes(dependencyId) && !retained.has(dependencyId),
-      )
-    )
-      throw new Error(
-        'A recomposed Candidate cannot depend on a replaced or removed Candidate.',
-      );
-  const selected = new Set(selectedIds);
-  for (const candidate of knownCandidates)
-    if (
-      !selected.has(candidate.candidateId) &&
-      candidate.dependsOn.some((dependencyId) => selected.has(dependencyId))
-    )
-      throw new Error(
-        `Candidate ${candidate.candidateId} still depends on the selected working set.`,
-      );
+  validateAgentGraphRecomposeDependencies({
+    selectedIds,
+    retainedIds,
+    outputCandidates: result.candidates,
+    knownCandidates,
+  });
 }
 
 async function recomposeCandidateContexts(

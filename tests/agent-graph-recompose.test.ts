@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { validateAgentGraphRecomposePlan } from '../lib/agent-graph-recompose.ts';
+import {
+  successfulRecomposeSupersededCandidateIds,
+  validateAgentGraphRecomposeDependencies,
+  validateAgentGraphRecomposePlan,
+} from '../lib/agent-graph-recompose.ts';
 
 void test('accepts one complete N-to-M Recompose plan', () => {
   assert.doesNotThrow(() =>
@@ -74,5 +78,57 @@ void test('supports explicit removal and requires retain to preserve identity', 
         effects: [{ kind: 'retain', from: ['A'], to: ['B'] }],
       }),
     /Invalid retain Recompose effect shape/,
+  );
+});
+
+void test('rejects retained Candidates that depend on removed working-set members', () => {
+  assert.throws(
+    () =>
+      validateAgentGraphRecomposeDependencies({
+        selectedIds: ['A', 'B'],
+        retainedIds: ['B'],
+        outputCandidates: [],
+        knownCandidates: [
+          { candidateId: 'A', dependsOn: [] },
+          { candidateId: 'B', dependsOn: ['A'] },
+        ],
+      }),
+    /Candidate B depends on a replaced or removed Candidate/,
+  );
+});
+
+void test('only successful Recompose proposals supersede the previous working set', () => {
+  const runs = [
+    {
+      operation: 'recompose-candidates',
+      status: 'failed',
+      recomposeCandidateIds: ['A', 'B'],
+    },
+    {
+      operation: 'recompose-candidates',
+      status: 'proposal',
+      recomposeCandidateIds: ['D', 'E'],
+      result: {
+        outcome: 'proposal',
+        recomposition: {
+          effects: [{ kind: 'merge' as const, from: ['D', 'E'], to: ['F'] }],
+        },
+      },
+    },
+    {
+      operation: 'recompose-candidates',
+      status: 'no-change',
+      recomposeCandidateIds: ['G', 'H'],
+      result: {
+        outcome: 'proposal',
+        recomposition: {
+          effects: [{ kind: 'merge' as const, from: ['G', 'H'], to: ['I'] }],
+        },
+      },
+    },
+  ];
+  assert.deepEqual(
+    [...successfulRecomposeSupersededCandidateIds(runs)],
+    ['D', 'E'],
   );
 });
