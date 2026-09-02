@@ -31,15 +31,18 @@ export function DomainModelWorkspace({
   initialModel,
   initialRuns,
   initialCanUndo,
+  initialLastChange,
 }: {
   projectId: string;
   initialModel: DomainModel;
   initialRuns: DomainModelRunRecord[];
   initialCanUndo: boolean;
+  initialLastChange: DomainChange | null;
 }) {
   const [model, setModel] = useState(initialModel);
   const [runs, setRuns] = useState(initialRuns);
   const [canUndo, setCanUndo] = useState(initialCanUndo);
+  const [lastModelChange, setLastModelChange] = useState(initialLastChange);
   const [instruction, setInstruction] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [focusedId, setFocusedId] = useState('');
@@ -51,14 +54,6 @@ export function DomainModelWorkspace({
     effort: '',
   });
   const [submitting, setSubmitting] = useState(false);
-  const [showUndoNotice, setShowUndoNotice] = useState(
-    Boolean(
-      initialModel.lastRunId === null &&
-      !initialCanUndo &&
-      initialRuns[0]?.change &&
-      initialModel.stateVersion > initialRuns[0].change.stateVersion,
-    ),
-  );
   const [error, setError] = useState('');
   const [now, setNow] = useState(0);
   const textarea = useRef<HTMLTextAreaElement | null>(null);
@@ -74,9 +69,11 @@ export function DomainModelWorkspace({
     const data = (await response.json()) as {
       model: DomainModel;
       canUndo: boolean;
+      lastChange: DomainChange | null;
     };
     setModel(data.model);
     setCanUndo(data.canUndo);
+    setLastModelChange(data.lastChange);
     setSelectedIds((current) =>
       current.filter(
         (id) =>
@@ -152,7 +149,6 @@ export function DomainModelWorkspace({
         setError(data.error ?? 'Could not start the Domain Model Agent.');
         return;
       }
-      setShowUndoNotice(false);
       setRuns((current) => [data.run!, ...current]);
       setNow(Date.now());
     } catch {
@@ -199,7 +195,7 @@ export function DomainModelWorkspace({
     }
     setModel(data.model);
     setCanUndo(Boolean(data.canUndo));
-    setShowUndoNotice(true);
+    setLastModelChange(data.change);
     setFocusedId('');
     setSelectedIds([]);
   }
@@ -226,6 +222,13 @@ export function DomainModelWorkspace({
     : 0;
   const lastActivity =
     running?.activity.at(-1)?.summary ?? 'Preparing the Agent request.';
+  const latestRunAt = latest
+    ? Date.parse(latest.endedAt ?? latest.startedAt)
+    : Number.NEGATIVE_INFINITY;
+  const showUndoNotice = Boolean(
+    lastModelChange?.kind === 'restored' &&
+    Date.parse(lastModelChange.createdAt) > latestRunAt,
+  );
 
   return (
     <div className="relative flex h-[calc(100vh-4rem)] min-h-[560px] flex-col overflow-hidden">
@@ -377,32 +380,38 @@ function LatestDomainResponse({
   onUndo: () => void;
 }) {
   const presentation = latestDomainModelResponse(run);
+  const detail = run.result?.summary ?? run.error;
+  const hasDetails = Boolean(
+    detail || run.change || run.result?.outcome === 'clarification' || canUndo,
+  );
   return (
     <LatestResponse
       {...presentation}
       title="Latest Response"
       className="absolute top-4 left-4 z-20 w-[min(360px,calc(100%-2rem))]"
     >
-      <div className="space-y-3 text-xs">
-        <p>{run.result?.summary ?? run.error}</p>
-        {run.change ? (
-          <div className="grid grid-cols-3 gap-2 text-center">
-            <Fact label="Added" value={run.change.added.length} />
-            <Fact label="Updated" value={run.change.updated.length} />
-            <Fact label="Removed" value={run.change.removed.length} />
-          </div>
-        ) : null}
-        {run.result?.outcome === 'clarification' ? (
-          <p className="rounded-lg bg-amber-500/10 p-2">
-            {run.result.question}
-          </p>
-        ) : null}
-        {canUndo ? (
-          <Button variant="outline" size="sm" onClick={onUndo}>
-            <RotateCcw /> Undo last change
-          </Button>
-        ) : null}
-      </div>
+      {hasDetails ? (
+        <div className="space-y-3 text-xs">
+          {detail ? <p>{detail}</p> : null}
+          {run.change ? (
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <Fact label="Added" value={run.change.added.length} />
+              <Fact label="Updated" value={run.change.updated.length} />
+              <Fact label="Removed" value={run.change.removed.length} />
+            </div>
+          ) : null}
+          {run.result?.outcome === 'clarification' ? (
+            <p className="rounded-lg bg-amber-500/10 p-2">
+              {run.result.question}
+            </p>
+          ) : null}
+          {canUndo ? (
+            <Button variant="outline" size="sm" onClick={onUndo}>
+              <RotateCcw /> Undo last change
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
     </LatestResponse>
   );
 }

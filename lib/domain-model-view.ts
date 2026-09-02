@@ -27,12 +27,16 @@ export function deriveDomainRelationships(
         ...containment,
         id: `DERIVED-${containment.id}`,
         targetEntityId: containment.sourceEntityId,
-        meaning: `Derived because ${containment.sourceEntityId} inherits from ${containment.targetEntityId}.`,
+        meaning: `${entityName(model, containment.sourceEntityId)} ${inheritance.label} ${entityName(model, containment.targetEntityId)} · ${entityName(model, containment.sourceEntityId)} ${containment.label} ${entityName(model, containment.targetEntityId)}`,
         provenance: 'derived',
         derivedFrom: [containment.id, inheritance.id],
       });
   }
   return derived;
+}
+
+function entityName(model: DomainModel, id: string) {
+  return model.entities.find((item) => item.id === id)?.name ?? id;
 }
 
 export function domainModelTopologyKey(model: DomainModel) {
