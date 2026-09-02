@@ -15,8 +15,9 @@ when an older Card has no Plan profile. A saved coordinator choice persists inde
 of the worker choice. Within one Round, a Codex Coordinator under the Full Access pilot runs
 as one read-only App Server thread that is suspended when it dispatches a Worker and resumed
 with the Worker's settlement event; see the coordinator suspension boundary in
-[Event-Driven Agent Runtime](EVENT_DRIVEN_AGENT_RUNTIME.md). Other profiles start a fresh
-provider session per call. Across Rounds, logical continuity comes from the confirmed Plan,
+[Event-Driven Agent Runtime](EVENT_DRIVEN_AGENT_RUNTIME.md). A Claude Coordinator runs the
+same boundary on the Claude session driver. Other cases start a fresh provider session per
+call. Across Rounds, logical continuity comes from the confirmed Plan,
 accepted output references, the latest coordination summary and addressable records, not an
 indefinitely growing provider conversation.
 
