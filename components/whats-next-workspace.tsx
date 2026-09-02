@@ -101,7 +101,7 @@ export function WhatsNextWorkspace(
   props: Parameters<typeof WhatsNextCanvas>[0],
 ) {
   return (
-    <div className="flex h-[calc(100dvh-4rem)] min-h-[480px] flex-col">
+    <div className="flex h-dvh min-h-[480px] flex-col">
       <WhatsNextContextToolbar
         projectId={props.projectId}
         disabled={props.developmentPreview}

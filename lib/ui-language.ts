@@ -6,6 +6,16 @@ export function isUiLanguage(value: unknown): value is UiLanguage {
 
 export const chineseUi: Record<string, string> = {
   "What's Next instructions": 'What’s Next 全局 Instructions',
+  'Explore the next supported product direction.':
+    '探索产品接下来值得推进的方向。',
+  'Domain Model instructions': 'Domain Model Instructions',
+  'Applies to new Domain Model requests. Running requests keep their original instructions. Leave blank to use only the Harness defaults.':
+    '保存后对新的 Domain Model 请求生效，不改变正在运行的请求。留空则只使用 Harness 默认规则。',
+  'Define the entities, fields and relationships behind the product.':
+    '定义产品中的实体、字段与关系。',
+  'Module instructions': 'Instructions',
+  'Open project location': '在本地路径打开',
+  'Could not open project location.': '无法打开本地路径。',
   'Applies to the next request, including continued sessions. Running requests keep their original instructions. Leave blank to use only the Harness defaults.':
     '保存后对下一轮请求生效，包括续接会话；不改变正在运行的请求。留空则只使用 Harness 默认规则。',
   'Optional language, collaboration preferences, or project constraints.':
@@ -359,9 +369,14 @@ export const chineseUi: Record<string, string> = {
   'Reasoning model · demo': '推理模型 · 演示',
   'Lightweight model · demo': '轻量模型 · 演示',
   'Reasoning effort': '推理强度',
+  none: '无',
+  minimal: '最低',
   low: '低',
   medium: '中',
   high: '高',
+  xhigh: '极高',
+  max: '最大',
+  ultra: '超高',
   'Planning profile': '规划配置',
   'Execution profile': '执行配置',
   'Review profile': '审查配置',
@@ -884,6 +899,10 @@ export const chineseUi: Record<string, string> = {
   'What should the Agent reconsider here?': '你希望 Agent 重新考虑什么？',
   'What to do with the selected cards': '对选中卡片的要求',
   'Product Design Completion': '产品设计补全',
+  'MVP Exploration': 'MVP 探索',
+  'Feature Synthesis': '功能提炼',
+  Intention: '探索目的',
+  Motion: '调整方式',
   Unspecified: '未指定',
   Diverge: '发散',
   Converge: '收敛',

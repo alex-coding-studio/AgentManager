@@ -35,6 +35,7 @@ import {
 } from '@/components/agent-graph-proposal-workspace';
 import type { AgentProfile } from '@/lib/agent-profile';
 import { MarkdownReader } from '@/components/markdown-reader';
+import { ProjectModuleHeader } from '@/components/project-module-header';
 import {
   NodeProvenanceFacts,
   NodeResourceSections,
@@ -1208,31 +1209,24 @@ export function TaskDecompositionWorkspace({
   }
 
   return (
-    <div className="flex min-h-[calc(100vh-4rem)] flex-col overflow-hidden">
-      <header className="flex shrink-0 items-end justify-between gap-6 border-b border-border px-5 py-5 lg:px-8">
-        <div>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-            {t('Break It Down')}
-          </p>
-          <h1 className="text-2xl font-semibold tracking-[-0.03em]">
-            {t('Break It Down canvas')}
-          </h1>
-          <p className="mt-2 max-w-xl text-sm text-muted-foreground">
-            {t('Break one scope into coherent, human-manageable nodes.')}
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
+    <div className="flex h-dvh min-h-[480px] flex-col overflow-hidden">
+      <ProjectModuleHeader
+        title={t('Break It Down')}
+        description={t(
+          'Break one scope into coherent, human-manageable nodes.',
+        )}
+        actions={
           <Link
             href={`/projects/${projectId}/decomposition/context`}
-            className={buttonVariants({ variant: 'outline' })}
+            className={buttonVariants({ variant: 'outline', size: 'sm' })}
           >
             <SlidersHorizontal /> {t('Context')}
           </Link>
-        </div>
-      </header>
+        }
+      />
 
       <div className="relative min-h-0 flex-1">
-        <section className="relative h-[calc(100vh-10rem)] min-h-[480px] overflow-hidden">
+        <section className="relative h-full min-h-[480px] overflow-hidden">
           {nodes.length === 0 ? (
             <div className="min-h-full bg-[radial-gradient(circle,var(--border)_1px,transparent_1px)] bg-[size:22px_22px]">
               <AgentGraphComposerCard

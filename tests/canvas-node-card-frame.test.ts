@@ -397,6 +397,40 @@ void test('Latest Response keeps its full-response action visible without a disc
   assert.equal((html.match(/<button/g) ?? []).length, 1);
 });
 
+void test('every primary module uses one compact Project Header structure', async () => {
+  const { ProjectModuleHeader } =
+    await import('../components/project-module-header.tsx');
+  const html = renderToStaticMarkup(
+    createElement(ProjectModuleHeader, {
+      title: 'What’s Next',
+      description: 'Explore the next supported product direction.',
+      actions: createElement('button', { type: 'button' }, 'Context'),
+    }),
+  );
+  assert.match(html, /min-h-16/);
+  assert.match(html, /What’s Next/);
+  assert.match(html, /Explore the next supported product direction/);
+  assert.match(html, /Context/);
+
+  for (const file of [
+    'whats-next-context-toolbar.tsx',
+    'task-decomposition-workspace.tsx',
+    'domain-model-workspace.tsx',
+    'just-do-it-live-workspace.tsx',
+  ]) {
+    const source = await readFile(
+      new URL(`../components/${file}`, import.meta.url),
+      'utf8',
+    );
+    assert.match(source, /ProjectModuleHeader/, file);
+  }
+  const justDoIt = await readFile(
+    new URL('../components/just-do-it-live-workspace.tsx', import.meta.url),
+    'utf8',
+  );
+  assert.doesNotMatch(justDoIt, /Open preview/);
+});
+
 void test('every Agent Graph module adopts the standard Composer and attachment input', async () => {
   for (const file of [
     'whats-next-workspace.tsx',

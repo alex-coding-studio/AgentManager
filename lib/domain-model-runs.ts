@@ -22,6 +22,7 @@ import {
   domainModelDirectory,
   domainModelFile,
 } from './domain-model-storage.ts';
+import { readDomainModelInstructions } from './domain-model-context.ts';
 import {
   createDomainModelRequest,
   domainModelPrompt,
@@ -138,16 +139,27 @@ export async function startDomainModelRun(
         409,
       );
     const previousSummary = await latestSummary(project);
+    const savedInstructions = await readDomainModelInstructions(project);
     const contextPath = path.join(await runPath(project, runId), 'context');
     try {
       const userInput = userInputWorkspaceInput(
         `domain-model/runs/${runId}/context/input/user-input.md`,
         instruction,
       );
+      const moduleInstructions: ContextWorkspaceInput | null =
+        savedInstructions.trim()
+          ? {
+              role: 'related',
+              kind: 'module-instructions',
+              logicalPath: 'domain-model/instructions.md',
+              content: savedInstructions,
+            }
+          : null;
       const workspace = await writeAgentGraphContextWorkspace(
         await runPath(project, runId),
         [
           ...(userInput ? [userInput] : []),
+          ...(moduleInstructions ? [moduleInstructions] : []),
           ...(await domainModelContextInputs(
             project,
             runId,

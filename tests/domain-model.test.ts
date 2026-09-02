@@ -34,6 +34,10 @@ import {
 } from '../lib/domain-model-runs.ts';
 import type { RegisteredProject } from '../lib/project-registry.ts';
 import type { startLocalAgentRun } from '../lib/local-agent-transport.ts';
+import {
+  readDomainModelInstructions,
+  saveDomainModelInstructions,
+} from '../lib/domain-model-context.ts';
 
 async function fixture(t: { after: (fn: () => Promise<void>) => void }) {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'domain-model-'));
@@ -497,6 +501,14 @@ void test('a controlled Agent Run applies one model and cancellation changes not
 
 void test('a Domain Model Run packages User Input, references and external files', async (t) => {
   const project = await fixture(t);
+  await saveDomainModelInstructions(
+    project,
+    'Use product-facing names and concise relationship labels.',
+  );
+  assert.equal(
+    await readDomainModelInstructions(project),
+    'Use product-facing names and concise relationship labels.',
+  );
   const contextPath = path.join(
     project.planningPath,
     'context',
@@ -532,7 +544,7 @@ void test('a Domain Model Run packages User Input, references and external files
   assert.equal(request.content.input?.kind, 'user-input');
   assert.deepEqual(
     request.content.references.map((item) => item.kind),
-    ['context'],
+    ['context', 'module-instructions'],
   );
   assert.deepEqual(
     request.content.external.map((item) => item.kind),
@@ -548,6 +560,10 @@ void test('a Domain Model Run packages User Input, references and external files
   );
   assert.ok(packagedUserInput.length > 25_000);
   assert.doesNotMatch(JSON.stringify(request), /xxxxxxxxxxxxxxxx/);
+  assert.doesNotMatch(
+    JSON.stringify(request),
+    /Use product-facing names and concise relationship labels/,
+  );
   for (const item of [
     request.content.input!,
     ...request.content.references,

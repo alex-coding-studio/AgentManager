@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { summarizeGitHub } from '@/lib/github-delivery-summary';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -13,7 +12,7 @@ import {
   SlidersHorizontal,
   Sparkles,
 } from 'lucide-react';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { AgentProfileSelector } from '@/components/agent-profile-selector';
 import { JustDoItAction } from '@/components/just-do-it-action';
@@ -27,6 +26,7 @@ import {
 import { ContextAttachmentPicker } from '@/components/context-attachment-picker';
 import { PlanningStepDetails } from '@/components/planning-step-details';
 import { GoalSourcePicker } from '@/components/goal-source-picker';
+import { ProjectModuleHeader } from '@/components/project-module-header';
 import { useUiText } from '@/components/ui-language-provider';
 import { cn } from '@/lib/utils';
 import type {
@@ -334,36 +334,24 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
   );
 
   return (
-    <div className="flex min-h-[calc(100vh-4rem)] flex-col">
-      <header className="flex shrink-0 flex-wrap items-end justify-between gap-4 border-b border-border px-5 py-5 lg:px-8">
-        <div>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-            {t('Just Do It')}
-          </p>
-          <h1 className="text-2xl font-semibold tracking-[-0.03em]">
-            {t('Execution workspace')}
-          </h1>
-          <p className="mt-2 max-w-xl text-sm text-muted-foreground">
-            {t('Plan together, execute one Action, then verify the output.')}
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <Link
-            className={buttonVariants({ variant: 'ghost' })}
-            href={`/projects/${projectId}/implementation?preview=just-do-it`}
-          >
-            {t('Open preview')}
-          </Link>
+    <div className="flex min-h-dvh flex-col">
+      <ProjectModuleHeader
+        title={t('Just Do It')}
+        description={t(
+          'Plan together, execute one Action, then verify the output.',
+        )}
+        actions={
           <Button
             variant="outline"
+            size="sm"
             disabled={!view}
             onClick={() => setContextOpen(true)}
           >
             <SlidersHorizontal />
             {t('Working instructions')}
           </Button>
-        </div>
-      </header>
+        }
+      />
       <div className="mx-auto w-full max-w-[1440px] space-y-5 px-5 py-6 lg:px-8">
         {error && (
           <p

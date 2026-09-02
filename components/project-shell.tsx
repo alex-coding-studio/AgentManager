@@ -9,14 +9,18 @@ import {
   ExternalLink,
   FileText,
   FolderGit2,
+  FolderOpen,
+  LoaderCircle,
   Play,
   LayoutDashboard,
   Network,
   Settings,
   Sparkles,
 } from 'lucide-react';
+import { useState } from 'react';
 import { siGithub } from 'simple-icons/icons';
 import type { RegisteredProject } from '@/lib/project-registry';
+import { requestProjectReveal } from '@/lib/project-reveal';
 import { cn } from '@/lib/utils';
 import { useUiText } from '@/components/ui-language-provider';
 
@@ -69,6 +73,24 @@ export function ProjectShell({
   const router = useRouter();
   const pathname = usePathname();
   const { t } = useUiText();
+  const [openingProject, setOpeningProject] = useState(false);
+  const [projectOpenError, setProjectOpenError] = useState('');
+
+  async function openProjectLocation() {
+    setOpeningProject(true);
+    setProjectOpenError('');
+    try {
+      await requestProjectReveal(project.id);
+    } catch (error) {
+      setProjectOpenError(
+        error instanceof Error
+          ? t(error.message)
+          : t('Could not open project location.'),
+      );
+    } finally {
+      setOpeningProject(false);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-background text-foreground lg:grid lg:grid-cols-[272px_1fr]">
@@ -154,10 +176,41 @@ export function ProjectShell({
           </nav>
 
           <div className="mt-auto border-t border-border p-3">
+            <button
+              type="button"
+              className="flex h-9 w-full min-w-0 items-center gap-3 rounded-lg px-3 text-left text-xs text-muted-foreground transition hover:bg-muted hover:text-foreground"
+              title={t('Open project location')}
+              disabled={openingProject}
+              onClick={() => void openProjectLocation()}
+            >
+              {project.kind === 'repository' ? (
+                <FolderGit2 className="size-4 shrink-0" />
+              ) : (
+                <CircleDot className="size-4 shrink-0" />
+              )}
+              <span className="truncate">{project.rootPath}</span>
+              {openingProject ? (
+                <LoaderCircle className="ml-auto size-4 shrink-0 animate-spin" />
+              ) : (
+                <FolderOpen className="ml-auto size-4 shrink-0" />
+              )}
+            </button>
+            {repositoryUrl ? (
+              <a
+                href={repositoryUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="flex h-9 items-center gap-3 rounded-lg px-3 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
+              >
+                <GitHubIcon />
+                {t('Repository')}
+                <ExternalLink className="ml-auto size-4 shrink-0" />
+              </a>
+            ) : null}
             <Link
               href={`/settings?project=${project.id}`}
               className={cn(
-                'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition',
+                'flex h-9 items-center gap-3 rounded-lg px-3 text-sm transition',
                 pathname === '/settings'
                   ? 'bg-primary text-primary-foreground'
                   : 'text-muted-foreground hover:bg-muted hover:text-foreground',
@@ -166,46 +219,26 @@ export function ProjectShell({
               <Settings className="size-4" />
               {t('Settings')}
             </Link>
+            {projectOpenError ? (
+              <p
+                role="alert"
+                className="px-3 pt-1 text-[10px] text-destructive"
+              >
+                {projectOpenError}
+              </p>
+            ) : null}
           </div>
         </div>
       </aside>
 
-      <main className="min-w-0">
-        <header className="flex h-16 items-center justify-between border-b border-border px-5 lg:px-8">
-          <div className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
-            {project.kind === 'repository' ? (
-              <FolderGit2 className="size-4 shrink-0" />
-            ) : (
-              <CircleDot className="size-4 shrink-0" />
-            )}
-            <span className="truncate">{project.rootPath}</span>
-          </div>
-          {repositoryUrl ? (
-            <a
-              href={repositoryUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="ml-4 flex shrink-0 items-center gap-1.5 rounded-full bg-secondary px-2.5 py-1 text-[11px] font-medium text-secondary-foreground transition hover:bg-muted"
-            >
-              <GitHubIcon />
-              {t('Repository')}
-              <ExternalLink className="size-3" />
-            </a>
-          ) : null}
-        </header>
-        {children}
-      </main>
+      <main className="min-w-0">{children}</main>
     </div>
   );
 }
 
 function GitHubIcon() {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-      className="size-3.5 fill-current"
-    >
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="size-4 fill-current">
       <path d={siGithub.path} />
     </svg>
   );
