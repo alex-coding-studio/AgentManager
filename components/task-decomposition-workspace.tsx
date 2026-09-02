@@ -89,11 +89,17 @@ import {
   type TaskDecompositionIntention,
 } from '@/lib/task-decomposition-intention';
 import { unresolvedCandidateDependencies } from '@/lib/task-decomposition-dependencies';
+import {
+  taskDecompositionMotionRegistry,
+  type TaskDecompositionMotion,
+} from '@/lib/task-decomposition-motion';
 
 type DecompositionRequestPreview = TaskGraphPreview & {
   contextRefs: string[];
   files: File[];
   intention?: TaskDecompositionIntention;
+  motion?: TaskDecompositionMotion;
+  recomposeCandidateIds?: string[];
 };
 
 const AGENT_LABELS: Record<LocalAgentKind, string> = {
@@ -113,8 +119,10 @@ type RunSnapshot = {
   files: File[];
   revisionTarget?: { runId: string; candidateId: string };
   revisionPreview?: DecompositionRequestPreview;
-  operation: 'propose' | 'append-candidates';
+  operation: 'propose' | 'append-candidates' | 'recompose-candidates';
   intention: TaskDecompositionIntention;
+  motion: TaskDecompositionMotion;
+  recomposeCandidateIds: string[];
 };
 
 export function TaskDecompositionWorkspace({
@@ -174,7 +182,8 @@ export function TaskDecompositionWorkspace({
         previews = mergeLatestCandidatePreview(previews, preview);
       }
     }
-    return previews;
+    const superseded = supersededCandidateIds(initialRuns);
+    return previews.filter((preview) => !superseded.has(preview.id));
   });
   const [decomposeSourceId, setDecomposeSourceId] = useState('');
   const [decompositionGoal, setDecompositionGoal] = useState('');
@@ -187,13 +196,19 @@ export function TaskDecompositionWorkspace({
     initialRuns.at(-1)?.intention ??
       taskDecompositionIntentionRegistry.defaultId,
   );
+  const [motion, setMotion] = useState<TaskDecompositionMotion>(
+    initialRuns.at(-1)?.motion ?? taskDecompositionMotionRegistry.defaultId,
+  );
+  const [recomposeCandidateIds, setRecomposeCandidateIds] = useState<string[]>(
+    [],
+  );
   const selectedAgent = agentProfile.agent;
   const [revisionTarget, setRevisionTarget] = useState<{
     runId: string;
     candidateId: string;
   } | null>(null);
   const [runOperation, setRunOperation] = useState<
-    'propose' | 'append-candidates'
+    'propose' | 'append-candidates' | 'recompose-candidates'
   >('propose');
   const [requestSelectedRefs, setRequestSelectedRefs] = useState<string[]>([]);
   const [requestFiles, setRequestFiles] = useState<File[]>([]);
@@ -417,6 +432,8 @@ export function TaskDecompositionWorkspace({
         files: [],
         operation: 'propose',
         intention,
+        motion,
+        recomposeCandidateIds: [],
       });
       if (!started) {
         setDecomposeSourceId(result.node.id);
@@ -476,11 +493,47 @@ export function TaskDecompositionWorkspace({
     setRequestFiles([]);
     setRequestError('');
     setRevisionTarget(null);
+    setRecomposeCandidateIds([]);
     setRunOperation(hasExistingChildren ? 'append-candidates' : 'propose');
     setIntention(
       [...runs].reverse().find((run) => run.sourceNodeId === nodeId)
         ?.intention ?? taskDecompositionIntentionRegistry.defaultId,
     );
+    setMotion(
+      [...runs].reverse().find((run) => run.sourceNodeId === nodeId)?.motion ??
+        taskDecompositionMotionRegistry.defaultId,
+    );
+  }
+
+  function toggleRecomposeCandidate(candidateId: string) {
+    const candidate = requestPreviews.find(
+      (preview) => preview.kind === 'candidate' && preview.id === candidateId,
+    );
+    if (!candidate) return;
+    setRecomposeCandidateIds((current) => {
+      if (current.includes(candidateId)) {
+        const next = current.filter((id) => id !== candidateId);
+        if (next.length === 0) closeDecomposition();
+        return next;
+      }
+      const selected = requestPreviews.filter((preview) =>
+        current.includes(preview.id),
+      );
+      if (
+        selected.some(
+          (preview) => preview.sourceNodeId !== candidate.sourceNodeId,
+        )
+      ) {
+        setRequestError('Recompose Candidates must share one source Node.');
+        return current;
+      }
+      setDecomposeSourceId(candidate.sourceNodeId);
+      setRevisionTarget(null);
+      setRunOperation('recompose-candidates');
+      setDecompositionGoal('');
+      setRequestError('');
+      return [...current, candidateId];
+    });
   }
 
   function selectRequestPreview(previewId: string) {
@@ -495,6 +548,8 @@ export function TaskDecompositionWorkspace({
     setIntention(
       preview.intention ?? taskDecompositionIntentionRegistry.defaultId,
     );
+    setMotion(preview.motion ?? taskDecompositionMotionRegistry.defaultId);
+    setRecomposeCandidateIds(preview.recomposeCandidateIds ?? []);
     setRequestError('');
   }
 
@@ -505,6 +560,7 @@ export function TaskDecompositionWorkspace({
     setRequestFiles([]);
     setRequestError('');
     setRevisionTarget(null);
+    setRecomposeCandidateIds([]);
     setRunOperation('propose');
   }
 
@@ -552,6 +608,8 @@ export function TaskDecompositionWorkspace({
         operation: runOperation,
         revisionTarget,
         intention,
+        motion,
+        recomposeCandidateIds,
       });
       if (started) closeDecomposition();
       return;
@@ -565,6 +623,8 @@ export function TaskDecompositionWorkspace({
       contextRefs: requestSelectedRefs,
       files: requestFiles,
       intention,
+      motion,
+      recomposeCandidateIds,
       kind: 'request',
     };
     setRequestPreviews((current) => [
@@ -582,14 +642,18 @@ export function TaskDecompositionWorkspace({
     operation,
     revisionTarget: target,
     intention: selectedIntention,
+    motion: selectedMotion,
+    recomposeCandidateIds: selectedCandidateIds,
   }: {
     source: TaskGraphNode;
     instruction: string;
     contextRefs: string[];
     files: File[];
-    operation: 'propose' | 'append-candidates';
+    operation: 'propose' | 'append-candidates' | 'recompose-candidates';
     revisionTarget?: { runId: string; candidateId: string } | null;
     intention: TaskDecompositionIntention;
+    motion: TaskDecompositionMotion;
+    recomposeCandidateIds: string[];
   }) {
     setRequestError('');
     const revisionPreview = target
@@ -607,6 +671,8 @@ export function TaskDecompositionWorkspace({
       revisionPreview,
       operation,
       intention: selectedIntention,
+      motion: selectedMotion,
+      recomposeCandidateIds: [...selectedCandidateIds],
     };
     const formData = new FormData();
     formData.set('sourceNodeId', source.id);
@@ -616,6 +682,9 @@ export function TaskDecompositionWorkspace({
     formData.set('effort', agentProfile.effort);
     formData.set('operation', operation);
     formData.set('intention', selectedIntention);
+    formData.set('motion', selectedMotion);
+    for (const candidateId of selectedCandidateIds)
+      formData.append('recomposeCandidateIds', candidateId);
     if (target) {
       formData.set('revisionRunId', target.runId);
       formData.set('revisionCandidateId', target.candidateId);
@@ -655,7 +724,8 @@ export function TaskDecompositionWorkspace({
         ]);
       }
       return [
-        ...(operation === 'append-candidates'
+        ...(operation === 'append-candidates' ||
+        operation === 'recompose-candidates'
           ? current
           : current.filter(
               (candidate) => candidate.sourceNodeId !== source.id,
@@ -701,13 +771,25 @@ export function TaskDecompositionWorkspace({
       return;
     }
     if (run.status === 'proposal' && run.result?.outcome === 'proposal') {
+      const retained = new Set(
+        run.result.recomposition?.effects
+          .filter((effect) => effect.kind === 'retain')
+          .flatMap((effect) => effect.from) ?? [],
+      );
+      const superseded = new Set(
+        (run.recomposeCandidateIds ?? []).filter((id) => !retained.has(id)),
+      );
       const candidatePreviews = taskDecompositionProposalPreviews(
         run,
         nodes,
         snapshot,
       );
       setRequestPreviews((current) =>
-        replaceRunWithPreviewsInPlace(current, run.runId, candidatePreviews),
+        replaceRunWithPreviewsInPlace(
+          current.filter((preview) => !superseded.has(preview.id)),
+          run.runId,
+          candidatePreviews,
+        ),
       );
       if (run.revisionOf) setFocusedNodeId('');
       runSnapshots.current.delete(run.runId);
@@ -764,6 +846,8 @@ export function TaskDecompositionWorkspace({
       setRevisionTarget(snapshot.revisionTarget ?? null);
       setRunOperation(snapshot.operation);
       setIntention(snapshot.intention);
+      setMotion(snapshot.motion);
+      setRecomposeCandidateIds(snapshot.recomposeCandidateIds);
     }
     runSnapshots.current.delete(runId);
   }
@@ -784,6 +868,11 @@ export function TaskDecompositionWorkspace({
       runs.find((run) => run.runId === selectedCandidatePreview.runId)
         ?.intention ?? taskDecompositionIntentionRegistry.defaultId,
     );
+    setMotion(
+      runs.find((run) => run.runId === selectedCandidatePreview.runId)
+        ?.motion ?? taskDecompositionMotionRegistry.defaultId,
+    );
+    setRecomposeCandidateIds([]);
     setCandidateActionError('');
     setInspectorNodeId('');
   }
@@ -924,11 +1013,14 @@ export function TaskDecompositionWorkspace({
               contextRefs: [],
               files: [],
               operation:
-                run.operation === 'append-candidates'
-                  ? 'append-candidates'
+                run.operation === 'append-candidates' ||
+                run.operation === 'recompose-candidates'
+                  ? run.operation
                   : 'propose',
               intention:
                 run.intention ?? taskDecompositionIntentionRegistry.defaultId,
+              motion: run.motion ?? taskDecompositionMotionRegistry.defaultId,
+              recomposeCandidateIds: run.recomposeCandidateIds ?? [],
             };
             setRequestPreviews((current) =>
               current.some((preview) => preview.id === run.runId)
@@ -1161,6 +1253,22 @@ export function TaskDecompositionWorkspace({
                     label="Decomposition purpose"
                   />
                 </div>
+                <label className="mt-4 block text-[10px] font-medium text-muted-foreground">
+                  {t('Adjustment')}
+                  <select
+                    value={motion}
+                    onChange={(event) =>
+                      setMotion(event.target.value as TaskDecompositionMotion)
+                    }
+                    className="mt-1 h-10 w-full rounded-xl border border-border bg-background px-3 text-xs font-medium text-foreground"
+                  >
+                    {taskDecompositionMotionRegistry.profiles.map((profile) => (
+                      <option key={profile.id} value={profile.id}>
+                        {t(profile.label)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <div className="mt-4">
                   <ContextAttachmentPicker
                     folders={folders}
@@ -1205,7 +1313,13 @@ export function TaskDecompositionWorkspace({
               focusedNodeId={focusedNodeId}
               locateRequest={locateRequest}
               fitRequest={fitRequest}
-              avoidBottomRightPanel={decomposeSource !== null}
+              selectedNodeIds={recomposeCandidateIds}
+              selectionEnabled
+              selectableKinds={['candidate']}
+              avoidBottomRightPanel={
+                decomposeSource !== null || recomposeCandidateIds.length > 0
+              }
+              onToggleSelection={toggleRecomposeCandidate}
               onFocusNode={setFocusedNodeId}
               onInspectNode={(nodeId) => {
                 setFocusedNodeId(nodeId);
@@ -1500,23 +1614,29 @@ export function TaskDecompositionWorkspace({
             title={
               revisionTarget
                 ? `Revise ${revisionTarget.candidateId}`
-                : runOperation === 'append-candidates'
-                  ? `Extend ${decomposeSource.id}`
-                  : t('Decompose from {id}', { id: decomposeSource.id })
+                : runOperation === 'recompose-candidates'
+                  ? `Recompose ${recomposeCandidateIds.length} Candidates`
+                  : runOperation === 'append-candidates'
+                    ? `Extend ${decomposeSource.id}`
+                    : t('Decompose from {id}', { id: decomposeSource.id })
             }
             description={
               revisionTarget
                 ? t(
                     'Redefine this Candidate only. Revisions cannot create siblings or child Nodes.',
                   )
-                : runOperation === 'append-candidates'
+                : runOperation === 'recompose-candidates'
                   ? t(
-                      'Existing child boundaries will not be replaced. Add new evidence or guidance so {agent} can propose only genuinely new siblings.',
-                      { agent: AGENT_LABELS[selectedAgent] },
+                      'Replace the selected unaccepted Candidate working set atomically. Accepted Nodes remain unchanged.',
                     )
-                  : t(
-                      'Define this round of work. Inherited Resources stay on the source Node; additions apply only to this request.',
-                    )
+                  : runOperation === 'append-candidates'
+                    ? t(
+                        'Existing child boundaries will not be replaced. Add new evidence or guidance so {agent} can propose only genuinely new siblings.',
+                        { agent: AGENT_LABELS[selectedAgent] },
+                      )
+                    : t(
+                        'Define this round of work. Inherited Resources stay on the source Node; additions apply only to this request.',
+                      )
             }
             action={
               <button
@@ -1547,7 +1667,11 @@ export function TaskDecompositionWorkspace({
                         ? t(
                             'Describe the new evidence or boundary that may require additional siblings.',
                           )
-                        : 'Generate several candidate modules from this product definition.'
+                        : runOperation === 'recompose-candidates'
+                          ? t(
+                              'Describe how these Candidates should be retained, replaced, split, merged, added or removed.',
+                            )
+                          : 'Generate several candidate modules from this product definition.'
                   }
                   className="min-h-28"
                   onChange={(event) => setDecompositionGoal(event.target.value)}
@@ -1561,6 +1685,24 @@ export function TaskDecompositionWorkspace({
                 label="Decomposition purpose"
                 disabled={Boolean(revisionTarget)}
               />
+
+              <label className="block text-[10px] font-medium text-muted-foreground">
+                {t('Adjustment')}
+                <select
+                  value={motion}
+                  disabled={Boolean(revisionTarget)}
+                  onChange={(event) =>
+                    setMotion(event.target.value as TaskDecompositionMotion)
+                  }
+                  className="mt-1 h-10 w-full rounded-xl border border-border bg-background px-3 text-xs font-medium text-foreground"
+                >
+                  {taskDecompositionMotionRegistry.profiles.map((profile) => (
+                    <option key={profile.id} value={profile.id}>
+                      {t(profile.label)}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
               <ContextAttachmentPicker
                 folders={folders}
@@ -1602,9 +1744,11 @@ export function TaskDecompositionWorkspace({
                           })
                         : runOperation === 'append-candidates'
                           ? t('Find additional nodes')
-                          : t('Send to {agent}', {
-                              agent: AGENT_LABELS[selectedAgent],
-                            })
+                          : runOperation === 'recompose-candidates'
+                            ? t('Recompose working set')
+                            : t('Send to {agent}', {
+                                agent: AGENT_LABELS[selectedAgent],
+                              })
                   }
                 />
               </div>
@@ -2047,6 +2191,8 @@ function runPreview(
     contextRefs: snapshot.contextRefs,
     files: snapshot.files,
     intention: snapshot.intention,
+    motion: snapshot.motion,
+    recomposeCandidateIds: snapshot.recomposeCandidateIds,
     kind: 'run',
     title: `${TRANSPORT_LABELS[run.transport]} decomposition`,
     agentLabel: TRANSPORT_LABELS[run.transport],
@@ -2105,6 +2251,23 @@ function taskDecompositionProposalPreviews(
         updatedAt: run.updatedAt,
       };
     });
+}
+
+function supersededCandidateIds(runs: TaskDecompositionRunRecord[]) {
+  const superseded = new Set<string>();
+  for (const run of runs) {
+    if (run.operation !== 'recompose-candidates') continue;
+    const retained = new Set(
+      run.result?.outcome === 'proposal'
+        ? (run.result.recomposition?.effects
+            .filter((effect) => effect.kind === 'retain')
+            .flatMap((effect) => effect.from) ?? [])
+        : [],
+    );
+    for (const candidateId of run.recomposeCandidateIds ?? [])
+      if (!retained.has(candidateId)) superseded.add(candidateId);
+  }
+  return superseded;
 }
 
 function CandidateRelationshipList({

@@ -7,7 +7,10 @@ export function renderTaskDecompositionSummaryMarkdown(
     const candidates = result.candidates
       .map((candidate) => `- ${candidate.title}: ${candidate.summary}`)
       .join('\n');
-    return `# Proposal\n\nProposed ${result.candidates.length} Candidate boundaries.\n\n${candidates}\n`;
+    const recomposition = result.recomposition
+      ? `\n\nRecomposed the selected working set with ${result.recomposition.effects.length} explicit effects.`
+      : '';
+    return `# Proposal\n\nProposed ${result.candidates.length} Candidate boundaries.${recomposition}\n\n${candidates}\n`;
   }
   if (result.outcome === 'clarification')
     return `# Clarification\n\n${result.clarification.question}\n`;
@@ -29,7 +32,15 @@ export function renderTaskDecompositionResponseMarkdown(
           `## ${candidate.title}\n\n${candidate.summary}\n\n- Derived from: ${candidate.derivedFrom.join(', ')}\n- Depends on: ${candidate.dependsOn.join(', ') || 'None'}`,
       )
       .join('\n\n');
-    return `# Decomposition Response\n\nProposed ${result.candidates.length} Candidate boundaries for review.\n\n## Impact review\n\n${impact}\n\n# Candidate Proposals\n\n${candidates}\n`;
+    const effects = result.recomposition
+      ? `\n\n## Working-set changes\n\n${result.recomposition.effects
+          .map(
+            (effect) =>
+              `- **${effect.kind}**: ${effect.from.join(', ') || 'None'} → ${effect.to.join(', ') || 'None'}`,
+          )
+          .join('\n')}`
+      : '';
+    return `# Decomposition Response\n\nProposed ${result.candidates.length} Candidate boundaries for review.${effects}\n\n## Impact review\n\n${impact}\n\n# Candidate Proposals\n\n${candidates || '_No new Candidate output._'}\n`;
   }
   if (result.outcome === 'clarification') {
     const options = result.clarification.options

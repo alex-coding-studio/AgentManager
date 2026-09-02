@@ -1,8 +1,7 @@
 # Break It Down Product Evolution
 
-Status: shared Run infrastructure, Proposal workspace and module-scoped Intention Profiles
-are delivered. Break It Down's existing decomposition semantics remain the default while
-Motion and Recompose stay in the final slice.
+Status: the shared Agent Graph Workspace is delivered across Run infrastructure, Proposal
+workspace, module-scoped Intention and Motion profiles, and atomic Candidate Recompose.
 
 ## Current product boundary
 
@@ -295,6 +294,21 @@ Delivered behavior:
 - present retained, replaced, split, merged, added and removed boundaries through the shared
   Motion and proposal controls.
 
+Delivered behavior:
+
+- What’s Next and Break It Down use the shared Motion registry while keeping module-owned
+  prompts and validators;
+- Break It Down exposes Unspecified, Diverge and Converge for ordinary Runs and Candidate
+  working-set Recompose;
+- Recompose validates retain, replace, split, merge, add and remove effects as one complete
+  N-to-M mapping before publishing a result;
+- selected Candidate outputs and Resources enter primary Context, while external Candidate
+  dependents and accepted Nodes protect their referenced boundaries;
+- a successful Recompose hides only replaced or removed Candidates, keeps retained Candidates,
+  and makes superseded Candidates impossible to accept or discard; and
+- failed, canceled, clarification, insufficient-evidence and no-change Runs leave the current
+  working set unchanged.
+
 ## Explicit non-goals
 
 The first update does not:
@@ -303,7 +317,6 @@ The first update does not:
 - redesign stable graph identity or Candidate promotion;
 - inject complete raw Run history into every Session;
 - impose a universal Candidate count;
-- expose Motion before Recompose exists;
 - replace Cards that already use the shared Frame; or
 - create another Break It Down-specific workspace shell; or
 - make delivery status part of Formal Node product meaning.

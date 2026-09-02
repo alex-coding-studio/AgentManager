@@ -26,8 +26,11 @@ const { redoProposalPlan, redoProposalContext } =
   await import('../lib/whats-next-redo.ts');
 const { saveWhatsNextInstructions } =
   await import('../lib/whats-next-context.ts');
-const { startTaskDecompositionRun, readTaskDecompositionRun } =
-  await import('../lib/task-decomposition-runs.ts');
+const {
+  startTaskDecompositionRun,
+  readTaskDecompositionRun,
+  acceptTaskDecompositionCandidate,
+} = await import('../lib/task-decomposition-runs.ts');
 
 void test('continued Runs receive current Instructions, clearing is explicit, and running snapshots stay unchanged', async () =>
   fixture(async ({ project, input, original }) => {
@@ -192,7 +195,7 @@ process.stdin.resume();process.stdin.on('end',()=>setTimeout(()=>{
  if(process.env.REDO_TEST_MODE==='fail'){console.log(JSON.stringify({type:'turn.failed',error:{message:'Fixture failure'}}));return;}
 	 const {packet}=JSON.parse(fs.readFileSync('request.json','utf8'));
  fs.writeFileSync('fixture-argv.json',JSON.stringify(process.argv.slice(2)));
- if(!packet.origins){console.log(JSON.stringify({type:'thread.started',thread_id:'fixture-decomposition-session'}));console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'{}'}}));console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:0,output_tokens:0}}));return;}
+	 if(!packet.origins){const workingSet=packet.workingSet||[];const count=packet.operation==='recompose-candidates'?1:(packet.motion==='diverge'?2:1);const base=packet.operation==='recompose-candidates'?9000:8000;const candidates=Array.from({length:count},(_,i)=>({candidateId:'CANDIDATE-'+String(base+i+1),revision:1,type:'module',title:'Module '+(i+1),summary:'A coherent module boundary.',derivedFrom:[packet.currentNode.id],dependsOn:[],resources:[],typeTemplateRef:null,metadata:{},presentation:{},assumptions:[]}));const recomposition=packet.operation==='recompose-candidates'?{effects:[{kind:workingSet.length>1?'merge':'replace',from:workingSet.map(item=>item.candidateId),to:[candidates[0].candidateId]}]}:undefined;const result={schemaVersion:1,harness:{id:'agent-manager.task-decomposition',revision:8},request:packet.request,impactReview:{reviewedNodeIds:[],affectedNodeIds:[],notes:[]},outcome:'proposal',candidates,...(recomposition?{recomposition}:{})};console.log(JSON.stringify({type:'thread.started',thread_id:'fixture-decomposition-session'}));console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:JSON.stringify(result)}}));console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:0,output_tokens:0}}));return;}
 	 const candidateBase=packet.intention==='feature-synthesis'?1000:packet.intention==='product-design-completion'?2000:0;
 	 const packetResources=[...(packet.content?.references||[]),...(packet.content?.external||[])];
 	 const candidates=Array.from({length:packet.revisionTarget?1:(packet.motion==='converge'?1:(packet.proposalCorrection?3:2))},(_,i)=>({candidateId:packet.revisionTarget?.candidateId||('CANDIDATE-'+String(candidateBase+i+1).padStart(4,'0')),revision:packet.revisionTarget?.requiredRevision||1,type:packet.destination.artifactKind,layer:packet.destination.layer,artifactKind:packet.destination.artifactKind,title:'Direction '+(i+1),summary:'A concrete next direction.',derivedFrom:packet.origins.map(n=>n.id),dependsOn:[],resources:packetResources.filter(r=>r.kind==='previous-proposal').map(r=>({kind:r.kind,path:r.logicalPath})),typeTemplateRef:null,metadata:{},presentation:{},assumptions:[],outputMarkdown:'# Direction '+(i+1)+'\\n\\nA concrete next direction.\\n\\n## Why this direction\\n\\n- Resolve the current uncertainty.\\n- Keep the next step bounded.\\n\\n## Assumptions\\n\\n- None'}));
@@ -634,6 +637,72 @@ void test('Break It Down persists profiles, forwards flags, and resumes only mat
     await assert.rejects(
       () => startTaskDecompositionRun(project, { ...input, effort: 'invalid' }),
       /configuration/,
+    );
+  }));
+
+void test('Break It Down atomically recomposes an unaccepted Candidate working set', async () =>
+  fixture(async ({ project }) => {
+    const created = await createStartNode(project, {
+      title: 'Recompose goal',
+      idea: 'A product with overlapping module boundaries.',
+      contextRefs: [],
+      files: [],
+    });
+    const source = created.node ?? created;
+    const initial = await finished(
+      project,
+      await startTaskDecompositionRun(project, {
+        sourceNodeId: source.id,
+        agent: 'codex',
+        instruction: 'Show two alternative module boundaries.',
+        contextRefs: [],
+        files: [],
+        intention: 'understanding',
+        motion: 'diverge',
+      }),
+      readTaskDecompositionRun,
+    );
+    assert.equal(initial.status, 'proposal', initial.error);
+    assert.equal(initial.result.candidates.length, 2);
+    const selectedIds = initial.result.candidates.map(
+      (candidate) => candidate.candidateId,
+    );
+    const recomposed = await finished(
+      project,
+      await startTaskDecompositionRun(project, {
+        sourceNodeId: source.id,
+        agent: 'codex',
+        instruction: 'Merge these overlapping boundaries.',
+        contextRefs: [],
+        files: [],
+        intention: 'understanding',
+        motion: 'converge',
+        recomposeCandidateIds: selectedIds,
+      }),
+      readTaskDecompositionRun,
+    );
+    assert.equal(recomposed.status, 'proposal', recomposed.error);
+    assert.equal(recomposed.operation, 'recompose-candidates');
+    assert.deepEqual(recomposed.recomposeCandidateIds, selectedIds);
+    assert.equal(recomposed.result.candidates.length, 1);
+    assert.equal(recomposed.result.recomposition.effects[0].kind, 'merge');
+    await assert.rejects(
+      () =>
+        acceptTaskDecompositionCandidate(
+          project,
+          initial.runId,
+          selectedIds[0],
+        ),
+      /replaced or removed by Recompose/,
+    );
+    const accepted = await acceptTaskDecompositionCandidate(
+      project,
+      recomposed.runId,
+      recomposed.result.candidates[0].candidateId,
+    );
+    assert.equal(
+      accepted.node.provenance.candidateId,
+      recomposed.result.candidates[0].candidateId,
     );
   }));
 
