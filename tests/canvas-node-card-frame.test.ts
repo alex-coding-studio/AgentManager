@@ -342,3 +342,34 @@ void test('a running card without a summary keeps the summary slot so height is 
   assert.match(render(undefined), /class="mt-1"><p class="line-clamp-3/);
   assert.match(render('Present.'), /class="mt-1"><p class="line-clamp-3/);
 });
+
+void test('the shared proposal workspace renders counts and named metadata sections', async () => {
+  const { CandidateMetadataSections, ProposalWorkspaceStatus } =
+    await import('../components/agent-graph-proposal-workspace.tsx');
+  const html = renderToStaticMarkup(
+    createElement(
+      UiLanguageProvider as never,
+      { language: 'zh-CN' } as never,
+      createElement(
+        'div',
+        null,
+        createElement(ProposalWorkspaceStatus, {
+          formalCount: 1,
+          candidateCount: 9,
+          activeProposalCount: 9,
+          onFocusProposal: () => {},
+        }),
+        createElement(CandidateMetadataSections, {
+          metadata: {
+            keyRules: ['Keep one boundary.', 'Preserve accepted meaning.'],
+          },
+        }),
+      ),
+    ),
+  );
+  assert.match(html, /1.*正式节点/);
+  assert.match(html, /9.*当前候选/);
+  assert.match(html, /aria-label="聚焦当前提案"/);
+  assert.match(html, /关键规则/);
+  assert.doesNotMatch(html, /<pre/);
+});

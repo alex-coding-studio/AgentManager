@@ -23,6 +23,11 @@ import {
 } from 'lucide-react';
 import { AgentRunControls } from '@/components/agent-run-controls';
 import { LatestResponse } from '@/components/latest-response';
+import {
+  CandidateMetadataSections,
+  CandidateResourceList,
+  ProposalWorkspaceStatus,
+} from '@/components/agent-graph-proposal-workspace';
 import type { AgentProfile } from '@/lib/agent-profile';
 import { MarkdownReader } from '@/components/markdown-reader';
 import {
@@ -69,6 +74,7 @@ import {
   latestTerminalTaskDecompositionRun,
 } from '@/lib/latest-response';
 import { cn } from '@/lib/utils';
+import { reconcileProposalRuns } from '@/lib/agent-graph-proposal';
 
 type DecompositionRequestPreview = TaskGraphPreview & {
   contextRefs: string[];
@@ -132,15 +138,28 @@ export function TaskDecompositionWorkspace({
     nodeId: string;
     sequence: number;
   } | null>(null);
+  const [proposalFocusSequence, setProposalFocusSequence] = useState(0);
   const [requestPreviews, setRequestPreviews] = useState<
     DecompositionRequestPreview[]
-  >(
-    initialPreviews.map((preview) => ({
-      ...preview,
-      contextRefs: [],
-      files: [],
-    })),
-  );
+  >(() => {
+    const previews: DecompositionRequestPreview[] = initialPreviews.map(
+      (preview) => ({
+        ...preview,
+        contextRefs: [],
+        files: [],
+      }),
+    );
+    for (const run of initialRuns) {
+      for (const preview of taskDecompositionProposalPreviews(
+        run,
+        initialNodes,
+      )) {
+        if (!previews.some((candidate) => candidate.id === preview.id))
+          previews.push(preview);
+      }
+    }
+    return previews;
+  });
   const [decomposeSourceId, setDecomposeSourceId] = useState('');
   const [decompositionGoal, setDecompositionGoal] = useState('');
   const [agentProfile, setAgentProfile] = useState<AgentProfile>({
@@ -231,6 +250,37 @@ export function TaskDecompositionWorkspace({
   const latestRun = latestTerminalTaskDecompositionRun(runs);
   const latestRunPresentation = latestRun
     ? latestTaskDecompositionResponse(latestRun)
+    : null;
+  const currentCandidateIds = new Set(
+    requestPreviews
+      .filter((preview) => preview.kind === 'candidate')
+      .map((preview) => preview.id),
+  );
+  const activeProposal = [...runs]
+    .sort((left, right) => right.startedAt.localeCompare(left.startedAt))
+    .find(
+      (run) =>
+        run.status === 'proposal' &&
+        run.result?.outcome === 'proposal' &&
+        run.result.candidates.some((candidate) =>
+          currentCandidateIds.has(candidate.candidateId),
+        ),
+    );
+  const activeProposalNodeIds =
+    activeProposal?.result?.outcome === 'proposal'
+      ? [
+          activeProposal.sourceNodeId,
+          ...activeProposal.result.candidates
+            .map((candidate) => candidate.candidateId)
+            .filter((candidateId) => currentCandidateIds.has(candidateId)),
+        ]
+      : [];
+  const activeProposalKey = activeProposalNodeIds.join('|');
+  const fitRequest = activeProposalKey
+    ? {
+        nodeIds: activeProposalNodeIds,
+        sequence: `${activeProposalKey}:${proposalFocusSequence}`,
+      }
     : null;
 
   function upsertRun(run: TaskDecompositionRunRecord) {
@@ -561,40 +611,11 @@ export function TaskDecompositionWorkspace({
       return;
     }
     if (run.status === 'proposal' && run.result?.outcome === 'proposal') {
-      const result = run.result;
-      const acceptedCandidateIds = new Set(
-        nodes.flatMap((node) =>
-          node.provenance?.candidateId ? [node.provenance.candidateId] : [],
-        ),
+      const candidatePreviews = taskDecompositionProposalPreviews(
+        run,
+        nodes,
+        snapshot,
       );
-      const candidatePreviews = result.candidates
-        .filter((candidate) => !acceptedCandidateIds.has(candidate.candidateId))
-        .map((candidate) => ({
-          candidate: {
-            ...candidate,
-            dependsOn: resolveCandidateDependencyIds(
-              candidate.dependsOn,
-              nodes,
-            ),
-          },
-          id: candidate.candidateId,
-          sourceNodeId: run.sourceNodeId,
-          instruction: snapshot?.instruction ?? '',
-          inheritedResourceCount: 0,
-          additionalResourceCount: candidate.resources.length,
-          contextRefs: [],
-          files: [],
-          kind: 'candidate' as const,
-          title: candidate.title,
-          type: candidate.type,
-          description: candidate.summary,
-          color: candidate.presentation.color,
-          status: 'proposal',
-          derivedFrom: candidate.derivedFrom,
-          dependsOn: resolveCandidateDependencyIds(candidate.dependsOn, nodes),
-          outputPath: candidateOutputPath(run.runId, candidate.candidateId),
-          runId: run.runId,
-        }));
       setRequestPreviews((current) =>
         replaceRunWithPreviewsInPlace(current, run.runId, candidatePreviews),
       );
@@ -775,21 +796,14 @@ export function TaskDecompositionWorkspace({
     setRequestPreviews((current) =>
       current.filter((preview) => preview.id !== selectedCandidate.candidateId),
     );
-    setRuns((current) => {
-      const deleted = new Set(
-        payload.deletedRunIds ??
-          (payload.runDeleted ? [selectedCandidatePreview.runId] : []),
-      );
-      const updated = payload.runs ?? [];
-      return [
-        ...current.filter(
-          (run) =>
-            !deleted.has(run.runId) &&
-            !updated.some((candidate) => candidate.runId === run.runId),
-        ),
-        ...updated,
-      ];
-    });
+    setRuns((current) =>
+      reconcileProposalRuns(current, {
+        requestedRunId: selectedCandidatePreview.runId!,
+        runDeleted: payload.runDeleted,
+        deletedRunIds: payload.deletedRunIds,
+        runs: payload.runs,
+      }),
+    );
     finishCandidateDiscard();
   }
 
@@ -1011,10 +1025,6 @@ export function TaskDecompositionWorkspace({
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <div className="hidden items-center gap-2 text-xs text-muted-foreground sm:flex">
-            <span className="size-2 rounded-full bg-foreground" />
-            {nodes.length} {nodes.length === 1 ? 'node' : 'nodes'}
-          </div>
           <Link
             href={`/projects/${projectId}/decomposition/context`}
             className={buttonVariants({ variant: 'outline' })}
@@ -1048,6 +1058,7 @@ export function TaskDecompositionWorkspace({
               previews={requestPreviews}
               focusedNodeId={focusedNodeId}
               locateRequest={locateRequest}
+              fitRequest={fitRequest}
               onFocusNode={setFocusedNodeId}
               onInspectNode={(nodeId) => {
                 setFocusedNodeId(nodeId);
@@ -1085,6 +1096,18 @@ export function TaskDecompositionWorkspace({
                 </Button>
               ) : null}
             </LatestResponse>
+          ) : null}
+
+          {nodes.length > 0 ? (
+            <ProposalWorkspaceStatus
+              className="absolute top-4 right-4 z-10"
+              formalCount={nodes.length}
+              candidateCount={currentCandidateIds.size}
+              activeProposalCount={activeProposalNodeIds.length}
+              onFocusProposal={() =>
+                setProposalFocusSequence((current) => current + 1)
+              }
+            />
           ) : null}
         </section>
 
@@ -1867,33 +1890,11 @@ export function TaskDecompositionWorkspace({
                 </section>
 
                 <section className="mt-7">
-                  <div className="flex items-center justify-between gap-3">
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                      {t('Resources')}
-                    </h3>
-                    <span className="text-[10px] text-muted-foreground">
-                      {selectedCandidate.resources.length}
-                    </span>
-                  </div>
-                  <div className="mt-3 divide-y divide-border overflow-hidden rounded-xl border border-border">
-                    {selectedCandidate.resources.map((resource) => (
-                      <button
-                        key={`${resource.kind}:${resource.path}`}
-                        type="button"
-                        className="flex w-full items-center gap-3 px-3 py-3 text-left transition hover:bg-muted/50"
-                        disabled={previewingPath === resource.path}
-                        onClick={() => previewResource(resource.path)}
-                      >
-                        <FileText className="size-3.5 shrink-0" />
-                        <span className="min-w-0 flex-1 truncate text-xs font-medium">
-                          {resourceName(resource.path)}
-                        </span>
-                        <span className="text-[9px] uppercase tracking-wide text-muted-foreground">
-                          {resource.kind}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
+                  <CandidateResourceList
+                    resources={selectedCandidate.resources}
+                    openingPath={previewingPath}
+                    onOpen={(path) => void previewResource(path)}
+                  />
                 </section>
 
                 {selectedCandidate.assumptions.length > 0 ? (
@@ -1909,16 +1910,11 @@ export function TaskDecompositionWorkspace({
                   </section>
                 ) : null}
 
-                {Object.keys(selectedCandidate.metadata).length > 0 ? (
-                  <section className="mt-7">
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                      {t('Metadata')}
-                    </h3>
-                    <pre className="mt-3 overflow-x-auto rounded-xl bg-secondary p-3 text-[10px] leading-4">
-                      {JSON.stringify(selectedCandidate.metadata, null, 2)}
-                    </pre>
-                  </section>
-                ) : null}
+                <div className="mt-7">
+                  <CandidateMetadataSections
+                    metadata={selectedCandidate.metadata}
+                  />
+                </div>
               </div>
               <SheetFooter className="border-t border-border px-6 py-4">
                 <div className="flex w-full gap-2">
@@ -2120,6 +2116,47 @@ function runPreview(
 
 function candidateOutputPath(runId: string, candidateId: string) {
   return `task-decomposition/runs/${runId}/candidates/${candidateId}/output.md`;
+}
+
+function taskDecompositionProposalPreviews(
+  run: TaskDecompositionRunRecord,
+  nodes: TaskGraphNode[],
+  snapshot?: RunSnapshot,
+): DecompositionRequestPreview[] {
+  if (run.result?.outcome !== 'proposal') return [];
+  const acceptedCandidateIds = new Set(
+    nodes.flatMap((node) =>
+      node.provenance?.candidateId ? [node.provenance.candidateId] : [],
+    ),
+  );
+  return run.result.candidates
+    .filter((candidate) => !acceptedCandidateIds.has(candidate.candidateId))
+    .map((candidate) => {
+      const dependsOn = resolveCandidateDependencyIds(
+        candidate.dependsOn,
+        nodes,
+      );
+      return {
+        candidate: { ...candidate, dependsOn },
+        id: candidate.candidateId,
+        sourceNodeId: run.sourceNodeId,
+        instruction: snapshot?.instruction ?? '',
+        inheritedResourceCount: 0,
+        additionalResourceCount: candidate.resources.length,
+        contextRefs: [],
+        files: [],
+        kind: 'candidate' as const,
+        title: candidate.title,
+        type: candidate.type,
+        description: candidate.summary,
+        color: candidate.presentation.color,
+        status: 'proposal',
+        derivedFrom: candidate.derivedFrom,
+        dependsOn,
+        outputPath: candidateOutputPath(run.runId, candidate.candidateId),
+        runId: run.runId,
+      };
+    });
 }
 
 function CandidateRelationshipList({

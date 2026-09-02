@@ -42,12 +42,18 @@ const defaultFitViewOptions = {
   minZoom: 0.25,
   maxZoom: 1,
 };
+const proposalFitViewOptions = {
+  padding: 0.15,
+  minZoom: 0.5,
+  maxZoom: 1,
+};
 
 export function TaskGraphCanvas({
   nodes,
   previews,
   focusedNodeId,
   locateRequest,
+  fitRequest,
   selectedNodeIds,
   plusLabel,
   edgeAlignedOverlays = false,
@@ -67,6 +73,7 @@ export function TaskGraphCanvas({
   previews: TaskGraphPreview[];
   focusedNodeId: string;
   locateRequest: { nodeId: string; sequence: number } | null;
+  fitRequest?: { nodeIds: string[]; sequence: string | number } | null;
   selectedNodeIds?: string[];
   plusLabel?: string;
   edgeAlignedOverlays?: boolean;
@@ -139,6 +146,7 @@ export function TaskGraphCanvas({
     .sort()
     .join('|');
   const graphNodeIdsKey = graph.nodes.map((node) => node.id).join('|');
+  const fitNodeIdsKey = (fitRequest?.nodeIds ?? []).join('|');
   const flowInstance = useRef<ReactFlowInstance<TaskFlowNode, Edge> | null>(
     null,
   );
@@ -147,10 +155,13 @@ export function TaskGraphCanvas({
     const instance = flowInstance.current;
     if (!instance) return;
     const frame = requestAnimationFrame(() => {
-      void instance.fitView(defaultFitViewOptions);
+      void fitGraph(
+        instance,
+        fitNodeIdsKey ? fitNodeIdsKey.split('|') : undefined,
+      );
     });
     return () => cancelAnimationFrame(frame);
-  }, [graphNodeIdsKey]);
+  }, [fitNodeIdsKey, fitRequest?.sequence, graphNodeIdsKey]);
 
   useEffect(() => {
     setFlowNodes(graph.nodes);
@@ -190,7 +201,10 @@ export function TaskGraphCanvas({
         flowInstance.current = instance;
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
-            void instance.fitView(defaultFitViewOptions);
+            void fitGraph(
+              instance,
+              fitNodeIdsKey ? fitNodeIdsKey.split('|') : undefined,
+            );
           });
         });
       }}
@@ -267,6 +281,20 @@ export function TaskGraphCanvas({
       />
     </ReactFlow>
   );
+}
+
+function fitGraph(
+  instance: ReactFlowInstance<TaskFlowNode, Edge>,
+  displayIds: string[] | undefined,
+) {
+  const requested = new Set(displayIds ?? []);
+  const selected = requested.size
+    ? instance.getNodes().filter((node) => requested.has(node.data.displayId))
+    : [];
+  return instance.fitView({
+    ...(selected.length > 0 ? proposalFitViewOptions : defaultFitViewOptions),
+    ...(selected.length > 0 ? { nodes: selected } : {}),
+  });
 }
 
 function GraphInternalsUpdater({

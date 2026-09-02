@@ -953,11 +953,20 @@ async function discardWhatsNextCandidateUnlocked(
       ),
   );
   let requestedRunDeleted = false;
+  const deletedRunIds: string[] = [];
+  const updatedRuns: WhatsNextRunRecord[] = [];
   for (const run of candidateRuns) {
     const runDeleted = await discardCandidateFromRun(project, run, candidateId);
+    if (runDeleted) deletedRunIds.push(run.runId);
+    else updatedRuns.push(run);
     if (run.runId === runId) requestedRunDeleted = runDeleted;
   }
-  return { candidateId, runDeleted: requestedRunDeleted };
+  return {
+    candidateId,
+    runDeleted: requestedRunDeleted,
+    deletedRunIds,
+    runs: updatedRuns,
+  };
 }
 
 async function discardCandidateFromRun(

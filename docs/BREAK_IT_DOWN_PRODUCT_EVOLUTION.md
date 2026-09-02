@@ -1,8 +1,8 @@
 # Break It Down Product Evolution
 
-Status: agreed staged direction. Break It Down's existing decomposition semantics remain the
-baseline while shared Run infrastructure, proposal presentation and composable Harness
-profiles are introduced in separate slices.
+Status: shared Run infrastructure and the shared Proposal workspace are delivered. Break It
+Down's existing decomposition semantics remain the baseline while composable Harness
+profiles are introduced in later slices.
 
 ## Current product boundary
 
@@ -230,6 +230,14 @@ Acceptance:
 - focus the active proposal without shrinking the complete graph into unreadability;
 - present one proposal-level Response; and
 - render Candidate metadata as product sections through shared components.
+
+Delivered behavior:
+
+- What’s Next and Break It Down use the same compact Proposal status control;
+- the complete graph remains available through the Canvas Fit View control while proposal
+  focus keeps the current working set at a readable zoom;
+- Candidate metadata is rendered as named product sections rather than raw JSON; and
+- Candidate discard reconciles persisted proposal evidence with the in-memory working set.
 
 ### Slice 3: Intention profiles
 

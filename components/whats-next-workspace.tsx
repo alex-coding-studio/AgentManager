@@ -61,6 +61,12 @@ import { intentionDestination } from '@/lib/whats-next-intention';
 import { toggleWhatsNextSelection } from '@/lib/whats-next-selection';
 import { LatestResponse } from '@/components/latest-response';
 import { latestWhatsNextResponse } from '@/lib/latest-response';
+import { reconcileProposalRuns } from '@/lib/agent-graph-proposal';
+import {
+  CandidateMetadataSections,
+  CandidateResourceList,
+  ProposalWorkspaceStatus,
+} from '@/components/agent-graph-proposal-workspace';
 
 const AGENT_LABELS: Record<LocalAgentKind, string> = {
   codex: 'Codex',
@@ -154,6 +160,7 @@ function WhatsNextCanvas({
     nodeId: string;
     sequence: number;
   } | null>(null);
+  const [proposalFocusSequence, setProposalFocusSequence] = useState(0);
   const [revisionTarget, setRevisionTarget] = useState<{
     runId: string;
     candidateId: string;
@@ -272,6 +279,38 @@ function WhatsNextCanvas({
     );
   const latestResponsePresentation = latestResponse
     ? latestWhatsNextResponse(latestResponse)
+    : null;
+  const visibleCandidateIds = new Set(
+    visiblePreviews
+      .filter((preview) => preview.kind === 'candidate')
+      .map((preview) => preview.id),
+  );
+  const activeProposal = [...runs]
+    .sort((left, right) => right.startedAt.localeCompare(left.startedAt))
+    .find(
+      (run) =>
+        run.status === 'proposal' &&
+        run.result?.outcome === 'proposal' &&
+        intentionDestination(run.intention).layer === activeLayer &&
+        run.result.candidates.some((candidate) =>
+          visibleCandidateIds.has(candidate.candidateId),
+        ),
+    );
+  const activeProposalNodeIds =
+    activeProposal?.result?.outcome === 'proposal'
+      ? [
+          ...activeProposal.sourceNodeIds,
+          ...activeProposal.result.candidates
+            .map((candidate) => candidate.candidateId)
+            .filter((candidateId) => visibleCandidateIds.has(candidateId)),
+        ]
+      : [];
+  const activeProposalKey = activeProposalNodeIds.join('|');
+  const fitRequest = activeProposalKey
+    ? {
+        nodeIds: activeProposalNodeIds,
+        sequence: `${activeLayer}:${activeProposalKey}:${proposalFocusSequence}`,
+      }
     : null;
   const continuingGrow = growSource
     ? runs.some(
@@ -585,6 +624,9 @@ function WhatsNextCanvas({
       );
       const payload = (await response.json()) as {
         nodes?: TaskGraphNode[];
+        runDeleted?: boolean;
+        deletedRunIds?: string[];
+        runs?: WhatsNextRunRecord[];
         error?: string;
       };
       if (!response.ok) {
@@ -594,6 +636,16 @@ function WhatsNextCanvas({
       setPreviews((current) =>
         current.filter((item) => item.id !== selectedCandidatePreview.id),
       );
+      if (action === 'discard') {
+        setRuns((current) =>
+          reconcileProposalRuns(current, {
+            requestedRunId: selectedCandidatePreview.runId!,
+            runDeleted: payload.runDeleted,
+            deletedRunIds: payload.deletedRunIds,
+            runs: payload.runs,
+          }),
+        );
+      }
       setInspectorId('');
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Something failed.');
@@ -919,6 +971,7 @@ function WhatsNextCanvas({
         previews={visiblePreviews}
         focusedNodeId={focusedNodeId}
         locateRequest={locateRequest}
+        fitRequest={fitRequest}
         selectedNodeIds={combineIds}
         edgeAlignedOverlays
         avoidBottomRightPanel={combineIds.length >= 1}
@@ -954,6 +1007,16 @@ function WhatsNextCanvas({
           </button>
         ))}
       </div>
+
+      <ProposalWorkspaceStatus
+        className="absolute top-[4.25rem] right-4 z-10"
+        formalCount={visibleNodes.length}
+        candidateCount={visibleCandidateIds.size}
+        activeProposalCount={activeProposalNodeIds.length}
+        onFocusProposal={() =>
+          setProposalFocusSequence((current) => current + 1)
+        }
+      />
 
       {latestResponse && latestResponsePresentation ? (
         <LatestResponse
@@ -1530,6 +1593,17 @@ function WhatsNextCanvas({
                     ))}
                   </div>
                 </details>
+
+                <CandidateResourceList
+                  resources={selectedCandidate.resources}
+                  onOpen={(path) =>
+                    void openMarkdown(path, path.split('/').at(-1) ?? path)
+                  }
+                />
+
+                <CandidateMetadataSections
+                  metadata={selectedCandidate.metadata}
+                />
 
                 <Dialog
                   open={feedbackDraft !== null}
