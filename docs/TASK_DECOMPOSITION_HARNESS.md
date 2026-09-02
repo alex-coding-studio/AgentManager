@@ -2,7 +2,7 @@
 
 ## Status
 
-This document records the product decisions behind AgentManager's built-in
+This document records the product decisions behind Praxis's built-in
 Decomposition Harness. The existing filename, internal identifiers, API paths,
 and storage directories retain `task-decomposition` for compatibility.
 
@@ -31,14 +31,14 @@ delivery-sizing signal only when the user explicitly decomposes for delivery.
 
 ## Product ownership
 
-The Harness is an AgentManager-owned core capability.
+The Harness is a Praxis-owned core capability.
 
 - Ordinary users cannot edit, replace, disable, or select another Harness from
   the interface or settings.
 - User-managed Decomposition Context remains separate and can contain
   project-specific instructions and Markdown or JSON attachments.
-- Because AgentManager is open source, a user may fork the source or manually
-  change an installation. AgentManager does not provide a customization workflow
+- Because Praxis is open source, a user may fork the source or manually
+  change an installation. Praxis does not provide a customization workflow
   or compatibility guarantee for those modifications.
 
 ## Harness boundary
@@ -125,7 +125,7 @@ Every Candidate has a stable session-local identifier and a monotonically
 increasing revision. User acceptance targets one exact revision rather than the
 Candidate name in general. The session also records the input revision or
 fingerprint used to generate that revision. If a relevant source, origin,
-dependency, or protected Node changes before acceptance, AgentManager marks the
+dependency, or protected Node changes before acceptance, Praxis marks the
 Candidate stale and requires reconciliation instead of silently promoting it.
 
 ## Recomposition semantics
@@ -162,10 +162,10 @@ separate implementation slice.
 The Agent proposes graph changes but cannot mutate formal graph state.
 
 1. The Agent returns Candidate Cards and proposed relationships.
-2. AgentManager validates structure, identifiers, references, relationship
+2. Praxis validates structure, identifiers, references, relationship
    semantics, and protected-node constraints.
 3. The user accepts an exact Candidate revision.
-4. AgentManager promotes the accepted revision through one crash-safe operation.
+4. Praxis promotes the accepted revision through one crash-safe operation.
 
 Malformed, partial, or unsupported Agent output remains session evidence and
 never becomes a formal Node. Promotion either writes the complete validated
@@ -177,12 +177,12 @@ require a separate explicit proposal and user decision.
 
 Confirmation is a responsibility boundary.
 
-1. AgentManager writes the accepted formal Nodes first.
+1. Praxis writes the accepted formal Nodes first.
 2. After the write succeeds, abandoned Candidate files, superseded versions, and
    transient session history are moved to the operating system's Trash.
-3. AgentManager keeps no private trash directory, trash index, restore interface,
+3. Praxis keeps no private trash directory, trash index, restore interface,
    retention policy, or recovery metadata.
-4. If the system Trash operation fails, AgentManager reports that cleanup failed
+4. If the system Trash operation fails, Praxis reports that cleanup failed
    and does not claim that the session was completely finalized.
 
 The user and the operating system own retention after deletion. A user who
@@ -239,7 +239,7 @@ information:
 - short summary;
 - decomposition origin relationships;
 - execution dependencies; and
-- reverse execution dependents derived by AgentManager.
+- reverse execution dependents derived by Praxis.
 
 This map may include the selected item's origins, siblings, dependencies,
 reverse dependents, shared-source neighbors, adjacent working-set Candidates,
@@ -355,7 +355,7 @@ and record at least:
 - malformed output, stale-input, and validation failure behavior.
 
 Assertions test product meaning and relationship correctness rather than exact
-wording. The initial smoke set should include a real AgentManager or HereItIs
+wording. The initial smoke set should include a real Praxis or HereItIs
 decomposition, a large but mostly irrelevant context library, a sibling-impact
 case, and a case where the correct result is clarification or no Candidate.
 Observed failures first enter the evaluation taxonomy. A new rule moves into the
@@ -376,5 +376,5 @@ The following details should be settled when implementation begins:
 - the Agent invocation transport and model selection;
 - crash-safe confirmation and system-Trash behavior;
 - schema migration from the current Node format; and
-- the first experimental prompt used to compare AgentManager output with the
+- the first experimental prompt used to compare Praxis output with the
   existing project decomposition process.

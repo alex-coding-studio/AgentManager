@@ -48,7 +48,7 @@ async function fixture(t: { after: (fn: () => Promise<void>) => void }) {
     kind: 'standalone',
     rootPath,
     codePath: null,
-    planningPath: path.join(rootPath, '.agent-manager'),
+    planningPath: path.join(rootPath, '.praxis'),
     createdAt: '',
   };
   const git = (...args: string[]) =>

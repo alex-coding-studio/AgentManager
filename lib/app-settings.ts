@@ -31,9 +31,9 @@ export function isSettingsPatch(value: unknown): value is SettingsPatch {
   );
 }
 const settingsHome = () =>
-  process.env.AGENT_MANAGER_HOME
-    ? path.resolve(process.env.AGENT_MANAGER_HOME)
-    : path.join(homedir(), '.agent-manager');
+  process.env.PRAXIS_HOME
+    ? path.resolve(process.env.PRAXIS_HOME)
+    : path.join(homedir(), '.praxis');
 
 export async function readAppSettings(
   home = settingsHome(),

@@ -148,9 +148,9 @@ function revisionRequest(runId: string) {
 
 function clearActiveRuns() {
   const runtime = globalThis as typeof globalThis & {
-    __agentManagerRuns?: Map<string, unknown>;
+    __praxisRuns?: Map<string, unknown>;
   };
-  runtime.__agentManagerRuns?.clear();
+  runtime.__praxisRuns?.clear();
 }
 
 function armRequestBarrier() {

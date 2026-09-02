@@ -70,7 +70,7 @@ export function createDomainModelRequest(input: {
 }
 
 export function domainModelPrompt(request: DomainModelRequest) {
-  return `You are the modeling Agent for AgentManager's What's That? module. Translate the user's instruction into one coherent product-facing Domain Model. The user speaks in ordinary product language and does not maintain UML, database columns or implementation inheritance.
+  return `You are the modeling Agent for Praxis's What's That? module. Translate the user's instruction into one coherent product-facing Domain Model. The user speaks in ordinary product language and does not maintain UML, database columns or implementation inheritance.
 
 Rules:
 - Read content.input from contextRoot first. It is the current User Input and the highest modeling authority.

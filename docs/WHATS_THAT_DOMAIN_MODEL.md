@@ -465,7 +465,7 @@ Canonical state remains small JSON and optional human-readable Markdown in the
 project companion repository. A plausible first layout is:
 
 ```text
-.agent-manager/domain-model/
+.praxis/domain-model/
 ├── state.json
 └── runs/
     └── RUN-<uuid>/

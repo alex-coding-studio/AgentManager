@@ -8,7 +8,7 @@ workspace, module-scoped Intention and Motion profiles, and atomic Candidate Rec
 Break It Down turns one selected Formal Node and bounded evidence into an inspectable
 Candidate working set. It remains independent from What's Next and Just Do It. A user may
 decompose an existing project, Product Design, implementation approach or direct request
-without passing through another AgentManager module first.
+without passing through another Praxis module first.
 
 ## Workspace parity with What's Next
 

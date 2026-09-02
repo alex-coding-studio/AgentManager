@@ -54,7 +54,7 @@ export function SettingsWorkspace() {
     <div className="mx-auto max-w-4xl px-5 py-9 lg:px-8 lg:py-12">
       <h1 className="text-2xl font-semibold tracking-tight">{t('Settings')}</h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        {t('Personal settings for this local AgentManager installation.')}
+        {t('Personal settings for this local Praxis installation.')}
       </p>
       <section className="mt-8 rounded-2xl border border-border bg-card p-6">
         <h2 className="text-sm font-semibold">{t('General')}</h2>

@@ -24,7 +24,7 @@ without turning it into a mandatory pipeline for every project.
 
 ## Scope discipline
 
-AgentManager is personal-first. Broader applicability should emerge from repeated real use,
+Praxis is personal-first. Broader applicability should emerge from repeated real use,
 not from prebuilding organization-scale process. Product evolution follows these rules:
 
 - solve one observed, repeated workflow cost at a time;
@@ -332,7 +332,7 @@ improvements.
 
 ## Lightweight implementation bridge
 
-AgentManager is designed for one person working with Agents. It should not require a large
+Praxis is designed for one person working with Agents. It should not require a large
 Technical Design document before ordinary feature delivery. The default path is:
 
 ```text

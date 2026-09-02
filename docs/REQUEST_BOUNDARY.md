@@ -1,6 +1,6 @@
 # API Request Boundary
 
-AgentManager serves its interface and its API over local HTTP. The same endpoints
+Praxis serves its interface and its API over local HTTP. The same endpoints
 that register projects, write planning state and start Agent Runs are reachable by
 any page the user's browser loads and by any device that can reach the port. This
 document defines the boundary that every `/api` request crosses, and states what
@@ -31,8 +31,8 @@ Allowed by default: `localhost`, `127.0.0.1`, `[::1]`.
 
 Additional hosts come from two environment variables, both read at request time:
 
-- `AGENT_MANAGER_ALLOWED_HOSTS` — the explicit setting for this boundary.
-- `AGENT_MANAGER_ALLOWED_DEV_ORIGINS` — already documented for Tailscale Serve
+- `PRAXIS_ALLOWED_HOSTS` — the explicit setting for this boundary.
+- `PRAXIS_ALLOWED_DEV_ORIGINS` — already documented for Tailscale Serve
   development, and still honored so existing setups keep working.
 
 Both accept a comma-separated list. Ports are ignored during comparison; a
@@ -71,7 +71,7 @@ already covers them.
 
 A request with no `Origin` header is not treated as cross-origin. This is the
 documented path for non-browser callers — `curl`, editor HTTP clients, and scripts
-that drive AgentManager locally:
+that drive Praxis locally:
 
 ```bash
 curl -X POST http://127.0.0.1:3000/api/projects \

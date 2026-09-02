@@ -102,7 +102,7 @@ const { PublicApiError } = await import('../lib/api-errors.ts');
 const managerHome = await realFs.mkdtemp(
   path.join(os.tmpdir(), 'am-ctx-home-'),
 );
-process.env.AGENT_MANAGER_HOME = managerHome;
+process.env.PRAXIS_HOME = managerHome;
 
 const HOST = 'localhost:3000';
 const UNRELATED = Buffer.from(

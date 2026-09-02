@@ -51,7 +51,7 @@ async function fixture(t: { after: (fn: () => Promise<void>) => void }) {
     description: '',
     rootPath,
     codePath: rootPath,
-    planningPath: path.join(rootPath, '.agent-manager'),
+    planningPath: path.join(rootPath, '.praxis'),
     createdAt: new Date().toISOString(),
   };
   const nodeDir = path.join(

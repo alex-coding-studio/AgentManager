@@ -250,9 +250,9 @@ export function buildCodexArguments(
                   '-c',
                   'approval_policy="never"',
                   '-c',
-                  'default_permissions="agent_manager_action"',
+                  'default_permissions="praxis_action"',
                   '-c',
-                  `permissions.agent_manager_action={extends=":workspace",filesystem={":root"="read",":workspace_roots"={"."="write",".git"="write"}${input.primaryRepositoryPath ? `,${JSON.stringify(input.primaryRepositoryPath)}="read"` : ''}${(input.gitWritePaths ?? []).map((entry) => `,${JSON.stringify(entry)}="write"`).join('')}${input.protectedPath ? `,${JSON.stringify(input.protectedPath)}="read"` : ''}},network={enabled=true}}`,
+                  `permissions.praxis_action={extends=":workspace",filesystem={":root"="read",":workspace_roots"={"."="write",".git"="write"}${input.primaryRepositoryPath ? `,${JSON.stringify(input.primaryRepositoryPath)}="read"` : ''}${(input.gitWritePaths ?? []).map((entry) => `,${JSON.stringify(entry)}="write"`).join('')}${input.protectedPath ? `,${JSON.stringify(input.protectedPath)}="read"` : ''}},network={enabled=true}}`,
                 ]
               : ['--sandbox', 'read-only']),
           '--json',

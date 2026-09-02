@@ -49,7 +49,7 @@ async function fixture(
     kind: 'standalone',
     rootPath,
     codePath: null,
-    planningPath: path.join(rootPath, '.agent-manager'),
+    planningPath: path.join(rootPath, '.praxis'),
     name: 'Fixture',
     description: '',
     createdAt: '',

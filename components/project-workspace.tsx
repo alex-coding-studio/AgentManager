@@ -111,10 +111,10 @@ export function ProjectWorkspace({
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 lg:px-8">
           <div className="flex items-center gap-3">
             <div className="grid size-9 place-items-center rounded-xl bg-primary text-sm font-semibold text-primary-foreground">
-              AM
+              P
             </div>
             <div>
-              <p className="font-semibold tracking-tight">AgentManager</p>
+              <p className="font-semibold tracking-tight">Praxis</p>
               <p className="text-xs text-muted-foreground">
                 {t('Project workspace')}
               </p>
@@ -207,7 +207,7 @@ export function ProjectWorkspace({
                       maxLength={120}
                       value={name}
                       onChange={(event) => setName(event.target.value)}
-                      placeholder="AgentManager"
+                      placeholder="Praxis"
                     />
                   </div>
 
@@ -254,7 +254,7 @@ export function ProjectWorkspace({
                     </div>
                     <p className="text-[11px] leading-4 text-muted-foreground">
                       {t(
-                        'AgentManager creates a locally excluded .agent-manager directory inside this folder.',
+                        'Praxis creates a locally excluded .praxis directory inside this folder.',
                       )}
                     </p>
                   </div>

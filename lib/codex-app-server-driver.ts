@@ -28,12 +28,12 @@ export type CodexAppServerDriverOptions = {
   hostTools?: HostTool[];
 };
 const workerInstructions =
-  'Complete only the assigned worker task. Do not create or delegate to other agents. Use the Host run_job tool for long-running commands. It starts the job and AgentManager interrupts this physical turn; do not call wait or poll. AgentManager starts a continuation turn in this same thread when the operating-system process exits.';
+  'Complete only the assigned worker task. Do not create or delegate to other agents. Use the Host run_job tool for long-running commands. It starts the job and Praxis interrupts this physical turn; do not call wait or poll. Praxis starts a continuation turn in this same thread when the operating-system process exits.';
 const runJobTool = {
   type: 'function',
   name: 'run_job',
   description:
-    'Start one long command in the current Card workspace. AgentManager suspends this physical turn and starts a continuation turn with the completion result. Never call wait or poll.',
+    'Start one long command in the current Card workspace. Praxis suspends this physical turn and starts a continuation turn with the completion result. Never call wait or poll.',
   inputSchema: {
     type: 'object',
     additionalProperties: false,
@@ -248,8 +248,8 @@ export class CodexAppServerDriver implements AgentSessionDriver {
   private async initialize() {
     await this.request('initialize', {
       clientInfo: {
-        name: 'agent-manager',
-        title: 'AgentManager',
+        name: 'praxis',
+        title: 'Praxis',
         version: '0.1.0',
       },
       capabilities: { experimentalApi: true },
@@ -518,9 +518,9 @@ export class CodexAppServerDriver implements AgentSessionDriver {
       this.suspend(turn, message, {
         tool: 'run_job',
         jobId: job.id,
-        acknowledgement: `Host job ${job.id} started. AgentManager will interrupt this physical turn and start a continuation turn with the operating-system result. Do not call wait, write_stdin, or another tool.`,
+        acknowledgement: `Host job ${job.id} started. Praxis will interrupt this physical turn and start a continuation turn with the operating-system result. Do not call wait, write_stdin, or another tool.`,
         completion: job.completion.then((result) => ({
-          prompt: `HOST_JOB_COMPLETED\n${JSON.stringify(result)}\nThe Host ran this command exactly once. Do not rerun it merely to obtain the result. Inspect the referenced log only when details are needed, then continue the original assignment. If another long command is necessary, use run_job once and let AgentManager suspend and resume the thread again.`,
+          prompt: `HOST_JOB_COMPLETED\n${JSON.stringify(result)}\nThe Host ran this command exactly once. Do not rerun it merely to obtain the result. Inspect the referenced log only when details are needed, then continue the original assignment. If another long command is necessary, use run_job once and let Praxis suspend and resume the thread again.`,
           jobResult: result,
         })),
       });

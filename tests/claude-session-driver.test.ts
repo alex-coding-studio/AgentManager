@@ -184,7 +184,7 @@ void test('a suspending Host tool over loopback MCP ends the physical turn and r
   assert.equal(runs[0].resume, false);
   assert.equal(runs[0].sessionId, thread.threadId);
   assert.equal(runs[0].prompt, 'prepare');
-  assert.ok(!runs[0].args.join(' ').includes('mcp__agentmanager__run_job'));
+  assert.ok(!runs[0].args.join(' ').includes('mcp__praxis__run_job'));
   assert.equal(runs[1].resume, true);
   assert.equal(runs[1].sessionId, thread.threadId);
   assert.ok(runs[1].prompt.startsWith('WORKER_COMPLETED'));
@@ -209,7 +209,7 @@ void test('Claude run_job goes through the Host broker and the job result resume
   const runs = await f.invocations();
   assert.equal(runs.length, 2);
   assert.match(runs[1].prompt, /"status":"completed"/);
-  assert.ok(runs[0].args.join(' ').includes('mcp__agentmanager__run_job'));
+  assert.ok(runs[0].args.join(' ').includes('mcp__praxis__run_job'));
 });
 
 void test('a Claude thread without Host jobs does not list run_job', async (t) => {
@@ -388,8 +388,7 @@ void test('every Claude Host-tool call emits activity before validation so the c
     'a rejected Host-tool call still counts against the cap',
   );
   assert.equal(
-    activity.filter((summary) => summary.includes('mcp__agentmanager__'))
-      .length,
+    activity.filter((summary) => summary.includes('mcp__praxis__')).length,
     0,
     'the model-reported MCP call is not counted a second time',
   );

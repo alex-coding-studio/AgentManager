@@ -65,9 +65,7 @@ void test('running status supports named agents and the generic Agent label', ()
 });
 
 void test('language defaults to English and persists both supported choices', async () => {
-  const home = await mkdtemp(
-    path.join(os.tmpdir(), 'agentmanager-settings-test-'),
-  );
+  const home = await mkdtemp(path.join(os.tmpdir(), 'praxis-settings-test-'));
   try {
     assert.equal((await readAppSettings(home)).language, 'en');
     await saveAppLanguage('zh-CN', home);
@@ -84,9 +82,7 @@ void test('language defaults to English and persists both supported choices', as
 });
 
 void test('appearance persists without replacing language, including concurrent partial saves', async () => {
-  const home = await mkdtemp(
-    path.join(os.tmpdir(), 'agentmanager-theme-test-'),
-  );
+  const home = await mkdtemp(path.join(os.tmpdir(), 'praxis-theme-test-'));
   try {
     await writeFile(
       path.join(home, 'settings.json'),
@@ -148,9 +144,7 @@ void test('explicit appearance overrides the system and bootstrap agrees before 
 });
 
 void test('unsupported language never changes the saved preference', async () => {
-  const home = await mkdtemp(
-    path.join(os.tmpdir(), 'agentmanager-settings-test-'),
-  );
+  const home = await mkdtemp(path.join(os.tmpdir(), 'praxis-settings-test-'));
   try {
     await saveAppLanguage('zh-CN', home);
     const before = await readFile(path.join(home, 'settings.json'), 'utf8');

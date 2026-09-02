@@ -1,6 +1,6 @@
 # Card Host Operations
 
-AgentManager owns deterministic environment, candidate publication and validation work.
+Praxis owns deterministic environment, candidate publication and validation work.
 Agents consume structured facts and results instead of reproducing Git, GitHub and CI setup
 in model turns.
 

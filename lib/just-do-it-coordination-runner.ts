@@ -514,7 +514,7 @@ export function startCoordinatedExecution(input: {
       });
       return {
         suspend: true as const,
-        acknowledgement: `Worker dispatched (${decision.decision}). AgentManager suspends this coordination turn and resumes this thread when the worker settles. Do not poll, wait or call another tool.`,
+        acknowledgement: `Worker dispatched (${decision.decision}). Praxis suspends this coordination turn and resumes this thread when the worker settles. Do not poll, wait or call another tool.`,
         continuation,
       };
     };

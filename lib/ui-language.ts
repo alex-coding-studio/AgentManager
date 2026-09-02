@@ -609,8 +609,8 @@ export const chineseUi: Record<string, string> = {
   General: '通用',
   Language: '语言',
   'Interface language': '界面语言',
-  'Personal settings for this local AgentManager installation.':
-    '当前本地 AgentManager 的个人设置。',
+  'Personal settings for this local Praxis installation.':
+    '当前本地 Praxis 的个人设置。',
   'Only website menus, buttons, and messages change. Your input, Agent responses, Markdown, and JSON stay exactly as they are.':
     '只改变网站菜单、按钮和提示的显示语言。你的输入、Agent 回答、Markdown 和 JSON 均保持原样。',
   'Saved automatically on this computer.': '自动保存在这台电脑上。',
@@ -652,8 +652,8 @@ export const chineseUi: Record<string, string> = {
   'Choose an existing local directory': '选择已有的本地目录',
   'A local-first workspace for one person building with agents.':
     '面向个人与 Agent 协作开发的本地工作区。',
-  'AgentManager creates a locally excluded .agent-manager directory inside this folder.':
-    'AgentManager 会在此文件夹内创建 .agent-manager 目录，并在本地排除其 Git 跟踪。',
+  'Praxis creates a locally excluded .praxis directory inside this folder.':
+    'Praxis 会在此文件夹内创建 .praxis 目录，并在本地排除其 Git 跟踪。',
   'Create the first project': '创建第一个项目',
   'Choose a folder, add a name, and write one short description.':
     '选择文件夹，填写名称和简短简介。',
@@ -1021,8 +1021,8 @@ export const chineseUi: Record<string, string> = {
   Unselect: '取消选择',
   'A manager that helps one developer grow and decompose product intent…':
     '一个帮助个人开发者逐步完善想法并分解产品内容的工具…',
-  'AgentManager’s feature-level generation contract will be designed separately. It will consume this user context but remain independently versioned and replaceable.':
-    'AgentManager 的功能生成契约独立设计。它会读取这些用户上下文，但独立维护版本，可单独替换。',
+  'Praxis’s feature-level generation contract will be designed separately. It will consume this user context but remain independently versioned and replaceable.':
+    'Praxis 的功能生成契约独立设计。它会读取这些用户上下文，但独立维护版本，可单独替换。',
   'What&apos;s next': '下一步',
   "What's Next": '下一步',
   'Write the idea in your own words. It becomes the Start of this Canvas, and':

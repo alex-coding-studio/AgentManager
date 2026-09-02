@@ -365,7 +365,7 @@ export function TaskDecompositionContextWorkspace({
             </div>
             <p className="mt-2 text-xs leading-5 text-muted-foreground">
               {t(
-                'AgentManager’s feature-level generation contract will be designed separately. It will consume this user context but remain independently versioned and replaceable.',
+                'Praxis’s feature-level generation contract will be designed separately. It will consume this user context but remain independently versioned and replaceable.',
               )}
             </p>
           </section>

@@ -52,7 +52,7 @@ export function createWhatsNextReviewPreview() {
     id: 'NODE-00009001',
     role: 'start',
     type: 'source',
-    title: 'Build a local AgentManager for one developer',
+    title: 'Build a local Praxis for one developer',
     summary:
       'Explore a local-first product that helps one developer shape, decompose, and deliver work with coding agents.',
     status: 'captured',

@@ -33,7 +33,7 @@ export default async function SettingsPage({
     <main className="min-h-screen bg-background">
       <header className="flex h-16 items-center justify-between border-b border-border px-6">
         <Link href="/" className="font-semibold">
-          AgentManager
+          Praxis
         </Link>
         <Link href="/" className="text-sm text-muted-foreground">
           {translateUi(settings.language, 'Back to projects')}

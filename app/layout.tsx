@@ -17,8 +17,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'AgentManager',
-  description: 'A local-first project workspace for one person and AI agents.',
+  title: 'Praxis',
+  description:
+    'From intent to action. A local-first workspace for one person and AI agents.',
 };
 
 export default async function RootLayout({

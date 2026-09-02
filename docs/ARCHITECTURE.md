@@ -1,8 +1,8 @@
-# AgentManager Architecture Decisions
+# Praxis Architecture Decisions
 
 ## Local-first boundary
 
-AgentManager is a local web application. Its browser interface talks to a service running on the same computer. Core behavior must not depend on a hosted database, hosted object storage, a user account, or a proprietary cloud runtime.
+Praxis is a local web application. Its browser interface talks to a service running on the same computer. Core behavior must not depend on a hosted database, hosted object storage, a user account, or a proprietary cloud runtime.
 
 The initial implementation uses TypeScript and React for the interface and a local Node.js service for filesystem and Git access. Technology choices may evolve, but local portability is a product requirement rather than an implementation detail.
 
@@ -11,13 +11,13 @@ The initial implementation uses TypeScript and React for the interface and a loc
 A managed product can have two independent Git repositories:
 
 1. The code repository, which contains source code, tests, durable product documents, and pull requests.
-2. An AgentManager companion repository, which contains versioned planning data.
+2. A Praxis companion repository, which contains versioned planning data.
 
 Example remotes:
 
 ```text
 alex-coding-studio/HereItIs
-alex-coding-studio/HereItIs-AgentManager
+alex-coding-studio/HereItIs-Praxis
 ```
 
 The companion repository can be checked out inside the code repository:
@@ -27,7 +27,7 @@ HereItIs/
 ├── .git/
 ├── HereItIs/
 ├── docs/
-└── .agent-manager/
+└── .praxis/
     ├── .git/
     ├── project.json
     ├── context/
@@ -46,7 +46,7 @@ That behavior violates the primary isolation requirement: planning-state changes
 
 ## Code-repository isolation
 
-The outer code repository should ignore the nested `.agent-manager/` directory through its clone-local exclusion file:
+The outer code repository should ignore the nested `.praxis/` directory through its clone-local exclusion file:
 
 ```text
 .git/info/exclude
@@ -55,22 +55,22 @@ The outer code repository should ignore the nested `.agent-manager/` directory t
 with this entry:
 
 ```gitignore
-.agent-manager/
+.praxis/
 ```
 
-This is preferred over editing the tracked `.gitignore` because enabling AgentManager should not produce a code change.
+This is preferred over editing the tracked `.gitignore` because enabling Praxis should not produce a code change.
 
 Required behavior:
 
-- `git status` in the code repository does not show AgentManager data.
+- `git status` in the code repository does not show Praxis data.
 - Code pull requests never contain planning-state changes.
-- Removing AgentManager does not affect the build.
+- Removing Praxis does not affect the build.
 - The planning repository can commit, push, pull, and roll back independently.
 - Deleting the local companion checkout does not delete the remote planning history.
 
 ## Global registry
 
-AgentManager keeps a minimal machine-local registry, initially as a config file rather than a database. Its responsibility is only to locate projects and their companion repositories.
+Praxis keeps a minimal machine-local registry, initially as a config file rather than a database. Its responsibility is only to locate projects and their companion repositories.
 
 Conceptual shape:
 
@@ -85,7 +85,7 @@ Conceptual shape:
       "description": "A place-based memory app.",
       "rootPath": "/path/to/HereItIs",
       "codePath": "/path/to/HereItIs",
-      "planningPath": "/path/to/HereItIs/.agent-manager",
+      "planningPath": "/path/to/HereItIs/.praxis",
       "createdAt": "2026-08-28T12:00:00.000Z"
     }
   ]
@@ -103,7 +103,7 @@ Human-readable and diffable files are the versioned source of truth for planning
 Planned layout:
 
 ```text
-.agent-manager/
+.praxis/
 ├── project.json
 ├── context/
 │   ├── README.md
@@ -136,15 +136,15 @@ Planned layout:
 ```
 
 This layout is an opinionated product contract and is not user-configurable.
-Users choose the project root directory; AgentManager owns every path beneath
-`.agent-manager/`. A stable layout keeps agents, Skills, synchronization,
-validation, and migrations deterministic. Because AgentManager is open source,
+Users choose the project root directory; Praxis owns every path beneath
+`.praxis/`. A stable layout keeps agents, Skills, synchronization,
+validation, and migrations deterministic. Because Praxis is open source,
 specialized installations can change the implementation instead of adding a
 configuration system to the core product.
 
 Product Context uses the filesystem as its canonical index. Each section is a
 folder, and an optional `README.md` can define the section's purpose, content
-boundary, and Agent loading guidance. AgentManager discovers sections by
+boundary, and Agent loading guidance. Praxis discovers sections by
 scanning the directory. It does not duplicate the context tree in SQLite or a
 manifest. Context source selection uses a recursive folder browser so nested
 folders remain navigable while only concrete Markdown files can become
@@ -153,7 +153,7 @@ Resources.
 Decomposition Context is user-owned feature context. Its Markdown
 instructions and Markdown or JSON attachments apply to future decomposition
 requests without being copied into every node. It is separate from the
-AgentManager-owned Harness. A future Harness defines only the stable generation
+Praxis-owned Harness. A future Harness defines only the stable generation
 contract: required Card fields, inference discipline, prohibited scope, and the
 minimum valid output. It must not impose a rigid domain workflow or assume what
 kind of input a user supplies.
@@ -193,7 +193,7 @@ role: a node is simply an endpoint while nothing continues from it.
 
 Each node owns its direct `dependsOn` identifiers, its optional `derivedFrom`
 lineage identifiers, and a list of typed Resources whose paths are relative to
-`.agent-manager/`. Reverse dependency and lineage edges are derived by scanning
+`.praxis/`. Reverse dependency and lineage edges are derived by scanning
 the node folders. This avoids maintaining a second relationship record that can
 drift away from the cards it connects. Flexible type-specific fields live under
 `metadata`; optional card rendering hints live under `presentation`.
@@ -251,10 +251,10 @@ upstream relationships disappear with its directory.
 Local Agent invocation is isolated behind a transport boundary. Every transport
 launches an installed Agent CLI as a persistent-session, read-only child
 process and uses the user's existing subscription login rather than storing an
-API key. AgentManager sends the complete Harness, Context Workspace manifest,
+API key. Praxis sends the complete Harness, Context Workspace manifest,
 and bounded request packet on standard input. The Agent uses its own read-only
 file tools to inspect primary files and selectively read related files; no
-second Agent or Coordinator model call mediates access. AgentManager consumes
+second Agent or Coordinator model call mediates access. Praxis consumes
 structured JSON-line events, records the provider
 session identifier and reported usage when available, and validates the final
 JSON before rendering it.
@@ -274,7 +274,7 @@ A Coordinator Session belongs to exactly one transport. A Run resumes a prior
 other Agent starts a fresh Session instead of replaying foreign Context.
 
 Each invocation owns a durable `task-decomposition/runs/RUN-*/run.json` record
-with AgentManager request identity, the exact User Instruction, project
+with Praxis request identity, the exact User Instruction, project
 decomposition instruction, Resource paths, input fingerprint, Harness revision,
 transport, lifecycle timestamps, provider session identifier, usage, validated
 result, and terminal error. Durable Run results can be reproduced and restored
@@ -367,13 +367,13 @@ Example start node:
 }
 ```
 
-If later evidence shows that canonical SQLite is necessary, AgentManager must also produce a deterministic textual snapshot suitable for review and recovery before that architecture changes.
+If later evidence shows that canonical SQLite is necessary, Praxis must also produce a deterministic textual snapshot suitable for review and recovery before that architecture changes.
 
 ## Worktree identity
 
 Agents may implement code from Git worktrees. A worktree must not create a second planning database.
 
-AgentManager resolves a worktree back to the registered project using stable repository evidence such as the Git remote, Git common directory, or project identifier. All worktrees access the same registered companion repository through AgentManager or its MCP server.
+Praxis resolves a worktree back to the registered project using stable repository evidence such as the Git remote, Git common directory, or project identifier. All worktrees access the same registered companion repository through Praxis or its MCP server.
 
 ## Future synchronization model
 
@@ -389,7 +389,7 @@ Ordinary code handles facts that do not require product judgment:
 - A merge commit exists.
 - A task identifier appears in a pull-request description.
 
-AgentManager can reconcile these facts on application launch, manual refresh, implementation handoff, or task completion. No model call is required.
+Praxis can reconcile these facts on application launch, manual refresh, implementation handoff, or task completion. No model call is required.
 
 Example transition:
 
@@ -418,7 +418,7 @@ Semantic changes must eventually be expressed as validated structured operations
 
 ## Companion-repository Git behavior
 
-After a validated planning operation, AgentManager may eventually:
+After a validated planning operation, Praxis may eventually:
 
 1. Write the updated Markdown or JSON files.
 2. Validate graph integrity.

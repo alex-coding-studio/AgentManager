@@ -375,7 +375,7 @@ export async function publishCardCandidate(
   let pr = existing[0];
   if (!pr) {
     const temporaryDirectory = await mkdtemp(
-      path.join(os.tmpdir(), 'agentmanager-pr-'),
+      path.join(os.tmpdir(), 'praxis-pr-'),
     );
     const bodyPath = path.join(temporaryDirectory, 'body.md');
     try {
@@ -454,8 +454,8 @@ export async function publishCardCandidate(
 
 function forbiddenCandidatePath(file: string) {
   return (
-    file === '.agent-manager' ||
-    file.startsWith('.agent-manager/') ||
+    file === '.praxis' ||
+    file.startsWith('.praxis/') ||
     file === 'build' ||
     file.startsWith('build/') ||
     file.includes('DerivedData') ||

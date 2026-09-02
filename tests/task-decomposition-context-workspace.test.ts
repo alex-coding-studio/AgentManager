@@ -35,7 +35,7 @@ void test('promotes a Source input when a Run has no separate User Input', () =>
 });
 
 void test('packages User Input, references and external files as one indexed workspace', async () => {
-  const runPath = await mkdtemp(path.join(tmpdir(), 'agent-manager-packet-'));
+  const runPath = await mkdtemp(path.join(tmpdir(), 'praxis-packet-'));
   const userInput = userInputWorkspaceInput(
     'whats-next/runs/RUN-test/context/input/user-input.md',
     'A long product request.',
@@ -138,7 +138,7 @@ void test('limits related Context to the selected Node neighborhood', () => {
 });
 
 void test('writes primary and related Context without embedding content in the manifest', async () => {
-  const runPath = await mkdtemp(path.join(tmpdir(), 'agent-manager-context-'));
+  const runPath = await mkdtemp(path.join(tmpdir(), 'praxis-context-'));
   const workspace = await writeAgentGraphContextWorkspace(runPath, [
     {
       role: 'related',
@@ -175,7 +175,7 @@ void test('writes primary and related Context without embedding content in the m
 });
 
 void test('promotes an explicitly selected duplicate Resource to primary', async () => {
-  const runPath = await mkdtemp(path.join(tmpdir(), 'agent-manager-context-'));
+  const runPath = await mkdtemp(path.join(tmpdir(), 'praxis-context-'));
   const workspace = await writeAgentGraphContextWorkspace(runPath, [
     {
       role: 'related',
@@ -197,7 +197,7 @@ void test('promotes an explicitly selected duplicate Resource to primary', async
 });
 
 void test('keeps inherited outputs from one related Node collision-free', async () => {
-  const runPath = await mkdtemp(path.join(tmpdir(), 'agent-manager-context-'));
+  const runPath = await mkdtemp(path.join(tmpdir(), 'praxis-context-'));
   const nodeId = 'NODE-eef14eef';
   const workspace = await writeAgentGraphContextWorkspace(runPath, [
     {

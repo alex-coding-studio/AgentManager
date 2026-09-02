@@ -8,7 +8,7 @@ const option = (name) => {
 };
 const sessionId = option('--session-id') ?? option('--resume');
 const resume = args.includes('--resume');
-const mcp = JSON.parse(option('--mcp-config') ?? '{}').mcpServers?.agentmanager;
+const mcp = JSON.parse(option('--mcp-config') ?? '{}').mcpServers?.praxis;
 const prompt = readFileSync(0, 'utf8');
 const logPath = process.env.FAKE_CLAUDE_LOG;
 if (logPath)
@@ -37,7 +37,7 @@ async function callTool(name, toolArguments) {
   send({
     type: 'assistant',
     message: {
-      content: [{ type: 'tool_use', name: `mcp__agentmanager__${name}` }],
+      content: [{ type: 'tool_use', name: `mcp__praxis__${name}` }],
     },
   });
   await rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {} });

@@ -49,7 +49,7 @@ Every request receives the retained source, current Plan and Card handoff with
 references, independent of previous provider memory. Session reuse is deferred.
 Project-wide instructions open from Context in the top module header, available
 on both the dashboard and inside a Card rather than below the goal list. They are stored in
-`.agent-manager/implementation/instructions.md` and snapshotted per run. Editing
+`.praxis/implementation/instructions.md` and snapshotted per run. Editing
 them does not alter an active run. Automatic local Skill discovery/loading is
 still deferred and instructions cannot expand runtime permissions.
 
@@ -66,7 +66,7 @@ files and handoff references rather than receiving every document body inline.
 
 ## Storage, races and recovery
 
-`.agent-manager/implementation/cards/<UUID>/` holds immutable worklog revisions.
+`.praxis/implementation/cards/<UUID>/` holds immutable worklog revisions.
 Each publishes `planning-state.json` atomically with its event, handoff and
 reference documents, plus new request/resource/result files when relevant.
 Providers start only after their input files exist. This is not a separate

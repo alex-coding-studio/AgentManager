@@ -16,11 +16,11 @@ if (process.platform !== 'darwin')
   throw new Error('This sandbox smoke requires macOS.');
 const exec = promisify(execFile);
 const parent = await mkdtemp(
-  path.join(os.homedir(), '.agentmanager-sandbox-fixture-'),
+  path.join(os.homedir(), '.praxis-sandbox-fixture-'),
 );
 try {
   const root = path.join(parent, 'project');
-  const planning = path.join(root, '.agent-manager');
+  const planning = path.join(root, '.praxis');
   const id = randomUUID();
   await mkdir(path.join(planning, 'implementation/cards', id), {
     recursive: true,
@@ -46,7 +46,7 @@ try {
     primaryRepositoryPath: workspace.repository,
   });
   const config = args.find((arg) =>
-    arg.startsWith('permissions.agent_manager_action='),
+    arg.startsWith('permissions.praxis_action='),
   )!;
   const forbidden = [
     path.join(workspace.gitDirectory, 'HEAD'),
@@ -61,7 +61,7 @@ try {
     [
       'sandbox',
       '-P',
-      'agent_manager_action',
+      'praxis_action',
       '-c',
       config,
       '-C',

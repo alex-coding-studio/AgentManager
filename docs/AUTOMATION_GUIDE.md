@@ -6,7 +6,7 @@ a bulk automation project or require every module to use the same mechanism.
 
 ## Purpose
 
-AgentManager should not spend model turns on deterministic work that the Host or repository
+Praxis should not spend model turns on deterministic work that the Host or repository
 can perform more reliably. The HereItIs Just Do It dogfood exposed repeated command
 discovery, environment probing, test ordering, polling, publication and cleanup work that
 Workers reconstructed from prose or handled through temporary shell and Python helpers.

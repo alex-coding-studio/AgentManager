@@ -2,7 +2,7 @@
 
 ## Contract
 
-`uid` is the immutable UUID of a product object. AgentManager allocates it when
+`uid` is the immutable UUID of a product object. Praxis allocates it when
 a Start or a validated Candidate is first created. Refinement changes content
 and revision, not identity. Acceptance preserves the Candidate UUID in the
 Formal Node. A new descendant receives a new UUID.
@@ -50,7 +50,7 @@ prompts and existing APIs. Reads project the stable relationships to current
 display aliases. After migration, editing only a legacy alias array does not
 change the canonical relationship; intentional graph edits must update the
 UUID relationship. The Agent still returns short aliases in the existing
-output schema; AgentManager resolves and persists UUID endpoints after validating
+output schema; Praxis resolves and persists UUID endpoints after validating
 the complete response. Agents cannot assign or overwrite UUIDs.
 
 Canvas node keys, edge endpoints, focus and layout use stable identity. Cards
