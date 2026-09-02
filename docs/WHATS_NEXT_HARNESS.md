@@ -3,7 +3,7 @@
 ## Status
 
 This document records the product decisions currently accepted for
-AgentManager's built-in What's Next Harness. It separates settled behavior from
+Praxis's built-in What's Next Harness. It separates settled behavior from
 open design questions so the executable Harness is not written ahead of the
 product model.
 
@@ -65,7 +65,7 @@ The Harness should internally test whether each direction has a coherent value
 loop:
 
 - **Input:** what the user already has or is willing to provide;
-- **Transformation:** what AgentManager would help them do;
+- **Transformation:** what Praxis would help them do;
 - **Output:** what durable result would exist; and
 - **Immediate value:** why that result matters to the user now.
 
@@ -137,7 +137,7 @@ line of inquiry when that is the more useful movement.
 
 The machine-readable continuation advice records both the broad action and a
 `recommendedFocus`: `clarify`, `concretize`, `expand`, `compare`, or `close`.
-AgentManager renders the recommendation prominently in the readable Response
+Praxis renders the recommendation prominently in the readable Response
 Markdown and uses it to construct the default continuation Instruction. The
 Canvas UI remains general, and the user may always replace the default.
 The broad action and focus cannot contradict each other: closing always uses
@@ -211,7 +211,7 @@ that the user must read as JSON.
 - Accepting a Candidate promotes its Markdown content without reconstructing
   product meaning from metadata.
 
-AgentManager may transport Markdown inside a validated envelope and render a
+Praxis may transport Markdown inside a validated envelope and render a
 combined Response view, but it must not ask the Agent to independently generate
 duplicate combined and per-Candidate prose that can drift apart. The combined
 view and individual files derive from one content source.
@@ -241,7 +241,7 @@ The Agent may update other affected sections in the same Candidate
 Candidate, Reflection, or Formal Node, and every additional change must appear
 in the reviewable Markdown diff.
 
-If the revision or excerpt hash no longer matches, AgentManager marks the
+If the revision or excerpt hash no longer matches, Praxis marks the
 feedback stale instead of applying it to shifted text. Feedback remains
 temporary Session material and does not become Formal Node content unless its
 meaning is incorporated into the accepted Markdown.
@@ -257,7 +257,7 @@ expression needs improvement.
 - One or several Markdown sections may change while untouched sections remain
   unchanged.
 - No sibling, child, dependency, or Formal Node may be created.
-- AgentManager validates the base revision and feedback anchors, persists the
+- Praxis validates the base revision and feedback anchors, persists the
   next revision, and derives the complete line diff before acceptance.
 - The response should summarize what changed because of the user's feedback.
 
@@ -338,9 +338,9 @@ Every successful round updates a durable checkpoint:
 - a Context ledger of inspected paths, hashes, and reasons.
 
 The complete transcript is not the recovery source. When provider resume is
-unavailable, AgentManager creates a fresh Agent Session from the latest
+unavailable, Praxis creates a fresh Agent Session from the latest
 checkpoint, selected origins, current manifest, and unresolved feedback. When
-the live Context approaches its evaluated limit, AgentManager performs the same
+the live Context approaches its evaluated limit, Praxis performs the same
 checkpoint-based rollover instead of allowing uncontrolled accumulation.
 
 Provider Session continuity is an optimization; durable Session artifacts are

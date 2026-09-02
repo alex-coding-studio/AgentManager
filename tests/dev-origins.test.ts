@@ -15,7 +15,7 @@ function configuredOrigins(additional: string) {
       {
         cwd: new URL('../', import.meta.url),
         encoding: 'utf8',
-        env: { ...process.env, AGENT_MANAGER_ALLOWED_DEV_ORIGINS: additional },
+        env: { ...process.env, PRAXIS_ALLOWED_DEV_ORIGINS: additional },
       },
     ),
   );

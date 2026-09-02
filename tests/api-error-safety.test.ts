@@ -12,7 +12,7 @@ import {
 
 const LOCAL = 'localhost:3000';
 const REGISTRY_HOME = mkdtempSync(path.join(os.tmpdir(), 'am-api-error-home-'));
-process.env.AGENT_MANAGER_HOME = REGISTRY_HOME;
+process.env.PRAXIS_HOME = REGISTRY_HOME;
 
 function captureDiagnostics<T>(run: () => T) {
   const captured: string[] = [];
@@ -58,7 +58,7 @@ void test('an explicit public error keeps its status, code and message', async (
 
 void test('an unexpected error exposes no path, username, stack or raw message', async () => {
   const leak = new Error(
-    "ENOENT: no such file or directory, realpath '/Users/someone/projects/secret-client/.agent-manager/context/product/notes.md'",
+    "ENOENT: no such file or directory, realpath '/Users/someone/projects/secret-client/.praxis/context/product/notes.md'",
   );
   const { result } = await captureDiagnosticsAsync(async () =>
     apiErrorResponse(

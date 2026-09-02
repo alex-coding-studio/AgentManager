@@ -99,7 +99,7 @@ void test('separates a Node output from inherited input Resources', () => {
 });
 
 void test('migrates legacy What’s Next nodes into Discovery without changing identity', async () => {
-  const root = await mkdtemp(path.join(tmpdir(), 'agent-manager-layer-'));
+  const root = await mkdtemp(path.join(tmpdir(), 'praxis-layer-'));
   const planningPath = path.join(root, 'planning');
   const nodeId = 'NODE-abcdef12';
   const nodePath = path.join(planningPath, 'whats-next', 'nodes', nodeId);

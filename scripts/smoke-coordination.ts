@@ -17,7 +17,7 @@ const workerModel = process.argv[3];
 if (!coordinatorModel || !workerModel)
   throw new Error('Supply coordinator and worker model IDs explicitly.');
 const root = await mkdtemp(
-  path.join(os.tmpdir(), 'agentmanager-coordination-smoke-'),
+  path.join(os.tmpdir(), 'praxis-coordination-smoke-'),
 );
 const cardId = randomUUID();
 const actionId = randomUUID();

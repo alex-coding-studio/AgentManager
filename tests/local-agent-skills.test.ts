@@ -216,16 +216,14 @@ void test('new and resumed Codex sessions receive metadata without removing exec
       workingDirectory: cwd,
       prompt: 'task',
       access: 'workspace-write',
-      protectedPath: '/tmp/skill-fixture/.agent-manager',
+      protectedPath: '/tmp/skill-fixture/.praxis',
     },
     catalog,
   );
   assert.ok(args.includes('approval_policy="never"'));
   assert.ok(args.includes('default_permissions="agent_manager_action"'));
   assert.ok(
-    args.some((arg) =>
-      arg.includes('"/tmp/skill-fixture/.agent-manager"="read"'),
-    ),
+    args.some((arg) => arg.includes('"/tmp/skill-fixture/.praxis"="read"')),
   );
 });
 

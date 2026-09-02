@@ -27,7 +27,7 @@ import {
 import type { RegisteredProject } from '../lib/project-registry.ts';
 
 const HOME = mkdtempSync(path.join(os.tmpdir(), 'am-planning-paths-home-'));
-process.env.AGENT_MANAGER_HOME = HOME;
+process.env.PRAXIS_HOME = HOME;
 
 const RUN = 'RUN-11111111-2222-4333-8444-555555555555';
 const CANDIDATE = 'CANDIDATE-abcdef12';
@@ -59,7 +59,7 @@ const SUPPORTED_SHAPES: Array<[string, string]> = [
 
 async function planningProject(label: string) {
   const root = await mkdtemp(path.join(os.tmpdir(), `am-planning-${label}-`));
-  const planningPath = path.join(root, '.agent-manager');
+  const planningPath = path.join(root, '.praxis');
   await mkdir(planningPath, { recursive: true });
   return {
     project: {

@@ -749,7 +749,7 @@ function ActionWorkbench({
             <Fact label="Input">
               {target.input
                 .replace('当前登记的项目路径', projectPath)
-                .replace('已登记的 AgentManager 项目目录', projectPath)}
+                .replace('已登记的 Praxis 项目目录', projectPath)}
             </Fact>
             <Fact label="Expected output">{target.output}</Fact>
             <Fact label="Validation">{target.validation}</Fact>

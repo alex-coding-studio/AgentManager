@@ -41,7 +41,7 @@ void test('builds a continuation prompt without reinjecting the Harness', () => 
     },
   });
 
-  assert.match(prompt, /Continue the existing AgentManager/);
+  assert.match(prompt, /Continue the existing Praxis/);
   assert.match(prompt, /append-candidates/);
   assert.match(prompt, /input\/user-input\.md/);
   assert.doesNotMatch(prompt, /complete output contract/);

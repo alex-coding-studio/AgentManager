@@ -80,7 +80,7 @@ const {
 const { PublicApiError } = await import('../lib/api-errors.ts');
 
 const managerHome = await mkdtemp(path.join(os.tmpdir(), 'am-tgc-home-'));
-process.env.AGENT_MANAGER_HOME = managerHome;
+process.env.PRAXIS_HOME = managerHome;
 
 function armBarrier(
   match: (kind: string, target: string, source: string) => boolean,

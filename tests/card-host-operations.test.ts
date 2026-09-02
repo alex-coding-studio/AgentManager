@@ -42,7 +42,7 @@ async function fixture(t: { after: (callback: () => Promise<void>) => void }) {
   const baseSha = (
     await execute('git', ['-C', repository, 'rev-parse', 'HEAD'])
   ).stdout.trim();
-  const branch = 'agentmanager/card-fixture';
+  const branch = 'praxis/card-fixture';
   await execute('git', [
     '-C',
     repository,

@@ -36,7 +36,7 @@ ${JSON.stringify(packet, null, 2)}`;
 }
 
 export function buildTaskDecompositionContinuationPrompt(packet: unknown) {
-  return `Continue the existing AgentManager Decomposition Session under the previously supplied Harness and output contract. The packet below contains the current operation, indexed content, a fresh Context Workspace, and authoritative state changes. moduleInstructionsState is complete: present means read the module-instructions reference and replace earlier module instructions; cleared means discard earlier module instructions. Read content.input first, followed by content.references and content.external. Do not reinterpret or replace unchanged prior Context. Return one JSON object and no Markdown fence or commentary.
+  return `Continue the existing Praxis Decomposition Session under the previously supplied Harness and output contract. The packet below contains the current operation, indexed content, a fresh Context Workspace, and authoritative state changes. moduleInstructionsState is complete: present means read the module-instructions reference and replace earlier module instructions; cleared means discard earlier module instructions. Read content.input first, followed by content.references and content.external. Do not reinterpret or replace unchanged prior Context. Return one JSON object and no Markdown fence or commentary.
 
 ${GRAPH_IDENTITY_PROMPT}
 

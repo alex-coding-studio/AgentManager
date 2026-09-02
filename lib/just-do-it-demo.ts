@@ -213,7 +213,7 @@ export function createDemoState(): DemoState {
   );
   environment.stage = 'verified';
   environment.input =
-    '工作位置：已登记的 AgentManager 项目目录。\n已确认技术：Next.js、TypeScript、npm（演示约定）。\n输入资料：来源 output.md、整份计划、用户补充要求。\n先检查已有 Node 与文件；保留用户改动，不安装全局工具、不接数据库或真实 Agent。';
+    '工作位置：已登记的 Praxis 项目目录。\n已确认技术：Next.js、TypeScript、npm（演示约定）。\n输入资料：来源 output.md、整份计划、用户补充要求。\n先检查已有 Node 与文件；保留用户改动，不安装全局工具、不接数据库或真实 Agent。';
   environment.output =
     '项目内的 package.json、锁文件、TypeScript 配置、最小应用入口与首页；可重复使用的启动和检查脚本；README 启动说明；包含上述变更的 PR。';
   environment.validation =
@@ -407,7 +407,7 @@ export function createLibraryGoal(): DemoGoal {
   const base = createDemoState().goals[0];
   return preparePlanningGoal({
     id: 'library',
-    title: '从零规划 AgentManager 的本地网站骨架',
+    title: '从零规划 Praxis 的本地网站骨架',
     summary:
       '先讨论整份执行计划，再确认各步的输入、交付和验收约定。确认前不创建执行 Action。',
     source: "What's Next",

@@ -63,7 +63,7 @@ GitHub tokens (`ghp_`, `gho_`, …), OpenAI-style `sk-` keys, Slack `xox*` token
 `key: value` forms for authorization, token, password, secret, api-key and
 private-key.
 
-This matters because AgentManager shells out to `git`, `gh` and Agent CLIs. A failing
+This matters because Praxis shells out to `git`, `gh` and Agent CLIs. A failing
 command's message can contain the arguments it was given.
 
 Redaction is best-effort on known shapes, not a guarantee. It is the reason the

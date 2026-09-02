@@ -27,13 +27,13 @@ import {
   parseClaudeEvent,
 } from './local-agent-transport.ts';
 
-export const claudeMcpServerName = 'agentmanager';
+export const claudeMcpServerName = 'praxis';
 export const claudeSuspensionGraceMs = 60000;
 const mcpProtocolVersion = '2025-06-18';
 const runJobTool = {
   name: 'run_job',
   description:
-    'Start one long command in the current Card workspace. The Host owns the process, log and cancellation. After calling it, end this turn immediately with one short line; AgentManager resumes this session with the completion result. Never call wait or poll.',
+    'Start one long command in the current Card workspace. The Host owns the process, log and cancellation. After calling it, end this turn immediately with one short line; Praxis resumes this session with the completion result. Never call wait or poll.',
   inputSchema: {
     type: 'object',
     additionalProperties: false,
@@ -496,7 +496,7 @@ export class ClaudeSessionDriver implements AgentSessionDriver {
       reply({
         protocolVersion: mcpProtocolVersion,
         capabilities: { tools: {} },
-        serverInfo: { name: 'agent-manager', version: '0.1.0' },
+        serverInfo: { name: 'praxis', version: '0.1.0' },
       });
       return;
     }
@@ -606,7 +606,7 @@ export class ClaudeSessionDriver implements AgentSessionDriver {
         });
         return {
           success: true,
-          text: `Host job ${job.id} started. End this turn now with one short line and do not call any other tool; AgentManager resumes this session with the operating-system result.`,
+          text: `Host job ${job.id} started. End this turn now with one short line and do not call any other tool; Praxis resumes this session with the operating-system result.`,
         };
       } catch (error) {
         return {
@@ -634,7 +634,7 @@ export class ClaudeSessionDriver implements AgentSessionDriver {
         });
         return {
           success: true,
-          text: `${result.acknowledgement} End this turn now with one short line and do not call any other tool; AgentManager resumes this session when the Host operation settles.`,
+          text: `${result.acknowledgement} End this turn now with one short line and do not call any other tool; Praxis resumes this session when the Host operation settles.`,
         };
       }
       return { success: true, text: JSON.stringify(result) };

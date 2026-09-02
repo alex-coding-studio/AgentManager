@@ -87,7 +87,7 @@ be deleted. Current conceptual boundaries are in [DECOMPOSITION_MODEL.md](DECOMP
 The first implementation may execute one fresh local Agent per Run, but its
 transport and records must preserve the seam required for Session reuse. A Run
 therefore carries both its own `runId` and an optional provider-owned
-`agentSessionId`, alongside the AgentManager Decomposition `sessionId`, request
+`agentSessionId`, alongside the Praxis Decomposition `sessionId`, request
 identity, input fingerprint, and Harness revision.
 
 Later Runs should reuse one Coordinator Agent only inside the same bounded
@@ -97,7 +97,7 @@ the complete Harness and unchanged evidence. A different independent root
 starts a new Agent Session. An independent Reviewer always starts fresh so it
 does not inherit the Coordinator's assumptions.
 
-Session reuse is bounded rather than permanent. AgentManager freezes a compact
+Session reuse is bounded rather than permanent. Praxis freezes a compact
 handoff and creates a new Agent Session when the Context threshold is reached,
 the Harness revision changes, the input boundary changes materially, the
 transport or model changes, or repeated failures make the current Session
@@ -180,14 +180,14 @@ Later observability should record:
 - model, transport, elapsed time, retries, context expansions, tool calls, Sub
   Agent usage, outcome, cancellation, and failure information;
 - estimated cost only when a reliable model-price snapshot is available;
-- AgentManager's measured request-payload attribution across the built-in
+- Praxis's measured request-payload attribution across the built-in
   Harness, user Instruction, Decomposition Context, Source Resources, graph
   map, expanded Nodes, type template, prior Candidate feedback, and output; and
 - an explicit unallocated or platform-overhead category instead of pretending
   that attribution is exact.
 
 Usage totals come from the transport or provider. The Agent must never be asked
-to invent or self-report them. Payload attribution is a separate AgentManager
+to invent or self-report them. Payload attribution is a separate Praxis
 measurement and must be labeled as such.
 
 Candidate and formal Node content should reference the generating `runId`

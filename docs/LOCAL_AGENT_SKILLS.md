@@ -1,6 +1,6 @@
 # Local Agent Skills context
 
-Codex sessions started by AgentManager receive the locally enabled Skills catalog
+Codex sessions started by Praxis receive the locally enabled Skills catalog
 without project-specific setup, manual path entry, or a Skills management screen.
 A catalog entry makes a Skill available; it does not invoke the Skill or preload
 its body. The Agent chooses a relevant Skill and reads its entry point on demand.
@@ -10,7 +10,7 @@ Codex app-server with the normal local configuration and calls `skills/list` for
 the run's working directory with `forceReload: true`. Discovery does not create a
 thread, start a model turn, install plugins, or change their enabled settings.
 Codex owns plugin discovery, path resolution, project trust and Skill enablement;
-AgentManager does not scan versioned cache directories or invent an iOS registry.
+Praxis does not scan versioned cache directories or invent an iOS registry.
 
 Only enabled names, descriptions and absolute entry-point paths are appended to
 the run input. These machine-local paths are resolved at runtime, not committed

@@ -30,7 +30,7 @@ export function executionAccessFromConfig(value: unknown): ExecutionAccess {
       ![':danger-full-access', ':read-only', ':workspace'].includes(profile))
   )
     throw new Error(
-      'Unsupported custom Codex permission profile. AgentManager will not replace it with broader permissions.',
+      'Unsupported custom Codex permission profile. Praxis will not replace it with broader permissions.',
     );
   if (
     profile === ':danger-full-access' ||

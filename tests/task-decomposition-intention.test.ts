@@ -86,7 +86,7 @@ function proposal(
   return {
     schemaVersion: 1,
     harness: {
-      id: 'agent-manager.task-decomposition',
+      id: 'praxis.task-decomposition',
       revision: 8,
     },
     request: {

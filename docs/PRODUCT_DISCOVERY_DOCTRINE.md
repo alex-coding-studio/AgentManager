@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This doctrine defines how AgentManager should help one person turn incomplete
+This doctrine defines how Praxis should help one person turn incomplete
 product intent into progressively clearer product meaning without replacing the
 subject, circumstances, or desired progress with a plausible invention.
 
@@ -11,7 +11,7 @@ mandatory user workflow, a fixed Node taxonomy, or an implementation plan.
 
 ## Combined foundation
 
-AgentManager uses several product-design lenses together because none is a
+Praxis uses several product-design lenses together because none is a
 complete anti-drift mechanism by itself.
 
 - **First-principles discipline** separates supported facts, assumptions, and
@@ -101,7 +101,7 @@ know product-design terminology.
 For example, when the user asks for a quickly testable version but has not named
 the validation subject:
 
-- use AgentManager to shape and build AgentManager itself;
+- use Praxis to shape and build Praxis itself;
 - apply the direction to an existing software project; or
 - create a domain-neutral interaction prototype.
 
@@ -135,7 +135,7 @@ Traceable parent.
 
 The correct response was not to invent a more concrete example. It was to ask
 which real subject should carry the validation or, when supported by Context,
-use AgentManager's own creation as the dogfooding case.
+use Praxis's own creation as the dogfooding case.
 
 ## Harness adoption boundary
 

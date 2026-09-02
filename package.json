@@ -1,9 +1,9 @@
 {
-  "name": "agent-manager",
+  "name": "praxis",
   "version": "0.1.0",
   "private": true,
   "bin": {
-    "agent-manager": "./bin/agent-manager.mjs"
+    "praxis": "./bin/praxis.mjs"
   },
   "engines": {
     "node": ">=22.13.0"
@@ -12,7 +12,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "cli": "node ./bin/agent-manager.mjs",
+    "cli": "node ./bin/praxis.mjs",
     "lint": "oxlint .",
     "format": "oxfmt",
     "test:graph": "node --experimental-strip-types --test tests/task-graph-layout.test.ts tests/task-graph-rules.test.ts tests/graph-identity.test.ts tests/graph-node-card.test.ts tests/goal-picker-graph.test.ts",
@@ -25,10 +25,11 @@
     "test:whats-next": "node --experimental-strip-types --test tests/whats-next-harness.test.ts tests/whats-next-redo.test.mjs tests/whats-next-context.test.ts tests/latest-response.test.ts",
     "test:markdown": "node --experimental-strip-types --test tests/markdown-feedback-position.test.ts tests/browser-uuid.test.ts",
     "test:settings": "node --experimental-strip-types --test tests/app-settings.test.ts tests/project-reveal.test.ts",
+    "test:brand": "node --experimental-strip-types --test tests/praxis-brand.test.ts",
     "test:boundary": "node --experimental-strip-types --import ./tests/helpers/register-alias.mjs --test tests/api-request-boundary.test.ts",
     "test:registry": "node --experimental-strip-types --test tests/project-registry-atomicity.test.ts",
     "test:api-errors": "node --experimental-strip-types --import ./tests/helpers/register-alias.mjs --test tests/api-error-safety.test.ts",
-    "test": "npm run test:graph && npm run test:task-graph-failures && npm run test:task-graph-concurrency && npm run test:context-publication && npm run test:dependency-audit && npm run test:planning-paths && npm run test:domain-model && npm run test:canvas-frame && npm run test:harness && npm run test:runs && npm run test:decomposition-concurrency && npm run test:whats-next && npm run test:markdown && npm run test:settings && npm run test:boundary && npm run test:registry && npm run test:api-errors && npm run test:implementation-demo && npm run test:implementation-harness && npm run test:implementation-planning && npm run test:implementation-execution",
+    "test": "npm run test:graph && npm run test:task-graph-failures && npm run test:task-graph-concurrency && npm run test:context-publication && npm run test:dependency-audit && npm run test:planning-paths && npm run test:domain-model && npm run test:canvas-frame && npm run test:harness && npm run test:runs && npm run test:decomposition-concurrency && npm run test:whats-next && npm run test:markdown && npm run test:settings && npm run test:brand && npm run test:boundary && npm run test:registry && npm run test:api-errors && npm run test:implementation-demo && npm run test:implementation-harness && npm run test:implementation-planning && npm run test:implementation-execution",
     "test:ci": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run build",
     "test:implementation-demo": "node --experimental-strip-types --test tests/just-do-it-demo.test.ts",
     "test:implementation-harness": "node --experimental-strip-types --test tests/just-do-it-harness.test.ts",

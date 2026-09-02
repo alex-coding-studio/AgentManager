@@ -1,8 +1,8 @@
 # Project Registry Updates
 
-The machine registry at `~/.agent-manager/config.json` (or `AGENT_MANAGER_HOME`) is
+The machine registry at `~/.praxis/config.json` (or `PRAXIS_HOME`) is
 the list of every project this machine knows about. Registering a project also writes
-`<project-root>/.agent-manager/project.json` and appends to that repository's
+`<project-root>/.praxis/project.json` and appends to that repository's
 `.git/info/exclude`. Those three effects have to agree.
 
 ## The defect this replaces
@@ -12,7 +12,7 @@ write the whole registry back. Two registrations that overlapped both read the s
 starting list, and the second write replaced the first. Eight concurrent
 registrations left one saved project.
 
-The losing calls had already created `.agent-manager/`, appended to
+The losing calls had already created `.praxis/`, appended to
 `.git/info/exclude` and written `project.json`. Nothing reported an error, so the
 user saw a project that had silently failed to register while its files were on
 disk.
@@ -47,7 +47,7 @@ bad request never blocks other writers.
 Inside the chain, in order:
 
 1. reject a `rootPath` already present in the freshly read registry;
-2. create `.agent-manager/`, append the Git exclusion, write `project.json`;
+2. create `.praxis/`, append the Git exclusion, write `project.json`;
 3. return the new registry value.
 
 `project.json` is published atomically — written to a temporary file and renamed over
@@ -79,7 +79,7 @@ harmless on its own, and may reflect what the user wants regardless of registrat
 one, and records the single cross-process primitive that exists today.
 
 **The boundary is process-local.** The chain lives in one Node process. Two
-AgentManager servers pointed at the same `AGENT_MANAGER_HOME` — two ports, or a `dev`
+Praxis servers pointed at the same `PRAXIS_HOME` — two ports, or a `dev`
 and a `start` process at once — do not see each other's chain, and their
 read-modify-write sequences can still interleave and lose an update. The atomic
 rename keeps each individual write whole, so the file is never corrupt, but a

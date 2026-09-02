@@ -188,7 +188,7 @@ Do not load this section by default. Read it only when a task explicitly points 
 
 const rootReadme = `# Product Context
 
-This directory contains the human-readable context that AgentManager uses to understand and decompose work for this product.
+This directory contains the human-readable context that Praxis uses to understand and decompose work for this product.
 
 Each section is a folder with its own README. Read the section README before loading its individual documents so Agent context can remain bounded.
 
@@ -201,7 +201,7 @@ Each section is a folder with its own README. Read the section README before loa
 - References preserve supporting research and source material.
 - Other temporarily holds material without a clear owner.
 
-The directory layout is owned by AgentManager. Task state and dependency relationships are stored separately from Product Context.
+The directory layout is owned by Praxis. Task state and dependency relationships are stored separately from Product Context.
 `;
 
 async function writeIfMissing(filePath: string, content: string) {

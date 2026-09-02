@@ -107,7 +107,7 @@ const { createStartNode, updateStartNode, listTaskGraphNodes } =
 const { PublicApiError } = await import('../lib/api-errors.ts');
 
 const managerHome = await mkdtemp(path.join(os.tmpdir(), 'am-tg-home-'));
-process.env.AGENT_MANAGER_HOME = managerHome;
+process.env.PRAXIS_HOME = managerHome;
 
 async function registerProject(project: RegisteredProject) {
   await realFs.writeFile(

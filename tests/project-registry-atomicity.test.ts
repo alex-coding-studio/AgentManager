@@ -18,7 +18,7 @@ import {
 } from '../lib/atomic-json-store.ts';
 
 const REGISTRY_HOME = mkdtempSync(path.join(os.tmpdir(), 'am-registry-home-'));
-process.env.AGENT_MANAGER_HOME = REGISTRY_HOME;
+process.env.PRAXIS_HOME = REGISTRY_HOME;
 
 const registryFile = path.join(REGISTRY_HOME, 'config.json');
 
@@ -199,7 +199,7 @@ void test('a failed registry write rolls back the project-local file', async () 
   }
 
   assert.equal(
-    await exists(path.join(rootPath, '.agent-manager', 'project.json')),
+    await exists(path.join(rootPath, '.praxis', 'project.json')),
     false,
   );
   assert.deepEqual(await listProjects(), before);
@@ -209,7 +209,7 @@ void test('a failed registry write restores a pre-existing project file byte for
   const { createProject, listProjects } =
     await import('../lib/project-registry.ts');
   const rootPath = await temporaryRoot('preexisting');
-  const projectFile = path.join(rootPath, '.agent-manager', 'project.json');
+  const projectFile = path.join(rootPath, '.praxis', 'project.json');
   const sentinel =
     '{\n  "schemaVersion": 1,\n  "id": "sentinel-from-the-lost-update-bug"\n}\n';
   await mkdir(path.dirname(projectFile), { recursive: true });
@@ -237,7 +237,7 @@ void test('a failed registry write restores a pre-existing project file byte for
 void test('rollback removes the project file only when the registration created it', async () => {
   const { createProject } = await import('../lib/project-registry.ts');
   const rootPath = await temporaryRoot('created');
-  const projectFile = path.join(rootPath, '.agent-manager', 'project.json');
+  const projectFile = path.join(rootPath, '.praxis', 'project.json');
 
   await chmod(REGISTRY_HOME, 0o500);
   try {
@@ -287,7 +287,7 @@ void test('a failed rollback is reported instead of being swallowed', async () =
 void test('a failed project metadata write leaves no partial file', async () => {
   const { createProject } = await import('../lib/project-registry.ts');
   const rootPath = await temporaryRoot('partial');
-  const planningPath = path.join(rootPath, '.agent-manager');
+  const planningPath = path.join(rootPath, '.praxis');
   const projectFile = path.join(planningPath, 'project.json');
   const sentinel = '{"id":"kept"}\n';
   await mkdir(planningPath, { recursive: true });
@@ -332,7 +332,7 @@ void test('a rejected registration leaves registry and local state agreeing', as
   );
 
   assert.deepEqual(await listProjects(), before);
-  assert.equal(await exists(path.join(missing, '.agent-manager')), false);
+  assert.equal(await exists(path.join(missing, '.praxis')), false);
 });
 
 void test('temporary files are collision safe and never replace an existing one', async () => {

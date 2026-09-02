@@ -31,7 +31,7 @@ export function buildWhatsNextContinuationPrompt(
   intention: WhatsNextIntention = 'mvp-exploration',
   motion: WhatsNextMotion = 'unspecified',
 ) {
-  return `Continue the existing AgentManager What's next Session under the previously supplied Harness and output contract. The packet below contains the current operation, indexed content, a fresh Context Workspace, and authoritative state changes. moduleInstructionsState is complete: present means read the module-instructions reference and replace earlier module instructions; cleared means discard earlier module instructions. Neither state removes the Harness or output contract. Read content.input first, followed by content.references and content.external. Do not reinterpret or replace other unchanged prior Context. Return one JSON object and no Markdown fence or commentary.
+  return `Continue the existing Praxis What's next Session under the previously supplied Harness and output contract. The packet below contains the current operation, indexed content, a fresh Context Workspace, and authoritative state changes. moduleInstructionsState is complete: present means read the module-instructions reference and replace earlier module instructions; cleared means discard earlier module instructions. Neither state removes the Harness or output contract. Read content.input first, followed by content.references and content.external. Do not reinterpret or replace other unchanged prior Context. Return one JSON object and no Markdown fence or commentary.
 
 ${GRAPH_IDENTITY_PROMPT}
 

@@ -1,6 +1,8 @@
-# AgentManager
+# Praxis
 
-AgentManager is a local-first workspace for one developer building products with
+**From intent to action.**
+
+Praxis is a local-first workspace for one developer building products with
 AI agents. It is designed to grow product intent into coherent directions,
 decompose selected scopes at a human-manageable resolution, and later carry
 accepted work into independently verifiable delivery while keeping product and
@@ -30,26 +32,26 @@ npm run build
 npm link
 ```
 
-After that, start AgentManager from any terminal:
+After that, start Praxis from any terminal:
 
 ```bash
-agent-manager
+praxis
 ```
 
 Open [http://localhost:3000](http://localhost:3000). Use
-`agent-manager --port 3100` to choose another port.
+`praxis --port 3100` to choose another port.
 
 For development with live reload:
 
 ```bash
-agent-manager dev
+praxis dev
 ```
 
 To review the development server through a private Tailscale Serve hostname,
 allow that hostname before starting the dev server:
 
 ```bash
-AGENT_MANAGER_ALLOWED_DEV_ORIGINS=your-device.your-tailnet.ts.net agent-manager dev
+PRAXIS_ALLOWED_DEV_ORIGINS=your-device.your-tailnet.ts.net praxis dev
 tailscale serve --bg 3000
 ```
 
@@ -59,7 +61,7 @@ or enable public Funnel access.
 
 Publishing the port to a tailnet gives every device on that tailnet the ability to
 register projects, write planning state and start Agent Runs on this machine.
-AgentManager has no user authentication; `tailscale serve` bounds the network, not
+Praxis has no user authentication; `tailscale serve` bounds the network, not
 the trust. See [API Request Boundary](docs/REQUEST_BOUNDARY.md) for what the
 boundary does and does not cover.
 
@@ -67,7 +69,7 @@ boundary does and does not cover.
 
 Open **Settings** from the project sidebar or project-list header. Choose English
 or Simplified Chinese under **Interface language**. The preference is saved
-automatically in `~/.agent-manager/settings.json` (or `AGENT_MANAGER_HOME`) and
+automatically in `~/.praxis/settings.json` (or `PRAXIS_HOME`) and
 applies when the site is reopened.
 
 Under **Appearance**, choose Light, Dark, or Follow system. Appearance is saved
@@ -81,17 +83,17 @@ details.
 
 ## Local data
 
-The machine registry is stored at `~/.agent-manager/config.json`. Each project
-stores its own metadata in `<project-root>/.agent-manager/project.json`. Registry
+The machine registry is stored at `~/.praxis/config.json`. Each project
+stores its own metadata in `<project-root>/.praxis/project.json`. Registry
 updates are serialized within one server process; see
 [Project Registry Updates](docs/PROJECT_REGISTRY.md) for that boundary.
 
-When the selected directory belongs to a Git repository, AgentManager adds
-`.agent-manager/` to that clone's `.git/info/exclude`. It does not modify the
+When the selected directory belongs to a Git repository, Praxis adds
+`.praxis/` to that clone's `.git/info/exclude`. It does not modify the
 tracked `.gitignore`.
 
-The internal `.agent-manager/` asset layout is fixed by the product. Users
-choose the project root, while AgentManager owns the planning paths beneath it.
+The internal `.praxis/` asset layout is fixed by the product. Users
+choose the project root, while Praxis owns the planning paths beneath it.
 Product Context sections are discovered directly from folders and their
 `README.md` files; no database or manifest duplicates that structure.
 README files can be opened in a reusable focus reader or revealed in the system
@@ -102,15 +104,17 @@ Decomposition Canvas start nodes are stored as one folder per node. Each node co
 human-readable `node.json` and can carry its own Resource files. Context Library
 Markdown can be selected through the folder browser, while external Markdown
 can be attached directly during node creation.
-Decomposition Context is stored in the compatibility directory
-`<project-root>/.agent-manager/task-decomposition/`. It remains separate from
+Decomposition Context is stored under
+`<project-root>/.praxis/task-decomposition/`. It remains separate from
 the built-in Harness that defines Agent output boundaries. Existing internal
 paths and identifiers retain `task-decomposition` for data compatibility.
 
-Set `AGENT_MANAGER_HOME` to use a different machine-registry directory.
-Set `AGENT_MANAGER_ALLOWED_HOSTS` to accept additional `Host` values beyond
+Set `PRAXIS_HOME` to use a different machine-registry directory.
+Set `PRAXIS_ALLOWED_HOSTS` to accept additional `Host` values beyond
 `localhost`, `127.0.0.1` and `[::1]`; see
 [API Request Boundary](docs/REQUEST_BOUNDARY.md).
+Praxis uses the `.praxis` directory, `PRAXIS_*` environment variables, and the
+`praxis` CLI consistently across local storage and runtime configuration.
 
 ## Verification
 
@@ -151,23 +155,17 @@ including settled workflow decisions and questions still open before implementat
 
 What's Next has a top-level **Context** control on both its empty start page and
 its Canvas. Optional project Instructions are stored in
-`.agent-manager/whats-next/instructions.md`. New projects start blank. Saving
+`.praxis/whats-next/instructions.md`. New projects start blank. Saving
 applies to subsequent requests, including resumed sessions; clearing explicitly
 removes earlier module Instructions without changing the Harness. Already running
 requests retain their captured snapshot. This does not alter exploration strategy.
 
-The Just Do It sidebar entry opens `/projects/<projectId>/implementation`,
-where **Open preview** enters the [interactive demo](docs/JUST_DO_IT_DEMO.md)
-at `/projects/<projectId>/implementation?preview=just-do-it`.
-The UI baseline is frozen as of 2026-08-30. The ordinary route now supports
-[real Planning](docs/JUST_DO_IT_PLANNING.md): import a formal Node, generate and
-adjust a Plan with a local Agent, then Finalize. Action execution is not connected.
-Preview uses fictional, in-memory data: no Agent calls, GitHub changes, or
-project writes. Reload or leave preview to reset the examples.
-
-In Preview, use **Add a goal** to try whole-plan generation, feedback, and confirmation
-before any Actions appear. The demo also includes per-role model profiles and
-Issue-style follow-ups; neither invokes a provider or writes to GitHub.
+The Just Do It sidebar entry opens `/projects/<projectId>/implementation`.
+It imports a formal Node, generates and adjusts a Plan with a local Agent,
+finalizes Actions, executes one Action at a time in an isolated worktree, and
+keeps review, required checks, user acceptance, and GitHub delivery distinct.
+See [Just Do It Planning](docs/JUST_DO_IT_PLANNING.md) and
+[Just Do It](docs/JUST_DO_IT.md) for the current behavior.
 
 The [Just Do It Harness foundation](docs/JUST_DO_IT_HARNESS.md) is available
 separately from the frozen UI. Run `npm run test:implementation-harness` for

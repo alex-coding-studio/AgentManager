@@ -10,7 +10,7 @@ import type { RegisteredProject } from './project-registry.ts';
 const exec = promisify(execFile);
 const excluded = new Set([
   '.git',
-  '.agent-manager',
+  '.praxis',
   'node_modules',
   '.next',
   '.build',

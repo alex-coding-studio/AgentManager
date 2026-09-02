@@ -21,7 +21,7 @@ development; module-level state would otherwise reset and let two chains run aga
 | module                           | runtime property             | key                                                       |
 | -------------------------------- | ---------------------------- | --------------------------------------------------------- |
 | `lib/atomic-json-store.ts`       | `atomicJsonStoreWrites`      | the absolute store file path                              |
-| `lib/app-settings.ts`            | `appSettingsWrites`          | `<AGENT_MANAGER_HOME>/settings.json`                      |
+| `lib/app-settings.ts`            | `appSettingsWrites`          | `<PRAXIS_HOME>/settings.json`                             |
 | `lib/graph-identity-store.ts`    | `graphIdentityState.pending` | `<planningPath>/<task-graph\|whats-next>/identities.json` |
 | `lib/task-decomposition-runs.ts` | `taskDecompositionMutations` | `project.planningPath`                                    |
 | `lib/whats-next-runs.ts`         | `whatsNextMutations`         | `project.planningPath`                                    |
@@ -36,8 +36,8 @@ The properties these chains have, and the ones they do not:
    it is written to disk or announced to any other process.
 2. **They serialize callers only inside that process.** Two callers in one process that use the
    same key run one after the other; that is the whole of the guarantee.
-3. **Two AgentManager processes do not share them.** Two servers on different ports against one
-   `AGENT_MANAGER_HOME`, or two processes against one planning root, each hold their own map and
+3. **Two Praxis processes do not share them.** Two servers on different ports against one
+   `PRAXIS_HOME`, or two processes against one planning root, each hold their own map and
    are invisible to each other.
 4. **Running `dev` and `start` together is not protected.** That is the same case as (3), and it
    is the one a developer reaches by accident. The chains do nothing for it.
@@ -103,5 +103,5 @@ implied by the fact that `mkdir` is atomic.
 ## What is therefore still unprotected
 
 The stores guarded by the process-local chains above remain unprotected against a second
-AgentManager process. The chains narrow the exposure to the multi-process case; they do not
+Praxis process. The chains narrow the exposure to the multi-process case; they do not
 remove it.

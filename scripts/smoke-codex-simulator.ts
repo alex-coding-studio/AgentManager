@@ -62,7 +62,7 @@ try {
   );
   await writeFile(
     path.join(directory, 'project.yml'),
-    `name: SimulatorPermissionSmoke\noptions:\n  deploymentTarget:\n    iOS: "18.0"\nsettings:\n  base:\n    SWIFT_VERSION: "6.0"\n    CODE_SIGNING_ALLOWED: NO\ntargets:\n  PermissionSmokeTests:\n    type: bundle.unit-test\n    platform: iOS\n    sources: [Tests]\n    settings:\n      base:\n        PRODUCT_BUNDLE_IDENTIFIER: local.agentmanager.permission-smoke\n        GENERATE_INFOPLIST_FILE: YES\nschemes:\n  PermissionSmokeTests:\n    build:\n      targets:\n        PermissionSmokeTests: all\n    test:\n      targets: [PermissionSmokeTests]\n`,
+    `name: SimulatorPermissionSmoke\noptions:\n  deploymentTarget:\n    iOS: "18.0"\nsettings:\n  base:\n    SWIFT_VERSION: "6.0"\n    CODE_SIGNING_ALLOWED: NO\ntargets:\n  PermissionSmokeTests:\n    type: bundle.unit-test\n    platform: iOS\n    sources: [Tests]\n    settings:\n      base:\n        PRODUCT_BUNDLE_IDENTIFIER: local.praxis.permission-smoke\n        GENERATE_INFOPLIST_FILE: YES\nschemes:\n  PermissionSmokeTests:\n    build:\n      targets:\n        PermissionSmokeTests: all\n    test:\n      targets: [PermissionSmokeTests]\n`,
   );
   await run('xcodegen', ['generate']);
   console.log(

@@ -161,10 +161,10 @@ async function create(
   baseCommit: string,
 ): Promise<CardWorkspace> {
   const generation = randomUUID().slice(0, 8);
-  const branch = `agentmanager/card-${cardId}-${generation}`;
+  const branch = `praxis/card-${cardId}-${generation}`;
   const directory = path.join(
     path.dirname(repository),
-    `.agentmanager-${path.basename(repository)}-${cardId}-${generation}`,
+    `.praxis-${path.basename(repository)}-${cardId}-${generation}`,
   );
   await git(repository, 'worktree', 'add', '-b', branch, directory, baseCommit);
   const workspace = {
@@ -242,19 +242,16 @@ export async function ensureCardWorkspace(
     await git(
       repository,
       '-c',
-      'user.name=AgentManager',
+      'user.name=Praxis',
       '-c',
-      'user.email=agentmanager@localhost',
+      'user.email=praxis@localhost',
       'commit',
       '--allow-empty',
       '-m',
       'Initialize empty local project baseline',
     );
     const exclude = path.join(repository, '.git/info/exclude');
-    await writeFile(
-      exclude,
-      `${await readFile(exclude, 'utf8')}\n.agent-manager/\n`,
-    );
+    await writeFile(exclude, `${await readFile(exclude, 'utf8')}\n.praxis/\n`);
   }
   if (
     (await realpath(await git(repository, 'rev-parse', '--show-toplevel'))) !==

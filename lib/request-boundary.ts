@@ -31,8 +31,8 @@ export function normalizeHostname(value: string | null | undefined) {
 
 function configuredHostnames() {
   return [
-    process.env.AGENT_MANAGER_ALLOWED_HOSTS ?? '',
-    process.env.AGENT_MANAGER_ALLOWED_DEV_ORIGINS ?? '',
+    process.env.PRAXIS_ALLOWED_HOSTS ?? '',
+    process.env.PRAXIS_ALLOWED_DEV_ORIGINS ?? '',
   ]
     .flatMap((value) => value.split(','))
     .map((entry) => normalizeHostname(entry))

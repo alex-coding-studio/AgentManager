@@ -57,7 +57,7 @@ async function fixture(
     name: 'Execution fixture',
     kind: 'standalone',
     rootPath,
-    planningPath: path.join(rootPath, '.agent-manager'),
+    planningPath: path.join(rootPath, '.praxis'),
     codePath: null,
     description: '',
     createdAt: new Date().toISOString(),
@@ -427,13 +427,11 @@ void test('execution permissions do not broaden planning and explicit execution 
   const execution = buildCodexArguments({
     ...input,
     access: 'workspace-write',
-    protectedPath: '/tmp/example/.agent-manager',
+    protectedPath: '/tmp/example/.praxis',
   });
   assert.ok(execution.includes('default_permissions="agent_manager_action"'));
   assert.ok(
-    execution.some((arg) =>
-      arg.includes('"/tmp/example/.agent-manager"="read"'),
-    ),
+    execution.some((arg) => arg.includes('"/tmp/example/.praxis"="read"')),
   );
   assert.ok(!execution.includes('--dangerously-bypass-approvals-and-sandbox'));
   assert.throws(
@@ -502,10 +500,7 @@ void test('source dependencies prevent execution before prerequisite acceptance'
 void test('Git checkpoints preserve exact bytes and deletions without changing the project Git index or branch', async (t) => {
   const { project } = await fixture(t);
   const git = promisify(execFile);
-  await writeFile(
-    path.join(project.rootPath, '.gitignore'),
-    '.agent-manager/\n',
-  );
+  await writeFile(path.join(project.rootPath, '.gitignore'), '.praxis/\n');
   await writeFile(path.join(project.rootPath, 'existing.txt'), 'existing');
   await git('git', ['init', '--initial-branch=fixture'], {
     cwd: project.rootPath,

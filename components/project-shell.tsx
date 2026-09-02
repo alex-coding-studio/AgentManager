@@ -102,10 +102,10 @@ export function ProjectShell({
               className="flex shrink-0 items-center gap-2.5 px-1 lg:mb-4"
             >
               <div className="grid size-8 place-items-center rounded-lg bg-primary text-xs font-semibold text-primary-foreground">
-                AM
+                P
               </div>
               <span className="hidden font-semibold tracking-tight sm:inline">
-                AgentManager
+                Praxis
               </span>
             </Link>
 

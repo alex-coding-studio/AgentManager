@@ -775,7 +775,7 @@ cross-domain execution engine, or a new storage architecture in this docs round.
 ### Opt-in publication implementation
 
 Shared infrastructure PR #63 introduces `pre_push_tests=deferred` for explicitly
-configured projects only. In that mode the hook allows only AgentManager Card refs
+configured projects only. In that mode the hook allows only Praxis Card refs
 and requires the executable acceptance entry. Other projects retain the default
 testing hook. HereItIs opts in and runs `./scripts/acceptance-tests.sh` after Draft
 publication; that entry never skips scheme tests based on upstream equality and

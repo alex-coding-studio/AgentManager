@@ -7,7 +7,7 @@ transport. No Claude SDK or background-job configuration is included.
 
 ## Responsibility boundary
 
-AgentManager owns Card state, background processes, logs, cancellation and event routing.
+Praxis owns Card state, background processes, logs, cancellation and event routing.
 Provider drivers own thread/turn protocol translation. Coordinator, worker and future
 Reviewer flows consume the same runtime events and never depend on Codex- or Claude-specific
 identifiers.
@@ -67,7 +67,7 @@ SDK dependency. A thread is one Claude session id; the first physical turn uses 
 and every later one, logical or continuation, uses `--resume`. Host tools reach the model
 through a loopback MCP endpoint owned by the driver: `http://127.0.0.1:<port>/mcp/<thread>`,
 bearer token per thread, `--mcp-config` plus `--strict-mcp-config`, and `--allowedTools`
-naming only the registered `mcp__agentmanager__*` tools. Thread instructions are injected with
+naming only the registered `mcp__praxis__*` tools. Thread instructions are injected with
 `--append-system-prompt` on the session-creating process. A coordinator thread keeps
 `--restricted --tools Read,Glob,Grep`, so it cannot poll with a shell; a worker thread adds
 Edit, Write and Bash with `acceptEdits`.
@@ -108,7 +108,7 @@ Coordinator have not been exercised live.
 
 The Codex driver uses the experimental App Server protocol with the current local Codex
 login. `thread/start` registers one dynamic `run_job` tool. When Codex emits the
-`item/tool/call` JSON-RPC request, AgentManager starts the process, immediately acknowledges
+`item/tool/call` JSON-RPC request, Praxis starts the process, immediately acknowledges
 the job identifier and interrupts that physical turn. The operating-system exit event then
 starts a continuation turn in the same provider thread with structured job status. The
 logical worker call remains pending until the continuation produces the final report. No

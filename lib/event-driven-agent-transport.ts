@@ -142,7 +142,7 @@ export function startEventDrivenWorkerRun(
     const permissionContext =
       '\n\nExecution permissions: Full Access, selected in local Codex settings. There is no OS filesystem sandbox protecting the primary checkout or planning store. You must still work only in the Card worktree, preserve host-owned records, and follow the explicit PR and acceptance boundaries. Full Access is not authorization for unrelated actions.';
     const hostToolContext =
-      '\n\nHost job tool: use run_job for builds, tests and other commands that may run longer than a quick inspection. The Host owns waiting, progress, logs and cancellation. Starting a job ends the current physical turn; AgentManager will create a continuation turn in this same thread only when the operating-system process exits. Never call wait or write_stdin and never start an overlapping replacement. Short read-only commands and file edits may use normal tools.';
+      '\n\nHost job tool: use run_job for builds, tests and other commands that may run longer than a quick inspection. The Host owns waiting, progress, logs and cancellation. Starting a job ends the current physical turn; Praxis will create a continuation turn in this same thread only when the operating-system process exits. Never call wait or write_stdin and never start an overlapping replacement. Short read-only commands and file edits may use normal tools.';
     const candidateToolContext = input.candidatePublication
       ? '\n\nCandidate publication tool: after creating one or more local commits and reaching a clean Candidate HEAD, call publish_candidate once. Do not run gh auth, permission, push, PR creation or PR lookup commands yourself. The Host returns the Draft PR bound to the exact HEAD. Further repair commits may call it again with the new HEAD.'
       : '';
@@ -264,7 +264,7 @@ function startClaudeWorkerRun(input: LocalAgentRunInput): LocalAgentRun {
       access: 'workspace-write',
     });
     const hostToolContext =
-      '\n\nHost job tool: use the agentmanager run_job tool for builds, tests and other commands that may run longer than a quick inspection. The Host owns waiting, progress, logs and cancellation. After starting a job, end this turn immediately with one short line; AgentManager resumes this same session with the result when the operating-system process exits. Never poll for it with shell commands and never start an overlapping job. Short read-only commands and file edits may use normal tools.';
+      '\n\nHost job tool: use the praxis run_job tool for builds, tests and other commands that may run longer than a quick inspection. The Host owns waiting, progress, logs and cancellation. After starting a job, end this turn immediately with one short line; Praxis resumes this same session with the result when the operating-system process exits. Never poll for it with shell commands and never start an overlapping job. Short read-only commands and file edits may use normal tools.';
     const candidateToolContext = input.candidatePublication
       ? '\n\nCandidate publication tool: after creating one or more local commits and reaching a clean Candidate HEAD, call publish_candidate once. Do not run gh auth, permission, push, PR creation or PR lookup commands yourself. The Host returns the Draft PR bound to the exact HEAD. Further repair commits may call it again with the new HEAD.'
       : '';

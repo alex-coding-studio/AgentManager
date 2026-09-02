@@ -61,7 +61,7 @@ export function includeInGitHistory(file: string) {
   const parts = file.split('/');
   if (
     parts.some((part) =>
-      ['.git', '.agent-manager', '.ssh', '.gnupg', '.DS_Store'].includes(part),
+      ['.git', '.praxis', '.ssh', '.gnupg', '.DS_Store'].includes(part),
     )
   )
     return false;
@@ -126,7 +126,7 @@ export async function checkpointWorkspace(
     let totalBytes = 0;
     const title = Buffer.from(message);
     await write(
-      `commit ${ref}\ncommitter AgentManager <agent-manager@localhost> ${Math.floor(Date.now() / 1000)} +0000\ndata ${title.length}\n`,
+      `commit ${ref}\ncommitter Praxis <praxis@localhost> ${Math.floor(Date.now() / 1000)} +0000\ndata ${title.length}\n`,
     );
     await write(title);
     await write('\n');

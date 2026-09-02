@@ -1,15 +1,15 @@
-# AgentManager Product Foundation
+# Praxis Product Foundation
 
 ## Product intent
 
-AgentManager is a local-first workspace for one independent developer working
+Praxis is a local-first workspace for one independent developer working
 with AI agents. It helps grow an evolving product definition into coherent
 directions and decompose selected scopes into independently understandable,
 human-manageable units with explicit relationships.
 
-The product exists because repository documents and pull requests are good homes for durable product facts and code, but they are too heavy for frequently changing planning state. AgentManager provides the missing planning and task-graph layer without replacing the repository.
+The product exists because repository documents and pull requests are good homes for durable product facts and code, but they are too heavy for frequently changing planning state. Praxis provides the missing planning and task-graph layer without replacing the repository.
 
-AgentManager is not a project-management product. A project is only the boundary
+Praxis is not a project-management product. A project is only the boundary
 that supplies product context and local assets. The product's center is
 decomposition, dependency synchronization, and additional personal Agent
 workflows built on those two capabilities. It does not add planning ceremony for
@@ -29,7 +29,7 @@ separate from What’s Next product exploration and from Break It Down delivery 
 
 The primary user is one developer working across one or more software repositories with coding agents. The user owns product judgment and acceptance. Agents help clarify intent, decompose work, implement bounded tasks, review changes, and preserve delivery evidence.
 
-AgentManager is not being designed for a multi-user organization. Team permissions, roles, billing, shared cloud workspaces, and real-time collaborative editing are outside the product boundary.
+Praxis is not being designed for a multi-user organization. Team permissions, roles, billing, shared cloud workspaces, and real-time collaborative editing are outside the product boundary.
 
 ## Operating principles
 
@@ -38,12 +38,12 @@ AgentManager is not being designed for a multi-user organization. Team permissio
 3. The product is intended to be open source.
 4. A fresh clone can be installed and run locally using documented dependencies.
 5. Repository documents remain the source of truth for durable product behavior, architecture, code, and tests.
-6. AgentManager owns product-growth and decomposition state, graph
+6. Praxis owns product-growth and decomposition state, graph
    relationships, and—when Implementation is introduced—delivery traceability.
 7. Product facts and task-planning state must remain distinct.
-8. Every new capability must solve a problem observed while using AgentManager to build AgentManager.
+8. Every new capability must solve a problem observed while using Praxis to build Praxis.
 9. Repository documentation, product contracts, interface copy, examples, data fields, and delivery notes are written in English.
-10. AgentManager owns one fixed internal asset layout; users choose the project
+10. Praxis owns one fixed internal asset layout; users choose the project
     root but do not configure internal planning paths.
 
 The [Automation Guide](AUTOMATION_GUIDE.md) applies these principles to repeated
@@ -53,7 +53,7 @@ assuming that more scripts mean more automation.
 
 ## Self-hosting and self-iteration
 
-AgentManager is its own first real project. Its product loop is:
+Praxis is its own first real project. Its product loop is:
 
 1. Discuss an idea with an agent.
 2. Produce or revise a user-approved Product Foundation.
@@ -103,14 +103,14 @@ resolution is feasible.
 
 ## First implementation slice
 
-Before task decomposition can be tested, AgentManager needs the smallest project container.
+Before task decomposition can be tested, Praxis needs the smallest project container.
 
 The first slice only allows the user to:
 
 1. Register a local project directory.
 2. Give the project a name.
 3. Give the project a short description.
-4. See the registered project after restarting AgentManager.
+4. See the registered project after restarting Praxis.
 
 Markdown upload, Product Foundation generation, SQLite task storage, task decomposition, graph visualization, MCP access, Git synchronization, and pull-request reconciliation are explicitly deferred.
 
@@ -167,8 +167,8 @@ The fourth slice creates user-managed context for Task Decomposition:
 1. Open a dedicated Context workspace from the Task Canvas or project navigation.
 2. Save project-specific decomposition guidance as Markdown.
 3. Add, preview, and remove Markdown or JSON context attachments.
-4. Persist the feature context under the project's `.agent-manager/` directory.
-5. Keep user context independent from the future AgentManager-owned Harness.
+4. Persist the feature context under the project's `.praxis/` directory.
+5. Keep user context independent from the future Praxis-owned Harness.
 
 The Harness and Agent invocation remain outside this slice. The future Harness
 will define a high-level generation contract rather than a fixed sequence. It
@@ -184,7 +184,7 @@ The accepted pre-implementation design is recorded in
 The fifth slice turns the agreed Harness design into an executable contract
 without invoking an Agent yet:
 
-1. Compile an immutable, compact Task Decomposition Harness into AgentManager.
+1. Compile an immutable, compact Task Decomposition Harness into Praxis.
 2. Expose one machine-readable output contract for proposals, bounded
    clarifications, and insufficient-evidence results.
 3. Validate request identity, Candidate revisions, graph references, Resource
@@ -282,7 +282,7 @@ The tenth slice completes the first local Codex Agent Run loop:
    inherited Resources, explicit Run-only Resources, feature Context, graph
    map, and immutable Harness through one bounded Run package.
 2. Use the installed Codex CLI with the user's existing subscription login; do
-   not require an API key, hosted AgentManager service, or model configuration.
+   not require an API key, hosted Praxis service, or model configuration.
 3. Render a connected running card immediately and let the user cancel it,
    interrupt the local process, and restore the exact in-memory Composer input.
 4. Persist Run identity, lifecycle, provider session identity, raw usage when
@@ -444,5 +444,5 @@ Branches, pull requests, reviews, merge commits, automated gates, and human acce
 - Sprint planning or time tracking
 - General-purpose team project management
 - Replacing GitHub, repositories, or product contracts
-- Running coding agents inside a hosted AgentManager service
+- Running coding agents inside a hosted Praxis service
 - Automatic product decisions without user confirmation

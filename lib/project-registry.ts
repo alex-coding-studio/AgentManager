@@ -25,9 +25,9 @@ type Registry = {
   projects: RegisteredProject[];
 };
 
-const managerHome = process.env.AGENT_MANAGER_HOME
-  ? path.resolve(process.env.AGENT_MANAGER_HOME)
-  : path.join(homedir(), '.agent-manager');
+const managerHome = process.env.PRAXIS_HOME
+  ? path.resolve(process.env.PRAXIS_HOME)
+  : path.join(homedir(), '.praxis');
 const registryPath = path.join(managerHome, 'config.json');
 
 function emptyRegistry(): Registry {
@@ -58,9 +58,9 @@ async function ensureLocalGitExclusion(codePath: string) {
   }
   const current = await readFile(excludePath, 'utf8').catch(() => '');
   const entries = current.split(/\r?\n/).map((entry) => entry.trim());
-  if (!entries.includes('.agent-manager/')) {
+  if (!entries.includes('.praxis/')) {
     const prefix = current.length > 0 && !current.endsWith('\n') ? '\n' : '';
-    await appendFile(excludePath, `${prefix}.agent-manager/\n`);
+    await appendFile(excludePath, `${prefix}.praxis/\n`);
   }
 }
 
@@ -140,7 +140,7 @@ export async function createProject(input: {
       );
     }
 
-    const planningPath = path.join(rootPath, '.agent-manager');
+    const planningPath = path.join(rootPath, '.praxis');
     const project: RegisteredProject = {
       id: randomUUID(),
       kind: input.kind,

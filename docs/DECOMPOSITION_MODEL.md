@@ -2,7 +2,7 @@
 
 ## Status
 
-This document records AgentManager's current conceptual model for turning an
+This document records Praxis's current conceptual model for turning an
 unclear idea into durable product meaning and, when the user chooses, into
 delivered work. It defines the shared objects and operations before the
 existing navigation, Harnesses, and storage models are generalized.
@@ -37,7 +37,7 @@ The same scope can be:
   independently verifiable steps or pull requests.
 
 Further subdivision is almost always possible. That fact alone is not a reason
-to keep decomposing. AgentManager stops at the resolution that the user finds
+to keep decomposing. Praxis stops at the resolution that the user finds
 feasible for the next decision.
 
 ## Formal Nodes are shared product objects
@@ -75,7 +75,7 @@ See [Just Do It source association](JUST_DO_IT.md#goal-dashboard-and-source-asso
 
 ## Three independent operations
 
-AgentManager exposes three different questions over the same product graph.
+Praxis exposes three different questions over the same product graph.
 They are operations the user may choose, not mandatory phases in a pipeline.
 
 ### Grow with What's Next
@@ -232,7 +232,7 @@ It preserves boundaries, dependencies, provenance, and multiple lines of
 growth. A complete project document is a synthesized narrative representation
 of the same accepted meaning.
 
-AgentManager should eventually support both directions:
+Praxis should eventually support both directions:
 
 - synthesize selected or complete accepted graph content into a coherent,
   large project document; and
@@ -248,9 +248,9 @@ text or identical graph geometry.
 The synthesis action is a future capability. It is not part of the What's Next
 Harness itself.
 
-## Example: AgentManager
+## Example: Praxis
 
-`I want to build AgentManager` did not initially define the complete product.
+`I want to build Praxis` did not initially define the complete product.
 The user's strongest immediate need was to turn a large AI-generated project
 document into manageable pieces. Exploring that need made Task Decomposition a
 concrete direction.
@@ -326,6 +326,6 @@ No single size rule applies unchanged across these operations.
                           delivery evidence
 ```
 
-The graph may expand through any of these routes. AgentManager manages changing
+The graph may expand through any of these routes. Praxis manages changing
 resolution and durable relationships without prescribing one universal
 workflow.

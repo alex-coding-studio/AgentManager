@@ -5,7 +5,7 @@ Settings is reachable from the project sidebar and project-list header, includin
 before any project exists. The default is English.
 
 The preference is saved automatically to the application's `settings.json` beside
-its project registry, under `AGENT_MANAGER_HOME` or the normal local application
+its project registry, under `PRAXIS_HOME` or the normal local application
 configuration directory. It is not written to any project's planning directory.
 Invalid language writes are rejected; a missing or malformed preference falls
 back to English. Writes use atomic rename.

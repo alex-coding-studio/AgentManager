@@ -42,7 +42,7 @@ evidence-grounded cause, a changed approach within the worker's authority and th
 expected new evidence. Unavailable or uncertain remedies cannot dispatch a repair.
 The host rejects repair targets that are optional, worker-passed or explicitly waived.
 An unchanged retry is not a remedy. Unsupported host `.app` inspection must not launch
-another inspection or expand the Action into modifying AgentManager. The coordinator
+another inspection or expand the Action into modifying Praxis. The coordinator
 judges feasibility from context; schema checks enforce the declared boundary but cannot
 prove that its diagnosis is correct.
 

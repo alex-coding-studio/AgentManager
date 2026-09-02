@@ -12,7 +12,7 @@ import {
 
 const LOCAL = 'localhost:3000';
 const REGISTRY_HOME = mkdtempSync(path.join(os.tmpdir(), 'am-boundary-home-'));
-process.env.AGENT_MANAGER_HOME = REGISTRY_HOME;
+process.env.PRAXIS_HOME = REGISTRY_HOME;
 
 function withEnvironment(
   values: Record<string, string | undefined>,
@@ -62,8 +62,8 @@ void test('malformed host headers never normalize to an allowed hostname', () =>
 void test('loopback hosts are allowed and unknown hosts are rejected', () => {
   withEnvironment(
     {
-      AGENT_MANAGER_ALLOWED_HOSTS: undefined,
-      AGENT_MANAGER_ALLOWED_DEV_ORIGINS: undefined,
+      PRAXIS_ALLOWED_HOSTS: undefined,
+      PRAXIS_ALLOWED_DEV_ORIGINS: undefined,
     },
     () => {
       assert.equal(isAllowedHost('localhost:3000'), true);
@@ -79,8 +79,8 @@ void test('loopback hosts are allowed and unknown hosts are rejected', () => {
 void test('configured hostnames extend rather than replace loopback access', () => {
   withEnvironment(
     {
-      AGENT_MANAGER_ALLOWED_HOSTS: ' device.tailnet.ts.net , ',
-      AGENT_MANAGER_ALLOWED_DEV_ORIGINS: undefined,
+      PRAXIS_ALLOWED_HOSTS: ' device.tailnet.ts.net , ',
+      PRAXIS_ALLOWED_DEV_ORIGINS: undefined,
     },
     () => {
       assert.equal(isAllowedHost('device.tailnet.ts.net'), true);
@@ -94,8 +94,8 @@ void test('configured hostnames extend rather than replace loopback access', () 
 void test('the documented Tailscale development variable keeps working', () => {
   withEnvironment(
     {
-      AGENT_MANAGER_ALLOWED_HOSTS: undefined,
-      AGENT_MANAGER_ALLOWED_DEV_ORIGINS: 'device.tailnet.ts.net',
+      PRAXIS_ALLOWED_HOSTS: undefined,
+      PRAXIS_ALLOWED_DEV_ORIGINS: 'device.tailnet.ts.net',
     },
     () => {
       assert.equal(isAllowedHost('device.tailnet.ts.net'), true);
@@ -107,8 +107,8 @@ void test('the documented Tailscale development variable keeps working', () => {
 void test('forwarded headers never widen the allowed host set', () => {
   withEnvironment(
     {
-      AGENT_MANAGER_ALLOWED_HOSTS: undefined,
-      AGENT_MANAGER_ALLOWED_DEV_ORIGINS: undefined,
+      PRAXIS_ALLOWED_HOSTS: undefined,
+      PRAXIS_ALLOWED_DEV_ORIGINS: undefined,
     },
     () => {
       const request = new Request('http://localhost:3000/api/projects', {

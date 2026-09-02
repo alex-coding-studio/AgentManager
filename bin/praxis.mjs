@@ -26,7 +26,7 @@ if (
   command === 'start' &&
   !existsSync(path.join(packageRoot, '.next', 'BUILD_ID'))
 ) {
-  console.error('AgentManager has not been built yet.');
+  console.error('Praxis has not been built yet.');
   console.error(`Run: cd ${packageRoot} && npm install && npm run build`);
   process.exit(1);
 }
@@ -40,7 +40,7 @@ const nextBinary = path.join(
   'next',
 );
 if (!existsSync(nextBinary)) {
-  console.error('AgentManager dependencies are missing.');
+  console.error('Praxis dependencies are missing.');
   console.error(`Run: cd ${packageRoot} && npm install`);
   process.exit(1);
 }
@@ -53,7 +53,7 @@ const child = spawn(process.execPath, [nextBinary, nextCommand, ...args], {
 });
 
 child.on('error', (error) => {
-  console.error(`Could not start AgentManager: ${error.message}`);
+  console.error(`Could not start Praxis: ${error.message}`);
   process.exit(1);
 });
 
@@ -66,14 +66,14 @@ child.on('exit', (code, signal) => {
 });
 
 function printHelp() {
-  console.log(`AgentManager
+  console.log(`Praxis
 
 Usage:
-  agent-manager [start] [Next.js options]
-  agent-manager dev [Next.js options]
+  praxis [start] [Next.js options]
+  praxis dev [Next.js options]
 
 Examples:
-  agent-manager
-  agent-manager --port 3100
-  agent-manager dev --port 3100`);
+  praxis
+  praxis --port 3100
+  praxis dev --port 3100`);
 }
