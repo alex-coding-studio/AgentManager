@@ -78,6 +78,7 @@ type StoredDomainState = {
   schemaVersion: 1;
   model: DomainModel;
   undo: DomainSnapshot | null;
+  lastChange: DomainChange | null;
   committedRuns: Array<{
     runId: string;
     stateVersion: number;
@@ -117,7 +118,11 @@ export async function readDomainModel(project: RegisteredProject) {
 
 export async function readDomainModelView(project: RegisteredProject) {
   const state = await readDomainState(project);
-  return { model: state.model, canUndo: state.undo !== null };
+  return {
+    model: state.model,
+    canUndo: state.undo !== null,
+    lastChange: state.lastChange,
+  };
 }
 
 export async function readDomainModelCommitReceipt(
@@ -132,7 +137,9 @@ async function readDomainState(project: RegisteredProject) {
   try {
     const stored = JSON.parse(
       await readFile(await domainModelFile(project, [], 'state.json'), 'utf8'),
-    ) as StoredDomainState;
+    ) as Omit<StoredDomainState, 'lastChange'> & {
+      lastChange?: DomainChange | null;
+    };
     if (stored.schemaVersion !== 1 || !('undo' in stored))
       throw new Error('Invalid stored Domain Model state.');
     const committedRuns = Array.isArray(stored.committedRuns)
@@ -146,9 +153,19 @@ async function readDomainState(project: RegisteredProject) {
             },
           ]
         : [];
-    const state = { ...stored, committedRuns };
+    const lastChange =
+      stored.lastChange !== undefined
+        ? stored.lastChange
+        : stored.model.stateVersion > 0 &&
+            stored.model.lastRunId === null &&
+            stored.undo === null &&
+            stored.model.updatedAt
+          ? legacyUndoChange(stored.model)
+          : null;
+    const state = { ...stored, committedRuns, lastChange };
     validateStoredModel(state.model);
     validateCommitReceipts(state.committedRuns);
+    validateLastChange(state.lastChange, state.model.stateVersion);
     return state;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT')
@@ -156,6 +173,7 @@ async function readDomainState(project: RegisteredProject) {
         schemaVersion: 1,
         model: emptyDomainModel(),
         undo: null,
+        lastChange: null,
         committedRuns: [],
       } satisfies StoredDomainState;
     throw error;
@@ -207,6 +225,7 @@ export async function applyProposedDomainModel(
       schemaVersion: 1,
       model: next,
       undo: snapshot(current),
+      lastChange: change,
       committedRuns: [
         ...state.committedRuns,
         {
@@ -243,6 +262,7 @@ export async function undoLastDomainModelChange(project: RegisteredProject) {
       schemaVersion: 1,
       model: next,
       undo: null,
+      lastChange: change,
       committedRuns: state.committedRuns,
     });
     return { model: next, change, canUndo: false };
@@ -529,6 +549,37 @@ function validateCommitReceipts(receipts: StoredDomainState['committedRuns']) {
     receipts.map((item) => item.runId),
     'Domain Model committed Run identifier',
   );
+}
+
+function validateLastChange(
+  change: DomainChange | null,
+  currentStateVersion: number,
+) {
+  if (
+    change &&
+    (!['applied', 'restored'].includes(change.kind) ||
+      !Number.isSafeInteger(change.stateVersion) ||
+      change.stateVersion < 1 ||
+      change.stateVersion > currentStateVersion ||
+      typeof change.createdAt !== 'string' ||
+      !Number.isFinite(Date.parse(change.createdAt)))
+  )
+    throw new Error('Invalid last Domain Model change.');
+}
+
+function legacyUndoChange(model: DomainModel): DomainChange {
+  return {
+    kind: 'restored',
+    runId: null,
+    baseVersion: model.stateVersion - 1,
+    stateVersion: model.stateVersion,
+    instruction: 'Undo the last Domain Model change.',
+    summary: 'Undid the last Domain Model change.',
+    added: [],
+    updated: [],
+    removed: [],
+    createdAt: model.updatedAt!,
+  };
 }
 
 async function atomicJson(file: string, value: unknown) {

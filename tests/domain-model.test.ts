@@ -145,6 +145,11 @@ void test('an applied model allocates stable identities and derives self-contain
   assert.equal(derived[0].sourceEntityId, derived[0].targetEntityId);
   assert.equal(derived[0].label, 'contains');
   assert.equal(derived[0].provenance, 'derived');
+  assert.equal(
+    derived[0].meaning,
+    'Container is a Item · Container contains Item',
+  );
+  assert.doesNotMatch(derived[0].meaning, /ENTITY-/);
   assert.deepEqual(
     new Set(derived[0].derivedFrom),
     new Set(applied.model.relationships.map((item) => item.id)),
@@ -259,6 +264,10 @@ void test('a later change preserves Entity identity and undo restores the previo
     false,
   );
   assert.equal((await readDomainModel(project)).stateVersion, 3);
+  assert.equal(
+    (await readDomainModelView(project)).lastChange?.kind,
+    'restored',
+  );
   await assert.rejects(
     () => undoLastDomainModelChange(project),
     /no Domain Model change to undo/i,

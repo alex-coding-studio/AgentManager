@@ -34,6 +34,7 @@ export default async function DomainModelPage({
         initialModel={view.model}
         initialRuns={runs}
         initialCanUndo={view.canUndo}
+        initialLastChange={view.lastChange}
       />
     </ProjectShell>
   );

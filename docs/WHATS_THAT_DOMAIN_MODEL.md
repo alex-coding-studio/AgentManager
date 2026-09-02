@@ -1,7 +1,7 @@
 # What’s That? Domain Model
 
-Status: agreed product direction. This document defines the module boundary and first
-implementation slice; it does not claim that the runtime or UI exists.
+Status: first implementation slice delivered. This document defines the current module
+boundary, implemented behavior and explicitly deferred scope.
 
 ## Purpose
 
@@ -93,7 +93,7 @@ The default Agent packet contains:
 - the complete current formal Domain Model so an applied response can safely return one
   coherent replacement model;
 - the checked Entity and relationship identifiers as the primary discussion boundary;
-- the latest bounded model Summary and references to relevant earlier Runs;
+- the latest bounded model Summary;
 - the opaque current Host state token and Harness revision.
 
 It does not eagerly inject raw logs, every prior Instruction or complete provider
@@ -114,16 +114,16 @@ domain-model/runs/RUN-<uuid>/
 └── summary.md
 ```
 
-`change.json` is the Host-validated structured model change used by Latest Response and
-single-step Undo evidence. `summary.md` records the concise result, current unresolved questions and
-relevant next context. `activity.jsonl` and raw output remain local evidence and never become
-the user-facing response by default.
+`change.json` is the Host-validated structured model change used by Latest Response. The
+canonical state file owns the single internal Undo snapshot. `summary.md` records the concise
+result, current unresolved questions and relevant next context. `activity.jsonl` and the
+bounded, redacted raw output remain local evidence and never become the user-facing response
+by default.
 
-Provider Session reuse is an optimization, not the correctness boundary. A fresh Session
-receives the current model, bounded Summary and evidence references; it must not require an
-old provider transcript to understand settled meaning. A continued Session receives only
-the current Instruction, model delta, selected Context and Summary changes rather than the
-unchanged complete history.
+The current implementation starts a fresh provider Session for every Run. It receives the
+current model, bounded Summary and selected identifiers, so correctness never depends on an
+old provider transcript. Provider Session continuation remains a possible later optimization
+rather than current behavior.
 
 Summary claims retain evidence references and applicability to the current model state. User input
 and current canonical model state override stale Summary text. Later correction records a
@@ -431,8 +431,8 @@ enforces these high-level rules:
 
 1. Treat the user's current instruction as the highest modeling authority.
 2. Read the current model before adding or changing meaning.
-3. Use the current Instruction, compact model index, selected Entity definitions and
-   on-demand related Entity files as the complete first-slice Context boundary.
+3. Use the current Instruction, complete current formal model, selected identifiers and
+   latest bounded Summary as the complete first-slice Context boundary.
 4. Resolve references by stable identity and treat display names as renameable labels.
 5. Translate natural language into structured Entities, fields, relationships and
    constraints.
@@ -449,9 +449,9 @@ enforces these high-level rules:
     Finalize states.
 13. Retain the user instruction, affected identifiers and concise change summary without
     exposing private chain-of-thought.
-14. Use the compact whole-model index for discovery, selected Entity definitions as primary
-    Context and related Entity bodies on demand. Selection narrows cost but never supplies
-    relationship semantics or blocks a required consistency update.
+14. Treat selected Entity and Relationship identifiers as primary attention within the
+    complete current model. Selection never supplies relationship semantics or blocks a
+    required consistency update.
 15. Use the current bounded Summary for continuity and read detailed Run Logs only through a
     concrete evidence need. Do not reinject complete history merely because it exists.
 
@@ -553,11 +553,12 @@ The first slice succeeds when a user who does not maintain UML or database schem
 - provide the resulting model to an implementation Agent without prematurely choosing a
   storage technology in a future integration without requiring a model migration.
 
-## Remaining implementation decisions
+## Deferred measurement
 
-These choices should be settled while implementing the first real scenario rather than by
-expanding the product contract now:
+Explicit and inferred provenance stays in the property panel. Derived relationships use a
+neutral dashed edge and explain their canonical source facts in details without exposing
+internal identifiers. This distinction does not represent acceptance status.
 
-1. The smallest visual distinction between explicit, inferred and derived meaning that does
-   not resemble acceptance status.
-2. The measured topology threshold for replacing Dagre with ELK.
+Dagre remains the layout engine until real models demonstrate a repeatable topology at which
+labels, self-loops or parallel edges are no longer readable. No speculative node-count
+threshold or ELK migration is part of the current slice.
