@@ -1,4 +1,5 @@
 import type { WhatsNextRunRecord } from './whats-next-runs.ts';
+import type { DomainModelRunRecord } from './domain-model-runs.ts';
 
 export type LatestResponseTone = 'neutral' | 'attention' | 'warning' | 'error';
 
@@ -58,6 +59,50 @@ export function latestWhatsNextResponse(
       run.result?.reflection.continuationAdvice.action,
     ),
     summary: plainMarkdown(run.result?.reflection.markdown ?? ''),
+    icon: 'success',
+  };
+}
+
+export function latestDomainModelResponse(
+  run: DomainModelRunRecord,
+): LatestResponsePresentation {
+  if (run.status === 'failed')
+    return {
+      tone: 'error',
+      attention: 'action-required',
+      statusLabel: 'Failed',
+      summary: run.error?.trim() || 'The Domain Model Agent failed.',
+      icon: 'error',
+    };
+  if (run.status === 'canceled')
+    return {
+      tone: 'neutral',
+      attention: 'none',
+      statusLabel: 'Canceled',
+      summary: 'The Agent Run was canceled. The Domain Model was not changed.',
+      icon: 'neutral',
+    };
+  if (run.result?.outcome === 'clarification')
+    return {
+      tone: 'attention',
+      attention: 'action-required',
+      statusLabel: 'Answer needed',
+      summary: run.result.question,
+      icon: 'attention',
+    };
+  if (run.result?.outcome === 'no-change')
+    return {
+      tone: 'neutral',
+      attention: 'none',
+      statusLabel: 'No change',
+      summary: run.result.reason,
+      icon: 'neutral',
+    };
+  return {
+    tone: 'neutral',
+    attention: 'none',
+    statusLabel: 'Applied',
+    summary: run.result?.summary ?? 'The current Domain Model was updated.',
     icon: 'success',
   };
 }
