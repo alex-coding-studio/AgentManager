@@ -1,9 +1,8 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import {
   CheckCircle2,
-  ChevronDown,
   CircleAlert,
   CircleX,
   MinusCircle,
@@ -49,8 +48,6 @@ export function LatestResponse({
   children?: ReactNode;
 }) {
   const requiresAction = attention === 'action-required';
-  const [open, setOpen] = useState(requiresAction);
-  const expandable = Boolean(children);
   const Icon =
     icon === 'success'
       ? CheckCircle2
@@ -71,14 +68,7 @@ export function LatestResponse({
         className,
       )}
     >
-      <button
-        type="button"
-        className="w-full px-3 py-2.5 text-left focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring"
-        aria-expanded={expandable ? open : undefined}
-        onClick={() => {
-          if (expandable) setOpen((current) => !current);
-        }}
-      >
+      <div className="px-3 py-2.5">
         <span className="flex items-center gap-2 text-xs font-semibold">
           <Icon
             aria-hidden="true"
@@ -99,21 +89,12 @@ export function LatestResponse({
           >
             {statusLabel}
           </span>
-          {expandable ? (
-            <ChevronDown
-              aria-hidden="true"
-              className={cn(
-                'size-3.5 shrink-0 text-muted-foreground transition-transform',
-                open && 'rotate-180',
-              )}
-            />
-          ) : null}
         </span>
         <span className="mt-1.5 block max-h-10 overflow-hidden text-[11px] leading-5 text-muted-foreground">
           {summary}
         </span>
-      </button>
-      {open && expandable ? (
+      </div>
+      {children ? (
         <div className="border-t border-current/10 px-3 py-2.5">{children}</div>
       ) : null}
       <span className="sr-only" aria-live="polite">

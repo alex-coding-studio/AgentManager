@@ -28,6 +28,31 @@ Both modules share:
 - Intention and Motion controls; and
 - proposal working-set visibility and batch management.
 
+## Standard Agent Graph input
+
+Every Agent Graph module receives one standard Input Packet rather than defining a text-only
+request shape:
+
+```text
+instruction
+selectedContext
+contextRefs
+attachments
+profile
+moduleOperation
+```
+
+`instruction` is the user's direct language. Selected graph objects, Context Library
+documents and temporary attachments are equally valid input evidence. Attachment bodies are
+written to the Run's Context Workspace; the packet carries bounded metadata and logical and
+workspace paths instead of embedding file bodies in JSON. Markdown is the first supported
+attachment adapter, not a permanent restriction on the packet.
+
+The standard Composer presents the same order in What’s Next, Break It Down and What’s That:
+primary instruction, collapsed optional sources, Agent/model/reasoning controls and the
+primary action. A module supplies operation wording and Harness semantics without forking the
+Composer structure.
+
 Their differences belong behind those surfaces:
 
 - Core Harness: What's Next grows outward; Break It Down partitions inward.

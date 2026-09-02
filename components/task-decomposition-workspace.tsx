@@ -17,11 +17,14 @@ import {
   Pencil,
   Plus,
   SlidersHorizontal,
+  Sparkles,
   Trash2,
   Upload,
   X,
 } from 'lucide-react';
 import { AgentRunControls } from '@/components/agent-run-controls';
+import { AgentGraphComposerCard } from '@/components/agent-graph-composer-card';
+import { ContextAttachmentPicker } from '@/components/context-attachment-picker';
 import { LatestResponse } from '@/components/latest-response';
 import {
   CandidateMetadataSections,
@@ -74,7 +77,12 @@ import {
   latestTerminalTaskDecompositionRun,
 } from '@/lib/latest-response';
 import { cn } from '@/lib/utils';
-import { reconcileProposalRuns } from '@/lib/agent-graph-proposal';
+import {
+  mergeLatestCandidatePreview,
+  proposalFocusNodeIds,
+  reconcileProposalRuns,
+} from '@/lib/agent-graph-proposal';
+import { titleFromAgentGraphIdea } from '@/lib/agent-graph-source';
 
 type DecompositionRequestPreview = TaskGraphPreview & {
   contextRefs: string[];
@@ -124,6 +132,7 @@ export function TaskDecompositionWorkspace({
   const { t } = useUiText();
   const [nodes, setNodes] = useState(initialNodes);
   const [runs, setRuns] = useState(initialRuns);
+  const [startIdea, setStartIdea] = useState('');
   const [title, setTitle] = useState('');
   const [selectedRefs, setSelectedRefs] = useState<string[]>([]);
   const [selectedFolderPath, setSelectedFolderPath] = useState(
@@ -142,7 +151,7 @@ export function TaskDecompositionWorkspace({
   const [requestPreviews, setRequestPreviews] = useState<
     DecompositionRequestPreview[]
   >(() => {
-    const previews: DecompositionRequestPreview[] = initialPreviews.map(
+    let previews: DecompositionRequestPreview[] = initialPreviews.map(
       (preview) => ({
         ...preview,
         contextRefs: [],
@@ -154,8 +163,7 @@ export function TaskDecompositionWorkspace({
         run,
         initialNodes,
       )) {
-        if (!previews.some((candidate) => candidate.id === preview.id))
-          previews.push(preview);
+        previews = mergeLatestCandidatePreview(previews, preview);
       }
     }
     return previews;
@@ -180,8 +188,6 @@ export function TaskDecompositionWorkspace({
   const [requestFolderPath, setRequestFolderPath] = useState(
     folders[0]?.path ?? '',
   );
-  const [requestDragging, setRequestDragging] = useState(false);
-  const [runContextOpen, setRunContextOpen] = useState(false);
   const [requestError, setRequestError] = useState('');
   const [retainedAttachmentRefs, setRetainedAttachmentRefs] = useState<
     string[]
@@ -203,20 +209,24 @@ export function TaskDecompositionWorkspace({
   const [candidateActionError, setCandidateActionError] = useState('');
   const [error, setError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const requestFileInputRef = useRef<HTMLInputElement>(null);
   const runSnapshots = useRef(new Map<string, RunSnapshot>());
   const restoredRuns = useRef(false);
   const selectedFolder =
     folders.find((folder) => folder.path === selectedFolderPath) ?? folders[0];
-  const requestFolder =
-    folders.find((folder) => folder.path === requestFolderPath) ?? folders[0];
   const availableSourceCount = folders.reduce(
     (count, folder) =>
       count + folder.entries.filter((entry) => entry.kind === 'file').length,
     0,
   );
   const sourceCount =
-    selectedRefs.length + retainedAttachmentRefs.length + files.length;
+    selectedRefs.length +
+    retainedAttachmentRefs.length +
+    files.length +
+    Number(
+      nodes
+        .find((node) => node.id === editingId)
+        ?.resources.some((resource) => resource.kind === 'idea'),
+    );
   const selectedNode =
     nodes.find((node) => node.id === inspectorNodeId) ?? null;
   const selectedCandidatePreview =
@@ -251,30 +261,13 @@ export function TaskDecompositionWorkspace({
   const latestRunPresentation = latestRun
     ? latestTaskDecompositionResponse(latestRun)
     : null;
-  const currentCandidateIds = new Set(
-    requestPreviews
-      .filter((preview) => preview.kind === 'candidate')
-      .map((preview) => preview.id),
+  const currentCandidatePreviews = requestPreviews.filter(
+    (preview) => preview.kind === 'candidate',
   );
-  const activeProposal = [...runs]
-    .sort((left, right) => right.startedAt.localeCompare(left.startedAt))
-    .find(
-      (run) =>
-        run.status === 'proposal' &&
-        run.result?.outcome === 'proposal' &&
-        run.result.candidates.some((candidate) =>
-          currentCandidateIds.has(candidate.candidateId),
-        ),
-    );
-  const activeProposalNodeIds =
-    activeProposal?.result?.outcome === 'proposal'
-      ? [
-          activeProposal.sourceNodeId,
-          ...activeProposal.result.candidates
-            .map((candidate) => candidate.candidateId)
-            .filter((candidateId) => currentCandidateIds.has(candidateId)),
-        ]
-      : [];
+  const currentCandidateIds = new Set(
+    currentCandidatePreviews.map((preview) => preview.id),
+  );
+  const activeProposalNodeIds = proposalFocusNodeIds(currentCandidatePreviews);
   const activeProposalKey = activeProposalNodeIds.join('|');
   const fitRequest = activeProposalKey
     ? {
@@ -361,6 +354,56 @@ export function TaskDecompositionWorkspace({
     setFormOpen(false);
   }
 
+  async function beginFromIdea() {
+    const instruction = startIdea.trim();
+    if (!instruction || creating || developmentPreview) return;
+    setCreating(true);
+    setError('');
+    try {
+      const formData = new FormData();
+      formData.set('title', titleFromAgentGraphIdea(instruction));
+      formData.set('idea', instruction);
+      for (const ref of selectedRefs) formData.append('contextRefs', ref);
+      for (const file of files) formData.append('files', file);
+      const response = await fetch(`/api/projects/${projectId}/nodes`, {
+        method: 'POST',
+        body: formData,
+      });
+      const result = (await response.json()) as {
+        node?: TaskGraphNode;
+        nodes?: TaskGraphNode[];
+        error?: string;
+      };
+      if (!response.ok || !result.node || !result.nodes) {
+        setError(result.error ?? 'Could not create the Start.');
+        return;
+      }
+      setNodes(result.nodes);
+      setStartIdea('');
+      setSelectedRefs([]);
+      setFiles([]);
+      const started = await startDecompositionRun({
+        source: result.node,
+        instruction,
+        contextRefs: [],
+        files: [],
+        operation: 'propose',
+      });
+      if (!started) {
+        setDecomposeSourceId(result.node.id);
+        setDecompositionGoal(instruction);
+      }
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : 'Could not create the Start.',
+      );
+    } finally {
+      setCreating(false);
+    }
+  }
+
   function editNode(node: TaskGraphNode) {
     setEditingId(node.id);
     setTitle(node.title);
@@ -390,16 +433,6 @@ export function TaskDecompositionWorkspace({
     setFormOpen(false);
   }
 
-  function createNode() {
-    setEditingId('');
-    setTitle('');
-    setSelectedRefs([]);
-    setRetainedAttachmentRefs([]);
-    setFiles([]);
-    setError('');
-    setFormOpen(true);
-  }
-
   function openDecomposition(nodeId: string) {
     const hasExistingChildren =
       nodes.some((node) => node.derivedFrom?.includes(nodeId)) ||
@@ -412,7 +445,6 @@ export function TaskDecompositionWorkspace({
     setDecompositionGoal('');
     setRequestSelectedRefs([]);
     setRequestFiles([]);
-    setRunContextOpen(false);
     setRequestError('');
     setRevisionTarget(null);
     setRunOperation(hasExistingChildren ? 'append-candidates' : 'propose');
@@ -427,9 +459,6 @@ export function TaskDecompositionWorkspace({
     setDecompositionGoal(preview.instruction);
     setRequestSelectedRefs(preview.contextRefs);
     setRequestFiles(preview.files);
-    setRunContextOpen(
-      preview.contextRefs.length > 0 || preview.files.length > 0,
-    );
     setRequestError('');
   }
 
@@ -438,8 +467,6 @@ export function TaskDecompositionWorkspace({
     setDecompositionGoal('');
     setRequestSelectedRefs([]);
     setRequestFiles([]);
-    setRequestDragging(false);
-    setRunContextOpen(false);
     setRequestError('');
     setRevisionTarget(null);
     setRunOperation('propose');
@@ -481,83 +508,15 @@ export function TaskDecompositionWorkspace({
     const goal = decompositionGoal.trim();
     if (!decomposeSource || !goal) return;
     if (!developmentPreview) {
-      setRequestError('');
-      const snapshot: RunSnapshot = {
-        sourceNodeId: decomposeSource.id,
+      const started = await startDecompositionRun({
+        source: decomposeSource,
         instruction: goal,
-        contextRefs: [...requestSelectedRefs],
-        files: [...requestFiles],
-        revisionTarget: revisionTarget ?? undefined,
-        revisionPreview: revisionTarget
-          ? requestPreviews.find(
-              (preview) =>
-                preview.kind === 'candidate' &&
-                preview.id === revisionTarget.candidateId,
-            )
-          : undefined,
+        contextRefs: requestSelectedRefs,
+        files: requestFiles,
         operation: runOperation,
-      };
-      const formData = new FormData();
-      formData.set('sourceNodeId', decomposeSource.id);
-      formData.set('instruction', goal);
-      formData.set('agent', selectedAgent);
-      formData.set('model', agentProfile.model);
-      formData.set('effort', agentProfile.effort);
-      formData.set('operation', runOperation);
-      if (revisionTarget) {
-        formData.set('revisionRunId', revisionTarget.runId);
-        formData.set('revisionCandidateId', revisionTarget.candidateId);
-      }
-      for (const ref of requestSelectedRefs)
-        formData.append('contextRefs', ref);
-      for (const file of requestFiles) formData.append('files', file);
-      const response = await fetch(
-        `/api/projects/${projectId}/decomposition-runs`,
-        { method: 'POST', body: formData },
-      );
-      const result = (await response.json()) as {
-        run?: TaskDecompositionRunRecord;
-        error?: string;
-      };
-      if (!response.ok || !result.run) {
-        setRequestError(result.error ?? 'Could not start the Agent Run.');
-        return;
-      }
-      const run = result.run;
-      upsertRun(run);
-      runSnapshots.current.set(run.runId, snapshot);
-      const runningPreview = runPreview(
-        run,
-        snapshot,
-        decomposeSource.resources.length,
-      );
-      setRequestPreviews((current) => {
-        if (snapshot.revisionPreview && revisionTarget) {
-          return replaceRunWithPreviewsInPlace(current, run.runId, [
-            {
-              ...runningPreview,
-              id: revisionTarget.candidateId,
-              title: snapshot.revisionPreview.title,
-              description: snapshot.revisionPreview.description,
-              color: snapshot.revisionPreview.color,
-              derivedFrom: snapshot.revisionPreview.derivedFrom,
-              dependsOn: snapshot.revisionPreview.dependsOn,
-              candidate: snapshot.revisionPreview.candidate,
-              outputPath: snapshot.revisionPreview.outputPath,
-            },
-          ]);
-        }
-        return [
-          ...(runOperation === 'append-candidates'
-            ? current
-            : current.filter(
-                (candidate) => candidate.sourceNodeId !== decomposeSource.id,
-              )),
-          runningPreview,
-        ];
+        revisionTarget,
       });
-      if (revisionTarget) setFocusedNodeId('');
-      closeDecomposition();
+      if (started) closeDecomposition();
       return;
     }
     const preview: DecompositionRequestPreview = {
@@ -575,6 +534,95 @@ export function TaskDecompositionWorkspace({
       preview,
     ]);
     closeDecomposition();
+  }
+
+  async function startDecompositionRun({
+    source,
+    instruction,
+    contextRefs,
+    files,
+    operation,
+    revisionTarget: target,
+  }: {
+    source: TaskGraphNode;
+    instruction: string;
+    contextRefs: string[];
+    files: File[];
+    operation: 'propose' | 'append-candidates';
+    revisionTarget?: { runId: string; candidateId: string } | null;
+  }) {
+    setRequestError('');
+    const revisionPreview = target
+      ? requestPreviews.find(
+          (preview) =>
+            preview.kind === 'candidate' && preview.id === target.candidateId,
+        )
+      : undefined;
+    const snapshot: RunSnapshot = {
+      sourceNodeId: source.id,
+      instruction,
+      contextRefs: [...contextRefs],
+      files: [...files],
+      revisionTarget: target ?? undefined,
+      revisionPreview,
+      operation,
+    };
+    const formData = new FormData();
+    formData.set('sourceNodeId', source.id);
+    formData.set('instruction', instruction);
+    formData.set('agent', selectedAgent);
+    formData.set('model', agentProfile.model);
+    formData.set('effort', agentProfile.effort);
+    formData.set('operation', operation);
+    if (target) {
+      formData.set('revisionRunId', target.runId);
+      formData.set('revisionCandidateId', target.candidateId);
+    }
+    for (const ref of contextRefs) formData.append('contextRefs', ref);
+    for (const file of files) formData.append('files', file);
+    const response = await fetch(
+      `/api/projects/${projectId}/decomposition-runs`,
+      { method: 'POST', body: formData },
+    );
+    const result = (await response.json()) as {
+      run?: TaskDecompositionRunRecord;
+      error?: string;
+    };
+    if (!response.ok || !result.run) {
+      setRequestError(result.error ?? 'Could not start the Agent Run.');
+      return false;
+    }
+    const run = result.run;
+    upsertRun(run);
+    runSnapshots.current.set(run.runId, snapshot);
+    const runningPreview = runPreview(run, snapshot, source.resources.length);
+    setRequestPreviews((current) => {
+      if (snapshot.revisionPreview && target) {
+        return replaceRunWithPreviewsInPlace(current, run.runId, [
+          {
+            ...runningPreview,
+            id: target.candidateId,
+            title: snapshot.revisionPreview.title,
+            description: snapshot.revisionPreview.description,
+            color: snapshot.revisionPreview.color,
+            derivedFrom: snapshot.revisionPreview.derivedFrom,
+            dependsOn: snapshot.revisionPreview.dependsOn,
+            candidate: snapshot.revisionPreview.candidate,
+            outputPath: snapshot.revisionPreview.outputPath,
+          },
+        ]);
+      }
+      return [
+        ...(operation === 'append-candidates'
+          ? current
+          : current.filter(
+              (candidate) => candidate.sourceNodeId !== source.id,
+            )),
+        runningPreview,
+      ];
+    });
+    if (target) setFocusedNodeId('');
+    return true;
   }
 
   function applyRunRecord(run: TaskDecompositionRunRecord) {
@@ -671,9 +719,6 @@ export function TaskDecompositionWorkspace({
       setDecompositionGoal(snapshot.instruction);
       setRequestSelectedRefs(snapshot.contextRefs);
       setRequestFiles(snapshot.files);
-      setRunContextOpen(
-        snapshot.contextRefs.length > 0 || snapshot.files.length > 0,
-      );
       setRevisionTarget(snapshot.revisionTarget ?? null);
       setRunOperation(snapshot.operation);
     }
@@ -690,7 +735,6 @@ export function TaskDecompositionWorkspace({
     setDecompositionGoal('');
     setRequestSelectedRefs([]);
     setRequestFiles([]);
-    setRunContextOpen(false);
     setRequestError('');
     setRunOperation('propose');
     setCandidateActionError('');
@@ -883,6 +927,7 @@ export function TaskDecompositionWorkspace({
         ),
       );
     }, 1_800);
+
     return () => {
       window.clearTimeout(transitionTimeout);
       window.clearTimeout(completionTimeout);
@@ -1034,23 +1079,72 @@ export function TaskDecompositionWorkspace({
         </div>
       </header>
 
-      <div className="min-h-0 flex-1">
+      <div className="relative min-h-0 flex-1">
         <section className="relative h-[calc(100vh-10rem)] min-h-[480px] overflow-hidden">
           {nodes.length === 0 ? (
-            <div className="min-h-full bg-[radial-gradient(circle,var(--border)_1px,transparent_1px)] bg-[size:22px_22px] p-8 lg:p-12">
-              <div className="grid min-h-[440px] place-items-center">
-                <button
-                  type="button"
-                  className="grid min-h-[156px] w-72 place-items-center rounded-2xl border border-dashed border-border bg-background/80 text-muted-foreground shadow-sm transition hover:border-foreground/40 hover:bg-secondary/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
-                  aria-label={t('Create Start')}
-                  onClick={createNode}
-                >
-                  <span className="flex flex-col items-center gap-2">
-                    <Plus className="size-5" />
-                    <span className="text-xs font-medium">{t('Start')}</span>
+            <div className="min-h-full bg-[radial-gradient(circle,var(--border)_1px,transparent_1px)] bg-[size:22px_22px]">
+              <AgentGraphComposerCard
+                title={
+                  <span className="flex items-center gap-2">
+                    <Sparkles className="size-4 text-muted-foreground" />
+                    {t('What do you want to break down?')}
                   </span>
-                </button>
-              </div>
+                }
+                description={t(
+                  'Describe the scope in your own words. It becomes the Canvas Start and the first Agent instruction.',
+                )}
+              >
+                <Textarea
+                  value={startIdea}
+                  onChange={(event) => setStartIdea(event.target.value)}
+                  rows={4}
+                  maxLength={4_000}
+                  placeholder={t(
+                    'A product, feature or technical scope that should become coherent boundaries…',
+                  )}
+                  className="resize-none text-sm"
+                  aria-label={t('Decomposition scope')}
+                />
+                <p className="mt-2 text-right text-[11px] text-muted-foreground">
+                  {startIdea.trim().length}
+                  {t('/4,000 characters')}
+                </p>
+                <div className="mt-4">
+                  <ContextAttachmentPicker
+                    folders={folders}
+                    folderPath={selectedFolderPath}
+                    onFolderPath={setSelectedFolderPath}
+                    refs={selectedRefs}
+                    onToggleRef={(ref) =>
+                      toggleSource(ref, !selectedRefs.includes(ref))
+                    }
+                    files={files}
+                    onAddFiles={addFiles}
+                    onRemoveFile={(index) =>
+                      setFiles((current) =>
+                        current.filter((_, itemIndex) => itemIndex !== index),
+                      )
+                    }
+                    label={t('Optional sources')}
+                  />
+                </div>
+                <div className="mt-4">
+                  <AgentRunControls
+                    value={agentProfile}
+                    onChange={setAgentProfile}
+                    mode={developmentPreview ? 'demo' : 'live'}
+                    disabled={
+                      !startIdea.trim() || creating || developmentPreview
+                    }
+                    running={creating}
+                    actionLabel="Start and decompose"
+                    onRun={() => void beginFromIdea()}
+                  />
+                </div>
+                {error ? (
+                  <p className="mt-4 text-xs text-destructive">{error}</p>
+                ) : null}
+              </AgentGraphComposerCard>
             </div>
           ) : (
             <TaskGraphCanvas
@@ -1120,19 +1214,6 @@ export function TaskDecompositionWorkspace({
         >
           <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-2xl">
             <form onSubmit={saveTask} className="space-y-6">
-              <div>
-                <h2 className="text-sm font-semibold">
-                  {editingId
-                    ? t('Edit {id}', { id: editingId })
-                    : t('New start node')}
-                </h2>
-                <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                  {t(
-                    'Select every document needed to understand what will be decomposed.',
-                  )}
-                </p>
-              </div>
-
               <div className="space-y-2">
                 <label htmlFor="task-title" className="text-xs font-medium">
                   {t('Start-node title')}
@@ -1361,335 +1442,115 @@ export function TaskDecompositionWorkspace({
           </DialogContent>
         </Dialog>
 
-        <Dialog
-          open={decomposeSource !== null}
-          onOpenChange={(open) => {
-            if (!open) closeDecomposition();
-          }}
-        >
-          <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-2xl">
-            {decomposeSource ? (
-              <form onSubmit={previewDecomposition} className="space-y-6">
-                <div>
-                  <h2 className="text-sm font-semibold">
-                    {revisionTarget
-                      ? `Revise ${revisionTarget.candidateId}`
-                      : runOperation === 'append-candidates'
-                        ? `Extend ${decomposeSource.id}`
-                        : t('Decompose from {id}', { id: decomposeSource.id })}
-                  </h2>
-                  <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                    {revisionTarget
-                      ? t(
-                          'Redefine this Candidate only. Revisions cannot create siblings or child Nodes.',
-                        )
+        {decomposeSource ? (
+          <AgentGraphComposerCard
+            title={
+              revisionTarget
+                ? `Revise ${revisionTarget.candidateId}`
+                : runOperation === 'append-candidates'
+                  ? `Extend ${decomposeSource.id}`
+                  : t('Decompose from {id}', { id: decomposeSource.id })
+            }
+            description={
+              revisionTarget
+                ? t(
+                    'Redefine this Candidate only. Revisions cannot create siblings or child Nodes.',
+                  )
+                : runOperation === 'append-candidates'
+                  ? t(
+                      'Existing child boundaries will not be replaced. Add new evidence or guidance so {agent} can propose only genuinely new siblings.',
+                      { agent: AGENT_LABELS[selectedAgent] },
+                    )
+                  : t(
+                      'Define this round of work. Inherited Resources stay on the source Node; additions apply only to this request.',
+                    )
+            }
+            action={
+              <button
+                type="button"
+                className="text-muted-foreground transition hover:text-foreground"
+                aria-label={t('Close')}
+                onClick={closeDecomposition}
+              >
+                <X className="size-4" />
+              </button>
+            }
+          >
+            <form onSubmit={previewDecomposition} className="space-y-6">
+              <div className="space-y-2">
+                <label
+                  htmlFor="decomposition-goal"
+                  className="text-xs font-medium"
+                >
+                  {t('Instruction')}
+                </label>
+                <Textarea
+                  id="decomposition-goal"
+                  value={decompositionGoal}
+                  maxLength={1_000}
+                  placeholder={
+                    revisionTarget
+                      ? t('Describe how this Candidate itself should change.')
                       : runOperation === 'append-candidates'
                         ? t(
-                            'Existing child boundaries will not be replaced. Add new evidence or guidance so {agent} can propose only genuinely new siblings.',
-                            { agent: AGENT_LABELS[selectedAgent] },
+                            'Describe the new evidence or boundary that may require additional siblings.',
                           )
-                        : t(
-                            'Define this round of work. Inherited Resources stay on the source Node; additions apply only to this request.',
-                          )}
-                  </p>
-                </div>
+                        : 'Generate several candidate modules from this product definition.'
+                  }
+                  className="min-h-28"
+                  onChange={(event) => setDecompositionGoal(event.target.value)}
+                />
+              </div>
 
-                <div className="space-y-2">
-                  <label
-                    htmlFor="decomposition-goal"
-                    className="text-xs font-medium"
-                  >
-                    {t('Instruction')}
-                  </label>
-                  <Textarea
-                    id="decomposition-goal"
-                    value={decompositionGoal}
-                    maxLength={1_000}
-                    placeholder={
-                      revisionTarget
-                        ? t('Describe how this Candidate itself should change.')
+              <ContextAttachmentPicker
+                folders={folders}
+                folderPath={requestFolderPath}
+                onFolderPath={setRequestFolderPath}
+                refs={requestSelectedRefs}
+                onToggleRef={(ref) =>
+                  toggleRequestSource(ref, !requestSelectedRefs.includes(ref))
+                }
+                files={requestFiles}
+                onAddFiles={addRequestFiles}
+                onRemoveFile={(index) =>
+                  setRequestFiles((current) =>
+                    current.filter((_, itemIndex) => itemIndex !== index),
+                  )
+                }
+                label={t('Optional sources')}
+              />
+
+              {requestError ? (
+                <p role="alert" className="text-xs text-destructive">
+                  {requestError}
+                </p>
+              ) : null}
+
+              <div className="border-t border-border pt-5">
+                <AgentRunControls
+                  value={agentProfile}
+                  onChange={setAgentProfile}
+                  mode={developmentPreview ? 'demo' : 'live'}
+                  actionType="submit"
+                  disabled={!decompositionGoal.trim()}
+                  actionLabel={
+                    developmentPreview
+                      ? t('Create fixture request')
+                      : revisionTarget
+                        ? t('Send revision to {agent}', {
+                            agent: AGENT_LABELS[selectedAgent],
+                          })
                         : runOperation === 'append-candidates'
-                          ? t(
-                              'Describe the new evidence or boundary that may require additional siblings.',
-                            )
-                          : 'Generate several candidate modules from this product definition.'
-                    }
-                    className="min-h-28"
-                    onChange={(event) =>
-                      setDecompositionGoal(event.target.value)
-                    }
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-xs font-medium">
-                      {t('Inherited Resources')}
-                    </p>
-                    <span className="text-[10px] text-muted-foreground">
-                      {decomposeSource.resources.length}
-                    </span>
-                  </div>
-                  <div className="max-h-40 divide-y divide-border overflow-y-auto rounded-xl border border-border">
-                    {decomposeSource.resources.map((resource) => (
-                      <div
-                        key={`${resource.kind}:${resource.path}`}
-                        className="flex items-center gap-2.5 px-3 py-2.5"
-                      >
-                        <FileText className="size-3.5 shrink-0 text-muted-foreground" />
-                        <span className="min-w-0 flex-1 truncate text-[11px]">
-                          {resourceName(resource.path)}
-                        </span>
-                        <span className="text-[9px] uppercase tracking-wide text-muted-foreground">
-                          {resource.kind}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="overflow-hidden rounded-xl border border-border">
-                  <button
-                    type="button"
-                    className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-muted/40"
-                    aria-expanded={runContextOpen}
-                    onClick={() => setRunContextOpen((current) => !current)}
-                  >
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-xs font-medium">
-                        {t('Run-only context')}
-                      </span>
-                      <span className="mt-0.5 block text-[10px] text-muted-foreground">
-                        {t('Optional Resources for this Agent Run only')}
-                      </span>
-                    </span>
-                    {requestSelectedRefs.length + requestFiles.length > 0 ? (
-                      <span className="text-[10px] text-muted-foreground">
-                        {requestSelectedRefs.length + requestFiles.length}
-                      </span>
-                    ) : null}
-                    <ChevronDown
-                      className={cn(
-                        'size-3.5 text-muted-foreground transition-transform',
-                        runContextOpen && 'rotate-180',
-                      )}
-                    />
-                  </button>
-
-                  {runContextOpen ? (
-                    <div className="space-y-5 border-t border-border p-4">
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between gap-3">
-                          <p className="text-xs font-medium">
-                            {t('Additional Context Library Resources')}
-                          </p>
-                          <span className="text-[10px] text-muted-foreground">
-                            {requestSelectedRefs.length}
-                          </span>
-                        </div>
-                        <div className="relative">
-                          <select
-                            aria-label={t('Additional Resource folder')}
-                            value={requestFolder?.path ?? ''}
-                            onChange={(event) =>
-                              setRequestFolderPath(event.target.value)
-                            }
-                            className="h-10 w-full appearance-none rounded-xl border border-border bg-background px-3 pr-9 text-xs font-medium outline-none transition focus:border-ring focus:ring-3 focus:ring-ring/20"
-                          >
-                            {folders.map((folder) => {
-                              const depth = folder.path.split('/').length - 2;
-                              return (
-                                <option key={folder.path} value={folder.path}>
-                                  {`${'— '.repeat(depth)}${folder.title}`}
-                                </option>
-                              );
-                            })}
-                          </select>
-                          <ChevronDown className="pointer-events-none absolute top-1/2 right-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
-                        </div>
-                        <div className="max-h-44 divide-y divide-border overflow-y-auto rounded-xl border border-border">
-                          {!requestFolder ||
-                          requestFolder.entries.length === 0 ? (
-                            <p className="p-4 text-xs text-muted-foreground">
-                              {t('This folder is empty.')}
-                            </p>
-                          ) : (
-                            requestFolder.entries.map((entry, index) => {
-                              if (entry.kind === 'folder') {
-                                return (
-                                  <button
-                                    key={entry.path}
-                                    type="button"
-                                    className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition hover:bg-muted/50"
-                                    onClick={() =>
-                                      setRequestFolderPath(entry.path)
-                                    }
-                                  >
-                                    <Folder className="size-3.5 shrink-0" />
-                                    <span className="min-w-0 flex-1 truncate text-xs font-medium">
-                                      {entry.name}
-                                    </span>
-                                    <span className="text-[10px] text-muted-foreground">
-                                      {t('Folder')}
-                                    </span>
-                                  </button>
-                                );
-                              }
-                              const checked = requestSelectedRefs.includes(
-                                entry.path,
-                              );
-                              const inputId = `request-context-${index}`;
-                              return (
-                                <label
-                                  key={entry.path}
-                                  htmlFor={inputId}
-                                  className="flex cursor-pointer items-start gap-2.5 px-3 py-2.5 transition hover:bg-muted/50"
-                                >
-                                  <Checkbox
-                                    id={inputId}
-                                    checked={checked}
-                                    onCheckedChange={(value) =>
-                                      toggleRequestSource(
-                                        entry.path,
-                                        value === true,
-                                      )
-                                    }
-                                    aria-label={`Add ${entry.name} to this request`}
-                                    className="mt-0.5"
-                                  />
-                                  <FileText className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
-                                  <span className="min-w-0">
-                                    <span className="block truncate font-mono text-[11px] font-medium">
-                                      {entry.name}
-                                    </span>
-                                    <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
-                                      {entry.title}
-                                    </span>
-                                  </span>
-                                </label>
-                              );
-                            })
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between gap-3">
-                          <p className="text-xs font-medium">
-                            {t('Additional Local Markdown')}
-                          </p>
-                          <span className="text-[10px] text-muted-foreground">
-                            {requestFiles.length}
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          className={cn(
-                            'flex min-h-20 w-full flex-col items-center justify-center rounded-xl border border-dashed border-border px-4 py-3 text-center transition',
-                            requestDragging && 'border-foreground bg-secondary',
-                          )}
-                          onClick={() => requestFileInputRef.current?.click()}
-                          onDragEnter={(event) => {
-                            event.preventDefault();
-                            setRequestDragging(true);
-                          }}
-                          onDragOver={(event) => event.preventDefault()}
-                          onDragLeave={() => setRequestDragging(false)}
-                          onDrop={(event) => {
-                            event.preventDefault();
-                            setRequestDragging(false);
-                            addRequestFiles(
-                              Array.from(event.dataTransfer.files),
-                            );
-                          }}
-                        >
-                          <Upload className="size-4" />
-                          <span className="mt-1.5 text-xs font-medium">
-                            {t('Drop Markdown or choose files')}
-                          </span>
-                        </button>
-                        <input
-                          ref={requestFileInputRef}
-                          type="file"
-                          accept=".md,.markdown,text/markdown"
-                          multiple
-                          hidden
-                          onChange={(event) => {
-                            addRequestFiles(
-                              Array.from(event.target.files ?? []),
-                            );
-                            event.target.value = '';
-                          }}
-                        />
-                        {requestFiles.length > 0 ? (
-                          <ul className="space-y-1.5 pt-1">
-                            {requestFiles.map((file, index) => (
-                              <li
-                                key={`${file.name}:${file.size}:${file.lastModified}`}
-                                className="flex items-center gap-2 rounded-lg bg-secondary px-2.5 py-2"
-                              >
-                                <FileText className="size-3 shrink-0" />
-                                <span className="min-w-0 flex-1 truncate text-[11px]">
-                                  {file.name}
-                                </span>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon-xs"
-                                  aria-label={`Remove ${file.name}`}
-                                  title={t('Remove Resource')}
-                                  onClick={() =>
-                                    setRequestFiles((current) =>
-                                      current.filter(
-                                        (_, candidateIndex) =>
-                                          candidateIndex !== index,
-                                      ),
-                                    )
-                                  }
-                                >
-                                  <X />
-                                </Button>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : null}
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-
-                {requestError ? (
-                  <p role="alert" className="text-xs text-destructive">
-                    {requestError}
-                  </p>
-                ) : null}
-
-                <div className="border-t border-border pt-5">
-                  <AgentRunControls
-                    value={agentProfile}
-                    onChange={setAgentProfile}
-                    mode={developmentPreview ? 'demo' : 'live'}
-                    actionType="submit"
-                    disabled={!decompositionGoal.trim()}
-                    actionLabel={
-                      developmentPreview
-                        ? t('Create fixture request')
-                        : revisionTarget
-                          ? t('Send revision to {agent}', {
+                          ? t('Find additional nodes')
+                          : t('Send to {agent}', {
                               agent: AGENT_LABELS[selectedAgent],
                             })
-                          : runOperation === 'append-candidates'
-                            ? t('Find additional nodes')
-                            : t('Send to {agent}', {
-                                agent: AGENT_LABELS[selectedAgent],
-                              })
-                    }
-                  />
-                </div>
-              </form>
-            ) : null}
-          </DialogContent>
-        </Dialog>
+                  }
+                />
+              </div>
+            </form>
+          </AgentGraphComposerCard>
+        ) : null}
       </div>
 
       <Sheet
@@ -2155,6 +2016,8 @@ function taskDecompositionProposalPreviews(
         dependsOn,
         outputPath: candidateOutputPath(run.runId, candidate.candidateId),
         runId: run.runId,
+        startedAt: run.startedAt,
+        updatedAt: run.updatedAt,
       };
     });
 }

@@ -3,6 +3,7 @@ import { DomainModelWorkspace } from '@/components/domain-model-workspace';
 import { ProjectShell } from '@/components/project-shell';
 import { readDomainModelView } from '@/lib/domain-model';
 import { listLatestDomainModelRuns } from '@/lib/domain-model-runs';
+import { readContextBrowser } from '@/lib/product-context';
 import {
   getGitHubRepositoryUrl,
   getProject,
@@ -18,10 +19,11 @@ export default async function DomainModelPage({
 }) {
   const project = await getProject((await params).projectId);
   if (!project) notFound();
-  const [projects, view, runs] = await Promise.all([
+  const [projects, view, runs, folders] = await Promise.all([
     listProjects(),
     readDomainModelView(project),
     listLatestDomainModelRuns(project),
+    readContextBrowser(project),
   ]);
   return (
     <ProjectShell
@@ -35,6 +37,7 @@ export default async function DomainModelPage({
         initialRuns={runs}
         initialCanUndo={view.canUndo}
         initialLastChange={view.lastChange}
+        folders={folders}
       />
     </ProjectShell>
   );

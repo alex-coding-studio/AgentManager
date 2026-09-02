@@ -42,10 +42,10 @@ import {
 import {
   primarySourceResourcePaths,
   relatedContextNodeIds,
-  writeTaskDecompositionContextWorkspace,
+  writeAgentGraphContextWorkspace,
   type ContextWorkspaceEntry,
   type ContextWorkspaceInput,
-} from './task-decomposition-context-workspace.ts';
+} from './agent-graph-context-workspace.ts';
 import {
   candidateDependencyBlockers,
   resolveCandidateDependencies,
@@ -235,7 +235,7 @@ async function startTaskDecompositionRunUnlocked(
         }
       : undefined,
   );
-  const contextWorkspace = await writeTaskDecompositionContextWorkspace(
+  const contextWorkspace = await writeAgentGraphContextWorkspace(
     runPath,
     contextInputs,
   );

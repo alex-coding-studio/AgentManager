@@ -840,6 +840,13 @@ export const chineseUi: Record<string, string> = {
   'User-owned constraints and preferences. The feature Harness is separate and will not overwrite this file.':
     '由你管理的约束和偏好。功能 Harness 独立维护，不会覆盖此文件。',
   'What do you want to build?': '你想做一个什么样的产品？',
+  'What do you want to break down?': '你想拆解什么？',
+  'Describe the scope in your own words. It becomes the Canvas Start and the first Agent instruction.':
+    '用自己的话描述范围。它会成为画布起点和发给 Agent 的第一条指令。',
+  'A product, feature or technical scope that should become coherent boundaries…':
+    '一个需要整理成清晰边界的产品、功能或技术范围…',
+  'Decomposition scope': '拆解范围',
+  'Start and decompose': '创建起点并拆解',
   'What do you want to do with these together?': '你想如何一起使用这些内容？',
   'Describe the result you want from these cards.':
     '说明你希望这些卡片生成什么结果。',

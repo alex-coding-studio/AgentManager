@@ -67,10 +67,10 @@ import {
 import {
   primarySourceResourcePaths,
   relatedContextNodeIds,
-  writeTaskDecompositionContextWorkspace,
+  writeAgentGraphContextWorkspace,
   type ContextWorkspaceEntry,
   type ContextWorkspaceInput,
-} from './task-decomposition-context-workspace.ts';
+} from './agent-graph-context-workspace.ts';
 import {
   startLocalAgentRun,
   type LocalAgentKind,
@@ -376,7 +376,7 @@ async function startWhatsNextRunUnlocked(
       resource.logicalPath = `whats-next/runs/${runId}/resources/${name}`;
     }
   }
-  const contextWorkspace = await writeTaskDecompositionContextWorkspace(
+  const contextWorkspace = await writeAgentGraphContextWorkspace(
     runPath,
     contextInputs,
   );

@@ -222,6 +222,8 @@ void test('GraphNodeCard adapts the shared Frame instead of duplicating the shel
   );
   assert.match(source, /import \{ CanvasNodeCardFrame \}/);
   assert.match(source, /<CanvasNodeCardFrame/);
+  assert.match(source, /CircleEllipsis/);
+  assert.doesNotMatch(source, /\bInfo\b/);
   for (const shellFragment of [
     'rounded-2xl border border-t-[3px]',
     'shadow-[0_10px_30px_rgb(15_23_42/6%)]',
@@ -372,4 +374,40 @@ void test('the shared proposal workspace renders counts and named metadata secti
   assert.match(html, /aria-label="聚焦当前提案"/);
   assert.match(html, /关键规则/);
   assert.doesNotMatch(html, /<pre/);
+});
+
+void test('Latest Response keeps its full-response action visible without a disclosure step', async () => {
+  const { LatestResponse } = await import('../components/latest-response.tsx');
+  const html = renderToStaticMarkup(
+    createElement(
+      LatestResponse,
+      {
+        title: 'Latest Response',
+        statusLabel: 'No change',
+        summary: 'The current proposal already covers this boundary.',
+        tone: 'neutral',
+        attention: 'none',
+        icon: 'neutral',
+      },
+      createElement('button', { type: 'button' }, 'Open full response'),
+    ),
+  );
+  assert.match(html, /Open full response/);
+  assert.doesNotMatch(html, /aria-expanded/);
+  assert.equal((html.match(/<button/g) ?? []).length, 1);
+});
+
+void test('every Agent Graph module adopts the standard Composer and attachment input', async () => {
+  for (const file of [
+    'whats-next-workspace.tsx',
+    'task-decomposition-workspace.tsx',
+    'domain-model-workspace.tsx',
+  ]) {
+    const source = await readFile(
+      new URL(`../components/${file}`, import.meta.url),
+      'utf8',
+    );
+    assert.match(source, /AgentGraphComposerCard/, file);
+    assert.match(source, /ContextAttachmentPicker/, file);
+  }
 });
