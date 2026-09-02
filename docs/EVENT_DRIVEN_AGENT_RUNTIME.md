@@ -1,8 +1,9 @@
 # Event-Driven Agent Runtime
 
 Status: provider-neutral contract with a Codex App Server pilot for Full Access execution
-workers. Read-only planning, ordinary workspace-write execution and Claude remain on the
-legacy transport. No Claude SDK or background-job configuration is included.
+workers and a Claude CLI session driver for Claude coordinators and workspace-write Claude
+workers. Read-only planning and ordinary Codex workspace-write execution remain on the legacy
+transport. No Claude SDK or background-job configuration is included.
 
 ## Responsibility boundary
 
@@ -55,10 +56,31 @@ Coordinator physical turn. Stop interrupts the Coordinator thread, cancels the W
 prevents a late continuation.
 
 Attention is derived by the Host from the Worker's report outcome; the Worker receives no new
-tool. Activation follows the Worker pilot rule: a Codex Coordinator profile with the user's
-Full Access selection. Any other Coordinator profile, including Claude, keeps the fresh-session
-Coordinator path, which is not a push model. `lib/coordinator-events.ts` owns the event
-classification and continuation prompts.
+tool. Activation: a Codex Coordinator profile follows the Worker pilot rule (the user's Full
+Access selection); a Claude Coordinator profile always uses the Claude session driver below.
+`lib/coordinator-events.ts` owns the event classification and continuation prompts.
+
+## Claude session driver
+
+`lib/claude-session-driver.ts` implements `AgentSessionDriver` on the Claude CLI without an
+SDK dependency. A thread is one Claude session id; a physical turn is one `claude --print`
+process started with `--session-id` and continued with `--resume`. Host tools reach the model
+through a loopback MCP endpoint owned by the driver: `http://127.0.0.1:<port>/mcp/<thread>`,
+bearer token per thread, `--mcp-config` plus `--strict-mcp-config`, and `--allowedTools`
+naming only the registered `mcp__agentmanager__*` tools. A coordinator thread keeps
+`--restricted --tools Read,Glob,Grep`, so it cannot poll with a shell; a worker thread adds
+Edit, Write and Bash with `acceptEdits`.
+
+Suspension differs from Codex in one way: the Claude CLI has no turn interrupt RPC. A
+suspending tool result tells the model to end the turn with one short line; the driver waits
+for the process to exit, then starts the continuation process with `--resume`. Stop kills the
+process group. A second Host tool call while one suspension is pending is refused. Killing the
+process mid-turn is avoided during suspension so the resumed transcript keeps its tool result.
+
+The Claude worker path in `startEventDrivenWorkerRun` now uses this driver for every
+workspace-write Claude execution, with `run_job` and, when a Candidate can be published,
+`publish_candidate`. Deterministic fixtures exercise the loopback endpoint end to end with a
+fake `claude` binary; a live Claude session against this driver has not been exercised yet.
 
 ## Push execution
 
@@ -88,14 +110,14 @@ choice to Full Access. This does not broaden a read-only or workspace-write Sess
 
 ## Provider capabilities
 
-| Capability                | Codex App Server | Claude legacy |
-| ------------------------- | ---------------- | ------------- |
-| Persistent thread         | yes              | no            |
-| Push tool result          | yes              | no            |
-| Resume turn/thread        | yes              | no            |
-| Interrupt                 | yes              | yes           |
-| Suspending Host tools     | yes              | no            |
-| Coordinator resume events | yes              | no            |
+| Capability                | Codex App Server | Claude session driver           | Claude legacy |
+| ------------------------- | ---------------- | ------------------------------- | ------------- |
+| Persistent thread         | yes              | yes (`--session-id`/`--resume`) | no            |
+| Push tool result          | yes              | yes (loopback MCP)              | no            |
+| Resume turn/thread        | yes              | yes (new process)               | no            |
+| Interrupt                 | yes              | kill only                       | yes           |
+| Suspending Host tools     | yes              | yes, model ends the turn        | no            |
+| Coordinator resume events | yes              | yes                             | no            |
 
 These are adapter capabilities, not product switches. When Claude later gains an SDK or
 protocol integration, it implements `AgentSessionDriver` and the same Host tool contract.
@@ -119,7 +141,7 @@ and cannot launch the command again automatically.
 - Logs, elapsed activity and Stop remain observable while the turn waits.
 - The command is restricted to the Card worktree and a symlink/path escape is rejected.
 - One cancellation test terminates the process group and returns a canceled tool result.
-- Existing read-only, workspace-write and Claude flows remain on the legacy transport.
+- Existing read-only and Codex workspace-write flows remain on the legacy transport.
 - Broader activation remains blocked on restart recovery and provider permission parity.
 - Coordinator suspension is covered by deterministic driver and runner fixtures: dispatch through
   the Host tool, `WORKER_COMPLETED` followed by one repair, `WORKER_FAILED` without repair,

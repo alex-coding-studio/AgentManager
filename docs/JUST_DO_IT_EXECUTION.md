@@ -17,8 +17,9 @@ primary HEAD/index/main and planning-store writes denied. Full Access removes th
 OS write barriers and allows macOS simulator/device services; worktree and PR rules
 remain explicit workflow requirements. Planning remains read-only in all modes.
 Claude uses restricted mode with
-file-edit permission; shell commands requiring approval may return blocked.
-Only Codex has received the live write smoke so far. Neither mode automatically
+file-edit permission through the Claude session driver, which adds the Host `run_job` and
+`publish_candidate` tools over a loopback MCP endpoint; shell commands requiring approval may
+return blocked. Only Codex has received the live write smoke so far. Neither mode automatically
 creates a delivery repository, commits to an existing project branch, publishes
 a PR, or merges. Those are not implied
 by merely pressing Start; any repository operation must belong to the accepted
