@@ -108,6 +108,16 @@ export async function listTaskGraphNodes(
   );
 }
 
+export async function readTaskGraphNodesSnapshot<T>(
+  project: RegisteredProject,
+  graphRoot: GraphRoot,
+  read: (nodes: TaskGraphNode[]) => Promise<T>,
+) {
+  return mutateCanvas(project, graphRoot, async () =>
+    read(await listCanvasNodesWithinCanvas(project, graphRoot)),
+  );
+}
+
 async function listCanvasNodesWithinCanvas(
   project: RegisteredProject,
   graphRoot: GraphRoot,
