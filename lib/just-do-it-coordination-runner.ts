@@ -535,6 +535,10 @@ export function startCoordinatedExecution(input: {
         let deadline: ReturnType<typeof setTimeout> | undefined;
         let attempt: (typeof trace.attempts)[number] | undefined;
         let pendingPrompt = prompt;
+        const clearDeadline = () => {
+          if (deadline) clearTimeout(deadline);
+          deadline = undefined;
+        };
         const fail = (error: Error) => {
           budgetError ??= error;
           coordinatorTurn?.interrupt();
@@ -582,7 +586,7 @@ export function startCoordinatedExecution(input: {
                 redactActivity(event.summary),
               );
           } else if (event.type === 'tool-suspended') {
-            if (deadline) clearTimeout(deadline);
+            clearDeadline();
             progress(
               'dispatch',
               'Coordinator dispatched a worker; the coordination thread is suspended.',
@@ -590,7 +594,7 @@ export function startCoordinatedExecution(input: {
           } else if (event.type === 'tool-resumed') {
             pendingPrompt = continuationPrompt;
           } else if (event.type === 'turn-completed') {
-            if (deadline) clearTimeout(deadline);
+            clearDeadline();
             if (attempt) {
               attempt.endedAt = event.at;
               attempt.usage = event.usage;
@@ -603,6 +607,7 @@ export function startCoordinatedExecution(input: {
         });
         coordinatorTurn.completion.then(
           (result) => {
+            clearDeadline();
             coordinatorTurn = undefined;
             if (budgetError) {
               if (attempt) attempt.summary = budgetError.message;
@@ -620,6 +625,7 @@ export function startCoordinatedExecution(input: {
             });
           },
           (error: Error) => {
+            clearDeadline();
             coordinatorTurn = undefined;
             const cause = budgetError ?? error;
             if (attempt) attempt.summary = cause.message;

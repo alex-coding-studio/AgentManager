@@ -1086,6 +1086,9 @@ void test('WORKER_COMPLETED with unresolved checks resumes the same coordinator 
 });
 
 void test('WORKER_FAILED resumes the coordinator without a repair option and rejects a repair reply', async () => {
+  const timersBefore = process
+    .getActiveResourcesInfo()
+    .filter((resource) => resource === 'Timeout').length;
   const seen: string[] = [];
   const f = pushSetup(
     (req, turn) => {
@@ -1106,6 +1109,13 @@ void test('WORKER_FAILED resumes the coordinator without a repair option and rej
   assert.match(continuation.workerReport?.summary ?? '', /valid report/);
   assert.equal(f.workerCalls.length, 1);
   assert.equal(f.driver().closed, true);
+  assert.equal(
+    process
+      .getActiveResourcesInfo()
+      .filter((resource) => resource === 'Timeout').length,
+    timersBefore,
+    'a rejected coordination turn must not leave its deadline armed',
+  );
 });
 
 void test('WORKER_FAILED lets the coordinator return blocked with honest checks', async () => {
