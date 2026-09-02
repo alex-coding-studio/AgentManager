@@ -94,7 +94,10 @@ import {
   taskDecompositionMotionRegistry,
   type TaskDecompositionMotion,
 } from '@/lib/task-decomposition-motion';
-import { successfulRecomposeSupersededCandidateIds } from '@/lib/agent-graph-recompose';
+import {
+  successfulRecomposeOutputCandidateIds,
+  successfulRecomposeSupersededCandidateIds,
+} from '@/lib/agent-graph-recompose';
 
 type DecompositionRequestPreview = TaskGraphPreview & {
   contextRefs: string[];
@@ -268,8 +271,10 @@ export function TaskDecompositionWorkspace({
     ) ?? null;
   const selectedCandidate = selectedCandidatePreview?.candidate ?? null;
   const selectedCandidateIsRecomposeOutput = Boolean(
-    runs.find((run) => run.runId === selectedCandidatePreview?.runId)
-      ?.operation === 'recompose-candidates',
+    selectedCandidate &&
+    successfulRecomposeOutputCandidateIds(runs).has(
+      selectedCandidate.candidateId,
+    ),
   );
   const unresolvedAcceptanceDependencies = selectedCandidate
     ? unresolvedCandidateDependencies(selectedCandidate.dependsOn, nodes).map(

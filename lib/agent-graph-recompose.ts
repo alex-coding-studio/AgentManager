@@ -25,6 +25,7 @@ type RecomposeRun = {
   result?: {
     outcome: string;
     recomposition?: { effects: AgentGraphRecomposeEffect[] };
+    candidates?: Array<{ candidateId: string }>;
   } | null;
 };
 
@@ -127,6 +128,25 @@ export function successfulRecomposeSupersededCandidateIds(
       if (!retained.has(candidateId)) superseded.add(candidateId);
   }
   return superseded;
+}
+
+export function successfulRecomposeOutputCandidateIds(runs: RecomposeRun[]) {
+  const outputs = new Set<string>();
+  for (const run of runs) {
+    if (
+      run.operation !== 'recompose-candidates' ||
+      run.status !== 'proposal' ||
+      run.result?.outcome !== 'proposal' ||
+      !run.result.recomposition
+    )
+      continue;
+    for (const candidate of run.result.candidates ?? [])
+      outputs.add(candidate.candidateId);
+    for (const effect of run.result.recomposition.effects)
+      if (effect.kind === 'retain')
+        for (const candidateId of effect.to) outputs.add(candidateId);
+  }
+  return outputs;
 }
 
 function validateEffectShape(effect: AgentGraphRecomposeEffect) {

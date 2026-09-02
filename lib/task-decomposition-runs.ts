@@ -92,6 +92,7 @@ import {
 import {
   validateAgentGraphRecomposeDependencies,
   validateAgentGraphRecomposePlan,
+  successfulRecomposeOutputCandidateIds,
 } from './agent-graph-recompose.ts';
 
 export type TaskDecompositionRunStatus =
@@ -779,7 +780,8 @@ async function discardTaskDecompositionCandidateUnlocked(
   );
   if (!requestedCandidate)
     throw new PublicApiError('The Candidate could not be found.', 400);
-  if (requestedRun.operation === 'recompose-candidates')
+  const allRuns = await readAllTaskDecompositionRuns(project);
+  if (successfulRecomposeOutputCandidateIds(allRuns).has(candidateId))
     throw new PublicApiError(
       'Recompose output Candidates belong to one atomic working set and cannot be discarded individually.',
       409,
@@ -824,7 +826,7 @@ async function discardTaskDecompositionCandidateUnlocked(
     );
   }
 
-  const candidateRuns = (await readAllTaskDecompositionRuns(project)).filter(
+  const candidateRuns = allRuns.filter(
     (run) =>
       run.result?.outcome === 'proposal' &&
       run.result.candidates.some(

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  successfulRecomposeOutputCandidateIds,
   successfulRecomposeSupersededCandidateIds,
   validateAgentGraphRecomposeDependencies,
   validateAgentGraphRecomposePlan,
@@ -130,5 +131,29 @@ void test('only successful Recompose proposals supersede the previous working se
   assert.deepEqual(
     [...successfulRecomposeSupersededCandidateIds(runs)],
     ['D', 'E'],
+  );
+});
+
+void test('successful Recompose output membership includes retained and new Candidate identities', () => {
+  const runs = [
+    {
+      operation: 'recompose-candidates',
+      status: 'proposal',
+      recomposeCandidateIds: ['A', 'B'],
+      result: {
+        outcome: 'proposal',
+        candidates: [{ candidateId: 'C' }],
+        recomposition: {
+          effects: [
+            { kind: 'retain' as const, from: ['A'], to: ['A'] },
+            { kind: 'replace' as const, from: ['B'], to: ['C'] },
+          ],
+        },
+      },
+    },
+  ];
+  assert.deepEqual(
+    [...successfulRecomposeOutputCandidateIds(runs)],
+    ['C', 'A'],
   );
 });
