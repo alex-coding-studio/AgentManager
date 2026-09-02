@@ -738,6 +738,7 @@ export const chineseUi: Record<string, string> = {
   'Input from': '输入来源',
   Inputs: '输入',
   Instruction: '指令',
+  'User Input': '用户输入',
   Instructions: '说明',
   'Latest Response': '最新回答',
   'Open full response': '查看完整回答',
@@ -772,7 +773,7 @@ export const chineseUi: Record<string, string> = {
   'Optional sources': '可选资料',
   'Out Of Scope': '范围外',
   Outputs: '输出',
-  'Previous instruction': '上一轮指令',
+  'Previous User Input': '上一轮用户输入',
   'Previous outputs ·': '上一轮输出 ·',
   'Previous proposal': '上一轮提案',
   'Previous proposal context': '上一轮提案上下文',
@@ -966,8 +967,8 @@ export const chineseUi: Record<string, string> = {
   'Move this card to Trash': '将卡片移到回收站',
   'New start node': '新建起点',
   'No description yet.': '尚无说明。',
-  'No instruction was recorded for this proposal.':
-    '此提案没有记录上一轮指令。',
+  'No User Input was recorded for this proposal.':
+    '此提案没有记录上一轮用户输入。',
   'Not configured': '尚未配置',
   Nothing: '无',
   'Open output.md': '打开 output.md',
@@ -1003,7 +1004,6 @@ export const chineseUi: Record<string, string> = {
   '. Existing directions and dependencies remain unchanged.':
     '。现有方向和依赖关系保持不变。',
   '/ 100,000 characters': '/ 100,000 字符',
-  '/4,000 characters': '/4,000 字符',
   'A captured': '已记录的',
   'This removes the Markdown file from the project. The':
     '这会移除项目中的 Markdown 文件，但',

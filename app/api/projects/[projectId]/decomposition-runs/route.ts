@@ -28,14 +28,16 @@ export async function POST(
   try {
     const formData = await request.formData();
     const sourceNodeId = formData.get('sourceNodeId');
-    const input = readAgentGraphInputPacket(formData);
+    const input = readAgentGraphInputPacket(formData, {
+      instructionRequired: false,
+    });
     const revisionRunId = formData.get('revisionRunId');
     const revisionCandidateId = formData.get('revisionCandidateId');
     const operation = formData.get('operation');
     const intention = formData.get('intention');
     if (typeof sourceNodeId !== 'string') {
       return Response.json(
-        { error: 'A source Node and Instruction are required.' },
+        { error: 'A source Node is required.' },
         { status: 400 },
       );
     }

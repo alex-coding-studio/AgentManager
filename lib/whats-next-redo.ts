@@ -8,15 +8,28 @@ export type ProposalReplacement = {
   runIds: string[];
 };
 
-export function redoProposalContext(
-  plan: Pick<ReturnType<typeof redoProposalPlan>, 'histories' | 'targets'>,
+export function redoProposalInputRun(
+  plan: Pick<ReturnType<typeof redoProposalPlan>, 'histories'>,
 ) {
   const histories = [...plan.histories].sort((a, b) =>
     b.startedAt.localeCompare(a.startedAt),
   );
-  const previousRun =
-    histories.find((run) => run.operation === 'explore') ?? histories[0];
-  const instruction = previousRun?.input?.instruction ?? '';
+  return histories.find((run) => run.operation === 'explore') ?? histories[0];
+}
+
+export function redoProposalContext(
+  plan: Pick<ReturnType<typeof redoProposalPlan>, 'histories' | 'targets'>,
+  packagedUserInput?: string,
+) {
+  const histories = [...plan.histories].sort((a, b) =>
+    b.startedAt.localeCompare(a.startedAt),
+  );
+  const previousRun = redoProposalInputRun(plan);
+  const userInput =
+    packagedUserInput?.trim() ||
+    (previousRun?.input?.instruction
+      ? `# User Input\n\n${previousRun.input.instruction}`
+      : '');
   const lastResult = histories[0]?.result;
   const responseMarkdown = lastResult
     ? renderWhatsNextResponseMarkdown(lastResult)
@@ -35,10 +48,10 @@ export function redoProposalContext(
       ),
   );
   return {
-    instruction,
+    userInput,
     outputs,
     responseMarkdown,
-    markdown: `# Previous request\n\n${instruction}\n\n# Last response\n\n${responseMarkdown}${additionalOutputs.length ? `\n\n# Other current unaccepted directions\n\n${additionalOutputs.map((output) => output.markdown).join('\n\n---\n\n')}` : ''}`,
+    markdown: `# Previous User Input\n\n${userInput || '_No explicit User Input was supplied._'}\n\n# Last response\n\n${responseMarkdown}${additionalOutputs.length ? `\n\n# Other current unaccepted directions\n\n${additionalOutputs.map((output) => output.markdown).join('\n\n---\n\n')}` : ''}`,
   };
 }
 

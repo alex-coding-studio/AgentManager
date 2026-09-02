@@ -25,6 +25,57 @@ export type ContextWorkspaceManifest = {
   related: ContextWorkspaceEntry[];
 };
 
+export type AgentGraphContentPacket = {
+  input: ContextWorkspaceEntry | null;
+  references: ContextWorkspaceEntry[];
+  external: ContextWorkspaceEntry[];
+};
+
+export function userInputWorkspaceInput(
+  logicalPath: string,
+  value: string,
+): ContextWorkspaceInput | null {
+  const text = value.trim();
+  if (!text) return null;
+  return {
+    role: 'primary',
+    kind: 'user-input',
+    logicalPath,
+    content: `# User Input\n\n${text}\n`,
+  };
+}
+
+export function agentGraphContentPacket(
+  manifest: ContextWorkspaceManifest,
+): AgentGraphContentPacket {
+  const entries = [...manifest.primary, ...manifest.related];
+  const inputs = entries.filter((entry) => entry.kind === 'user-input');
+  if (inputs.length > 1)
+    throw new Error('An Agent Graph Packet can contain only one User Input.');
+  return {
+    input: inputs[0] ?? null,
+    references: entries.filter(
+      (entry) => entry.kind !== 'user-input' && entry.kind !== 'run-attachment',
+    ),
+    external: entries.filter((entry) => entry.kind === 'run-attachment'),
+  };
+}
+
+export function assembleAgentGraphWorkspaceInputs(
+  userInput: ContextWorkspaceInput | null,
+  references: ContextWorkspaceInput[],
+) {
+  if (userInput) return [userInput, ...references];
+  let promoted = false;
+  return references.map((entry) => {
+    if (!promoted && entry.kind === 'source-input') {
+      promoted = true;
+      return { ...entry, role: 'primary' as const, kind: 'user-input' };
+    }
+    return entry;
+  });
+}
+
 export function primarySourceResourcePaths(
   role: 'start' | 'node',
   resources: Array<{ kind: string; path: string }>,
@@ -130,6 +181,12 @@ function deduplicateInputs(inputs: ContextWorkspaceInput[]) {
 }
 
 function chooseWorkspacePath(input: ContextWorkspaceInput, index: number) {
+  if (input.kind === 'user-input') return 'input/user-input.md';
+  if (input.kind === 'run-attachment')
+    return path.posix.join(
+      'external',
+      `${String(index + 1).padStart(3, '0')}-${safeFileName(input.logicalPath)}`,
+    );
   if (input.role === 'primary') {
     return path.posix.join(
       'primary',

@@ -4,10 +4,76 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import {
+  agentGraphContentPacket,
+  assembleAgentGraphWorkspaceInputs,
   primarySourceResourcePaths,
   relatedContextNodeIds,
+  userInputWorkspaceInput,
   writeAgentGraphContextWorkspace,
 } from '../lib/agent-graph-context-workspace.ts';
+
+void test('promotes a Source input when a Run has no separate User Input', () => {
+  const packaged = assembleAgentGraphWorkspaceInputs(null, [
+    {
+      role: 'primary',
+      kind: 'source-input',
+      logicalPath: 'whats-next/nodes/NODE-source/resources/user-input.md',
+      content: '# Product idea',
+    },
+    {
+      role: 'related',
+      kind: 'node-output',
+      logicalPath: 'whats-next/nodes/NODE-related/output.md',
+      content: '# Related',
+    },
+  ]);
+  assert.equal(packaged[0]?.kind, 'user-input');
+  assert.equal(
+    packaged.filter((entry) => entry.kind === 'user-input').length,
+    1,
+  );
+});
+
+void test('packages User Input, references and external files as one indexed workspace', async () => {
+  const runPath = await mkdtemp(path.join(tmpdir(), 'agent-manager-packet-'));
+  const userInput = userInputWorkspaceInput(
+    'whats-next/runs/RUN-test/context/input/user-input.md',
+    'A long product request.',
+  );
+  assert.ok(userInput);
+  const workspace = await writeAgentGraphContextWorkspace(runPath, [
+    userInput,
+    {
+      role: 'primary',
+      kind: 'run-context',
+      logicalPath: 'context/Product/project.md',
+      content: '# Product',
+    },
+    {
+      role: 'primary',
+      kind: 'run-attachment',
+      logicalPath: 'whats-next/runs/RUN-test/resources/rules.md',
+      content: '# Rules',
+    },
+  ]);
+  const packet = agentGraphContentPacket(workspace.manifest);
+
+  assert.equal(packet.input?.workspacePath, 'input/user-input.md');
+  assert.deepEqual(
+    packet.references.map((entry) => entry.kind),
+    ['run-context'],
+  );
+  assert.deepEqual(
+    packet.external.map((entry) => entry.kind),
+    ['run-attachment'],
+  );
+  assert.match(packet.external[0]?.workspacePath ?? '', /^external\//);
+  assert.doesNotMatch(JSON.stringify(packet), /A long product request/);
+  assert.equal(
+    await readFile(path.join(workspace.root, 'input/user-input.md'), 'utf8'),
+    '# User Input\n\nA long product request.\n',
+  );
+});
 
 void test('uses Start Resources as primary and narrows descendants to output.md', () => {
   const resources = [

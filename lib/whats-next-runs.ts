@@ -54,6 +54,7 @@ import {
 import {
   redoProposalPlan,
   redoProposalContext,
+  redoProposalInputRun,
   type ProposalReplacement,
 } from './whats-next-redo.ts';
 import {
@@ -67,6 +68,9 @@ import {
 import {
   primarySourceResourcePaths,
   relatedContextNodeIds,
+  agentGraphContentPacket,
+  assembleAgentGraphWorkspaceInputs,
+  userInputWorkspaceInput,
   writeAgentGraphContextWorkspace,
   type ContextWorkspaceEntry,
   type ContextWorkspaceInput,
@@ -131,10 +135,14 @@ export type WhatsNextRunRecord = {
     revision: typeof WHATS_NEXT_HARNESS_REVISION;
   };
   input?: {
-    instruction: string;
-    projectInstructions: string;
+    instruction?: string;
+    userInputPath?: string | null;
+    moduleInstructionsState?: 'present' | 'cleared';
     resourcePaths: string[];
-    feedback: WhatsNextFeedbackAnchor[];
+    feedback?: WhatsNextFeedbackAnchor[];
+    feedbackAnchors?: Array<
+      Omit<WhatsNextFeedbackAnchor, 'excerpt' | 'instruction'>
+    >;
     requestArtifact: 'request.json';
     intention: WhatsNextIntention;
     motion: WhatsNextMotion;
@@ -261,20 +269,6 @@ async function startWhatsNextRunUnlocked(
       ? coordinatorCandidate
       : null;
   const continuesExistingSession = Boolean(coordinatorRun?.agentSessionId);
-  const effectiveInstruction =
-    input.instruction.trim() ||
-    (revisionTarget
-      ? 'Refine the current Candidate using the attached inline feedback.'
-      : continuesExistingSession
-        ? continuationInstruction(
-            coordinatorRun?.result?.reflection.continuationAdvice
-              .recommendedFocus,
-          )
-        : intention === 'feature-synthesis'
-          ? 'Synthesize the selected Discovery evidence into useful Product Features.'
-          : intention === 'product-design-completion'
-            ? 'Complete the known Product Design around the missing concern in the Instruction.'
-            : 'Explore useful MVP directions from the selected origin.');
   const reservedCandidateIds = await collectReservedCandidateIds(project);
   if (
     [...activeRuns.values()].some(
@@ -323,7 +317,18 @@ async function startWhatsNextRunUnlocked(
         content: resource.markdown,
       });
     }
-    const priorMarkdown = redoProposalContext(redo).markdown;
+    const previousRun = redoProposalInputRun(redo);
+    const previousUserInput = previousRun?.input?.userInputPath
+      ? await readFile(
+          path.join(
+            whatsNextRunPath(project, previousRun.runId),
+            'context',
+            previousRun.input.userInputPath,
+          ),
+          'utf8',
+        )
+      : undefined;
+    const priorMarkdown = redoProposalContext(redo, previousUserInput).markdown;
     await writeFile(
       path.join(resourcesPath, 'previous-proposal.md'),
       priorMarkdown,
@@ -361,6 +366,18 @@ async function startWhatsNextRunUnlocked(
         }
       : undefined,
   );
+  const userInput = userInputWorkspaceInput(
+    `whats-next/runs/${runId}/context/input/user-input.md`,
+    renderWhatsNextUserInput(input.instruction, input.feedback ?? []),
+  );
+  const moduleInstructions = featureContext.instructions.trim()
+    ? {
+        role: 'primary' as const,
+        kind: 'module-instructions',
+        logicalPath: 'whats-next/instructions.md',
+        content: featureContext.instructions,
+      }
+    : null;
   if (redo) {
     for (const [index, resource] of contextInputs.entries()) {
       if (
@@ -378,8 +395,12 @@ async function startWhatsNextRunUnlocked(
   }
   const contextWorkspace = await writeAgentGraphContextWorkspace(
     runPath,
-    contextInputs,
+    assembleAgentGraphWorkspaceInputs(userInput, [
+      ...(moduleInstructions ? [moduleInstructions] : []),
+      ...contextInputs,
+    ]),
   );
+  const content = agentGraphContentPacket(contextWorkspace.manifest);
   const resources = [
     ...contextWorkspace.manifest.primary,
     ...contextWorkspace.manifest.related,
@@ -405,34 +426,29 @@ async function startWhatsNextRunUnlocked(
     proposalCorrection: redo
       ? {
           intent:
-            'Redo the entire unaccepted proposal from these origins using the current Instruction as feedback. The previous proposal is evidence of what the user is correcting, not a direction to preserve. Return a new proposal, not single-card refinement. Do not modify the parent or other branches.',
+            'Redo the entire unaccepted proposal from these origins using the current User Input as feedback. The previous proposal is evidence of what the user is correcting, not a direction to preserve. Return a new proposal, not single-card refinement. Do not modify the parent or other branches.',
           previousCandidateIds: redo.candidateIds,
         }
       : undefined,
-    instruction: effectiveInstruction,
-    projectInstructions: featureContext.instructions,
+    content,
+    continuationFocus:
+      coordinatorRun?.result?.reflection.continuationAdvice.recommendedFocus ??
+      null,
+    moduleInstructionsState: moduleInstructions ? 'present' : 'cleared',
     graphMap: continuesExistingSession ? undefined : nodes.map(graphMapEntry),
     origins: sourceNodes.map(graphMapEntry),
     contextWorkspace: {
       root: contextWorkspace.root,
       indexPath: contextWorkspace.indexPath,
-      primary: contextWorkspace.manifest.primary,
-      related: contextWorkspace.manifest.related,
     },
     revisionTarget: revisionTarget
       ? createWhatsNextRevisionTarget(revisionTarget.candidate)
       : null,
-    feedback: input.feedback ?? [],
+    feedbackAnchors: (input.feedback ?? []).map(feedbackAnchorReference),
     previousProposalAliases: coordinatorRun?.result?.candidateAliases ?? {},
     reservedCandidateIds: reservedCandidateIds.filter(
       (candidateId) => candidateId !== revisionTarget?.candidate.candidateId,
     ),
-    resources: resources.map((resource) => ({
-      kind: resource.kind,
-      path: resource.logicalPath,
-      role: resource.role,
-      workspacePath: resource.workspacePath,
-    })),
   };
   requestIdentity.inputFingerprint = createHash('sha256')
     .update(JSON.stringify(packet))
@@ -480,10 +496,10 @@ async function startWhatsNextRunUnlocked(
       revision: WHATS_NEXT_HARNESS_REVISION,
     },
     input: {
-      instruction: effectiveInstruction,
-      projectInstructions: featureContext.instructions,
+      userInputPath: content.input?.workspacePath ?? null,
+      moduleInstructionsState: moduleInstructions ? 'present' : 'cleared',
       resourcePaths: resources.map((resource) => resource.logicalPath),
-      feedback: input.feedback ?? [],
+      feedbackAnchors: (input.feedback ?? []).map(feedbackAnchorReference),
       requestArtifact: 'request.json',
       intention,
       motion,
@@ -632,24 +648,6 @@ export async function readWhatsNextRun(
       activity: [...active.record.activity],
     };
   return record;
-}
-
-function continuationInstruction(
-  focus: 'clarify' | 'concretize' | 'expand' | 'compare' | 'close' | undefined,
-) {
-  if (focus === 'concretize') {
-    return 'Continue this line of inquiry exactly one semantic level more concrete. Propose user-observable product directions that validate the current meaning without repeating the principle or jumping to implementation steps.';
-  }
-  if (focus === 'clarify') {
-    return 'Continue by resolving the smallest material ambiguity that blocks honest product directions. Prefer one bounded clarification with concrete options.';
-  }
-  if (focus === 'compare') {
-    return 'Continue by making the meaningful differences and overlap between the current directions easier for the user to judge.';
-  }
-  if (focus === 'close') {
-    return 'Reassess whether this line of inquiry has sufficient clarity. Return no-change when another round would only repeat accepted meaning.';
-  }
-  return 'Continue this line of inquiry from the current accepted understanding and explore the most useful adjacent meaning at the current semantic resolution.';
 }
 
 export async function listLatestWhatsNextRuns(project: RegisteredProject) {
@@ -1143,7 +1141,10 @@ async function collectContextWorkspaceInputs(
           !continuesExistingSession && primaryPaths.has(resource.path)
             ? ('primary' as const)
             : ('related' as const),
-        kind: resource.kind,
+        kind:
+          resource.kind === 'user-input' || resource.kind === 'idea'
+            ? 'source-input'
+            : resource.kind,
         nodeId: sourceOutputPaths.has(resource.path)
           ? sourceNode.id
           : undefined,
@@ -1302,6 +1303,47 @@ async function writeRunRecord(
   await rename(temporaryPath, filePath);
 }
 
+function renderWhatsNextUserInput(
+  instruction: string,
+  feedback: WhatsNextFeedbackAnchor[],
+) {
+  const direct = instruction.trim();
+  const annotations = feedback.map(
+    (item, index) => `## Feedback ${index + 1}
+
+- Target: ${item.path}
+- Revision: ${item.baseRevision}
+- Lines: ${item.startLine}-${item.endLine}
+
+### Selected text
+
+${item.excerpt
+  .split('\n')
+  .map((line) => `> ${line}`)
+  .join('\n')}
+
+### Request
+
+${item.instruction.trim()}`,
+  );
+  return [
+    direct,
+    annotations.length
+      ? `# Inline Feedback\n\n${annotations.join('\n\n')}`
+      : '',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+}
+
+function feedbackAnchorReference({
+  excerpt: _excerpt,
+  instruction: _instruction,
+  ...reference
+}: WhatsNextFeedbackAnchor) {
+  return reference;
+}
+
 function validateRunRequest(input: RunRequest) {
   assertWhatsNextIntention(input.intention ?? 'mvp-exploration');
   assertWhatsNextMotion(input.motion ?? 'unspecified');
@@ -1338,16 +1380,7 @@ function validateRunRequest(input: RunRequest) {
     !instruction &&
     (input.feedback?.length ?? 0) === 0
   ) {
-    throw new PublicApiError(
-      'Refine requires feedback or an Instruction.',
-      400,
-    );
-  }
-  if (instruction.length > 1_000) {
-    throw new PublicApiError(
-      'The Instruction must be 1,000 characters or fewer.',
-      400,
-    );
+    throw new PublicApiError('Refine requires feedback or User Input.', 400);
   }
   if (input.contextRefs.length > 50) {
     throw new PublicApiError(

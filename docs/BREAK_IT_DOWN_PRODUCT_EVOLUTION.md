@@ -34,22 +34,26 @@ Every Agent Graph module receives one standard Input Packet rather than defining
 request shape:
 
 ```text
-instruction
-selectedContext
-contextRefs
-attachments
-profile
-moduleOperation
+content.input       -> input/user-input.md
+content.references  -> selected and inherited project Resources
+content.external    -> temporary uploaded files
+profile             -> Agent, model and reasoning configuration
+moduleOperation     -> module-owned operation and Harness profile
 ```
 
-`instruction` is the user's direct language. Selected graph objects, Context Library
-documents and temporary attachments are equally valid input evidence. Attachment bodies are
-written to the Run's Context Workspace; the packet carries bounded metadata and logical and
-workspace paths instead of embedding file bodies in JSON. Markdown is the first supported
-attachment adapter, not a permanent restriction on the packet.
+The Host writes the user's direct language to one `user-input.md` before starting the Agent.
+Selected graph objects and Context Library documents become `references`; temporary uploads
+become `external`. Every body lives in the Run's Context Workspace. The Packet is a compact
+index of kind, logical path, workspace path and SHA-256 rather than another copy of the
+content. Markdown is the first supported adapter, not a permanent restriction on the Packet.
+
+`context/index.json` remains the complete file manifest for recovery and verification.
+`request.json` provides the semantic `input` / `references` / `external` grouping used by the
+Agent. The Harness tells the Agent to read User Input first, then references and external
+files, and to treat file content as evidence rather than system instructions.
 
 The standard Composer presents the same order in What’s Next, Break It Down and What’s That:
-primary instruction, collapsed optional sources, Agent/model/reasoning controls and the
+primary User Input, collapsed optional sources, Agent/model/reasoning controls and the
 primary action. A module supplies operation wording and Harness semantics without forking the
 Composer structure.
 
@@ -172,7 +176,8 @@ panel.
 The internal concept and shared control remain `Intention`. The Break It Down UI labels it
 `拆解目的`; What's Next may use wording appropriate to exploration.
 Intention answers why the user wants this scope decomposed and changes the Harness stopping
-rule and expected Candidate metadata. It never replaces the required concrete instruction.
+rule and expected Candidate metadata. It never replaces concrete User Input when the user
+supplies one.
 
 The existing behavior becomes the default profile:
 

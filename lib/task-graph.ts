@@ -215,12 +215,6 @@ async function createStartNodeWithinCanvas(
     );
   }
   const idea = input.idea?.trim() ?? '';
-  if (idea.length > 4_000) {
-    throw new PublicApiError(
-      'The starting idea must be 4,000 characters or fewer.',
-      400,
-    );
-  }
   if (input.contextRefs.length + input.files.length === 0 && !idea) {
     throw new PublicApiError(
       'Write a starting idea, or select or upload at least one source document.',
@@ -262,13 +256,13 @@ async function createStartNodeWithinCanvas(
       const resourcesPath = path.join(temporaryNodePath, 'resources');
       await mkdir(resourcesPath, { recursive: true });
       await writeFile(
-        path.join(resourcesPath, 'idea.md'),
+        path.join(resourcesPath, 'user-input.md'),
         `# ${title}\n\n${idea}\n`,
         { flag: 'wx' },
       );
       uploadedResources.push({
         kind: 'idea',
-        path: `${graphRoot}/nodes/${id}/resources/idea.md`,
+        path: `${graphRoot}/nodes/${id}/resources/user-input.md`,
       });
     }
     if (uploads.length > 0) {
@@ -386,12 +380,6 @@ async function updateStartNodeWithinCanvas(
     );
   }
   const idea = input.idea?.trim() ?? '';
-  if (idea.length > 4_000) {
-    throw new PublicApiError(
-      'The starting idea must be 4,000 characters or fewer.',
-      400,
-    );
-  }
 
   const nodePath = path.join(
     project.planningPath,
@@ -430,7 +418,7 @@ async function updateStartNodeWithinCanvas(
     return resource;
   });
   const ideaResource = node.resources.find(
-    (resource) => resource.kind === 'idea',
+    (resource) => resource.kind === 'user-input' || resource.kind === 'idea',
   );
   if (
     contextRefs.length + retainedAttachments.length + input.files.length ===
@@ -471,7 +459,7 @@ async function updateStartNodeWithinCanvas(
     }
 
     if (idea && ideaResource) {
-      const fileName = chooseUniqueName('idea', usedNames);
+      const fileName = chooseUniqueName('user-input', usedNames);
       const absolutePath = path.join(resourcesPath, fileName);
       await writeFile(absolutePath, `# ${title}\n\n${idea}\n`, { flag: 'wx' });
       newAttachmentPaths.push(absolutePath);

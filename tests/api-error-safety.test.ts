@@ -341,7 +341,7 @@ void test('a caught Run guard keeps its exact actionable 400', async () => {
 
   assert.equal(response.status, 400);
   assert.deepEqual(await response.json(), {
-    error: 'An Instruction is required.',
+    error: 'The source Node could not be found.',
   });
 });
 
@@ -408,7 +408,7 @@ void test('deliberate request validation is still thrown as PublicApiError', asy
   const expected: Array<[string, string]> = [
     ['task-graph.ts', 'A start-node title is required.'],
     ['task-graph.ts', 'Upload no more than 20 Markdown files at once.'],
-    ['task-decomposition-runs.ts', 'An Instruction is required.'],
+    ['task-decomposition-runs.ts', 'A User Input is required.'],
     ['whats-next-runs.ts', 'Select at least one origin Node.'],
     ['project-registry.ts', 'The project path must be an existing directory.'],
     ['product-context.ts', 'Only Markdown files can be imported right now.'],

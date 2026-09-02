@@ -21,6 +21,9 @@ void test('ships the settled Reflection and Markdown Harness contract', () => {
   assert.match(WHATS_NEXT_HARNESS_PROMPT, /requiredRevision/);
   assert.match(WHATS_NEXT_HARNESS_PROMPT, /Intention owns the destination/);
   assert.match(WHATS_NEXT_HARNESS_PROMPT, /protected comparison Context/);
+  assert.match(WHATS_NEXT_HARNESS_PROMPT, /content\.input first/);
+  assert.match(WHATS_NEXT_HARNESS_PROMPT, /content\.references/);
+  assert.match(WHATS_NEXT_HARNESS_PROMPT, /content\.external/);
   assert.match(
     WHATS_NEXT_HARNESS_PROMPT,
     /When no material uncertainty remains.*- None/,

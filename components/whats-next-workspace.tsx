@@ -53,7 +53,11 @@ import type {
   WhatsNextRunRecord,
 } from '@/lib/whats-next-runs';
 import { cn } from '@/lib/utils';
-import { redoProposalPlan, redoProposalContext } from '@/lib/whats-next-redo';
+import {
+  redoProposalPlan,
+  redoProposalContext,
+  redoProposalInputRun,
+} from '@/lib/whats-next-redo';
 import type {
   WhatsNextIntention,
   WhatsNextLayer,
@@ -151,6 +155,11 @@ function WhatsNextCanvas({
   const [growSourceId, setGrowSourceId] = useState('');
   const [growInstruction, setGrowInstruction] = useState('');
   const [redoProposal, setRedoProposal] = useState(false);
+  const [redoUserInput, setRedoUserInput] = useState<{
+    key: string;
+    markdown: string;
+  } | null>(null);
+  const [loadingRedoUserInput, setLoadingRedoUserInput] = useState(false);
   const [submittingGrow, setSubmittingGrow] = useState(false);
   const [growRefs, setGrowRefs] = useState<string[]>([]);
   const [growFiles, setGrowFiles] = useState<File[]>([]);
@@ -205,18 +214,38 @@ function WhatsNextCanvas({
 
   const growSource = nodes.find((node) => node.id === growSourceId) ?? null;
   const redoBoundary = (() => {
-    if (!growSource) return { count: 0, reason: '', context: null };
+    if (!growSource)
+      return {
+        count: 0,
+        reason: '',
+        context: null,
+        inputRun: null,
+        inputKey: '',
+      };
     try {
       const plan = redoProposalPlan(nodes, runs, [growSource.id]);
+      const inputRun = redoProposalInputRun(plan) ?? null;
+      const inputKey = inputRun?.input?.userInputPath
+        ? `${inputRun.runId}:${inputRun.input.userInputPath}`
+        : '';
       return {
         count: plan.candidateIds.length,
-        context: redoProposalContext(plan),
+        context: redoProposalContext(
+          plan,
+          inputKey && redoUserInput?.key === inputKey
+            ? redoUserInput.markdown
+            : undefined,
+        ),
         reason: '',
+        inputRun,
+        inputKey,
       };
     } catch (error) {
       return {
         count: 0,
         context: null,
+        inputRun: null,
+        inputKey: '',
         reason:
           error instanceof Error ? error.message : 'Cannot redo this proposal.',
       };
@@ -547,6 +576,44 @@ function WhatsNextCanvas({
     }
   }
 
+  async function enableRedoProposal() {
+    if (redoBoundary.reason || loadingRedoUserInput) return;
+    const run = redoBoundary.inputRun;
+    const workspacePath = run?.input?.userInputPath;
+    if (run && workspacePath && redoBoundary.inputKey) {
+      setLoadingRedoUserInput(true);
+      setError('');
+      try {
+        const resourcePath = `whats-next/runs/${run.runId}/context/${workspacePath}`;
+        const response = await fetch(
+          `/api/projects/${projectId}/resources?path=${encodeURIComponent(resourcePath)}`,
+        );
+        const result = (await response.json()) as {
+          markdown?: string;
+          error?: string;
+        };
+        if (!response.ok || result.markdown === undefined)
+          throw new Error(
+            result.error ?? 'Could not read the previous User Input.',
+          );
+        setRedoUserInput({
+          key: redoBoundary.inputKey,
+          markdown: result.markdown,
+        });
+      } catch (caught) {
+        setError(
+          caught instanceof Error
+            ? caught.message
+            : 'Could not read the previous User Input.',
+        );
+        return;
+      } finally {
+        setLoadingRedoUserInput(false);
+      }
+    }
+    setRedoProposal(true);
+  }
+
   async function submitCombine() {
     if (combineIds.length < 1 || !combineInstruction.trim()) return;
     setError('');
@@ -789,7 +856,9 @@ function WhatsNextCanvas({
   }
 
   async function beginEditSource(node: TaskGraphNode) {
-    const source = node.resources.find((resource) => resource.kind === 'idea');
+    const source = node.resources.find(
+      (resource) => resource.kind === 'user-input' || resource.kind === 'idea',
+    );
     if (!source) return;
     const response = await fetch(
       `/api/projects/${projectId}/resources?path=${encodeURIComponent(source.path)}`,
@@ -913,14 +982,9 @@ function WhatsNextCanvas({
             placeholder={t(
               'A manager that helps one developer grow and decompose product intent…',
             )}
-            maxLength={4_000}
             className="mt-3 resize-none text-sm"
             aria-label={t('Your idea')}
           />
-          <p className="mt-2 text-right text-[11px] text-muted-foreground">
-            {idea.trim().length}
-            {t('/4,000 characters')}
-          </p>
           <div className="mt-4">
             <AgentGraphIntentionSelect
               profiles={whatsNextIntentionRegistry.profiles}
@@ -1091,6 +1155,7 @@ function WhatsNextCanvas({
               value={intention}
               onChange={changeIntention}
               label="Exploration purpose"
+              showDescription={false}
             />
             <label className="space-y-1 text-[10px] font-medium text-muted-foreground">
               {t('Motion')}
@@ -1106,6 +1171,13 @@ function WhatsNextCanvas({
                 <option value="converge">{t('Converge')}</option>
               </select>
             </label>
+            <p className="col-span-2 text-[10px] leading-4 text-muted-foreground">
+              {t(
+                whatsNextIntentionRegistry.profiles.find(
+                  (profile) => profile.id === intention,
+                )?.description ?? '',
+              )}
+            </p>
           </div>
 
           {intention === 'product-design-completion' ? (
@@ -1139,12 +1211,11 @@ function WhatsNextCanvas({
           </div>
 
           <label className="mt-3 block text-[10px] font-medium text-muted-foreground">
-            {t('Instruction')} · {t('required')}
+            {t('User Input')} · {t('required')}
             <Textarea
               value={combineInstruction}
               onChange={(event) => setCombineInstruction(event.target.value)}
               rows={3}
-              maxLength={1_000}
               required
               placeholder={t('Describe the result you want from these cards.')}
               className="mt-1 resize-none text-sm"
@@ -1222,8 +1293,10 @@ function WhatsNextCanvas({
                     type="button"
                     size="sm"
                     variant={redoProposal ? 'default' : 'outline'}
-                    onClick={() => setRedoProposal(true)}
-                    disabled={Boolean(redoBoundary.reason)}
+                    onClick={() => void enableRedoProposal()}
+                    disabled={
+                      Boolean(redoBoundary.reason) || loadingRedoUserInput
+                    }
                     title={
                       redoBoundary.reason ||
                       t('Redo all unaccepted directions from this parent')
@@ -1268,11 +1341,11 @@ function WhatsNextCanvas({
                   </div>
                   <div>
                     <p className="text-[11px] font-medium text-muted-foreground">
-                      {t('Previous instruction')}
+                      {t('Previous User Input')}
                     </p>
                     <p className="mt-1 max-h-40 overflow-y-auto whitespace-pre-wrap break-words text-xs leading-5">
-                      {redoBoundary.context.instruction ||
-                        t('No instruction was recorded for this proposal.')}
+                      {redoBoundary.context.userInput ||
+                        t('No User Input was recorded for this proposal.')}
                     </p>
                   </div>
                   <div className="space-y-1">
@@ -1323,7 +1396,7 @@ function WhatsNextCanvas({
                   htmlFor="whats-next-instruction"
                   className="text-xs font-medium"
                 >
-                  {redoProposal ? t('Correction') : t('Instruction')}{' '}
+                  {redoProposal ? t('Correction') : t('User Input')}{' '}
                   <span className="font-normal text-muted-foreground">
                     {redoProposal ? t('required') : t('optional')}
                   </span>
@@ -1331,7 +1404,6 @@ function WhatsNextCanvas({
                 <Textarea
                   id="whats-next-instruction"
                   value={growInstruction}
-                  maxLength={1_000}
                   placeholder={
                     redoProposal
                       ? t(
@@ -1467,15 +1539,10 @@ function WhatsNextCanvas({
                 value={editText}
                 onChange={(event) => setEditText(event.target.value)}
                 rows={10}
-                maxLength={4_000}
                 className="text-sm"
                 aria-label={t('Source Markdown')}
               />
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-[11px] text-muted-foreground">
-                  {editText.trim().length}
-                  {t('/4,000 characters')}
-                </span>
+              <div className="flex justify-end">
                 <Button
                   type="submit"
                   disabled={!editText.trim() || savingStart}
@@ -2257,7 +2324,7 @@ function lineDiff(previous: string, current: string) {
 function runToPreviews(run: WhatsNextRunRecord): TaskGraphPreview[] {
   const base = {
     sourceNodeId: run.sourceNodeIds[0] ?? '',
-    instruction: run.input?.instruction ?? '',
+    instruction: '',
     inheritedResourceCount: run.input?.resourcePaths.length ?? 0,
     additionalResourceCount: 0,
     runId: run.runId,
@@ -2276,8 +2343,7 @@ function runToPreviews(run: WhatsNextRunRecord): TaskGraphPreview[] {
         kind: 'run',
         title: run.revisionOf ? 'Refining direction' : agentLabel,
         type: run.revisionOf ? 'Refining' : 'Running',
-        description:
-          run.activity?.at(-1)?.summary ?? run.input?.instruction ?? '',
+        description: run.activity?.at(-1)?.summary ?? '',
         agentLabel,
         status: run.status,
         revisionOf: run.revisionOf,

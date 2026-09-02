@@ -13,24 +13,37 @@ void test('builds a bounded prompt with the Harness contract and request packet'
       requestId: 'REQUEST-0001',
       inputFingerprint: 'fingerprint',
     },
-    instruction: 'Propose the next-level modules.',
+    content: {
+      input: {
+        workspacePath: 'input/user-input.md',
+        sha256: 'sha256:user-input',
+      },
+      references: [],
+      external: [],
+    },
   });
 
   assert.match(prompt, /Decomposition Agent/);
   assert.match(prompt, /human-manageable resolution/);
   assert.match(prompt, /CANDIDATE-/);
   assert.match(prompt, /SESSION-0001/);
-  assert.match(prompt, /Propose the next-level modules/);
+  assert.match(prompt, /input\/user-input\.md/);
+  assert.doesNotMatch(prompt, /Propose the next-level modules/);
 });
 
 void test('builds a continuation prompt without reinjecting the Harness', () => {
   const prompt = buildTaskDecompositionContinuationPrompt({
     operation: 'append-candidates',
-    instruction: 'Consider the newly supplied constraint.',
+    content: {
+      input: { workspacePath: 'input/user-input.md' },
+      references: [],
+      external: [],
+    },
   });
 
   assert.match(prompt, /Continue the existing AgentManager/);
   assert.match(prompt, /append-candidates/);
+  assert.match(prompt, /input\/user-input\.md/);
   assert.doesNotMatch(prompt, /complete output contract/);
   assert.doesNotMatch(prompt, /Decomposition Agent/);
 });

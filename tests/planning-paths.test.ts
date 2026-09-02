@@ -51,6 +51,10 @@ const SUPPORTED_SHAPES: Array<[string, string]> = [
   ['What’s Next reflection', `whats-next/runs/${RUN}/reflection.md`],
   ['What’s Next response', `whats-next/runs/${RUN}/response.md`],
   ['What’s Next Run resource', `whats-next/runs/${RUN}/resources/a.md`],
+  [
+    'What’s Next Run User Input',
+    `whats-next/runs/${RUN}/context/input/user-input.md`,
+  ],
 ];
 
 async function planningProject(label: string) {

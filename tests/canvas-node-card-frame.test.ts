@@ -409,6 +409,8 @@ void test('every Agent Graph module adopts the standard Composer and attachment 
     );
     assert.match(source, /AgentGraphComposerCard/, file);
     assert.match(source, /ContextAttachmentPicker/, file);
+    assert.doesNotMatch(source, /maxLength=\{(?:1_000|4_000)\}/, file);
+    assert.doesNotMatch(source, /\/4,000 characters/, file);
   }
   const decomposition = await readFile(
     new URL('../components/task-decomposition-workspace.tsx', import.meta.url),

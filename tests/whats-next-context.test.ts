@@ -115,8 +115,11 @@ void test('linked module directories cannot redirect Instructions writes', async
 });
 
 void test('continued prompts explicitly replace module Instructions, including clearing', () => {
-  const prompt = buildWhatsNextContinuationPrompt({ projectInstructions: '' });
-  assert.match(prompt, /"projectInstructions": ""/);
-  assert.match(prompt, /empty string clears earlier module instructions/);
-  assert.match(prompt, /does not remove the Harness or output contract/);
+  const prompt = buildWhatsNextContinuationPrompt({
+    moduleInstructionsState: 'cleared',
+    content: { input: null, references: [], external: [] },
+  });
+  assert.match(prompt, /"moduleInstructionsState": "cleared"/);
+  assert.match(prompt, /cleared means discard earlier module instructions/);
+  assert.match(prompt, /Neither state removes the Harness or output contract/);
 });

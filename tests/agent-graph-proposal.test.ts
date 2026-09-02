@@ -6,10 +6,7 @@ import {
   reconcileProposalRuns,
 } from '../lib/agent-graph-proposal.ts';
 import { titleFromAgentGraphIdea } from '../lib/agent-graph-source.ts';
-import {
-  readAgentGraphInputPacket,
-  snapshotAgentGraphInput,
-} from '../lib/agent-graph-input.ts';
+import { readAgentGraphInputPacket } from '../lib/agent-graph-input.ts';
 
 void test('Agent Graph Sources derive a display title without losing the full idea', () => {
   const idea =
@@ -18,9 +15,10 @@ void test('Agent Graph Sources derive a display title without losing the full id
   assert.match(idea, /complete prompt/);
 });
 
-void test('the standard Agent Graph Input Packet keeps text, Context, files and profile distinct', () => {
+void test('the standard submission accepts long User Input before packaging', () => {
   const form = new FormData();
-  form.set('instruction', 'Define the Item lifecycle.');
+  const userInput = `Define the Item lifecycle.\n\n${'x'.repeat(25_000)}`;
+  form.set('instruction', userInput);
   form.set('agent', 'codex');
   form.set('model', 'gpt-5.6-luna');
   form.set('effort', 'high');
@@ -30,7 +28,7 @@ void test('the standard Agent Graph Input Packet keeps text, Context, files and 
     new File(['# Rules'], 'rules.md', { type: 'text/markdown' }),
   );
   const input = readAgentGraphInputPacket(form);
-  assert.equal(input.instruction, 'Define the Item lifecycle.');
+  assert.equal(input.instruction, userInput);
   assert.deepEqual(input.contextRefs, ['context/Product/item.md']);
   assert.equal(input.files[0]?.name, 'rules.md');
   assert.deepEqual(input.profile, {
@@ -38,9 +36,7 @@ void test('the standard Agent Graph Input Packet keeps text, Context, files and 
     model: 'gpt-5.6-luna',
     effort: 'high',
   });
-  assert.deepEqual(snapshotAgentGraphInput(input).attachments, [
-    { name: 'rules.md', type: 'text/markdown', size: 7 },
-  ]);
+  assert.equal(input.files[0]?.size, 7);
 });
 
 void test('proposal Run reconciliation removes deleted records and replaces changed ones', () => {

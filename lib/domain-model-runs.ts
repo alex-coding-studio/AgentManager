@@ -41,6 +41,8 @@ import {
 import type { RegisteredProject } from './project-registry.ts';
 import { readTaskGraphMarkdownResource } from './task-graph.ts';
 import {
+  agentGraphContentPacket,
+  userInputWorkspaceInput,
   writeAgentGraphContextWorkspace,
   type ContextWorkspaceInput,
 } from './agent-graph-context-workspace.ts';
@@ -49,7 +51,8 @@ export type DomainModelRunRecord = {
   schemaVersion: 1;
   id: string;
   status: 'running' | 'succeeded' | 'failed' | 'canceled';
-  instruction: string;
+  instruction?: string;
+  userInputPath?: string | null;
   selectedIds: string[];
   contextRefs?: string[];
   attachmentNames?: string[];
@@ -91,11 +94,8 @@ export async function startDomainModelRun(
 ) {
   validateAgentProfile(input.profile);
   const instruction = input.instruction.trim();
-  if (!instruction || Buffer.byteLength(instruction) > 20_000)
-    throw new PublicApiError(
-      'A bounded Domain Model instruction is required.',
-      400,
-    );
+  if (!instruction)
+    throw new PublicApiError('A Domain Model User Input is required.', 400);
   if (input.selectedIds.length > 20)
     throw new PublicApiError('Select no more than 20 Domain elements.', 400);
   const contextRefs = [...new Set(input.contextRefs ?? [])];
@@ -140,28 +140,36 @@ export async function startDomainModelRun(
     const previousSummary = await latestSummary(project);
     const contextPath = path.join(await runPath(project, runId), 'context');
     try {
+      const userInput = userInputWorkspaceInput(
+        `domain-model/runs/${runId}/context/input/user-input.md`,
+        instruction,
+      );
       const workspace = await writeAgentGraphContextWorkspace(
         await runPath(project, runId),
-        await domainModelContextInputs(project, runId, contextRefs, files),
+        [
+          ...(userInput ? [userInput] : []),
+          ...(await domainModelContextInputs(
+            project,
+            runId,
+            contextRefs,
+            files,
+          )),
+        ],
       );
+      const content = agentGraphContentPacket(workspace.manifest);
       const request = createDomainModelRequest({
         requestId: runId,
-        instruction,
+        content,
         selectedIds,
         model,
         previousSummary,
         contextRoot: await relativeContextRoot(project, contextPath),
-        context: workspace.manifest.primary.map((entry) => ({
-          kind: entry.kind,
-          logicalPath: entry.logicalPath,
-          workspacePath: entry.workspacePath,
-        })),
       });
       const run: DomainModelRunRecord = {
         schemaVersion: 1,
         id: runId,
         status: 'running',
-        instruction,
+        userInputPath: content.input?.workspacePath ?? null,
         selectedIds,
         contextRefs,
         attachmentNames: files.map((file) => file.name),
@@ -318,7 +326,7 @@ async function settle(
     const applied = await applyProposedDomainModel(project, {
       baseVersion: request.baseVersion,
       runId: original.id,
-      instruction: original.instruction,
+      userInputPath: original.userInputPath ?? null,
       summary: result.summary,
       proposed: result.model,
     });

@@ -351,7 +351,17 @@ void test('stale and cyclic changes fail without replacing the current model', a
 void test('the Harness binds responses to one exact model state', () => {
   const request = createDomainModelRequest({
     requestId: 'RUN-11111111-1111-4111-8111-111111111111',
-    instruction: 'Create Item and Container.',
+    content: {
+      input: {
+        role: 'primary',
+        kind: 'user-input',
+        logicalPath: 'domain-model/runs/RUN-test/context/input/user-input.md',
+        workspacePath: 'input/user-input.md',
+        sha256: 'fixture',
+      },
+      references: [],
+      external: [],
+    },
     selectedIds: [],
     model: {
       schemaVersion: 1,
@@ -366,7 +376,7 @@ void test('the Harness binds responses to one exact model state', () => {
   });
   const result = parseDomainModelResult(
     JSON.stringify({
-      harnessVersion: 1,
+      harnessVersion: 2,
       requestId: request.requestId,
       baseVersion: 0,
       inputFingerprint: request.inputFingerprint,
@@ -417,7 +427,7 @@ void test('a controlled Agent Run applies one model and cancellation changes not
         agentSessionId: 'fixture-session',
         usage: null,
         finalOutput: JSON.stringify({
-          harnessVersion: 1,
+          harnessVersion: 2,
           requestId: request.requestId,
           baseVersion: request.baseVersion,
           inputFingerprint: request.inputFingerprint,
@@ -485,7 +495,7 @@ void test('a controlled Agent Run applies one model and cancellation changes not
   );
 });
 
-void test('a Domain Model Run receives the standard text and attachment Context packet', async (t) => {
+void test('a Domain Model Run packages User Input, references and external files', async (t) => {
   const project = await fixture(t);
   const contextPath = path.join(
     project.planningPath,
@@ -511,7 +521,7 @@ void test('a Domain Model Run receives the standard text and attachment Context 
   const started = await startDomainModelRun(
     project,
     {
-      instruction: 'Use the supplied product rules.',
+      instruction: `Use the supplied product rules.\n\n${'x'.repeat(25_000)}`,
       selectedIds: [],
       profile: { agent: 'codex', model: '', effort: '' },
       contextRefs: ['context/Product/item.md'],
@@ -519,12 +529,30 @@ void test('a Domain Model Run receives the standard text and attachment Context 
     },
     hanging,
   );
-  assert.equal(request.context.length, 2);
-  assert.deepEqual(request.context.map((item) => item.kind).sort(), [
-    'context',
-    'run-attachment',
-  ]);
-  for (const item of request.context) {
+  assert.equal(request.content.input?.kind, 'user-input');
+  assert.deepEqual(
+    request.content.references.map((item) => item.kind),
+    ['context'],
+  );
+  assert.deepEqual(
+    request.content.external.map((item) => item.kind),
+    ['run-attachment'],
+  );
+  const packagedUserInput = await readFile(
+    path.join(
+      project.rootPath,
+      request.contextRoot,
+      request.content.input!.workspacePath,
+    ),
+    'utf8',
+  );
+  assert.ok(packagedUserInput.length > 25_000);
+  assert.doesNotMatch(JSON.stringify(request), /xxxxxxxxxxxxxxxx/);
+  for (const item of [
+    request.content.input!,
+    ...request.content.references,
+    ...request.content.external,
+  ]) {
     assert.ok(
       (
         await readFile(
@@ -607,7 +635,7 @@ void test('a committed model is never reported as unchanged when Run evidence fa
       agentSessionId: 'fixture-session',
       usage: null,
       finalOutput: JSON.stringify({
-        harnessVersion: 1,
+        harnessVersion: 2,
         requestId: request.requestId,
         baseVersion: request.baseVersion,
         inputFingerprint: request.inputFingerprint,
@@ -660,7 +688,7 @@ void test('a rejected Agent model retains the raw response for diagnosis', async
         agentSessionId: 'fixture-session',
         usage: null,
         finalOutput: JSON.stringify({
-          harnessVersion: 1,
+          harnessVersion: 2,
           requestId: request.requestId,
           baseVersion: request.baseVersion,
           inputFingerprint: request.inputFingerprint,

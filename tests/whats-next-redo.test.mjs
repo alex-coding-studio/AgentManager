@@ -47,6 +47,24 @@ void test('continued Runs receive current Instructions, clearing is explicit, an
           'utf8',
         ),
       );
+    const readModuleInstructions = async (run) => {
+      const request = await readPacket(run);
+      const reference = request.packet.content.references.find(
+        (entry) => entry.kind === 'module-instructions',
+      );
+      return reference
+        ? readFile(
+            path.join(
+              project.planningPath,
+              'whats-next/runs',
+              run.runId,
+              'context',
+              reference.workspacePath,
+            ),
+            'utf8',
+          )
+        : '';
+    };
     assert.equal(first.sessionId, original.sessionId);
     const actualPrompt = await readFile(
       path.join(
@@ -59,23 +77,20 @@ void test('continued Runs receive current Instructions, clearing is explicit, an
     );
     assert.match(actualPrompt, /fixture:available/);
     assert.match(actualPrompt, /not a request to invoke/);
+    assert.equal(await readModuleInstructions(first), 'Use Chinese.');
+    assert.equal(first.input.moduleInstructionsState, 'present');
     assert.equal(
-      (await readPacket(first)).packet.projectInstructions,
-      'Use Chinese.',
-    );
-    assert.equal(first.input.projectInstructions, 'Use Chinese.');
-    assert.equal(
-      (await readPacket(original)).packet.projectInstructions,
+      await readModuleInstructions(original),
       'Initial project rule.',
     );
-    assert.equal(original.input.projectInstructions, 'Initial project rule.');
+    assert.equal(original.input.moduleInstructionsState, 'present');
     const next = await finished(
       project,
       await startWhatsNextRun(project, input),
     );
     assert.equal(next.sessionId, original.sessionId);
     assert.equal(
-      (await readPacket(next)).packet.projectInstructions,
+      await readModuleInstructions(next),
       'Use concise explanations.',
     );
     await saveWhatsNextInstructions(project, '');
@@ -84,13 +99,11 @@ void test('continued Runs receive current Instructions, clearing is explicit, an
       await startWhatsNextRun(project, input),
     );
     const packet = (await readPacket(cleared)).packet;
-    assert.equal(Object.hasOwn(packet, 'projectInstructions'), true);
-    assert.equal(packet.projectInstructions, '');
+    assert.equal(Object.hasOwn(packet, 'projectInstructions'), false);
+    assert.equal(packet.moduleInstructionsState, 'cleared');
+    assert.equal(await readModuleInstructions(cleared), '');
     assert.equal(packet.graphMap, undefined);
-    assert.equal(
-      (await readPacket(first)).packet.projectInstructions,
-      'Use Chinese.',
-    );
+    assert.equal(await readModuleInstructions(first), 'Use Chinese.');
   }, 'Initial project rule.'));
 
 void test('redo keeps the proposal instruction and complete last response without duplicating current outputs', () => {
@@ -117,30 +130,36 @@ void test('redo keeps the proposal instruction and complete last response withou
       candidates: [{ outputMarkdown: '# Current A\n\nRefined output' }],
     },
   };
-  const context = redoProposalContext({
-    histories: [original, refined],
-    targets: [
-      {
-        runId: 'refined',
-        candidate: {
-          candidateId: 'a',
-          title: 'A',
-          revision: 2,
-          outputMarkdown: '# Current A\n\nRefined output',
+  const context = redoProposalContext(
+    {
+      histories: [original, refined],
+      targets: [
+        {
+          runId: 'refined',
+          candidate: {
+            candidateId: 'a',
+            title: 'A',
+            revision: 2,
+            outputMarkdown: '# Current A\n\nRefined output',
+          },
         },
-      },
-      {
-        runId: 'original',
-        candidate: {
-          candidateId: 'b',
-          title: 'B',
-          revision: 1,
-          outputMarkdown: '# Current B\n\nUnchanged sibling',
+        {
+          runId: 'original',
+          candidate: {
+            candidateId: 'b',
+            title: 'B',
+            revision: 1,
+            outputMarkdown: '# Current B\n\nUnchanged sibling',
+          },
         },
-      },
-    ],
-  });
-  assert.equal(context.instruction, 'Build a personal local website');
+      ],
+    },
+    '# User Input\n\nBuild a personal local website\n',
+  );
+  assert.equal(
+    context.userInput,
+    '# User Input\n\nBuild a personal local website',
+  );
   assert.match(context.responseMarkdown, /Last full reflection/);
   assert.match(context.responseMarkdown, /Last next-step recommendation/);
   assert.match(context.markdown, /Unchanged sibling/);
@@ -171,13 +190,14 @@ let input='';process.stdin.setEncoding('utf8');process.stdin.on('data',chunk=>in
 process.stdin.resume();process.stdin.on('end',()=>setTimeout(()=>{
  fs.writeFileSync('fixture-prompt.txt',input);
  if(process.env.REDO_TEST_MODE==='fail'){console.log(JSON.stringify({type:'turn.failed',error:{message:'Fixture failure'}}));return;}
- const {packet}=JSON.parse(fs.readFileSync('request.json','utf8'));
+	 const {packet}=JSON.parse(fs.readFileSync('request.json','utf8'));
  fs.writeFileSync('fixture-argv.json',JSON.stringify(process.argv.slice(2)));
  if(!packet.origins){console.log(JSON.stringify({type:'thread.started',thread_id:'fixture-decomposition-session'}));console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'{}'}}));console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:0,output_tokens:0}}));return;}
- const candidateBase=packet.intention==='feature-synthesis'?1000:packet.intention==='product-design-completion'?2000:0;
- const candidates=Array.from({length:packet.revisionTarget?1:(packet.motion==='converge'?1:(packet.proposalCorrection?3:2))},(_,i)=>({candidateId:packet.revisionTarget?.candidateId||('CANDIDATE-'+String(candidateBase+i+1).padStart(4,'0')),revision:packet.revisionTarget?.requiredRevision||1,type:packet.destination.artifactKind,layer:packet.destination.layer,artifactKind:packet.destination.artifactKind,title:'Direction '+(i+1),summary:'A concrete next direction.',derivedFrom:packet.origins.map(n=>n.id),dependsOn:[],resources:packet.resources.filter(r=>r.kind==='previous-proposal').map(r=>({kind:r.kind,path:r.path})),typeTemplateRef:null,metadata:{},presentation:{},assumptions:[],outputMarkdown:'# Direction '+(i+1)+'\\n\\nA concrete next direction.\\n\\n## Why this direction\\n\\n- Resolve the current uncertainty.\\n- Keep the next step bounded.\\n\\n## Assumptions\\n\\n- None'}));
+	 const candidateBase=packet.intention==='feature-synthesis'?1000:packet.intention==='product-design-completion'?2000:0;
+	 const packetResources=[...(packet.content?.references||[]),...(packet.content?.external||[])];
+	 const candidates=Array.from({length:packet.revisionTarget?1:(packet.motion==='converge'?1:(packet.proposalCorrection?3:2))},(_,i)=>({candidateId:packet.revisionTarget?.candidateId||('CANDIDATE-'+String(candidateBase+i+1).padStart(4,'0')),revision:packet.revisionTarget?.requiredRevision||1,type:packet.destination.artifactKind,layer:packet.destination.layer,artifactKind:packet.destination.artifactKind,title:'Direction '+(i+1),summary:'A concrete next direction.',derivedFrom:packet.origins.map(n=>n.id),dependsOn:[],resources:packetResources.filter(r=>r.kind==='previous-proposal').map(r=>({kind:r.kind,path:r.logicalPath})),typeTemplateRef:null,metadata:{},presentation:{},assumptions:[],outputMarkdown:'# Direction '+(i+1)+'\\n\\nA concrete next direction.\\n\\n## Why this direction\\n\\n- Resolve the current uncertainty.\\n- Keep the next step bounded.\\n\\n## Assumptions\\n\\n- None'}));
  if(process.env.REDO_TEST_MODE==='invalid-result')candidates[0].outputMarkdown='# Direction 1\\n\\nMissing required sections.';
- const result={schemaVersion:1,harness:{id:'agent-manager.whats-next',revision:7},request:packet.request,outcome:'proposal',reflection:{markdown:'The previous directions misunderstood the user.',continuationAdvice:{action:'continue',recommendedFocus:'compare',reason:'Compare the corrected choices.'}},exploration:{consideredNodeIds:packet.origins.map(n=>n.id),notes:[]},candidates};
+	 const result={schemaVersion:1,harness:{id:'agent-manager.whats-next',revision:8},request:packet.request,outcome:'proposal',reflection:{markdown:'The previous directions misunderstood the user.',continuationAdvice:{action:'continue',recommendedFocus:'compare',reason:'Compare the corrected choices.'}},exploration:{consideredNodeIds:packet.origins.map(n=>n.id),notes:[]},candidates};
  console.log(JSON.stringify({type:'thread.started',thread_id:'fixture-session'}));console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:JSON.stringify(result)}}));console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:0,output_tokens:0}}));
 },process.env.REDO_TEST_MODE==='slow'?10000:80));
 }
@@ -241,7 +261,12 @@ async function finished(project, run, reader = readWhatsNextRun) {
 
 void test('What’s Next persists the requested model, forwards CLI flags, and isolates changed profiles', async () =>
   fixture(async ({ project, input, original }) => {
-    const selected = { ...input, model: 'test-model', effort: 'high' };
+    const selected = {
+      ...input,
+      instruction: `Explore useful directions.\n\n${'x'.repeat(25_000)}`,
+      model: 'test-model',
+      effort: 'high',
+    };
     const first = await finished(
       project,
       await startWhatsNextRun(project, selected),
@@ -260,11 +285,24 @@ void test('What’s Next persists the requested model, forwards CLI flags, and i
     assert.equal(argv[argv.indexOf('--model') + 1], 'test-model');
     assert.ok(argv.includes('model_reasoning_effort="high"'));
     assert.ok(!argv.includes('resume'));
-    assert.deepEqual(
-      JSON.parse(await readFile(artifact(first, 'request.json'), 'utf8'))
-        .profile,
-      first.profile,
+    const request = JSON.parse(
+      await readFile(artifact(first, 'request.json'), 'utf8'),
     );
+    assert.deepEqual(request.profile, first.profile);
+    assert.equal(Object.hasOwn(request.packet, 'instruction'), false);
+    assert.equal(
+      request.packet.content.input.workspacePath,
+      'input/user-input.md',
+    );
+    const packagedUserInput = await readFile(
+      path.join(
+        artifact(first, 'context'),
+        request.packet.content.input.workspacePath,
+      ),
+      'utf8',
+    );
+    assert.ok(packagedUserInput.length > 25_000);
+    assert.doesNotMatch(request.prompt, /xxxxxxxxxxxxxxxx/);
     const continued = await finished(
       project,
       await startWhatsNextRun(project, selected),
@@ -285,6 +323,38 @@ void test('What’s Next persists the requested model, forwards CLI flags, and i
       () => startWhatsNextRun(project, { ...input, model: 'bad;model' }),
       /configuration/,
     );
+  }));
+
+void test('a Source-only Run promotes the Source Markdown as its User Input', async () =>
+  fixture(async ({ project, input }) => {
+    const run = await finished(
+      project,
+      await startWhatsNextRun(project, { ...input, instruction: '' }),
+    );
+    const request = JSON.parse(
+      await readFile(
+        path.join(
+          project.planningPath,
+          'whats-next/runs',
+          run.runId,
+          'request.json',
+        ),
+        'utf8',
+      ),
+    );
+    assert.equal(request.packet.content.input.kind, 'user-input');
+    assert.match(
+      request.packet.content.input.logicalPath,
+      /nodes\/NODE-[0-9a-f]+\/resources\/user-input\.md$/,
+    );
+    assert.equal(
+      request.packet.content.references.some(
+        (entry) =>
+          entry.logicalPath === request.packet.content.input.logicalPath,
+      ),
+      false,
+    );
+    assert.equal(Object.hasOwn(request.packet, 'instruction'), false);
   }));
 
 void test('Source-only Product Design Completion exposes an explicit zero-Feature readiness state', async () =>
@@ -371,12 +441,12 @@ void test('Product Design Completion injects the Source and accepted Product Des
       sourceNodeId: input.sourceNodeIds[0],
       featureNodeIds: [acceptedFeature.node.id],
     });
-    const primaryPaths = request.packet.contextWorkspace.primary.map(
+    const primaryPaths = request.packet.content.references.map(
       (entry) => entry.logicalPath,
     );
     assert.ok(
       primaryPaths.includes(
-        `whats-next/nodes/${input.sourceNodeIds[0]}/resources/idea.md`,
+        `whats-next/nodes/${input.sourceNodeIds[0]}/resources/user-input.md`,
       ),
     );
     assert.ok(
@@ -450,12 +520,40 @@ void test('Break It Down persists profiles, forwards flags, and resumes only mat
       files: [],
     });
     const source = created.node ?? created;
+    const sourceOnly = await finished(
+      project,
+      await startTaskDecompositionRun(project, {
+        sourceNodeId: source.id,
+        agent: 'codex',
+        instruction: '',
+        contextRefs: [],
+        files: [],
+        intention: 'understanding',
+      }),
+      readTaskDecompositionRun,
+    );
+    const sourceRequest = JSON.parse(
+      await readFile(
+        path.join(
+          project.planningPath,
+          'task-decomposition/runs',
+          sourceOnly.runId,
+          'request.json',
+        ),
+        'utf8',
+      ),
+    );
+    assert.equal(sourceRequest.packet.content.input.kind, 'user-input');
+    assert.match(
+      sourceRequest.packet.content.input.logicalPath,
+      /nodes\/NODE-[0-9a-f]+\/resources\/user-input\.md$/,
+    );
     const input = {
       sourceNodeId: source.id,
       agent: 'codex',
       model: 'test-model',
       effort: 'max',
-      instruction: 'Find boundaries',
+      instruction: `Find boundaries\n\n${'x'.repeat(25_000)}`,
       contextRefs: [],
       files: [],
       intention: 'delivery',
@@ -491,6 +589,18 @@ void test('Break It Down persists profiles, forwards flags, and resumes only mat
     );
     assert.deepEqual(request.profile, first.profile);
     assert.equal(request.packet.intention, 'delivery');
+    assert.equal(Object.hasOwn(request.packet, 'instruction'), false);
+    assert.equal(request.packet.content.input.kind, 'user-input');
+    assert.equal(first.input.userInputPath, 'input/user-input.md');
+    assert.ok(
+      (
+        await readFile(
+          path.join(artifact(first, 'context'), first.input.userInputPath),
+          'utf8',
+        )
+      ).length > 25_000,
+    );
+    assert.doesNotMatch(request.prompt, /xxxxxxxxxxxxxxxx/);
     assert.match(request.prompt, /INTENTION PROFILE — Delivery breakdown/);
     const continued = await finished(
       project,
@@ -541,6 +651,7 @@ void test('Re-propose trashes the previous proposal before generation and expose
         [original],
         input.sourceNodeIds,
       ),
+      `# User Input\n\n${input.instruction}\n`,
     );
     const started = await startWhatsNextRun(project, {
       ...input,
@@ -583,7 +694,7 @@ void test('Re-propose trashes the previous proposal before generation and expose
         'utf8',
       ),
     );
-    const prior = request.packet.contextWorkspace.primary.find(
+    const prior = request.packet.content.references.find(
       (resource) => resource.kind === 'previous-proposal',
     );
     assert.equal(
