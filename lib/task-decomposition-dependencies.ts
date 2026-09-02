@@ -1,3 +1,5 @@
+import { PublicApiError } from './api-errors.ts';
+
 export type AcceptedDependencyNode = {
   id: string;
   provenance?: { candidateId: string };
@@ -11,7 +13,10 @@ export function resolveCandidateDependencies(
   return dependencyIds.map((dependencyId) => {
     if (dependencyId.startsWith('NODE-')) {
       if (!nodes.some((node) => node.id === dependencyId)) {
-        throw new Error(`Dependency ${dependencyId} is no longer available.`);
+        throw new PublicApiError(
+          `Dependency ${dependencyId} is no longer available.`,
+          409,
+        );
       }
       return dependencyId;
     }
@@ -19,12 +24,24 @@ export function resolveCandidateDependencies(
       (node) => node.provenance?.candidateId === dependencyId,
     );
     if (!acceptedDependency) {
-      throw new Error(
+      throw new PublicApiError(
         `Accept ${dependencyId} before accepting ${candidateId}.`,
+        409,
       );
     }
     return acceptedDependency.id;
   });
+}
+
+export function unresolvedCandidateDependencies(
+  dependencyIds: string[],
+  nodes: AcceptedDependencyNode[],
+) {
+  return dependencyIds.filter((dependencyId) =>
+    dependencyId.startsWith('NODE-')
+      ? !nodes.some((node) => node.id === dependencyId)
+      : !nodes.some((node) => node.provenance?.candidateId === dependencyId),
+  );
 }
 
 export function candidateDependencyBlockers(

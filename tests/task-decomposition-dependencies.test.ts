@@ -3,7 +3,9 @@ import test from 'node:test';
 import {
   candidateDependencyBlockers,
   resolveCandidateDependencies,
+  unresolvedCandidateDependencies,
 } from '../lib/task-decomposition-dependencies.ts';
+import { PublicApiError } from '../lib/api-errors.ts';
 
 const nodes = [
   { id: 'NODE-00000001' },
@@ -28,7 +30,25 @@ void test('requires Candidate dependencies to be accepted first', () => {
   assert.throws(
     () =>
       resolveCandidateDependencies('CANDIDATE-0003', ['CANDIDATE-0002'], nodes),
-    /Accept CANDIDATE-0002 before accepting CANDIDATE-0003/,
+    (error: unknown) => {
+      assert.ok(error instanceof PublicApiError);
+      assert.equal(error.status, 409);
+      assert.equal(
+        error.message,
+        'Accept CANDIDATE-0002 before accepting CANDIDATE-0003.',
+      );
+      return true;
+    },
+  );
+});
+
+void test('identifies only dependencies that still prevent acceptance', () => {
+  assert.deepEqual(
+    unresolvedCandidateDependencies(
+      ['NODE-00000001', 'CANDIDATE-0001', 'CANDIDATE-0002'],
+      nodes,
+    ),
+    ['CANDIDATE-0002'],
   );
 });
 

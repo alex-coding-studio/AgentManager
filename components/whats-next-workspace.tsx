@@ -14,6 +14,7 @@ import {
 import { AgentProfileSelector } from '@/components/agent-profile-selector';
 import { AgentRunControls } from '@/components/agent-run-controls';
 import { AgentGraphComposerCard } from '@/components/agent-graph-composer-card';
+import { AgentGraphIntentionSelect } from '@/components/agent-graph-intention-select';
 import { sameModelSelection, type AgentProfile } from '@/lib/agent-profile';
 import { ContextAttachmentPicker } from '@/components/context-attachment-picker';
 import { WhatsNextContextToolbar } from '@/components/whats-next-context-toolbar';
@@ -58,7 +59,10 @@ import type {
   WhatsNextLayer,
   WhatsNextMotion,
 } from '@/lib/whats-next-intention';
-import { intentionDestination } from '@/lib/whats-next-intention';
+import {
+  intentionDestination,
+  whatsNextIntentionRegistry,
+} from '@/lib/whats-next-intention';
 import { toggleWhatsNextSelection } from '@/lib/whats-next-selection';
 import { LatestResponse } from '@/components/latest-response';
 import { latestWhatsNextResponse } from '@/lib/latest-response';
@@ -507,7 +511,7 @@ function WhatsNextCanvas({
       await startRun({
         sourceNodeIds: [payload.node.id],
         instruction: '',
-        intention: 'mvp-exploration',
+        intention,
         motion: 'unspecified',
       });
     } catch (caught) {
@@ -564,6 +568,14 @@ function WhatsNextCanvas({
     setCombineIds((current) =>
       toggleWhatsNextSelection(nodes, current, nodeId),
     );
+  }
+
+  function changeIntention(next: WhatsNextIntention) {
+    setIntention(next);
+    if (next === 'product-design-completion') {
+      setMotion('unspecified');
+      if (sharedSourceId) setCombineIds([sharedSourceId]);
+    }
   }
 
   function closeGrow() {
@@ -909,6 +921,14 @@ function WhatsNextCanvas({
             {t('/4,000 characters')}
           </p>
           <div className="mt-4">
+            <AgentGraphIntentionSelect
+              profiles={whatsNextIntentionRegistry.profiles}
+              value={intention}
+              onChange={changeIntention}
+              label="Exploration purpose"
+            />
+          </div>
+          <div className="mt-4">
             <SourcePicker
               folders={folders}
               folderPath={startFolderPath}
@@ -1065,29 +1085,12 @@ function WhatsNextCanvas({
           }
         >
           <div className="grid grid-cols-2 gap-2">
-            <label className="space-y-1 text-[10px] font-medium text-muted-foreground">
-              {t('Intention')}
-              <select
-                value={intention}
-                onChange={(event) => {
-                  const next = event.target.value as WhatsNextIntention;
-                  setIntention(next);
-                  if (next === 'product-design-completion') {
-                    setMotion('unspecified');
-                    if (sharedSourceId) setCombineIds([sharedSourceId]);
-                  }
-                }}
-                className="h-9 w-full rounded-lg border border-border bg-background px-2 text-xs text-foreground"
-              >
-                <option value="mvp-exploration">{t('MVP Exploration')}</option>
-                <option value="feature-synthesis">
-                  {t('Feature Synthesis')}
-                </option>
-                <option value="product-design-completion">
-                  {t('Product Design Completion')}
-                </option>
-              </select>
-            </label>
+            <AgentGraphIntentionSelect
+              profiles={whatsNextIntentionRegistry.profiles}
+              value={intention}
+              onChange={changeIntention}
+              label="Exploration purpose"
+            />
             <label className="space-y-1 text-[10px] font-medium text-muted-foreground">
               {t('Motion')}
               <select

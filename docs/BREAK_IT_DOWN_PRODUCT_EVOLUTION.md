@@ -1,8 +1,8 @@
 # Break It Down Product Evolution
 
-Status: shared Run infrastructure and the shared Proposal workspace are delivered. Break It
-Down's existing decomposition semantics remain the baseline while composable Harness
-profiles are introduced in later slices.
+Status: shared Run infrastructure, Proposal workspace and module-scoped Intention Profiles
+are delivered. Break It Down's existing decomposition semantics remain the default while
+Motion and Recompose stay in the final slice.
 
 ## Current product boundary
 
@@ -270,6 +270,17 @@ Delivered behavior:
 - keep `理清结构` as the default and backward-compatible behavior;
 - add profiles one at a time with fixtures and real decomposition evaluation; and
 - keep the user instruction required.
+
+Delivered behavior:
+
+- the shared registry and selection control define one Profile interface without sharing
+  Profile content across modules;
+- What’s Next owns MVP Exploration, Feature Synthesis and Product Design Completion;
+- Break It Down owns Understand the structure, Product modules, Implementation approach and
+  Delivery breakdown;
+- the selected Profile is persisted in the Run and request packet, participates in Session
+  reuse and composes into the Core Harness; and
+- Break It Down validates the metadata contract required by its selected Profile.
 
 ### Slice 4: Motion and Recompose
 

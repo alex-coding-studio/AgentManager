@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { AgentRunControls } from '@/components/agent-run-controls';
 import { AgentGraphComposerCard } from '@/components/agent-graph-composer-card';
+import { AgentGraphIntentionSelect } from '@/components/agent-graph-intention-select';
 import { ContextAttachmentPicker } from '@/components/context-attachment-picker';
 import { LatestResponse } from '@/components/latest-response';
 import {
@@ -83,10 +84,16 @@ import {
   reconcileProposalRuns,
 } from '@/lib/agent-graph-proposal';
 import { titleFromAgentGraphIdea } from '@/lib/agent-graph-source';
+import {
+  taskDecompositionIntentionRegistry,
+  type TaskDecompositionIntention,
+} from '@/lib/task-decomposition-intention';
+import { unresolvedCandidateDependencies } from '@/lib/task-decomposition-dependencies';
 
 type DecompositionRequestPreview = TaskGraphPreview & {
   contextRefs: string[];
   files: File[];
+  intention?: TaskDecompositionIntention;
 };
 
 const AGENT_LABELS: Record<LocalAgentKind, string> = {
@@ -107,6 +114,7 @@ type RunSnapshot = {
   revisionTarget?: { runId: string; candidateId: string };
   revisionPreview?: DecompositionRequestPreview;
   operation: 'propose' | 'append-candidates';
+  intention: TaskDecompositionIntention;
 };
 
 export function TaskDecompositionWorkspace({
@@ -175,6 +183,10 @@ export function TaskDecompositionWorkspace({
     model: '',
     effort: '',
   });
+  const [intention, setIntention] = useState<TaskDecompositionIntention>(
+    initialRuns.at(-1)?.intention ??
+      taskDecompositionIntentionRegistry.defaultId,
+  );
   const selectedAgent = agentProfile.agent;
   const [revisionTarget, setRevisionTarget] = useState<{
     runId: string;
@@ -235,6 +247,19 @@ export function TaskDecompositionWorkspace({
         preview.id === inspectorNodeId && preview.kind === 'candidate',
     ) ?? null;
   const selectedCandidate = selectedCandidatePreview?.candidate ?? null;
+  const unresolvedAcceptanceDependencies = selectedCandidate
+    ? unresolvedCandidateDependencies(selectedCandidate.dependsOn, nodes).map(
+        (dependencyId) => {
+          const preview = requestPreviews.find(
+            (candidate) => candidate.id === dependencyId,
+          );
+          return {
+            id: dependencyId,
+            title: preview?.title ?? dependencyId,
+          };
+        },
+      )
+    : [];
   const selectedCandidateIsRevising = selectedCandidate
     ? requestPreviews.some(
         (preview) =>
@@ -388,6 +413,7 @@ export function TaskDecompositionWorkspace({
         contextRefs: [],
         files: [],
         operation: 'propose',
+        intention,
       });
       if (!started) {
         setDecomposeSourceId(result.node.id);
@@ -448,6 +474,10 @@ export function TaskDecompositionWorkspace({
     setRequestError('');
     setRevisionTarget(null);
     setRunOperation(hasExistingChildren ? 'append-candidates' : 'propose');
+    setIntention(
+      [...runs].reverse().find((run) => run.sourceNodeId === nodeId)
+        ?.intention ?? taskDecompositionIntentionRegistry.defaultId,
+    );
   }
 
   function selectRequestPreview(previewId: string) {
@@ -459,6 +489,9 @@ export function TaskDecompositionWorkspace({
     setDecompositionGoal(preview.instruction);
     setRequestSelectedRefs(preview.contextRefs);
     setRequestFiles(preview.files);
+    setIntention(
+      preview.intention ?? taskDecompositionIntentionRegistry.defaultId,
+    );
     setRequestError('');
   }
 
@@ -515,6 +548,7 @@ export function TaskDecompositionWorkspace({
         files: requestFiles,
         operation: runOperation,
         revisionTarget,
+        intention,
       });
       if (started) closeDecomposition();
       return;
@@ -527,6 +561,7 @@ export function TaskDecompositionWorkspace({
       additionalResourceCount: requestSelectedRefs.length + requestFiles.length,
       contextRefs: requestSelectedRefs,
       files: requestFiles,
+      intention,
       kind: 'request',
     };
     setRequestPreviews((current) => [
@@ -543,6 +578,7 @@ export function TaskDecompositionWorkspace({
     files,
     operation,
     revisionTarget: target,
+    intention: selectedIntention,
   }: {
     source: TaskGraphNode;
     instruction: string;
@@ -550,6 +586,7 @@ export function TaskDecompositionWorkspace({
     files: File[];
     operation: 'propose' | 'append-candidates';
     revisionTarget?: { runId: string; candidateId: string } | null;
+    intention: TaskDecompositionIntention;
   }) {
     setRequestError('');
     const revisionPreview = target
@@ -566,6 +603,7 @@ export function TaskDecompositionWorkspace({
       revisionTarget: target ?? undefined,
       revisionPreview,
       operation,
+      intention: selectedIntention,
     };
     const formData = new FormData();
     formData.set('sourceNodeId', source.id);
@@ -574,6 +612,7 @@ export function TaskDecompositionWorkspace({
     formData.set('model', agentProfile.model);
     formData.set('effort', agentProfile.effort);
     formData.set('operation', operation);
+    formData.set('intention', selectedIntention);
     if (target) {
       formData.set('revisionRunId', target.runId);
       formData.set('revisionCandidateId', target.candidateId);
@@ -721,6 +760,7 @@ export function TaskDecompositionWorkspace({
       setRequestFiles(snapshot.files);
       setRevisionTarget(snapshot.revisionTarget ?? null);
       setRunOperation(snapshot.operation);
+      setIntention(snapshot.intention);
     }
     runSnapshots.current.delete(runId);
   }
@@ -737,6 +777,10 @@ export function TaskDecompositionWorkspace({
     setRequestFiles([]);
     setRequestError('');
     setRunOperation('propose');
+    setIntention(
+      runs.find((run) => run.runId === selectedCandidatePreview.runId)
+        ?.intention ?? taskDecompositionIntentionRegistry.defaultId,
+    );
     setCandidateActionError('');
     setInspectorNodeId('');
   }
@@ -880,6 +924,8 @@ export function TaskDecompositionWorkspace({
                 run.operation === 'append-candidates'
                   ? 'append-candidates'
                   : 'propose',
+              intention:
+                run.intention ?? taskDecompositionIntentionRegistry.defaultId,
             };
             setRequestPreviews((current) =>
               current.some((preview) => preview.id === run.runId)
@@ -1109,6 +1155,14 @@ export function TaskDecompositionWorkspace({
                   {startIdea.trim().length}
                   {t('/4,000 characters')}
                 </p>
+                <div className="mt-4">
+                  <AgentGraphIntentionSelect
+                    profiles={taskDecompositionIntentionRegistry.profiles}
+                    value={intention}
+                    onChange={setIntention}
+                    label="Decomposition purpose"
+                  />
+                </div>
                 <div className="mt-4">
                   <ContextAttachmentPicker
                     folders={folders}
@@ -1503,6 +1557,14 @@ export function TaskDecompositionWorkspace({
                 />
               </div>
 
+              <AgentGraphIntentionSelect
+                profiles={taskDecompositionIntentionRegistry.profiles}
+                value={intention}
+                onChange={setIntention}
+                label="Decomposition purpose"
+                disabled={Boolean(revisionTarget)}
+              />
+
               <ContextAttachmentPicker
                 folders={folders}
                 folderPath={requestFolderPath}
@@ -1774,11 +1836,34 @@ export function TaskDecompositionWorkspace({
 
                 <div className="mt-7">
                   <CandidateMetadataSections
-                    metadata={selectedCandidate.metadata}
+                    metadata={Object.fromEntries(
+                      Object.entries(selectedCandidate.metadata).filter(
+                        ([key]) => key !== 'moduleDependsOn',
+                      ),
+                    )}
                   />
                 </div>
               </div>
               <SheetFooter className="border-t border-border px-6 py-4">
+                {unresolvedAcceptanceDependencies.length > 0 ? (
+                  <div className="w-full rounded-xl border border-amber-500/35 bg-amber-500/10 p-3 text-[10px] leading-4 text-amber-800 dark:text-amber-200">
+                    <p className="font-medium">
+                      {t('Accept these prerequisites first')}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {unresolvedAcceptanceDependencies.map((dependency) => (
+                        <button
+                          key={dependency.id}
+                          type="button"
+                          className="rounded-full bg-background/80 px-2 py-1 text-foreground transition hover:bg-background"
+                          onClick={() => locateNode(dependency.id)}
+                        >
+                          {dependency.title}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
                 <div className="flex w-full gap-2">
                   <Button
                     type="button"
@@ -1814,7 +1899,8 @@ export function TaskDecompositionWorkspace({
                     disabled={
                       accepting ||
                       discardingCandidate ||
-                      selectedCandidateIsRevising
+                      selectedCandidateIsRevising ||
+                      unresolvedAcceptanceDependencies.length > 0
                     }
                     onClick={acceptCandidate}
                   >
@@ -1963,6 +2049,7 @@ function runPreview(
       snapshot.contextRefs.length + snapshot.files.length,
     contextRefs: snapshot.contextRefs,
     files: snapshot.files,
+    intention: snapshot.intention,
     kind: 'run',
     title: `${TRANSPORT_LABELS[run.transport]} decomposition`,
     agentLabel: TRANSPORT_LABELS[run.transport],
@@ -2038,12 +2125,18 @@ function CandidateRelationshipList({
 }) {
   const relatedNodes = nodeIds.flatMap((nodeId) => {
     const node = nodes.find((candidate) => candidate.id === nodeId);
-    if (node) return [node];
+    if (node) return [{ ...node, relationshipStatus: 'Stabilized' }];
     const candidate = previews.find(
       (preview) => preview.id === nodeId && preview.kind === 'candidate',
     );
     return candidate
-      ? [{ id: candidate.id, title: candidate.title ?? candidate.id }]
+      ? [
+          {
+            id: candidate.id,
+            title: candidate.title ?? candidate.id,
+            relationshipStatus: 'Pending acceptance',
+          },
+        ]
       : [];
   });
   return (
@@ -2057,7 +2150,7 @@ function RelationshipList({
   onSelect,
 }: {
   title: string;
-  nodes: Array<{ id: string; title: string }>;
+  nodes: Array<{ id: string; title: string; relationshipStatus?: string }>;
   onSelect: (nodeId: string) => void;
 }) {
   const { t } = useUiText();
@@ -2086,6 +2179,11 @@ function RelationshipList({
                   {node.id}
                 </span>
               </span>
+              {node.relationshipStatus ? (
+                <span className="shrink-0 rounded-full bg-secondary px-2 py-1 text-[9px] font-medium text-secondary-foreground">
+                  {t(node.relationshipStatus)}
+                </span>
+              ) : null}
               <ArrowUpRight className="size-3.5 shrink-0 text-muted-foreground" />
             </button>
           ))}

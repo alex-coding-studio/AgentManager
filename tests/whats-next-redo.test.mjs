@@ -458,6 +458,7 @@ void test('Break It Down persists profiles, forwards flags, and resumes only mat
       instruction: 'Find boundaries',
       contextRefs: [],
       files: [],
+      intention: 'delivery',
     };
     const first = await finished(
       project,
@@ -472,6 +473,7 @@ void test('Break It Down persists profiles, forwards flags, and resumes only mat
       model: 'test-model',
       effort: 'max',
     });
+    assert.equal(first.intention, 'delivery');
     const artifact = (run, name) =>
       path.join(
         project.planningPath,
@@ -484,11 +486,12 @@ void test('Break It Down persists profiles, forwards flags, and resumes only mat
     );
     assert.equal(argv[argv.indexOf('--model') + 1], 'test-model');
     assert.ok(argv.includes('model_reasoning_effort="max"'));
-    assert.deepEqual(
-      JSON.parse(await readFile(artifact(first, 'request.json'), 'utf8'))
-        .profile,
-      first.profile,
+    const request = JSON.parse(
+      await readFile(artifact(first, 'request.json'), 'utf8'),
     );
+    assert.deepEqual(request.profile, first.profile);
+    assert.equal(request.packet.intention, 'delivery');
+    assert.match(request.prompt, /INTENTION PROFILE — Delivery breakdown/);
     const continued = await finished(
       project,
       await startTaskDecompositionRun(project, {
@@ -498,6 +501,16 @@ void test('Break It Down persists profiles, forwards flags, and resumes only mat
       readTaskDecompositionRun,
     );
     assert.equal(continued.sessionId, first.sessionId);
+    const changedIntention = await finished(
+      project,
+      await startTaskDecompositionRun(project, {
+        ...input,
+        operation: 'append-candidates',
+        intention: 'understanding',
+      }),
+      readTaskDecompositionRun,
+    );
+    assert.notEqual(changedIntention.sessionId, continued.sessionId);
     const changed = await finished(
       project,
       await startTaskDecompositionRun(project, {
