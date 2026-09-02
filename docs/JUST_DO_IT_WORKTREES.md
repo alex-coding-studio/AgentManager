@@ -8,8 +8,12 @@ remain rooted at the original project; execution is directed to write source fil
 Card worktree. Source context and accepted-output records remain available across
 fresh provider Sessions.
 
-Existing repositories start from their current committed HEAD. Uncommitted primary
-checkout changes are not copied or discarded. A new empty standalone project needs
+Before creating a new Card worktree, the Host fetches `origin` when available and resolves
+the repository default branch. A local default that is behind starts from the fetched remote
+default; a local default that is ahead remains the base. Diverged defaults stop before any
+worktree is created. An unavailable remote falls back to the current committed HEAD so local
+execution remains available. The Host does not checkout, merge, pull or rebase the primary
+checkout. Uncommitted primary checkout changes are not copied or discarded. A new empty standalone project needs
 an explicitly confirmed local empty Git bootstrap before worktree creation. Starting
 an Action or confirming the Plan alone does not grant that bootstrap exception.
 The host never pushes main, merges a PR, publishes a repository or accepts an output.

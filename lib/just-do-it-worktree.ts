@@ -13,6 +13,7 @@ import path from 'node:path';
 import type { RegisteredProject } from './project-registry.ts';
 import type { PlanningCard } from './just-do-it-planning-service.ts';
 import { assertCardUuid } from './just-do-it-harness.ts';
+import { PublicApiError } from './api-errors.ts';
 
 const exec = promisify(execFile);
 export type CardWorkspace = {
@@ -37,6 +38,69 @@ async function git(directory: string, ...args: string[]) {
       env: environment(),
     })
   ).stdout.trim();
+}
+async function optionalGit(directory: string, ...args: string[]) {
+  try {
+    return await git(directory, ...args);
+  } catch {
+    return null;
+  }
+}
+async function isAncestor(repository: string, ancestor: string, head: string) {
+  try {
+    await git(repository, 'merge-base', '--is-ancestor', ancestor, head);
+    return true;
+  } catch {
+    return false;
+  }
+}
+async function resolveCardBase(repository: string) {
+  const currentHead = await git(repository, 'rev-parse', 'HEAD');
+  if (!(await optionalGit(repository, 'remote', 'get-url', 'origin')))
+    return currentHead;
+  try {
+    await git(repository, 'fetch', '--prune', 'origin');
+  } catch {
+    return currentHead;
+  }
+  const advertised = await optionalGit(
+    repository,
+    'ls-remote',
+    '--symref',
+    'origin',
+    'HEAD',
+  );
+  const advertisedDefault = advertised?.match(
+    /^ref: refs\/heads\/([^\s]+)\s+HEAD$/m,
+  )?.[1];
+  const remoteDefault = advertisedDefault
+    ? `origin/${advertisedDefault}`
+    : await optionalGit(
+        repository,
+        'symbolic-ref',
+        '--short',
+        'refs/remotes/origin/HEAD',
+      );
+  if (!remoteDefault?.startsWith('origin/')) return currentHead;
+  const defaultBranch = remoteDefault.slice('origin/'.length);
+  const remoteHead = await optionalGit(
+    repository,
+    'rev-parse',
+    `refs/remotes/origin/${defaultBranch}`,
+  );
+  if (!remoteHead) return currentHead;
+  const localHead = await optionalGit(
+    repository,
+    'rev-parse',
+    `refs/heads/${defaultBranch}`,
+  );
+  if (!localHead || localHead === remoteHead) return remoteHead;
+  if (await isAncestor(repository, localHead, remoteHead)) return remoteHead;
+  if (await isAncestor(repository, remoteHead, localHead)) return localHead;
+  throw new PublicApiError(
+    'Local and remote default branches diverged. Reconcile them before starting a new Card.',
+    409,
+  );
 }
 async function regularDirectory(directory: string) {
   const stat = await lstat(directory);
@@ -197,7 +261,7 @@ export async function ensureCardWorkspace(
     repository
   )
     throw new Error('Registered code directory must be a repository root.');
-  const base = await git(repository, 'rev-parse', 'HEAD');
+  const base = await resolveCardBase(repository);
   return create(project, card.id, repository, base);
 }
 export function workspaceProject(

@@ -32,6 +32,7 @@ import type {
   startLocalAgentRun,
 } from '../lib/local-agent-transport.ts';
 import type { CardHarnessRequest } from '../lib/just-do-it-harness.ts';
+import { PublicApiError } from '../lib/api-errors.ts';
 
 const exec = promisify(execFile);
 const git = async (directory: string, ...args: string[]) =>
@@ -210,6 +211,198 @@ function delivered(request: CardHarnessRequest): LocalAgentResult {
     }),
   };
 }
+async function initializeRemoteFixture(
+  project: RegisteredProject,
+  content = 'initial\n',
+) {
+  const remote = path.join(path.dirname(project.rootPath), 'remote.git');
+  const publisher = path.join(path.dirname(project.rootPath), 'publisher');
+  await exec('git', ['init', '--bare', '--initial-branch=main', remote]);
+  await git(project.rootPath, 'init', '-b', 'main');
+  await git(project.rootPath, 'config', 'user.name', 'Fixture');
+  await git(
+    project.rootPath,
+    'config',
+    'user.email',
+    'fixture@example.invalid',
+  );
+  await writeFile(path.join(project.rootPath, 'app.txt'), content);
+  await git(project.rootPath, 'add', 'app.txt');
+  await git(project.rootPath, 'commit', '-m', 'initial');
+  await git(project.rootPath, 'remote', 'add', 'origin', remote);
+  await git(project.rootPath, 'push', '-u', 'origin', 'main');
+  await exec('git', ['clone', remote, publisher]);
+  await git(publisher, 'config', 'user.name', 'Publisher');
+  await git(publisher, 'config', 'user.email', 'publisher@example.invalid');
+  return { remote, publisher };
+}
+
+void test('a new Card starts from the advanced remote default without changing the primary checkout', async (t) => {
+  const f = await fixture(t);
+  const { publisher } = await initializeRemoteFixture(f.project);
+  const localHead = await git(f.project.rootPath, 'rev-parse', 'HEAD');
+  await writeFile(path.join(publisher, 'app.txt'), 'merged\n');
+  await git(publisher, 'commit', '-am', 'merged output');
+  await git(publisher, 'push', 'origin', 'main');
+  const remoteHead = await git(publisher, 'rev-parse', 'HEAD');
+
+  const workspace = await ensureCardWorkspace(f.project, f.card);
+
+  assert.equal(workspace.baseCommit, remoteHead);
+  assert.equal(await git(workspace.path, 'rev-parse', 'HEAD'), remoteHead);
+  assert.equal(
+    await readFile(path.join(workspace.path, 'app.txt'), 'utf8'),
+    'merged\n',
+  );
+  assert.equal(await git(f.project.rootPath, 'rev-parse', 'HEAD'), localHead);
+  assert.equal(
+    await readFile(path.join(f.project.rootPath, 'app.txt'), 'utf8'),
+    'initial\n',
+  );
+});
+
+void test('a remote default rename overrides a stale local origin HEAD', async (t) => {
+  const f = await fixture(t);
+  const remote = path.join(path.dirname(f.project.rootPath), 'remote.git');
+  const publisher = path.join(path.dirname(f.project.rootPath), 'publisher');
+  await exec('git', ['init', '--bare', '--initial-branch=master', remote]);
+  await git(f.project.rootPath, 'init', '-b', 'master');
+  await git(f.project.rootPath, 'config', 'user.name', 'Fixture');
+  await git(
+    f.project.rootPath,
+    'config',
+    'user.email',
+    'fixture@example.invalid',
+  );
+  await writeFile(path.join(f.project.rootPath, 'app.txt'), 'master\n');
+  await git(f.project.rootPath, 'add', 'app.txt');
+  await git(f.project.rootPath, 'commit', '-m', 'master base');
+  await git(f.project.rootPath, 'remote', 'add', 'origin', remote);
+  await git(f.project.rootPath, 'push', '-u', 'origin', 'master');
+  await git(f.project.rootPath, 'remote', 'set-head', 'origin', 'master');
+  assert.equal(
+    await git(
+      f.project.rootPath,
+      'symbolic-ref',
+      '--short',
+      'refs/remotes/origin/HEAD',
+    ),
+    'origin/master',
+  );
+  await exec('git', ['clone', remote, publisher]);
+  await git(publisher, 'config', 'user.name', 'Publisher');
+  await git(publisher, 'config', 'user.email', 'publisher@example.invalid');
+  await git(publisher, 'checkout', '-b', 'main');
+  await writeFile(path.join(publisher, 'app.txt'), 'main\n');
+  await git(publisher, 'commit', '-am', 'main default');
+  await git(publisher, 'push', '-u', 'origin', 'main');
+  await exec('git', [
+    '--git-dir',
+    remote,
+    'symbolic-ref',
+    'HEAD',
+    'refs/heads/main',
+  ]);
+  const mainHead = await git(publisher, 'rev-parse', 'HEAD');
+
+  const workspace = await ensureCardWorkspace(f.project, f.card);
+
+  assert.equal(workspace.baseCommit, mainHead);
+  assert.equal(
+    await readFile(path.join(workspace.path, 'app.txt'), 'utf8'),
+    'main\n',
+  );
+  assert.equal(
+    await git(
+      f.project.rootPath,
+      'symbolic-ref',
+      '--short',
+      'refs/remotes/origin/HEAD',
+    ),
+    'origin/master',
+    'the Host reads the advertised default without rewriting repository metadata',
+  );
+});
+
+void test('a new Card preserves a local default branch that is ahead of its remote', async (t) => {
+  const f = await fixture(t);
+  await initializeRemoteFixture(f.project);
+  await writeFile(path.join(f.project.rootPath, 'app.txt'), 'local ahead\n');
+  await git(f.project.rootPath, 'commit', '-am', 'local work');
+  const localHead = await git(f.project.rootPath, 'rev-parse', 'HEAD');
+
+  const workspace = await ensureCardWorkspace(f.project, f.card);
+
+  assert.equal(workspace.baseCommit, localHead);
+  assert.equal(
+    await readFile(path.join(workspace.path, 'app.txt'), 'utf8'),
+    'local ahead\n',
+  );
+});
+
+void test('a divergent default branch stops before creating a Card worktree', async (t) => {
+  const f = await fixture(t);
+  const { publisher } = await initializeRemoteFixture(f.project);
+  await writeFile(path.join(f.project.rootPath, 'local.txt'), 'local\n');
+  await git(f.project.rootPath, 'add', 'local.txt');
+  await git(f.project.rootPath, 'commit', '-m', 'local divergence');
+  await writeFile(path.join(publisher, 'remote.txt'), 'remote\n');
+  await git(publisher, 'add', 'remote.txt');
+  await git(publisher, 'commit', '-m', 'remote divergence');
+  await git(publisher, 'push', 'origin', 'main');
+
+  await assert.rejects(
+    () => ensureCardWorkspace(f.project, f.card),
+    (error) =>
+      error instanceof PublicApiError &&
+      error.status === 409 &&
+      /default branches diverged/.test(error.message),
+  );
+  await assert.rejects(
+    () =>
+      readFile(
+        path.join(
+          f.project.planningPath,
+          'implementation/cards',
+          f.card.id,
+          'workspace.json',
+        ),
+      ),
+    /ENOENT/,
+  );
+});
+
+void test('an unavailable remote keeps local-first Card creation on the current HEAD', async (t) => {
+  const f = await fixture(t);
+  await git(f.project.rootPath, 'init', '-b', 'main');
+  await git(f.project.rootPath, 'config', 'user.name', 'Fixture');
+  await git(
+    f.project.rootPath,
+    'config',
+    'user.email',
+    'fixture@example.invalid',
+  );
+  await writeFile(path.join(f.project.rootPath, 'app.txt'), 'offline\n');
+  await git(f.project.rootPath, 'add', 'app.txt');
+  await git(f.project.rootPath, 'commit', '-m', 'offline base');
+  await git(
+    f.project.rootPath,
+    'remote',
+    'add',
+    'origin',
+    path.join(path.dirname(f.project.rootPath), 'missing.git'),
+  );
+  const localHead = await git(f.project.rootPath, 'rev-parse', 'HEAD');
+
+  const workspace = await ensureCardWorkspace(f.project, f.card);
+
+  assert.equal(workspace.baseCommit, localHead);
+  assert.equal(
+    await readFile(path.join(workspace.path, 'app.txt'), 'utf8'),
+    'offline\n',
+  );
+});
+
 void test('empty bootstrap needs explicit confirmation and Actions reuse one isolated Card worktree', async (t) => {
   const f = await fixture(t);
   await assert.rejects(
