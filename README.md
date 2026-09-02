@@ -2,177 +2,181 @@
 
 **From intent to action.**
 
-Praxis is a local-first workspace for one developer building products with
-AI agents. It is designed to grow product intent into coherent directions,
-decompose selected scopes at a human-manageable resolution, and later carry
-accepted work into independently verifiable delivery while keeping product and
-execution state separate from code history.
+Praxis is a local-first workspace for one developer building products with AI
+agents. It keeps evolving product intent, domain meaning, decomposition, and
+delivery work visible without turning them into project-management ceremony or
+mixing planning state into the code repository.
 
-It is a decomposition and dependency-synchronization tool, not a general
-project-management system. Projects provide context boundaries for Agent work.
+Praxis is designed for a single trusted user on one machine. It can start from
+an existing repository or from a product idea that has no code yet.
 
-The current slices provide local project registration, a filesystem-backed
-Product Context library, and capture of source-backed start nodes on the
-Decomposition Canvas. Decomposition also has its own user-managed Markdown instructions
-and Markdown or JSON attachments. A project can begin as a standalone product
-idea or attach to an existing local code repository.
+## Workspaces
+
+- **Product Context** is the project-owned library for Markdown product,
+  design, engineering, milestone, reference, and other source material.
+- **What's Next** explores supported product directions. It separates Discovery
+  from Product Design, applies module-specific Intention and Motion profiles,
+  and keeps generated Candidates temporary until the user accepts them as
+  Formal Nodes.
+- **Break It Down** turns a selected scope into coherent, human-manageable
+  Candidates. A working set can be refined or atomically recomposed before its
+  Candidates are accepted into the formal graph.
+- **What's That?** maintains a visual Domain Model of entities, fields,
+  relationships, and constraints. Valid Agent changes become the current model
+  immediately; the latest successful change has one Undo opportunity rather
+  than a Candidate/finalization lifecycle.
+- **Just Do It** imports a Formal Node as a goal, develops and finalizes an
+  Agent-generated Plan, and executes one Action at a time in a Card-owned
+  worktree. Required-check evidence, output review, user acceptance, local
+  checkpoints, and GitHub delivery evidence remain distinct states.
+
+What's Next and Break It Down share the Agent Graph Workspace shell: canvas,
+Card structure, Composer, Agent controls, file-backed input packets, Run status,
+Summary, Log, and Latest Response presentation. What's That? reuses the common
+input and Run surfaces while keeping a Domain Model-specific graph. Harnesses,
+profiles, context assembly, validation, and product language remain
+module-specific.
+
+### Agent input and instructions
+
+What's Next, Break It Down, and What's That? package direct user input as
+`user-input.md`. Selected Product Context and graph resources become references;
+temporary uploads become external inputs. The Agent receives an indexed packet
+whose file paths and hashes identify the captured request instead of one large
+inline prompt.
+
+Each Agent workspace provides persistent module instructions for later
+requests. Changing them does not rewrite an active Run. The graph Composers
+currently accept Markdown uploads; Just Do It also accepts plain-text files.
+Product Context imports Markdown, while Break It Down's persistent context area
+accepts Markdown or JSON.
 
 ## Requirements
 
 - Node.js 22.13 or later
 - npm
-- The Codex CLI or the Claude CLI, signed in with an existing subscription, for
-  Decomposition Agent Runs
+- A locally installed and authenticated Codex CLI or Claude CLI for Agent
+  operations across What's Next, Break It Down, What's That?, and Just Do It
+- Git for Just Do It worktrees and repository delivery
+- Optional: GitHub CLI (`gh`) to resolve and refresh pull-request evidence
 
-## Install the local command
+Praxis uses the Agent account and model access already configured on the local
+machine. It does not include a hosted Agent service or its own account system.
+
+## Install and run
 
 ```bash
 npm install
 npm run build
 npm link
-```
-
-After that, start Praxis from any terminal:
-
-```bash
 praxis
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Use
-`praxis --port 3100` to choose another port.
+Open [http://localhost:3000](http://localhost:3000). Pass normal Next.js options
+through the command when needed:
+
+```bash
+praxis --port 3100
+```
 
 For development with live reload:
 
 ```bash
 praxis dev
+praxis dev --port 3100
 ```
 
-To review the development server through a private Tailscale Serve hostname,
-allow that hostname before starting the dev server:
+Run `praxis --help` to see the supported command forms.
 
-```bash
-PRAXIS_ALLOWED_DEV_ORIGINS=your-device.your-tailnet.ts.net praxis dev
-tailscale serve --bg 3000
+## Local data and trust boundary
+
+The machine-wide registry and interface settings live under `~/.praxis` by
+default:
+
+```text
+~/.praxis/
+├── config.json
+└── settings.json
 ```
 
-The hostname is machine-specific and must not be committed to configuration.
-Tailscale Serve keeps the site inside the tailnet; this project does not require
-or enable public Funnel access.
+Each registered project keeps its Praxis-owned state under the selected project
+root:
 
-Publishing the port to a tailnet gives every device on that tailnet the ability to
-register projects, write planning state and start Agent Runs on this machine.
-Praxis has no user authentication; `tailscale serve` bounds the network, not
-the trust. See [API Request Boundary](docs/REQUEST_BOUNDARY.md) for what the
-boundary does and does not cover.
+```text
+<project-root>/.praxis/
+├── project.json
+├── context/
+├── whats-next/
+├── task-decomposition/
+├── domain-model/
+└── implementation/
+```
 
-## Settings, interface language, and appearance
+For a Git repository, Praxis adds `.praxis/` to that clone's
+`.git/info/exclude`; it does not edit the tracked `.gitignore`. Planning records,
+Run evidence, generated Markdown, and execution worklogs remain local unless the
+user deliberately versions or publishes them.
 
-Open **Settings** from the project sidebar or project-list header. Choose English
-or Simplified Chinese under **Interface language**. The preference is saved
-automatically in `~/.praxis/settings.json` (or `PRAXIS_HOME`) and
-applies when the site is reopened.
+Set `PRAXIS_HOME` to relocate the machine-wide registry and settings. Set
+`PRAXIS_ALLOWED_HOSTS` or `PRAXIS_ALLOWED_DEV_ORIGINS` to allow additional local
+hostnames. Values are comma-separated.
 
-Under **Appearance**, choose Light, Dark, or Follow system. Appearance is saved
-in the same local settings file without changing the language preference. See
-[Appearance](docs/APPEARANCE.md) for theme behavior.
+Praxis has no user authentication. Its request boundary rejects unrecognized
+hosts and cross-origin browser writes, but any process on the machine—and any
+trusted-network device that can reach an allowed host—can use the local API.
+Exposing Praxis through Tailscale Serve therefore grants that tailnet access to
+project registration, planning writes, and Agent Runs. See
+[API Request Boundary](docs/REQUEST_BOUNDARY.md) before exposing the server.
 
-This changes website interface text only. User input, Agent-generated cards,
-Markdown, JSON, and project files remain unchanged. See
-[Interface Language](docs/INTERFACE_LANGUAGE.md) for the boundary and persistence
-details.
+Agent execution can read or change local files according to the selected Agent's
+effective permissions. Just Do It uses isolated Card worktrees and explicit
+workflow rules, but these are not an operating-system security boundary when the
+Agent itself runs with Full Access.
 
-## Local data
+## Interface
 
-The machine registry is stored at `~/.praxis/config.json`. Each project
-stores its own metadata in `<project-root>/.praxis/project.json`. Registry
-updates are serialized within one server process; see
-[Project Registry Updates](docs/PROJECT_REGISTRY.md) for that boundary.
+Settings supports English and Simplified Chinese interface text, plus Light,
+Dark, and Follow system appearance. These preferences affect application-owned
+UI only; project names, user input, filenames, Markdown, JSON, and Agent output
+remain unchanged.
 
-When the selected directory belongs to a Git repository, Praxis adds
-`.praxis/` to that clone's `.git/info/exclude`. It does not modify the
-tracked `.gitignore`.
-
-The internal `.praxis/` asset layout is fixed by the product. Users
-choose the project root, while Praxis owns the planning paths beneath it.
-Product Context sections are discovered directly from folders and their
-`README.md` files; no database or manifest duplicates that structure.
-README files can be opened in a reusable focus reader or revealed in the system
-file manager for external editing.
-Markdown documents can be created from the interface or imported through a file
-picker and drag and drop.
-Decomposition Canvas start nodes are stored as one folder per node. Each node contains a
-human-readable `node.json` and can carry its own Resource files. Context Library
-Markdown can be selected through the folder browser, while external Markdown
-can be attached directly during node creation.
-Decomposition Context is stored under
-`<project-root>/.praxis/task-decomposition/`. It remains separate from
-the built-in Harness that defines Agent output boundaries. Existing internal
-paths and identifiers retain `task-decomposition` for data compatibility.
-
-Set `PRAXIS_HOME` to use a different machine-registry directory.
-Set `PRAXIS_ALLOWED_HOSTS` to accept additional `Host` values beyond
-`localhost`, `127.0.0.1` and `[::1]`; see
-[API Request Boundary](docs/REQUEST_BOUNDARY.md).
-Praxis uses the `.praxis` directory, `PRAXIS_*` environment variables, and the
-`praxis` CLI consistently across local storage and runtime configuration.
+See [Interface Language](docs/INTERFACE_LANGUAGE.md) and
+[Appearance](docs/APPEARANCE.md) for the exact persistence and fallback rules.
 
 ## Verification
+
+Run the same full gate used by CI:
 
 ```bash
 npm run test:ci
 ```
 
-That is the single gate CI runs: format check, lint, typecheck, the full portable
-test suite, and the production build. Run it before opening a pull request.
-
-While working, the focused commands are faster — one per domain:
+It checks formatting, lint, types, the portable test suite, and the production
+build. Focused suites are available while working on one area:
 
 ```bash
-npm run test:graph
-npm run test:runs
 npm run test:whats-next
-npm run test:boundary
-npm run test:registry
-npm run test:api-errors
+npm run test:harness
+npm run test:runs
+npm run test:domain-model
+npm run test:implementation-planning
 npm run test:implementation-execution
+npm run test:boundary
 ```
 
-`npm test` runs every portable suite without the build. See `package.json` for the
-full list.
+Host-dependent smoke tests are intentionally outside CI. See `package.json` for
+their exact commands and prerequisites.
 
-Four commands are deliberately outside CI because they need a signed-in Codex CLI or
-host-specific filesystem behavior: `test:coordination-smoke`, `test:simulator-access`,
-`test:worktree-sandbox` and `test:appserver-code-smoke`. Run them locally when
-changing the code they cover.
+## Detailed references
 
-See [Product Foundation](docs/PRODUCT.md),
-[Architecture Decisions](docs/ARCHITECTURE.md), and the
-[Roadmap](docs/ROADMAP.md) for the current product boundary and next delivery
-steps.
-
-See [Just Do It](docs/JUST_DO_IT.md) for the execution-workspace design,
-including settled workflow decisions and questions still open before implementation.
-
-What's Next has a top-level **Context** control on both its empty start page and
-its Canvas. Optional project Instructions are stored in
-`.praxis/whats-next/instructions.md`. New projects start blank. Saving
-applies to subsequent requests, including resumed sessions; clearing explicitly
-removes earlier module Instructions without changing the Harness. Already running
-requests retain their captured snapshot. This does not alter exploration strategy.
-
-The Just Do It sidebar entry opens `/projects/<projectId>/implementation`.
-It imports a formal Node, generates and adjusts a Plan with a local Agent,
-finalizes Actions, executes one Action at a time in an isolated worktree, and
-keeps review, required checks, user acceptance, and GitHub delivery distinct.
-See [Just Do It Planning](docs/JUST_DO_IT_PLANNING.md) and
-[Just Do It](docs/JUST_DO_IT.md) for the current behavior.
-
-The [Just Do It Harness foundation](docs/JUST_DO_IT_HARNESS.md) is available
-separately from the frozen UI. Run `npm run test:implementation-harness` for
-contract/storage checks or `npm run preview:implementation-harness` to generate
-a temporary Prompt, fixture response and progressive-disclosure handoff example.
-Neither command invokes an Agent or modifies registered project data.
+- [Product foundation](docs/PRODUCT.md)
+- [Architecture decisions](docs/ARCHITECTURE.md)
+- [Break It Down](docs/BREAK_IT_DOWN_PRODUCT_EVOLUTION.md)
+- [What's That? Domain Model](docs/WHATS_THAT_DOMAIN_MODEL.md)
+- [Just Do It planning](docs/JUST_DO_IT_PLANNING.md)
+- [Just Do It execution](docs/JUST_DO_IT_EXECUTION.md)
+- [Process boundaries](docs/PROCESS_BOUNDARIES.md)
 
 ## License
 
-MIT
+[MIT](LICENSE)
