@@ -93,6 +93,7 @@ export class CodexAppServerDriver implements AgentSessionDriver {
   private brokers = new Map<string, HostJobBroker>();
   private hostJobs = new Map<string, boolean>();
   private turns = new Map<string, TurnState>();
+  private suspended = new Set<TurnState>();
   private bufferedTurnMessages = new Map<string, RpcMessage[]>();
   private ready: Promise<void>;
   private brokerFactory: CodexAppServerDriverOptions['brokerFactory'];
@@ -223,8 +224,10 @@ export class CodexAppServerDriver implements AgentSessionDriver {
     })) as { turn: { id: string } };
     state.turnId = started.turn.id;
     state.finalOutput = '';
+    state.lastTurnUsage = null;
     state.physicalCompleted = false;
     state.continuationStarted = false;
+    this.suspended.delete(state);
     this.turns.set(state.turnId, state);
     state.onEvent?.({
       type: 'turn-started',
@@ -397,6 +400,13 @@ export class CodexAppServerDriver implements AgentSessionDriver {
     const hostTool = this.hostTools.get(stringValue(params.tool));
     if (hostTool) {
       const turn = this.turns.get(stringValue(params.turnId));
+      turn?.onEvent?.({
+        type: 'activity',
+        threadId: turn.threadId,
+        turnId: turn.turnId,
+        summary: `Running tool: ${hostTool.name}`,
+        at: new Date().toISOString(),
+      });
       if (turn?.pendingSuspension) {
         this.reply(
           message,
@@ -450,6 +460,13 @@ export class CodexAppServerDriver implements AgentSessionDriver {
     const thread = this.threads.get(threadId);
     const broker = this.brokers.get(threadId);
     const turn = this.turns.get(stringValue(params.turnId));
+    turn?.onEvent?.({
+      type: 'activity',
+      threadId: turn.threadId,
+      turnId: turn.turnId,
+      summary: 'Running tool: run_job',
+      at: new Date().toISOString(),
+    });
     if (!thread || !broker || !turn) {
       this.send({
         id: message.id,
@@ -545,6 +562,7 @@ export class CodexAppServerDriver implements AgentSessionDriver {
       jobId: suspension.jobId,
       completion: suspension.completion,
     };
+    this.suspended.add(turn);
     if (suspension.tool !== 'run_job')
       turn.onEvent?.({
         type: 'tool-suspended',
@@ -594,6 +612,7 @@ export class CodexAppServerDriver implements AgentSessionDriver {
     const result = turn.suspensionResult;
     turn.pendingSuspension = undefined;
     turn.suspensionResult = undefined;
+    this.suspended.delete(turn);
     if (result.tool !== 'run_job')
       turn.onEvent?.({
         type: 'tool-resumed',
@@ -624,6 +643,8 @@ export class CodexAppServerDriver implements AgentSessionDriver {
     this.pending.clear();
     for (const turn of this.turns.values()) turn.reject(error);
     this.turns.clear();
+    for (const turn of this.suspended) turn.reject(error);
+    this.suspended.clear();
     this.bufferedTurnMessages.clear();
   }
 }

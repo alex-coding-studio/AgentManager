@@ -154,6 +154,7 @@ else if(message.method==='turn/interrupt'){send({id:message.id,result:{}});send(
   assert.deepEqual(statuses, ['running', 'completed']);
   assert.deepEqual(runtimeEvents, [
     'turn-started',
+    'activity',
     'job-started',
     'turn-completed',
     'job-completed',
@@ -354,7 +355,9 @@ else if(message.method==='turn/interrupt'){send({id:message.id,result:{}});send(
   await new Promise((resolve) => setTimeout(resolve, 150));
   assert.deepEqual(events, [
     'turn-started',
+    'activity',
     'tool-suspended',
+    'activity',
     'turn-completed',
   ]);
   resolveWorker();
@@ -364,7 +367,9 @@ else if(message.method==='turn/interrupt'){send({id:message.id,result:{}});send(
   assert.equal(result.usage?.inputTokens, 30);
   assert.deepEqual(events, [
     'turn-started',
+    'activity',
     'tool-suspended',
+    'activity',
     'turn-completed',
     'tool-resumed',
     'turn-started',
@@ -427,6 +432,7 @@ else if(message.method==='turn/interrupt'){send({id:message.id,result:{}});send(
   assert.equal(result.turnId, 'turn-1');
   assert.deepEqual(events, [
     'turn-started',
+    'activity',
     'tool-suspended',
     'turn-completed',
     'tool-resumed',
@@ -468,6 +474,125 @@ else if(message.id===930){send({method:'item/completed',params:{threadId:'thread
   const result = await driver.startTurn(thread, { prompt: 'x' }).completion;
   assert.equal(result.finalOutput, 'REJECTED');
   assert.equal(jobs, 0);
+});
+
+void test('a suspended logical turn is rejected when the App Server exits before the continuation settles', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'app-server-exit-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const server = path.join(root, 'fake-server.mjs');
+  await writeFile(
+    server,
+    `import readline from 'node:readline';
+const rl=readline.createInterface({input:process.stdin});
+function send(value){process.stdout.write(JSON.stringify(value)+'\\n')}
+rl.on('line',line=>{const message=JSON.parse(line);
+if(message.method==='initialize')send({id:message.id,result:{}});
+else if(message.method==='thread/start')send({id:message.id,result:{thread:{id:'thread-x'}}});
+else if(message.method==='turn/start'){send({id:message.id,result:{turn:{id:'turn-1'}}});send({id:940,method:'item/tool/call',params:{threadId:'thread-x',turnId:'turn-1',callId:'call-1',tool:'dispatch_worker',arguments:{}}});}
+else if(message.method==='turn/interrupt'){send({id:message.id,result:{}});send({method:'turn/completed',params:{threadId:'thread-x',turn:{id:'turn-1',status:'interrupted'}}});setTimeout(()=>process.exit(0),50);}
+});`,
+  );
+  const driver = new CodexAppServerDriver({
+    command: process.execPath,
+    arguments: [server],
+    brokerFactory: (input) =>
+      new HostJobBroker(input.workingDirectory, path.join(root, 'jobs')),
+    hostTools: [
+      {
+        name: 'dispatch_worker',
+        description: 'Dispatch',
+        inputSchema: { type: 'object' },
+        call: async () => ({
+          suspend: true as const,
+          acknowledgement: 'Worker dispatched.',
+          continuation: new Promise(() => {}),
+        }),
+      },
+    ],
+  });
+  t.after(() => driver.close());
+  const thread = await driver.startThread({
+    profile: { agent: 'codex', model: 'fixture', effort: 'low' },
+    workingDirectory: root,
+    access: 'read-only',
+    hostJobs: false,
+  });
+  const events: string[] = [];
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error('logical turn never settled')), 1500),
+  );
+  await assert.rejects(
+    () =>
+      Promise.race([
+        driver.startTurn(thread, {
+          prompt: 'prepare',
+          onEvent: (event) => events.push(event.type),
+        }).completion,
+        timeout,
+      ]),
+    /Codex App Server exited/,
+  );
+  assert.deepEqual(events, [
+    'turn-started',
+    'activity',
+    'tool-suspended',
+    'turn-completed',
+  ]);
+});
+
+void test('a continuation turn without its own token update reports no inherited usage', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'app-server-usage-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const server = path.join(root, 'fake-server.mjs');
+  await writeFile(
+    server,
+    `import readline from 'node:readline';
+const rl=readline.createInterface({input:process.stdin});
+let turnStarts=0;
+function send(value){process.stdout.write(JSON.stringify(value)+'\\n')}
+rl.on('line',line=>{const message=JSON.parse(line);
+if(message.method==='initialize')send({id:message.id,result:{}});
+else if(message.method==='thread/start')send({id:message.id,result:{thread:{id:'thread-u'}}});
+else if(message.method==='turn/start'){turnStarts++;const turnId='turn-'+turnStarts;send({id:message.id,result:{turn:{id:turnId}}});if(turnStarts===1){send({method:'thread/tokenUsage/updated',params:{threadId:'thread-u',turnId,tokenUsage:{total:{inputTokens:10,cachedInputTokens:0,cacheWriteInputTokens:0,outputTokens:1,reasoningOutputTokens:0},last:{inputTokens:10,cachedInputTokens:0,cacheWriteInputTokens:0,outputTokens:1,reasoningOutputTokens:0}}}});send({id:950,method:'item/tool/call',params:{threadId:'thread-u',turnId,callId:'call-1',tool:'dispatch_worker',arguments:{}}});}else{send({method:'item/completed',params:{threadId:'thread-u',turnId,item:{type:'agentMessage',text:'DONE'}}});send({method:'turn/completed',params:{threadId:'thread-u',turn:{id:turnId,status:'completed'}}});}}
+else if(message.method==='turn/interrupt'){send({id:message.id,result:{}});send({method:'turn/completed',params:{threadId:'thread-u',turn:{id:message.params.turnId,status:'interrupted'}}});}
+});`,
+  );
+  const driver = new CodexAppServerDriver({
+    command: process.execPath,
+    arguments: [server],
+    brokerFactory: (input) =>
+      new HostJobBroker(input.workingDirectory, path.join(root, 'jobs')),
+    hostTools: [
+      {
+        name: 'dispatch_worker',
+        description: 'Dispatch',
+        inputSchema: { type: 'object' },
+        call: async () => ({
+          suspend: true as const,
+          acknowledgement: 'Worker dispatched.',
+          continuation: Promise.resolve({ prompt: 'WORKER_COMPLETED' }),
+        }),
+      },
+    ],
+  });
+  t.after(() => driver.close());
+  const thread = await driver.startThread({
+    profile: { agent: 'codex', model: 'fixture', effort: 'low' },
+    workingDirectory: root,
+    access: 'read-only',
+    hostJobs: false,
+  });
+  const usages: Array<number | null> = [];
+  const result = await driver.startTurn(thread, {
+    prompt: 'prepare',
+    onEvent: (event) => {
+      if (event.type === 'turn-completed')
+        usages.push(event.usage?.inputTokens ?? null);
+    },
+  }).completion;
+  assert.equal(result.finalOutput, 'DONE');
+  assert.deepEqual(usages, [10, null]);
+  assert.equal(result.usage?.inputTokens, 10);
 });
 
 async function readdirOne(directory: string) {

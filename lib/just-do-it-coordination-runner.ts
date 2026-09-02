@@ -572,7 +572,7 @@ export function startCoordinatedExecution(input: {
           } else if (event.type === 'activity') {
             if (
               !budgetError &&
-              event.summary.startsWith('Running: ') &&
+              event.summary.startsWith('Running') &&
               ++toolCalls > limits.maxCoordinatorToolCalls
             )
               fail(new Error('Coordinator tool-call budget exhausted.'));

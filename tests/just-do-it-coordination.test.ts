@@ -32,6 +32,11 @@ import {
   type HostTool,
 } from '../lib/agent-runtime-driver.ts';
 import type { CoordinatorSession } from '../lib/event-driven-agent-transport.ts';
+import { CodexAppServerDriver } from '../lib/codex-app-server-driver.ts';
+import { HostJobBroker } from '../lib/host-job-broker.ts';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 
 const cardId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const actionId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -1252,4 +1257,69 @@ void test('a non-Codex coordinator profile keeps the legacy fresh-session path',
   assert.equal(sessions, 1);
   assert.deepEqual(calls, ['claude:read-only', 'codex:workspace-write']);
   assert.equal(JSON.parse(output.finalOutput).outcome, 'delivered');
+});
+
+void test('rejected dispatch_worker calls count against the coordinator tool cap and the cap interrupts the thread', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'coordinator-cap-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const server = path.join(root, 'fake-server.mjs');
+  await writeFile(
+    server,
+    `import readline from 'node:readline';
+const rl=readline.createInterface({input:process.stdin});
+let calls=0;let interrupted=false;
+function send(value){process.stdout.write(JSON.stringify(value)+'\\n')}
+function dispatch(){calls++;send({id:1000+calls,method:'item/tool/call',params:{threadId:'thread-cap',turnId:'turn-1',callId:'call-'+calls,tool:'dispatch_worker',arguments:{decision:{}}}});}
+rl.on('line',line=>{const message=JSON.parse(line);
+if(message.method==='initialize')send({id:message.id,result:{}});
+else if(message.method==='thread/start')send({id:message.id,result:{thread:{id:'thread-cap'}}});
+else if(message.method==='turn/start'){send({id:message.id,result:{turn:{id:'turn-1'}}});dispatch();}
+else if(typeof message.id==='number'&&message.id>1000){if(message.result?.success!==false)process.exit(3);if(!interrupted&&calls<60)dispatch();}
+else if(message.method==='turn/interrupt'){interrupted=true;send({id:message.id,result:{}});process.stderr.write('INTERRUPTED_AFTER_'+calls+'\\n');send({method:'turn/completed',params:{threadId:'thread-cap',turn:{id:'turn-1',status:'interrupted'}}});}
+});`,
+  );
+  const request = task();
+  let dispatched = 0;
+  const workerTransport: typeof startLocalAgentRun = () => {
+    dispatched++;
+    return { completion: Promise.resolve(worker(request)), cancel: () => {} };
+  };
+  const progress: string[] = [];
+  const run = startCoordinatedExecution({
+    request,
+    workerOptions: {
+      workingDirectory: root,
+      prompt: 'WORKER',
+      access: 'workspace-write',
+    },
+    workerAgent: 'codex',
+    settings: { profile },
+    priorEvidence: [],
+    previousContext: '',
+    readBasis: async () => 'basis',
+    onProgress: (event) => progress.push(event.summary),
+    workerTransport,
+    coordinatorSession: async (input): Promise<CoordinatorSession> => ({
+      driver: new CodexAppServerDriver({
+        command: process.execPath,
+        arguments: [server],
+        brokerFactory: (thread) =>
+          new HostJobBroker(thread.workingDirectory, path.join(root, 'jobs')),
+        hostTools: input.hostTools,
+      }),
+      decoratePrompt: (prompt) => prompt,
+    }),
+  });
+  await assert.rejects(
+    () => run.completion,
+    (error) =>
+      error instanceof CoordinationRunError &&
+      /tool-call budget exhausted/.test(error.message),
+  );
+  assert.equal(dispatched, 0);
+  assert.equal(
+    progress.filter((summary) => summary === 'Running tool: dispatch_worker')
+      .length,
+    coordinationLimits.maxCoordinatorToolCalls + 1,
+  );
 });
