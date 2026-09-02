@@ -24,6 +24,42 @@ workers receive `publish_candidate`, which audits and publishes one clean Candid
 through the Host. Long validation remains outside the model through System validation runs.
 See `CARD_HOST_OPERATIONS.md`.
 
+A Host tool may instead suspend the turn. Its result carries an acknowledgement for the model
+and a continuation promise owned by the Host. The driver acknowledges, interrupts the physical
+turn and, when the promise settles, either starts a continuation turn in the same thread with
+the supplied prompt or settles the logical turn directly with a Host-supplied final output.
+`run_job` is one such tool; `dispatch_worker` is another (below). One suspension is pending per
+turn; a second suspending call is rejected while the first is pending.
+
+## Coordinator suspension boundary
+
+The event boundary that resumes a Worker after a Host job now also resumes the Coordinator
+after its Worker settles:
+
+| Boundary                                     | Suspended thread | Continuation                                           |
+| -------------------------------------------- | ---------------- | ------------------------------------------------------ |
+| Host job completed                           | Worker           | `HOST_JOB_COMPLETED` with the job record               |
+| Worker completed with unresolved required    | Coordinator      | `WORKER_COMPLETED` with the report and a new requestId |
+| Worker reported `blocked` or `error`         | Coordinator      | `WORKER_ATTENTION_REQUIRED`                            |
+| Worker returned no valid report or failed    | Coordinator      | `WORKER_FAILED`; repair is not offered                 |
+| Worker passed every effective required check | Coordinator      | none: the Host settles the logical turn itself         |
+
+The Coordinator runs as one read-only App Server thread per Round with a single Host tool,
+`dispatch_worker`, whose argument is the complete JSON coordination decision (`dispatch` or
+`repair`). The Host validates it against the current coordination request, records the
+decision, starts the Worker through the existing Worker transport, and suspends the
+Coordinator's physical turn. A dispatch or repair decision returned as text instead of a tool
+call is dispatched the same way and resumed in the same thread. Budgets are unchanged: five
+Agent calls, two Worker calls, one repair, a 300-second deadline and a 40-tool cap per
+Coordinator physical turn. Stop interrupts the Coordinator thread, cancels the Worker and
+prevents a late continuation.
+
+Attention is derived by the Host from the Worker's report outcome; the Worker receives no new
+tool. Activation follows the Worker pilot rule: a Codex Coordinator profile with the user's
+Full Access selection. Any other Coordinator profile, including Claude, keeps the fresh-session
+Coordinator path, which is not a push model. `lib/coordinator-events.ts` owns the event
+classification and continuation prompts.
+
 ## Push execution
 
 The Codex driver uses the experimental App Server protocol with the current local Codex
@@ -52,12 +88,14 @@ choice to Full Access. This does not broaden a read-only or workspace-write Sess
 
 ## Provider capabilities
 
-| Capability         | Codex App Server | Claude legacy |
-| ------------------ | ---------------- | ------------- |
-| Persistent thread  | yes              | no            |
-| Push tool result   | yes              | no            |
-| Resume turn/thread | yes              | no            |
-| Interrupt          | yes              | yes           |
+| Capability                | Codex App Server | Claude legacy |
+| ------------------------- | ---------------- | ------------- |
+| Persistent thread         | yes              | no            |
+| Push tool result          | yes              | no            |
+| Resume turn/thread        | yes              | no            |
+| Interrupt                 | yes              | yes           |
+| Suspending Host tools     | yes              | no            |
+| Coordinator resume events | yes              | no            |
 
 These are adapter capabilities, not product switches. When Claude later gains an SDK or
 protocol integration, it implements `AgentSessionDriver` and the same Host tool contract.
@@ -83,3 +121,8 @@ and cannot launch the command again automatically.
 - One cancellation test terminates the process group and returns a canceled tool result.
 - Existing read-only, workspace-write and Claude flows remain on the legacy transport.
 - Broader activation remains blocked on restart recovery and provider permission parity.
+- Coordinator suspension is covered by deterministic driver and runner fixtures: dispatch through
+  the Host tool, `WORKER_COMPLETED` followed by one repair, `WORKER_FAILED` without repair,
+  `WORKER_ATTENTION_REQUIRED` leading to needs-user, text-returned dispatch, stop during
+  suspension, per-turn timeout and the Claude fallback. A real Coordinator thread against the
+  Codex App Server has not been exercised yet; that live smoke is the next evidence step.

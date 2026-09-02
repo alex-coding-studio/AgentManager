@@ -1,15 +1,18 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import path from 'node:path';
 import readline from 'node:readline';
-import type {
-  AgentRuntimeCapabilities,
-  AgentRuntimeEvent,
-  AgentRuntimeThread,
-  AgentRuntimeThreadInput,
-  AgentRuntimeTurn,
-  AgentRuntimeTurnInput,
-  AgentRuntimeTurnResult,
-  AgentSessionDriver,
+import {
+  isHostToolSuspension,
+  type AgentRuntimeCapabilities,
+  type AgentRuntimeEvent,
+  type AgentRuntimeThread,
+  type AgentRuntimeThreadInput,
+  type AgentRuntimeTurn,
+  type AgentRuntimeTurnInput,
+  type AgentRuntimeTurnResult,
+  type AgentSessionDriver,
+  type HostTool,
+  type HostToolContinuation,
 } from './agent-runtime-driver.ts';
 import {
   HostJobBroker,
@@ -22,12 +25,27 @@ export type CodexAppServerDriverOptions = {
   arguments?: string[];
   environment?: NodeJS.ProcessEnv;
   brokerFactory: (input: AgentRuntimeThreadInput) => HostJobBroker;
-  hostTools?: Array<{
-    name: string;
-    description: string;
-    inputSchema: Record<string, unknown>;
-    call: (arguments_: Record<string, unknown>) => Promise<unknown>;
-  }>;
+  hostTools?: HostTool[];
+};
+const workerInstructions =
+  'Complete only the assigned worker task. Do not create or delegate to other agents. Use the Host run_job tool for long-running commands. It starts the job and AgentManager interrupts this physical turn; do not call wait or poll. AgentManager starts a continuation turn in this same thread when the operating-system process exits.';
+const runJobTool = {
+  type: 'function',
+  name: 'run_job',
+  description:
+    'Start one long command in the current Card workspace. AgentManager suspends this physical turn and starts a continuation turn with the completion result. Never call wait or poll.',
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['label', 'executable', 'arguments'],
+    properties: {
+      label: { type: 'string' },
+      executable: { type: 'string' },
+      arguments: { type: 'array', items: { type: 'string' } },
+      workingDirectory: { type: 'string' },
+      timeoutMs: { type: 'integer', minimum: 1 },
+    },
+  },
 };
 type Pending = {
   resolve: (value: unknown) => void;
@@ -48,11 +66,16 @@ type TurnState = {
   onEvent?: (event: AgentRuntimeEvent) => void;
   resolve: (result: AgentRuntimeTurnResult) => void;
   reject: (error: Error) => void;
+  lastTurnUsage: AgentRuntimeTurnResult['usage'];
   stopped: boolean;
   physicalCompleted: boolean;
   continuationStarted: boolean;
-  pendingJob?: { id: string; completion: Promise<HostJobEvent> };
-  jobResult?: HostJobEvent;
+  pendingSuspension?: {
+    tool: string;
+    jobId?: string;
+    completion: Promise<HostToolContinuation>;
+  };
+  suspensionResult?: { tool: string; jobId?: string } & HostToolContinuation;
 };
 
 export class CodexAppServerDriver implements AgentSessionDriver {
@@ -68,14 +91,13 @@ export class CodexAppServerDriver implements AgentSessionDriver {
   private pending = new Map<number, Pending>();
   private threads = new Map<string, AgentRuntimeThread>();
   private brokers = new Map<string, HostJobBroker>();
+  private hostJobs = new Map<string, boolean>();
   private turns = new Map<string, TurnState>();
+  private suspended = new Set<TurnState>();
   private bufferedTurnMessages = new Map<string, RpcMessage[]>();
   private ready: Promise<void>;
   private brokerFactory: CodexAppServerDriverOptions['brokerFactory'];
-  private hostTools: Map<
-    string,
-    NonNullable<CodexAppServerDriverOptions['hostTools']>[number]
-  >;
+  private hostTools: Map<string, HostTool>;
 
   constructor(options: CodexAppServerDriverOptions) {
     this.brokerFactory = options.brokerFactory;
@@ -110,28 +132,10 @@ export class CodexAppServerDriver implements AgentSessionDriver {
         input.access === 'full-access' ? 'danger-full-access' : input.access,
       approvalPolicy: 'never',
       multiAgentMode: 'explicitRequestOnly',
-      developerInstructions:
-        'Complete only the assigned worker task. Do not create or delegate to other agents. Use the Host run_job tool for long-running commands. It starts the job and AgentManager interrupts this physical turn; do not call wait or poll. AgentManager starts a continuation turn in this same thread when the operating-system process exits.',
+      developerInstructions: input.instructions ?? workerInstructions,
       ephemeral: false,
       dynamicTools: [
-        {
-          type: 'function',
-          name: 'run_job',
-          description:
-            'Start one long command in the current Card workspace. AgentManager suspends this physical turn and starts a continuation turn with the completion result. Never call wait or poll.',
-          inputSchema: {
-            type: 'object',
-            additionalProperties: false,
-            required: ['label', 'executable', 'arguments'],
-            properties: {
-              label: { type: 'string' },
-              executable: { type: 'string' },
-              arguments: { type: 'array', items: { type: 'string' } },
-              workingDirectory: { type: 'string' },
-              timeoutMs: { type: 'integer', minimum: 1 },
-            },
-          },
-        },
+        ...(input.hostJobs === false ? [] : [runJobTool]),
         ...[...this.hostTools.values()].map((tool) => ({
           type: 'function',
           name: tool.name,
@@ -149,6 +153,7 @@ export class CodexAppServerDriver implements AgentSessionDriver {
     };
     this.threads.set(thread.threadId, thread);
     this.brokers.set(thread.threadId, this.brokerFactory(input));
+    this.hostJobs.set(thread.threadId, input.hostJobs !== false);
     return thread;
   }
 
@@ -180,6 +185,7 @@ export class CodexAppServerDriver implements AgentSessionDriver {
           turnId: '',
           finalOutput: '',
           usage: null,
+          lastTurnUsage: null,
           onEvent: input.onEvent,
           resolve,
           reject,
@@ -218,8 +224,10 @@ export class CodexAppServerDriver implements AgentSessionDriver {
     })) as { turn: { id: string } };
     state.turnId = started.turn.id;
     state.finalOutput = '';
+    state.lastTurnUsage = null;
     state.physicalCompleted = false;
     state.continuationStarted = false;
+    this.suspended.delete(state);
     this.turns.set(state.turnId, state);
     state.onEvent?.({
       type: 'turn-started',
@@ -351,13 +359,15 @@ export class CodexAppServerDriver implements AgentSessionDriver {
         });
       }
     }
-    if (message.method === 'thread/tokenUsage/updated')
+    if (message.method === 'thread/tokenUsage/updated') {
+      const tokenUsage = message.params?.tokenUsage as
+        | Record<string, unknown>
+        | undefined;
       turn.usage = normalizeUsage(
-        (message.params?.tokenUsage as Record<string, unknown> | undefined)
-          ?.total ??
-          message.params?.tokenUsage ??
-          message.params?.usage,
+        tokenUsage?.total ?? tokenUsage ?? message.params?.usage,
       );
+      turn.lastTurnUsage = normalizeUsage(tokenUsage?.last) ?? turn.usage;
+    }
     if (message.method === 'turn/completed') {
       this.turns.delete(turn.turnId);
       turn.physicalCompleted = true;
@@ -365,10 +375,11 @@ export class CodexAppServerDriver implements AgentSessionDriver {
         type: 'turn-completed',
         threadId: turn.threadId,
         turnId: turn.turnId,
+        usage: turn.lastTurnUsage,
         at: now,
       });
-      if (turn.pendingJob) {
-        this.continueAfterJob(turn);
+      if (turn.pendingSuspension) {
+        this.continueAfterSuspension(turn);
         return;
       }
       if (turn.stopped) {
@@ -388,17 +399,36 @@ export class CodexAppServerDriver implements AgentSessionDriver {
     const params = message.params ?? {};
     const hostTool = this.hostTools.get(stringValue(params.tool));
     if (hostTool) {
+      const turn = this.turns.get(stringValue(params.turnId));
+      turn?.onEvent?.({
+        type: 'activity',
+        threadId: turn.threadId,
+        turnId: turn.turnId,
+        summary: `Running tool: ${hostTool.name}`,
+        at: new Date().toISOString(),
+      });
+      if (turn?.pendingSuspension) {
+        this.reply(
+          message,
+          false,
+          'A Host operation is already pending. Do not start or poll another one.',
+        );
+        return;
+      }
       try {
         const result = await hostTool.call(
           (params.arguments as Record<string, unknown> | undefined) ?? {},
         );
-        this.send({
-          id: message.id,
-          result: {
-            success: true,
-            contentItems: [{ type: 'inputText', text: JSON.stringify(result) }],
-          },
-        });
+        if (isHostToolSuspension(result)) {
+          if (!turn) throw new Error('Unknown App Server turn.');
+          this.suspend(turn, message, {
+            tool: hostTool.name,
+            acknowledgement: result.acknowledgement,
+            completion: result.continuation,
+          });
+          return;
+        }
+        this.reply(message, true, JSON.stringify(result));
       } catch (error) {
         this.send({
           id: message.id,
@@ -416,7 +446,8 @@ export class CodexAppServerDriver implements AgentSessionDriver {
       }
       return;
     }
-    if (params.tool !== 'run_job') {
+    const threadId = stringValue(params.threadId);
+    if (params.tool !== 'run_job' || this.hostJobs.get(threadId) === false) {
       this.send({
         id: message.id,
         result: {
@@ -426,10 +457,16 @@ export class CodexAppServerDriver implements AgentSessionDriver {
       });
       return;
     }
-    const threadId = stringValue(params.threadId);
     const thread = this.threads.get(threadId);
     const broker = this.brokers.get(threadId);
     const turn = this.turns.get(stringValue(params.turnId));
+    turn?.onEvent?.({
+      type: 'activity',
+      threadId: turn.threadId,
+      turnId: turn.turnId,
+      summary: 'Running tool: run_job',
+      at: new Date().toISOString(),
+    });
     if (!thread || !broker || !turn) {
       this.send({
         id: message.id,
@@ -442,19 +479,12 @@ export class CodexAppServerDriver implements AgentSessionDriver {
       });
       return;
     }
-    if (turn.pendingJob) {
-      this.send({
-        id: message.id,
-        result: {
-          success: false,
-          contentItems: [
-            {
-              type: 'inputText',
-              text: 'A Host job is already running. Do not start or poll another task.',
-            },
-          ],
-        },
-      });
+    if (turn.pendingSuspension) {
+      this.reply(
+        message,
+        false,
+        'A Host job is already running. Do not start or poll another task.',
+      );
       return;
     }
     try {
@@ -477,7 +507,6 @@ export class CodexAppServerDriver implements AgentSessionDriver {
             ? arguments_.timeoutMs
             : undefined,
       });
-      turn.pendingJob = { id: job.id, completion: job.completion };
       turn.onEvent?.({
         type: 'job-started',
         threadId,
@@ -486,28 +515,15 @@ export class CodexAppServerDriver implements AgentSessionDriver {
         label: String(arguments_.label ?? ''),
         at: new Date().toISOString(),
       });
-      this.send({
-        id: message.id,
-        result: {
-          success: true,
-          contentItems: [
-            {
-              type: 'inputText',
-              text: `Host job ${job.id} started. AgentManager will interrupt this physical turn and start a continuation turn with the operating-system result. Do not call wait, write_stdin, or another tool.`,
-            },
-          ],
-        },
+      this.suspend(turn, message, {
+        tool: 'run_job',
+        jobId: job.id,
+        acknowledgement: `Host job ${job.id} started. AgentManager will interrupt this physical turn and start a continuation turn with the operating-system result. Do not call wait, write_stdin, or another tool.`,
+        completion: job.completion.then((result) => ({
+          prompt: `HOST_JOB_COMPLETED\n${JSON.stringify(result)}\nThe Host ran this command exactly once. Do not rerun it merely to obtain the result. Inspect the referenced log only when details are needed, then continue the original assignment. If another long command is necessary, use run_job once and let AgentManager suspend and resume the thread again.`,
+          jobResult: result,
+        })),
       });
-      void job.completion
-        .then((result) => {
-          turn.jobResult = result;
-          this.continueAfterJob(turn);
-        })
-        .catch((error: Error) => turn.reject(error));
-      void this.request('turn/interrupt', {
-        threadId,
-        turnId: turn.turnId,
-      }).catch((error: Error) => turn.reject(error));
     } catch (error) {
       this.send({
         id: message.id,
@@ -524,32 +540,102 @@ export class CodexAppServerDriver implements AgentSessionDriver {
     }
   }
 
-  private continueAfterJob(turn: TurnState) {
-    if (!turn.physicalCompleted || !turn.jobResult || turn.continuationStarted)
+  private reply(message: RpcMessage, success: boolean, text: string) {
+    this.send({
+      id: message.id,
+      result: { success, contentItems: [{ type: 'inputText', text }] },
+    });
+  }
+
+  private suspend(
+    turn: TurnState,
+    message: RpcMessage,
+    suspension: {
+      tool: string;
+      jobId?: string;
+      acknowledgement: string;
+      completion: Promise<HostToolContinuation & { jobResult?: HostJobEvent }>;
+    },
+  ) {
+    turn.pendingSuspension = {
+      tool: suspension.tool,
+      jobId: suspension.jobId,
+      completion: suspension.completion,
+    };
+    this.suspended.add(turn);
+    if (suspension.tool !== 'run_job')
+      turn.onEvent?.({
+        type: 'tool-suspended',
+        threadId: turn.threadId,
+        turnId: turn.turnId,
+        tool: suspension.tool,
+        at: new Date().toISOString(),
+      });
+    this.reply(message, true, suspension.acknowledgement);
+    void suspension.completion
+      .then((result) => {
+        turn.suspensionResult = {
+          tool: suspension.tool,
+          jobId: suspension.jobId,
+          ...result,
+        };
+        if (result.jobResult)
+          turn.onEvent?.({
+            type: 'job-completed',
+            threadId: turn.threadId,
+            turnId: turn.turnId,
+            jobId: result.jobResult.jobId,
+            exitCode: result.jobResult.exitCode,
+            at: result.jobResult.endedAt ?? new Date().toISOString(),
+          });
+        this.continueAfterSuspension(turn);
+      })
+      .catch((error: Error) => turn.reject(error));
+    void this.request('turn/interrupt', {
+      threadId: turn.threadId,
+      turnId: turn.turnId,
+    }).catch((error: Error) => turn.reject(error));
+  }
+
+  private continueAfterSuspension(turn: TurnState) {
+    if (
+      !turn.physicalCompleted ||
+      !turn.suspensionResult ||
+      turn.continuationStarted
+    )
       return;
     if (turn.stopped) {
       turn.reject(new Error('Agent turn interrupted.'));
       return;
     }
     turn.continuationStarted = true;
-    const result = turn.jobResult;
-    turn.pendingJob = undefined;
-    turn.jobResult = undefined;
-    turn.onEvent?.({
-      type: 'job-completed',
-      threadId: turn.threadId,
-      turnId: turn.turnId,
-      jobId: result.jobId,
-      exitCode: result.exitCode,
-      at: result.endedAt ?? new Date().toISOString(),
-    });
+    const result = turn.suspensionResult;
+    turn.pendingSuspension = undefined;
+    turn.suspensionResult = undefined;
+    this.suspended.delete(turn);
+    if (result.tool !== 'run_job')
+      turn.onEvent?.({
+        type: 'tool-resumed',
+        threadId: turn.threadId,
+        turnId: turn.turnId,
+        tool: result.tool,
+        at: new Date().toISOString(),
+      });
+    if ('finalOutput' in result) {
+      turn.resolve({
+        threadId: turn.threadId,
+        turnId: turn.turnId,
+        finalOutput: result.finalOutput,
+        usage: turn.usage,
+      });
+      return;
+    }
     const thread = this.threads.get(turn.threadId);
     if (!thread) {
       turn.reject(new Error('Unknown App Server thread.'));
       return;
     }
-    const prompt = `HOST_JOB_COMPLETED\n${JSON.stringify(result)}\nThe Host ran this command exactly once. Do not rerun it merely to obtain the result. Inspect the referenced log only when details are needed, then continue the original assignment. If another long command is necessary, use run_job once and let AgentManager suspend and resume the thread again.`;
-    void this.startPhysicalTurn(thread, prompt, turn).catch(turn.reject);
+    void this.startPhysicalTurn(thread, result.prompt, turn).catch(turn.reject);
   }
 
   private failAll(error: Error) {
@@ -557,6 +643,8 @@ export class CodexAppServerDriver implements AgentSessionDriver {
     this.pending.clear();
     for (const turn of this.turns.values()) turn.reject(error);
     this.turns.clear();
+    for (const turn of this.suspended) turn.reject(error);
+    this.suspended.clear();
     this.bufferedTurnMessages.clear();
   }
 }

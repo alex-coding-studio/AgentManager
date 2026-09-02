@@ -10,6 +10,38 @@ import {
 import { CodexAppServerDriver } from './codex-app-server-driver.ts';
 import { HostJobBroker } from './host-job-broker.ts';
 import { publishCardCandidate } from './card-host-operations.ts';
+import type { AgentSessionDriver, HostTool } from './agent-runtime-driver.ts';
+
+export type CoordinatorSessionInput = {
+  profile: AgentProfile;
+  workingDirectory: string;
+  protectedPath?: string;
+  hostTools: HostTool[];
+};
+export type CoordinatorSession = {
+  driver: AgentSessionDriver;
+  decoratePrompt: (prompt: string) => string;
+};
+
+export async function startPushCoordinatorSession(
+  input: CoordinatorSessionInput,
+): Promise<CoordinatorSession | null> {
+  if (input.profile.agent !== 'codex') return null;
+  const catalog = await readCodexSkills(input.workingDirectory);
+  if (catalog.executionAccess !== 'full-access') return null;
+  const recordRoot = path.join(
+    input.protectedPath ?? input.workingDirectory,
+    'runtime/jobs',
+  );
+  return {
+    driver: new CodexAppServerDriver({
+      brokerFactory: (thread) =>
+        new HostJobBroker(thread.workingDirectory, recordRoot),
+      hostTools: input.hostTools,
+    }),
+    decoratePrompt: (prompt) => withSkillCatalog(prompt, catalog),
+  };
+}
 
 export function startEventDrivenWorkerRun(
   agent: LocalAgentKind,
