@@ -177,7 +177,7 @@ export function AgentProfileSelector({
             <option value="">{t('Agent default')}</option>
             {efforts.map((effort) => (
               <option key={effort} value={effort}>
-                {effort}
+                {t(effort)}
               </option>
             ))}
             {value.effort && !efforts.includes(value.effort) && (

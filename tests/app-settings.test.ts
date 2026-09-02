@@ -25,6 +25,26 @@ void test('module names translate without renaming dependency terminology', () =
   }
 });
 
+void test('built-in Agent Graph profiles and effort levels are localized', () => {
+  for (const [english, chinese] of [
+    ['MVP Exploration', 'MVP 探索'],
+    ['Feature Synthesis', '功能提炼'],
+    ['Product Design Completion', '产品设计补全'],
+    ['Understand the structure', '理清结构'],
+    ['Product modules', '产品模块'],
+    ['Implementation approach', '实现方案'],
+    ['Delivery breakdown', '交付拆分'],
+    ['Unspecified', '未指定'],
+    ['Diverge', '发散'],
+    ['Converge', '收敛'],
+    ['xhigh', '极高'],
+    ['max', '最大'],
+  ]) {
+    assert.equal(translateUi('en', english), english);
+    assert.equal(translateUi('zh-CN', english), chinese);
+  }
+});
+
 void test('running status supports named agents and the generic Agent label', () => {
   assert.equal(
     translateUi('zh-CN', '{agent} is running', { agent: 'Codex' }),
