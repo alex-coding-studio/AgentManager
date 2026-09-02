@@ -20,6 +20,7 @@ import {
 import { useState } from 'react';
 import { siGithub } from 'simple-icons/icons';
 import type { RegisteredProject } from '@/lib/project-registry';
+import { requestProjectReveal } from '@/lib/project-reveal';
 import { cn } from '@/lib/utils';
 import { useUiText } from '@/components/ui-language-provider';
 
@@ -78,15 +79,17 @@ export function ProjectShell({
   async function openProjectLocation() {
     setOpeningProject(true);
     setProjectOpenError('');
-    const response = await fetch(`/api/projects/${project.id}/reveal`, {
-      method: 'POST',
-    });
-    const result = (await response.json()) as { error?: string };
-    setOpeningProject(false);
-    if (!response.ok)
+    try {
+      await requestProjectReveal(project.id);
+    } catch (error) {
       setProjectOpenError(
-        result.error ?? t('Could not open project location.'),
+        error instanceof Error
+          ? t(error.message)
+          : t('Could not open project location.'),
       );
+    } finally {
+      setOpeningProject(false);
+    }
   }
 
   return (
