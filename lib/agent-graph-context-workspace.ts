@@ -8,6 +8,14 @@ export type ContextWorkspaceInput = {
   logicalPath: string;
   content: string;
   nodeId?: string;
+  attachment?: ContextWorkspaceAttachment;
+};
+
+export type ContextWorkspaceAttachment = {
+  originalName: string;
+  mediaType: string;
+  byteSize: number;
+  semanticKind: string;
 };
 
 export type ContextWorkspaceEntry = {
@@ -17,6 +25,7 @@ export type ContextWorkspaceEntry = {
   workspacePath: string;
   sha256: string;
   nodeId?: string;
+  attachment?: ContextWorkspaceAttachment;
 };
 
 export type ContextWorkspaceManifest = {
@@ -145,6 +154,7 @@ export async function writeAgentGraphContextWorkspace(
       workspacePath,
       sha256: createHash('sha256').update(input.content).digest('hex'),
       ...(input.nodeId ? { nodeId: input.nodeId } : {}),
+      ...(input.attachment ? { attachment: input.attachment } : {}),
     });
   }
 

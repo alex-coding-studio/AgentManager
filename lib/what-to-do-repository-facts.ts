@@ -98,6 +98,80 @@ export async function collectWhatToDoRepositoryFacts(
   };
 }
 
+export async function readWhatToDoRepositoryEvidence(
+  project: RegisteredProject,
+  facts: WhatToDoRepositoryFacts,
+) {
+  const root = await realpath(project.codePath ?? project.rootPath);
+  if (root !== facts.root)
+    throw new Error('What to Do repository evidence root changed.');
+  return Promise.all(
+    facts.evidence.map(async (entry) => {
+      const content = await readOwnedFile(root, entry.path, MAX_EVIDENCE_BYTES);
+      if (
+        !content ||
+        content.length !== entry.size ||
+        createHash('sha256').update(content).digest('hex') !== entry.sha256
+      )
+        throw new Error('What to Do repository evidence changed.');
+      let text: string;
+      try {
+        text = new TextDecoder('utf-8', { fatal: true }).decode(content);
+      } catch {
+        throw new Error('What to Do repository evidence is not UTF-8 text.');
+      }
+      return { path: entry.path, content: text };
+    }),
+  );
+}
+
+export async function readWhatToDoTargetedRepositoryEvidence(
+  project: RegisteredProject,
+  facts: WhatToDoRepositoryFacts,
+  paths: string[],
+) {
+  const root = await realpath(project.codePath ?? project.rootPath);
+  if (root !== facts.root)
+    throw new Error('What to Do repository evidence root changed.');
+  return Promise.all(
+    [...new Set(paths)].map(async (relative) => {
+      if (
+        facts.git &&
+        !(
+          await git(root, [
+            'ls-files',
+            '--cached',
+            '--others',
+            '--exclude-standard',
+            '-z',
+            '--',
+            relative,
+          ])
+        )
+          .split('\0')
+          .includes(relative)
+      )
+        throw new Error(
+          'Requested What to Do repository evidence is not in the Git inventory.',
+        );
+      const content = await readOwnedFile(root, relative, MAX_EVIDENCE_BYTES);
+      if (!content)
+        throw new Error(
+          'Requested What to Do repository evidence is unavailable.',
+        );
+      let text: string;
+      try {
+        text = new TextDecoder('utf-8', { fatal: true }).decode(content);
+      } catch {
+        throw new Error(
+          'Requested What to Do repository evidence is not UTF-8 text.',
+        );
+      }
+      return { path: relative, content: text };
+    }),
+  );
+}
+
 async function readGitFacts(root: string) {
   const top = await git(root, ['rev-parse', '--show-toplevel']).catch(() => '');
   if (!top || (await realpath(top).catch(() => '')) !== root) return null;
@@ -245,7 +319,7 @@ function classifyPaths(
   const documentation = files.filter(
     (file) =>
       /(^|\/)(docs?|documentation)\//i.test(file) ||
-      /(^|\/)(readme|contributing|architecture|license)(?:\.[^/]*)?$/i.test(
+      /(^|\/)(readme|contributing|architecture|license|agents|claude)(?:\.[^/]*)?$/i.test(
         file,
       ),
   );

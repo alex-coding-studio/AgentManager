@@ -6,7 +6,10 @@ import path from 'node:path';
 import test from 'node:test';
 import { promisify } from 'node:util';
 import type { RegisteredProject } from '../lib/project-registry.ts';
-import { collectWhatToDoRepositoryFacts } from '../lib/what-to-do-repository-facts.ts';
+import {
+  collectWhatToDoRepositoryFacts,
+  readWhatToDoTargetedRepositoryEvidence,
+} from '../lib/what-to-do-repository-facts.ts';
 
 const execute = promisify(execFile);
 
@@ -49,7 +52,14 @@ void test('Repository Facts describe observed project evidence without inferring
   await git(rootPath, 'init', '--initial-branch=main');
   await git(rootPath, 'config', 'user.name', 'Fixture');
   await git(rootPath, 'config', 'user.email', 'fixture@example.com');
-  await writeFile(path.join(rootPath, '.gitignore'), 'node_modules/\n');
+  await writeFile(
+    path.join(rootPath, '.gitignore'),
+    'node_modules/\ncredentials.json\n',
+  );
+  await writeFile(
+    path.join(rootPath, 'credentials.json'),
+    '{"TOKEN":"secret"}\n',
+  );
   await writeFile(
     path.join(rootPath, '.git/info/exclude'),
     '# git ls-files --others --exclude-from=.git/info/exclude\n.praxis/\n',
@@ -89,6 +99,12 @@ void test('Repository Facts describe observed project evidence without inferring
   assert.equal(JSON.stringify(first).includes('framework'), false);
   assert.equal(JSON.stringify(first).includes('ignored.js'), false);
   assert.equal(JSON.stringify(first).includes('private.md'), false);
+  await assert.rejects(
+    readWhatToDoTargetedRepositoryEvidence(project, first, [
+      'credentials.json',
+    ]),
+    /not in the Git inventory/,
+  );
 
   await writeFile(path.join(rootPath, 'README.md'), '# Changed\n');
   const changed = await collectWhatToDoRepositoryFacts(project);

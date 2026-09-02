@@ -90,6 +90,8 @@ export async function whatToDoFeatureWorkspaceInputs(
         const current = await materializeFeature(project, node);
         if (
           current.source.nodeId !== source.nodeId ||
+          current.source.title !== source.title ||
+          current.source.summary !== source.summary ||
           current.source.outputPath !== source.outputPath ||
           current.source.outputSha256 !== source.outputSha256
         )

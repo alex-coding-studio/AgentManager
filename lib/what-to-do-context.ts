@@ -1,0 +1,307 @@
+import type { AgentProfile } from './agent-profile.ts';
+import path from 'node:path';
+import {
+  agentGraphContentPacket,
+  userInputWorkspaceInput,
+  writeAgentGraphContextWorkspace,
+  type ContextWorkspaceInput,
+} from './agent-graph-context-workspace.ts';
+import { PublicApiError } from './api-errors.ts';
+import { readDomainModel, type DomainModel } from './domain-model.ts';
+import type { RegisteredProject } from './project-registry.ts';
+import { readTaskGraphMarkdownResource } from './task-graph.ts';
+import {
+  collectWhatToDoRepositoryFacts,
+  readWhatToDoRepositoryEvidence,
+  readWhatToDoTargetedRepositoryEvidence,
+} from './what-to-do-repository-facts.ts';
+import {
+  selectWhatToDoFeatureSources,
+  whatToDoFeatureWorkspaceInputs,
+} from './what-to-do-sources.ts';
+import {
+  readWhatToDoRepositorySummary,
+  stageWhatToDoRunDirectory,
+} from './what-to-do-storage.ts';
+
+export type WhatToDoRunInput = {
+  instruction: string;
+  sourceUids: string[];
+  profile: AgentProfile;
+  contextRefs?: string[];
+  files?: File[];
+  repositoryEvidencePaths?: string[];
+};
+
+export async function prepareWhatToDoContext(
+  project: RegisteredProject,
+  runId: string,
+  input: WhatToDoRunInput,
+) {
+  const instruction = input.instruction.trim();
+  if (!instruction)
+    throw new PublicApiError('What to Do User Input is required.', 400);
+  const contextRefs = [...new Set(input.contextRefs ?? [])];
+  const files = input.files ?? [];
+  const repositoryEvidencePaths = [
+    ...new Set(input.repositoryEvidencePaths ?? []),
+  ];
+  if (contextRefs.length > 50)
+    throw new PublicApiError('Select no more than 50 Context documents.', 400);
+  if (files.length > 20)
+    throw new PublicApiError('Attach no more than 20 Markdown files.', 400);
+  if (repositoryEvidencePaths.length > 50)
+    throw new PublicApiError(
+      'Select no more than 50 repository evidence files.',
+      400,
+    );
+
+  const [sources, repositoryFacts, repositorySummary, domainModel] =
+    await Promise.all([
+      selectWhatToDoFeatureSources(project, input.sourceUids),
+      collectWhatToDoRepositoryFacts(project),
+      readWhatToDoRepositorySummary(project),
+      readDomainModel(project),
+    ]);
+  const featureInputs = await whatToDoFeatureWorkspaceInputs(project, sources);
+  let repositoryEvidence: Array<{ path: string; content: string }>;
+  try {
+    const [automatic, targeted] = await Promise.all([
+      readWhatToDoRepositoryEvidence(project, repositoryFacts),
+      readWhatToDoTargetedRepositoryEvidence(
+        project,
+        repositoryFacts,
+        repositoryEvidencePaths,
+      ),
+    ]);
+    repositoryEvidence = [
+      ...new Map(
+        [...automatic, ...targeted].map((entry) => [entry.path, entry]),
+      ).values(),
+    ];
+  } catch {
+    throw new PublicApiError(
+      'Repository evidence changed or is unavailable. Reload before continuing.',
+      409,
+    );
+  }
+  const confirmedFacts = await collectWhatToDoRepositoryFacts(project);
+  if (confirmedFacts.fingerprint !== repositoryFacts.fingerprint)
+    throw new PublicApiError(
+      'Repository facts changed. Reload before continuing.',
+      409,
+    );
+  const extraInputs = await contextInputs(project, contextRefs, files, runId);
+  const userInput = userInputWorkspaceInput(
+    `what-to-do/runs/${runId}/context/input/user-input.md`,
+    instruction,
+  );
+  if (!userInput) throw new Error('What to Do User Input was lost.');
+  const staging = await stageWhatToDoRunDirectory(project, runId);
+  let workspace: Awaited<ReturnType<typeof writeAgentGraphContextWorkspace>>;
+  try {
+    const staged = await writeAgentGraphContextWorkspace(staging.stagingPath, [
+      userInput,
+      ...featureInputs,
+      {
+        role: 'related',
+        kind: 'repository-facts',
+        logicalPath: 'what-to-do/repository-context/facts.json',
+        content: `${JSON.stringify(repositoryFacts, null, 2)}\n`,
+      },
+      ...repositoryEvidence.map((entry) => ({
+        role: 'related' as const,
+        kind: 'repository-evidence',
+        logicalPath: `repository/${entry.path}`,
+        content: entry.content,
+      })),
+      ...(repositorySummary &&
+      repositoryFacts.reusable &&
+      repositorySummary.repositoryFingerprint === repositoryFacts.fingerprint
+        ? [
+            {
+              role: 'related' as const,
+              kind: 'repository-summary',
+              logicalPath: 'what-to-do/repository-context/summary.md',
+              content: repositorySummary.markdown,
+            },
+          ]
+        : []),
+      {
+        role: 'related',
+        kind: 'domain-model-summary',
+        logicalPath: 'domain-model/domain-model-summary.md',
+        content: renderDomainModelSummary(domainModel),
+      },
+      {
+        role: 'related',
+        kind: 'domain-model',
+        logicalPath: 'domain-model/domain-model.json',
+        content: `${JSON.stringify(domainModel, null, 2)}\n`,
+      },
+      ...extraInputs,
+    ]);
+    const publishedRoot = await staging.publish();
+    workspace = {
+      ...staged,
+      root: path.join(publishedRoot, 'context'),
+      indexPath: path.join(publishedRoot, 'context', 'index.json'),
+    };
+  } catch (error) {
+    await staging.cleanup();
+    throw error;
+  }
+  const packet = agentGraphContentPacket(workspace.manifest);
+  const inputEntry = workspace.manifest.primary.find(
+    (entry) => entry.kind === 'user-input',
+  );
+  if (!inputEntry) throw new Error('What to Do Packet has no User Input.');
+  return {
+    workspace,
+    packet,
+    sources,
+    repositoryFacts,
+    domainModel,
+    userInput: {
+      path: inputEntry.logicalPath,
+      sha256: inputEntry.sha256,
+      content: userInput.content,
+    },
+    knownSources: Object.fromEntries(
+      sources.map((source) => [
+        source.outputPath,
+        {
+          sha256: source.outputSha256,
+          content: featureInputContent(featureInputs, source.outputPath),
+        },
+      ]),
+    ),
+    knownEvidencePaths: knownEvidencePaths(workspace.manifest),
+  };
+}
+
+function featureInputContent(
+  inputs: ContextWorkspaceInput[],
+  logicalPath: string,
+) {
+  const input = inputs.find((entry) => entry.logicalPath === logicalPath);
+  if (!input) throw new Error('What to Do Feature Context is unavailable.');
+  return input.content;
+}
+
+async function contextInputs(
+  project: RegisteredProject,
+  contextRefs: string[],
+  files: File[],
+  runId: string,
+): Promise<ContextWorkspaceInput[]> {
+  const references = await Promise.all(
+    contextRefs.map(async (resourcePath) => {
+      const resource = await readTaskGraphMarkdownResource(
+        project,
+        resourcePath,
+      );
+      return {
+        role: 'primary' as const,
+        kind: 'context',
+        logicalPath: resource.path,
+        content: resource.markdown,
+      };
+    }),
+  );
+  const external = await Promise.all(
+    files.map(async (file, index) => {
+      if (!/\.(md|markdown)$/i.test(file.name))
+        throw new PublicApiError(
+          'Only Markdown files can be attached to What to Do.',
+          400,
+        );
+      if (file.size > 2 * 1024 * 1024)
+        throw new PublicApiError(
+          'Each What to Do attachment must be 2 MB or smaller.',
+          400,
+        );
+      if (file.name.length > 255 || file.name.includes('\0'))
+        throw new PublicApiError(
+          'A What to Do attachment name is invalid.',
+          400,
+        );
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      let content: string;
+      try {
+        content = new TextDecoder('utf-8', {
+          fatal: true,
+          ignoreBOM: true,
+        }).decode(bytes);
+      } catch {
+        throw new PublicApiError(
+          'A What to Do attachment must be UTF-8 Markdown text.',
+          400,
+        );
+      }
+      const mediaType = file.type || 'text/markdown';
+      if (!['text/markdown', 'text/plain'].includes(mediaType.toLowerCase()))
+        throw new PublicApiError(
+          'A What to Do attachment media type is not supported.',
+          400,
+        );
+      return {
+        role: 'primary' as const,
+        kind: 'run-attachment',
+        logicalPath: `what-to-do/runs/${runId}/attachments/${String(index + 1).padStart(3, '0')}-${safeAttachmentName(file.name)}`,
+        content,
+        attachment: {
+          originalName: file.name,
+          mediaType,
+          byteSize: bytes.byteLength,
+          semanticKind: 'markdown',
+        },
+      };
+    }),
+  );
+  return [...references, ...external];
+}
+
+function safeAttachmentName(value: string) {
+  const name = value
+    .normalize('NFKD')
+    .replace(/[^a-zA-Z0-9._-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+  return name || 'attachment.md';
+}
+
+export function renderDomainModelSummary(model: DomainModel) {
+  const entities = model.entities.length
+    ? model.entities
+        .map(
+          (entity) =>
+            `- ${entity.name}: ${entity.meaning} (${entity.fields.length} fields)`,
+        )
+        .join('\n')
+    : '- None';
+  const relationships = model.relationships.length
+    ? model.relationships
+        .map(
+          (relationship) => `- ${relationship.label}: ${relationship.meaning}`,
+        )
+        .join('\n')
+    : '- None';
+  const constraints = model.constraints.length
+    ? model.constraints.map((constraint) => `- ${constraint.text}`).join('\n')
+    : '- None';
+  return `# Domain Model Summary\n\nState version: ${model.stateVersion}\n\n## Entities\n\n${entities}\n\n## Relationships\n\n${relationships}\n\n## Constraints\n\n${constraints}\n`;
+}
+
+function knownEvidencePaths(
+  manifest: Awaited<
+    ReturnType<typeof writeAgentGraphContextWorkspace>
+  >['manifest'],
+) {
+  return [
+    ...new Set([
+      ...manifest.primary.map((entry) => entry.logicalPath),
+      ...manifest.related.map((entry) => entry.logicalPath),
+    ]),
+  ];
+}
