@@ -559,7 +559,7 @@ void test('Delivery Planning replaces the full Composer while its Agent is runni
   assert.match(source, /previews=\{\[\]\}/);
 });
 
-void test('Domain Modeling and Delivery Planning share one running card', async () => {
+void test('Domain Modeling, Delivery Planning and Just Do It share one running card', async () => {
   const { latestReadableAgentActivity } =
     await import('../components/agent-graph-running-card.tsx');
   assert.equal(
@@ -592,6 +592,7 @@ void test('Domain Modeling and Delivery Planning share one running card', async 
   for (const file of [
     'domain-model-workspace.tsx',
     'what-to-do-workspace.tsx',
+    'just-do-it-live-workspace.tsx',
   ]) {
     const source = await readFile(
       new URL(`../components/${file}`, import.meta.url),
@@ -727,6 +728,31 @@ void test('every Agent Graph module adopts the standard Composer and attachment 
     emptyStateSubmission,
     /setActiveLayer\(intentionDestination\(intention\)\.layer\)/,
   );
+  const selectedCardSubmission = whatsNext.slice(
+    whatsNext.indexOf('async function submitCombine()'),
+    whatsNext.indexOf('function toggleSelection'),
+  );
+  assert.match(selectedCardSubmission, /contextRefs: combineRefs/);
+  assert.match(selectedCardSubmission, /files: combineFiles/);
+  assert.match(whatsNext, /contextRefs: input\.contextRefs \?\? \[\]/);
+  assert.match(whatsNext, /files: input\.files \?\? \[\]/);
+  assert.match(whatsNext, /setCombineRefs\(snapshot\.contextRefs\)/);
+  assert.match(whatsNext, /setCombineFiles\(snapshot\.files\)/);
+  assert.match(
+    whatsNext,
+    /!hasCombineDraft\(combineDraftRef\.current\)[\s\S]*restoreRunSnapshot\(snapshot\)/,
+  );
+  const selectedCardComposer = whatsNext.slice(
+    whatsNext.indexOf('{combineIds.length >= 1 ? ('),
+    whatsNext.indexOf(
+      '<Dialog',
+      whatsNext.indexOf('{combineIds.length >= 1 ? ('),
+    ),
+  );
+  assert.match(selectedCardComposer, /extraInfo=\{/);
+  assert.match(selectedCardComposer, /refs=\{combineRefs\}/);
+  assert.match(selectedCardComposer, /files=\{combineFiles\}/);
+  assert.doesNotMatch(selectedCardComposer, /Clear the selection/);
 });
 
 void test('the standard Agent Composer owns one collapsible panel control', async () => {
@@ -752,6 +778,126 @@ void test('the standard Agent Composer owns one collapsible panel control', asyn
   );
   assert.match(source, /<Sparkles/);
   assert.match(source, /setCollapsed\(false\)/);
+});
+
+void test('the shared Agent profile is one caption button beside the action', async () => {
+  const { AgentProfileSelector, preferredEffort } =
+    await import('../components/agent-profile-selector.tsx');
+  assert.equal(
+    preferredEffort({
+      id: 'reasoning-model',
+      name: 'Reasoning model',
+      description: '',
+      efforts: ['medium', 'high'],
+    }),
+    'medium',
+  );
+  assert.equal(
+    preferredEffort({
+      id: 'plain-model',
+      name: 'Plain model',
+      description: '',
+      efforts: [],
+    }),
+    '',
+  );
+  const html = renderToStaticMarkup(
+    createElement(
+      UiLanguageProvider as never,
+      { language: 'en' },
+      createElement(AgentProfileSelector, {
+        value: { agent: 'codex', model: 'gpt-5.6-sol', effort: 'high' },
+        onChange: () => {},
+        mode: 'demo',
+      }),
+    ),
+  );
+  assert.match(html, /Codex/);
+  assert.match(html, /gpt-5\.6-sol/);
+  assert.match(html, /high/);
+  assert.match(html, /aria-haspopup="dialog"/);
+  const selector = await readFile(
+    new URL('../components/agent-profile-selector.tsx', import.meta.url),
+    'utf8',
+  );
+  assert.match(selector, /grid-cols-\[108px_minmax\(0,1fr\)\]/);
+  assert.match(selector, /type="range"/);
+  assert.match(selector, /effortOptions\.map/);
+  assert.match(selector, /h-4 .*rounded-full bg-secondary/);
+  assert.match(selector, /rounded-l-full/);
+  assert.match(selector, /className="absolute right-0"/);
+  assert.match(selector, /catalogPromises/);
+  assert.match(selector, /!value\.model && !manual/);
+  assert.match(selector, /effortOptions\.length > 0/);
+  assert.match(selector, /manual[\s\S]*Custom model…/);
+  assert.doesNotMatch(selector, /\{t\('Default'\)\}/);
+  const controls = await readFile(
+    new URL('../components/agent-run-controls.tsx', import.meta.url),
+    'utf8',
+  );
+  assert.match(controls, /flex items-stretch justify-between gap-2/);
+  assert.match(controls, /ml-auto flex items-stretch gap-2/);
+  assert.match(controls, /size-8 shrink-0/);
+  assert.match(controls, /<SendHorizontal/);
+  assert.match(controls, /<Plus/);
+  assert.match(controls, /<PopoverContent[\s\S]*align="start"/);
+  assert.match(controls, /aria-label=\{t\(extraInfoLabel\)\}/);
+  assert.match(controls, /disabled=\{disabled \|\| !value\.model\}/);
+  const runningCard = await readFile(
+    new URL('../components/agent-graph-running-card.tsx', import.meta.url),
+    'utf8',
+  );
+  assert.match(runningCard, /disabled=\{cancelDisabled\}/);
+  const justDoIt = await readFile(
+    new URL('../components/just-do-it-live-workspace.tsx', import.meta.url),
+    'utf8',
+  );
+  assert.match(justDoIt, /cancelDisabled=\{pending\}/);
+});
+
+void test('the standard Composer Shell keeps input above its toolbar', async () => {
+  const { contextAttachmentTitle } =
+    await import('../components/context-attachment-picker.tsx');
+  assert.equal(
+    contextAttachmentTitle(
+      [
+        {
+          path: 'product-design',
+          name: 'product-design',
+          title: 'Product Design',
+          entries: [
+            {
+              kind: 'file',
+              path: 'product-design/002-output.md',
+              name: '002-output.md',
+              title: 'Layered location records',
+            },
+          ],
+        },
+      ],
+      'product-design/002-output.md',
+    ),
+    'Layered location records',
+  );
+  const shell = await readFile(
+    new URL('../components/agent-composer-shell.tsx', import.meta.url),
+    'utf8',
+  );
+  assert.ok(shell.indexOf('{children}') < shell.indexOf('{controls}'));
+  for (const file of [
+    'whats-next-workspace.tsx',
+    'task-decomposition-workspace.tsx',
+    'what-to-do-workspace.tsx',
+    'domain-model-workspace.tsx',
+  ]) {
+    const source = await readFile(
+      new URL(`../components/${file}`, import.meta.url),
+      'utf8',
+    );
+    assert.match(source, /<AgentComposerShell/, file);
+    assert.match(source, /<ContextAttachmentPicker\s+embedded/, file);
+    assert.match(source, /<AgentComposerAttachments/, file);
+  }
 });
 
 void test('Latest Response Markdown uses one standard reader shell and close control', async () => {

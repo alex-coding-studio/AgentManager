@@ -4,6 +4,10 @@ import { Plus, Route, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AgentGraphComposerCard } from '@/components/agent-graph-composer-card';
+import {
+  AgentComposerAttachments,
+  AgentComposerShell,
+} from '@/components/agent-composer-shell';
 import { AgentGraphRunningCard } from '@/components/agent-graph-running-card';
 import { AgentRunControls } from '@/components/agent-run-controls';
 import { ContextAttachmentPicker } from '@/components/context-attachment-picker';
@@ -113,6 +117,12 @@ export function WhatToDoWorkspace({
   const selectedContracts = currentMap?.contracts.filter((contract) =>
     focusContractIds.includes(contract.id),
   );
+  const selectedContextDocuments = contextRefs.map((ref) => {
+    const entry = folders
+      .flatMap((folder) => folder.entries)
+      .find((item) => item.kind === 'file' && item.path === ref);
+    return { ref, title: entry?.title ?? ref.split('/').at(-1) ?? ref };
+  });
 
   useEffect(() => {
     const run = latestTerminal;
@@ -520,59 +530,87 @@ export function WhatToDoWorkspace({
                 ) : null}
               </div>
             ) : null}
-            <Textarea
-              className="mt-3 resize-none text-sm"
-              rows={4}
-              value={instruction}
-              disabled={Boolean(running)}
-              placeholder={t(
-                'Describe the delivery outcome, constraints or priorities…',
-              )}
-              onChange={(event) => setInstruction(event.target.value)}
+            <AgentComposerAttachments
+              className="mt-3"
+              label={t('Extra info')}
+              items={[
+                ...selectedContextDocuments.map((entry) => ({
+                  id: entry.ref,
+                  label: entry.title,
+                  onRemove: () =>
+                    setContextRefs((current) =>
+                      current.filter((item) => item !== entry.ref),
+                    ),
+                })),
+                ...files.map((file, index) => ({
+                  id: `${file.name}:${index}`,
+                  label: file.name,
+                  onRemove: () =>
+                    setFiles((current) =>
+                      current.filter((_, item) => item !== index),
+                    ),
+                })),
+              ]}
             />
-            <div className="mt-3">
-              <ContextAttachmentPicker
-                folders={folders}
-                folderPath={folderPath}
-                onFolderPath={setFolderPath}
-                refs={contextRefs}
-                onToggleRef={(ref) =>
-                  setContextRefs((current) =>
-                    current.includes(ref)
-                      ? current.filter((item) => item !== ref)
-                      : [...current, ref],
-                  )
-                }
-                files={files}
-                onAddFiles={(added) =>
-                  setFiles((current) => [...current, ...added])
-                }
-                onRemoveFile={(index) =>
-                  setFiles((current) =>
-                    current.filter((_, item) => item !== index),
-                  )
-                }
-                label={t('Extra info')}
+            <AgentComposerShell
+              className="mt-3"
+              controls={
+                <AgentRunControls
+                  extraInfo={
+                    <ContextAttachmentPicker
+                      embedded
+                      folders={folders}
+                      folderPath={folderPath}
+                      onFolderPath={setFolderPath}
+                      refs={contextRefs}
+                      onToggleRef={(ref) =>
+                        setContextRefs((current) =>
+                          current.includes(ref)
+                            ? current.filter((item) => item !== ref)
+                            : [...current, ref],
+                        )
+                      }
+                      files={files}
+                      onAddFiles={(added) =>
+                        setFiles((current) => [...current, ...added])
+                      }
+                      onRemoveFile={(index) =>
+                        setFiles((current) =>
+                          current.filter((_, item) => item !== index),
+                        )
+                      }
+                      label={t('Extra info')}
+                      disabled={Boolean(running)}
+                    />
+                  }
+                  extraInfoCount={contextRefs.length + files.length}
+                  value={profile}
+                  onChange={setProfile}
+                  disabled={
+                    !instruction.trim() ||
+                    (!currentMap && sourceUids.length === 0) ||
+                    starting ||
+                    Boolean(running)
+                  }
+                  running={starting || Boolean(running)}
+                  actionLabel={
+                    currentMap ? 'Update Delivery Map' : 'Create Delivery Map'
+                  }
+                  onRun={() => void startRun()}
+                />
+              }
+            >
+              <Textarea
+                className="min-h-24 resize-none text-sm"
+                rows={4}
+                value={instruction}
                 disabled={Boolean(running)}
+                placeholder={t(
+                  'Describe the delivery outcome, constraints or priorities…',
+                )}
+                onChange={(event) => setInstruction(event.target.value)}
               />
-            </div>
-            <div className="mt-3">
-              <AgentRunControls
-                value={profile}
-                onChange={setProfile}
-                disabled={
-                  !instruction.trim() ||
-                  (!currentMap && sourceUids.length === 0) ||
-                  starting ||
-                  Boolean(running)
-                }
-                running={starting || Boolean(running)}
-                actionLabel={
-                  currentMap ? 'Update Delivery Map' : 'Create Delivery Map'
-                }
-                onRun={() => void startRun()}
-              />
-            </div>
+            </AgentComposerShell>
             {error ? (
               <p className="mt-2 text-xs text-destructive">{error}</p>
             ) : null}

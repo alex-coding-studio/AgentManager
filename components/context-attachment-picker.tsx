@@ -7,6 +7,17 @@ import { Checkbox } from '@/components/ui/checkbox';
 import type { ContextBrowserFolder } from '@/lib/product-context';
 import { cn } from '@/lib/utils';
 
+export function contextAttachmentTitle(
+  folders: ContextBrowserFolder[],
+  path: string,
+) {
+  for (const folder of folders) {
+    const entry = folder.entries.find((candidate) => candidate.path === path);
+    if (entry) return entry.title;
+  }
+  return path.split('/').filter(Boolean).at(-1) ?? path;
+}
+
 export function ContextAttachmentPicker({
   folders,
   folderPath,
@@ -19,6 +30,7 @@ export function ContextAttachmentPicker({
   label,
   disabled = false,
   accept = '.md,.markdown',
+  embedded = false,
 }: {
   folders: ContextBrowserFolder[];
   folderPath: string;
@@ -31,6 +43,7 @@ export function ContextAttachmentPicker({
   label: string;
   disabled?: boolean;
   accept?: string;
+  embedded?: boolean;
 }) {
   const { t } = useUiText();
   const [open, setOpen] = useState(false);
@@ -40,25 +53,32 @@ export function ContextAttachmentPicker({
     folders.find((entry) => entry.path === folderPath) ?? folders[0];
 
   return (
-    <div className="rounded-xl border border-border">
-      <button
-        type="button"
-        className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs text-muted-foreground transition hover:text-foreground"
-        aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
-      >
-        <ChevronDown
-          className={cn('size-3.5 transition-transform', open && 'rotate-180')}
-        />
-        {label}
-        {refs.length + files.length > 0 ? (
-          <span className="ml-auto rounded-full bg-secondary px-2 py-0.5 text-[10px] text-secondary-foreground">
-            {refs.length + files.length} {t('attached')}
-          </span>
-        ) : null}
-      </button>
-      {open ? (
-        <div className="space-y-4 border-t border-border p-4">
+    <div className={cn(!embedded && 'rounded-xl border border-border')}>
+      {!embedded ? (
+        <button
+          type="button"
+          className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs text-muted-foreground transition hover:text-foreground"
+          aria-expanded={open}
+          onClick={() => setOpen((value) => !value)}
+        >
+          <ChevronDown
+            className={cn(
+              'size-3.5 transition-transform',
+              open && 'rotate-180',
+            )}
+          />
+          {label}
+          {refs.length + files.length > 0 ? (
+            <span className="ml-auto rounded-full bg-secondary px-2 py-0.5 text-[10px] text-secondary-foreground">
+              {refs.length + files.length} {t('attached')}
+            </span>
+          ) : null}
+        </button>
+      ) : null}
+      {open || embedded ? (
+        <div
+          className={cn('space-y-4', !embedded && 'border-t border-border p-4')}
+        >
           <div className="grid gap-4 sm:grid-cols-2">
             {folders.length > 0 ? (
               <div className="flex flex-col">

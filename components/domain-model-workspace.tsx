@@ -3,6 +3,10 @@
 import { RotateCcw, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AgentRunControls } from '@/components/agent-run-controls';
+import {
+  AgentComposerAttachments,
+  AgentComposerShell,
+} from '@/components/agent-composer-shell';
 import { AgentGraphComposerCard } from '@/components/agent-graph-composer-card';
 import { AgentGraphRunningCard } from '@/components/agent-graph-running-card';
 import { ContextAttachmentPicker } from '@/components/context-attachment-picker';
@@ -142,6 +146,12 @@ export function DomainModelWorkspace({
     if (entity) return [{ id, label: entity.name }];
     const relationship = model.relationships.find((item) => item.id === id);
     return relationship ? [{ id, label: relationship.label }] : [];
+  });
+  const selectedReferenceDocuments = contextRefs.map((ref) => {
+    const entry = folders
+      .flatMap((folder) => folder.entries)
+      .find((item) => item.kind === 'file' && item.path === ref);
+    return { ref, title: entry?.title ?? ref.split('/').at(-1) ?? ref };
   });
   const inspectedEntity = model.entities.find(
     (item) => item.id === inspectedEntityId,
@@ -348,59 +358,91 @@ export function DomainModelWorkspace({
                 </button>
               </div>
             ) : null}
-            <Textarea
-              ref={textarea}
-              value={instruction}
-              rows={3}
-              placeholder={t(
-                'Describe an entity, field, relationship or rule to add or change…',
-              )}
-              className="min-h-24 resize-none text-sm"
-              onChange={(event) => setInstruction(event.target.value)}
-              onKeyDown={(event) => {
-                if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-                  event.preventDefault();
-                  void startRun();
-                }
-              }}
+            <AgentComposerAttachments
+              className="mt-3"
+              label={t('Optional sources')}
+              items={[
+                ...selectedReferenceDocuments.map((entry) => ({
+                  id: entry.ref,
+                  label: entry.title,
+                  onRemove: () =>
+                    setContextRefs((current) =>
+                      current.filter((item) => item !== entry.ref),
+                    ),
+                })),
+                ...contextFiles.map((file, index) => ({
+                  id: `${file.name}:${index}`,
+                  label: file.name,
+                  onRemove: () =>
+                    setContextFiles((current) =>
+                      current.filter((_, item) => item !== index),
+                    ),
+                })),
+              ]}
             />
-            <div className="mt-3">
-              <ContextAttachmentPicker
-                folders={folders}
-                folderPath={contextFolderPath}
-                onFolderPath={setContextFolderPath}
-                refs={contextRefs}
-                onToggleRef={(ref) =>
-                  setContextRefs((current) =>
-                    current.includes(ref)
-                      ? current.filter((item) => item !== ref)
-                      : [...current, ref],
-                  )
-                }
-                files={contextFiles}
-                onAddFiles={(files) =>
-                  setContextFiles((current) =>
-                    [...current, ...files].slice(0, 20),
-                  )
-                }
-                onRemoveFile={(index) =>
-                  setContextFiles((current) =>
-                    current.filter((_, itemIndex) => itemIndex !== index),
-                  )
-                }
-                label={t('Optional sources')}
+            <AgentComposerShell
+              className="mt-3"
+              controls={
+                <AgentRunControls
+                  extraInfo={
+                    <ContextAttachmentPicker
+                      embedded
+                      folders={folders}
+                      folderPath={contextFolderPath}
+                      onFolderPath={setContextFolderPath}
+                      refs={contextRefs}
+                      onToggleRef={(ref) =>
+                        setContextRefs((current) =>
+                          current.includes(ref)
+                            ? current.filter((item) => item !== ref)
+                            : [...current, ref],
+                        )
+                      }
+                      files={contextFiles}
+                      onAddFiles={(files) =>
+                        setContextFiles((current) =>
+                          [...current, ...files].slice(0, 20),
+                        )
+                      }
+                      onRemoveFile={(index) =>
+                        setContextFiles((current) =>
+                          current.filter((_, item) => item !== index),
+                        )
+                      }
+                      label={t('Optional sources')}
+                    />
+                  }
+                  extraInfoCount={contextRefs.length + contextFiles.length}
+                  extraInfoLabel="Optional sources"
+                  value={profile}
+                  onChange={setProfile}
+                  label="Domain Model Agent"
+                  disabled={!instruction.trim() || submitting}
+                  running={submitting}
+                  onRun={startRun}
+                />
+              }
+            >
+              <Textarea
+                ref={textarea}
+                value={instruction}
+                rows={3}
+                placeholder={t(
+                  'Describe an entity, field, relationship or rule to add or change…',
+                )}
+                className="min-h-24 resize-none text-sm"
+                onChange={(event) => setInstruction(event.target.value)}
+                onKeyDown={(event) => {
+                  if (
+                    (event.metaKey || event.ctrlKey) &&
+                    event.key === 'Enter'
+                  ) {
+                    event.preventDefault();
+                    void startRun();
+                  }
+                }}
               />
-            </div>
-            <div className="mt-3">
-              <AgentRunControls
-                value={profile}
-                onChange={setProfile}
-                label="Domain Model Agent"
-                disabled={!instruction.trim() || submitting}
-                running={submitting}
-                onRun={startRun}
-              />
-            </div>
+            </AgentComposerShell>
             {error ? (
               <p role="alert" className="mt-3 text-xs text-destructive">
                 {t(error)}

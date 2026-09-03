@@ -14,12 +14,19 @@ import {
   X,
 } from 'lucide-react';
 import { AgentProfileSelector } from '@/components/agent-profile-selector';
+import {
+  AgentComposerAttachments,
+  AgentComposerShell,
+} from '@/components/agent-composer-shell';
 import { AgentRunControls } from '@/components/agent-run-controls';
 import { AgentGraphComposerCard } from '@/components/agent-graph-composer-card';
 import { AgentGraphIntentionSelect } from '@/components/agent-graph-intention-select';
 import { AgentGraphMotionSelect } from '@/components/agent-graph-motion-select';
 import { sameModelSelection, type AgentProfile } from '@/lib/agent-profile';
-import { ContextAttachmentPicker } from '@/components/context-attachment-picker';
+import {
+  ContextAttachmentPicker,
+  contextAttachmentTitle,
+} from '@/components/context-attachment-picker';
 import { WhatsNextContextToolbar } from '@/components/whats-next-context-toolbar';
 import { createBrowserUuid } from '@/lib/browser-uuid';
 import {
@@ -101,11 +108,18 @@ const AGENT_LABELS: Record<LocalAgentKind, string> = {
 type RunSnapshot = {
   sourceNodeIds: string[];
   instruction: string;
+  contextRefs: string[];
+  files: File[];
   revisionTarget?: { runId: string; candidateId: string };
   redoProposal?: boolean;
   intention: WhatsNextIntention;
   motion: WhatsNextMotion;
 };
+
+type CombineDraft = Pick<
+  RunSnapshot,
+  'sourceNodeIds' | 'instruction' | 'contextRefs' | 'files'
+>;
 
 export function WhatsNextWorkspace(
   props: Parameters<typeof WhatsNextCanvas>[0],
@@ -180,6 +194,25 @@ function WhatsNextCanvas({
 
   const [combineIds, setCombineIds] = useState<string[]>([]);
   const [combineInstruction, setCombineInstruction] = useState('');
+  const [combineRefs, setCombineRefs] = useState<string[]>([]);
+  const [combineFiles, setCombineFiles] = useState<File[]>([]);
+  const [combineFolderPath, setCombineFolderPath] = useState(
+    folders[0]?.path ?? '',
+  );
+  const combineDraftRef = useRef<CombineDraft>({
+    sourceNodeIds: [],
+    instruction: '',
+    contextRefs: [],
+    files: [],
+  });
+  useEffect(() => {
+    combineDraftRef.current = {
+      sourceNodeIds: combineIds,
+      instruction: combineInstruction,
+      contextRefs: combineRefs,
+      files: combineFiles,
+    };
+  }, [combineFiles, combineIds, combineInstruction, combineRefs]);
   const [intention, setIntention] =
     useState<WhatsNextIntention>('mvp-exploration');
   const [motion, setMotion] = useState<WhatsNextMotion>('unspecified');
@@ -463,6 +496,15 @@ function WhatsNextCanvas({
       }
       setRuns((current) => upsertRun(current, run));
       setPreviews((current) => mergeTerminalRunPreviews(current, run));
+      if (['failed', 'canceled'].includes(run.status)) {
+        const snapshot = runSnapshots.current.get(runId);
+        if (
+          snapshot &&
+          !snapshot.revisionTarget &&
+          !hasCombineDraft(combineDraftRef.current)
+        )
+          restoreRunSnapshot(snapshot);
+      }
       if (run.revisionOf) setFocusedNodeId('');
       return;
     }
@@ -514,6 +556,8 @@ function WhatsNextCanvas({
     runSnapshots.current.set(payload.run.runId, {
       sourceNodeIds: input.sourceNodeIds,
       instruction: input.instruction,
+      contextRefs: input.contextRefs ?? [],
+      files: input.files ?? [],
       revisionTarget: input.revisionTarget,
       redoProposal: input.redoProposal,
       intention: input.intention ?? 'mvp-exploration',
@@ -650,21 +694,31 @@ function WhatsNextCanvas({
       await startRun({
         sourceNodeIds: combineIds,
         instruction: combineInstruction,
+        contextRefs: combineRefs,
+        files: combineFiles,
         intention,
         motion,
       });
       setActiveLayer(intentionDestination(intention).layer);
       setCombineIds([]);
       setCombineInstruction('');
+      setCombineRefs([]);
+      setCombineFiles([]);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Something failed.');
     }
   }
 
   function toggleSelection(nodeId: string) {
-    setCombineIds((current) =>
-      toggleWhatsNextSelection(nodes, current, nodeId),
-    );
+    setCombineIds((current) => {
+      const next = toggleWhatsNextSelection(nodes, current, nodeId);
+      if (next.length === 0) {
+        setCombineInstruction('');
+        setCombineRefs([]);
+        setCombineFiles([]);
+      }
+      return next;
+    });
   }
 
   function changeIntention(next: WhatsNextIntention) {
@@ -697,8 +751,15 @@ function WhatsNextCanvas({
       return;
     }
     if (!snapshot || snapshot.revisionTarget) return;
+    if (hasCombineDraft(combineDraftRef.current)) return;
+    restoreRunSnapshot(snapshot);
+  }
+
+  function restoreRunSnapshot(snapshot: RunSnapshot) {
     setCombineIds(snapshot.sourceNodeIds);
     setCombineInstruction(snapshot.instruction);
+    setCombineRefs(snapshot.contextRefs);
+    setCombineFiles(snapshot.files);
     setIntention(snapshot.intention);
     setMotion(snapshot.motion);
   }
@@ -1004,16 +1065,6 @@ function WhatsNextCanvas({
             </>
           }
         >
-          <Textarea
-            value={idea}
-            onChange={(event) => setIdea(event.target.value)}
-            rows={4}
-            placeholder={t(
-              'A manager that helps one developer grow and decompose product intent…',
-            )}
-            className="mt-3 resize-none text-sm"
-            aria-label={t('Your idea')}
-          />
           <div className="mt-4">
             <AgentGraphIntentionSelect
               profiles={whatsNextIntentionRegistry.profiles}
@@ -1022,38 +1073,79 @@ function WhatsNextCanvas({
               label="Exploration purpose"
             />
           </div>
-          <div className="mt-4">
-            <SourcePicker
-              folders={folders}
-              folderPath={startFolderPath}
-              onFolderPath={setStartFolderPath}
-              refs={startRefs}
-              onToggleRef={(refPath) =>
-                setStartRefs((current) => toggle(current, refPath))
-              }
-              files={startFiles}
-              onAddFiles={(added) =>
-                setStartFiles((current) => [...current, ...added])
-              }
-              onRemoveFile={(index) =>
-                setStartFiles((current) =>
-                  current.filter((_, value) => value !== index),
-                )
-              }
+          {startRefs.length + startFiles.length > 0 ? (
+            <AgentComposerAttachments
+              className="mt-4"
               label={t('Optional sources')}
+              items={[
+                ...startRefs.map((ref) => ({
+                  id: ref,
+                  label: contextAttachmentTitle(folders, ref),
+                  onRemove: () =>
+                    setStartRefs((current) =>
+                      current.filter((item) => item !== ref),
+                    ),
+                })),
+                ...startFiles.map((file, index) => ({
+                  id: `${file.name}:${index}`,
+                  label: file.name,
+                  onRemove: () =>
+                    setStartFiles((current) =>
+                      current.filter((_, item) => item !== index),
+                    ),
+                })),
+              ]}
             />
-          </div>
-          <div className="mt-3">
-            <AgentRunControls
-              value={agentProfile}
-              onChange={setAgentProfile}
-              mode={developmentPreview ? 'demo' : 'live'}
-              disabled={!idea.trim() || starting || developmentPreview}
-              running={starting}
-              actionLabel="Start and ask"
-              onRun={() => void beginFromIdea()}
+          ) : null}
+          <AgentComposerShell
+            className="mt-4"
+            controls={
+              <AgentRunControls
+                extraInfo={
+                  <ContextAttachmentPicker
+                    embedded
+                    folders={folders}
+                    folderPath={startFolderPath}
+                    onFolderPath={setStartFolderPath}
+                    refs={startRefs}
+                    onToggleRef={(refPath) =>
+                      setStartRefs((current) => toggle(current, refPath))
+                    }
+                    files={startFiles}
+                    onAddFiles={(added) =>
+                      setStartFiles((current) => [...current, ...added])
+                    }
+                    onRemoveFile={(index) =>
+                      setStartFiles((current) =>
+                        current.filter((_, value) => value !== index),
+                      )
+                    }
+                    label={t('Optional sources')}
+                  />
+                }
+                extraInfoCount={startRefs.length + startFiles.length}
+                extraInfoLabel="Optional sources"
+                value={agentProfile}
+                onChange={setAgentProfile}
+                mode={developmentPreview ? 'demo' : 'live'}
+                disabled={!idea.trim() || starting || developmentPreview}
+                running={starting}
+                actionLabel="Start and ask"
+                onRun={() => void beginFromIdea()}
+              />
+            }
+          >
+            <Textarea
+              value={idea}
+              onChange={(event) => setIdea(event.target.value)}
+              rows={4}
+              placeholder={t(
+                'A manager that helps one developer grow and decompose product intent…',
+              )}
+              className="resize-none text-sm"
+              aria-label={t('Your idea')}
             />
-          </div>
+          </AgentComposerShell>
           {error ? (
             <p className="mt-4 text-xs text-destructive">{error}</p>
           ) : null}
@@ -1178,19 +1270,6 @@ function WhatsNextCanvas({
               ? t('Choose what this Source should generate.')
               : t('Choose what these cards should become.')
           }
-          action={
-            <button
-              type="button"
-              className="text-muted-foreground transition hover:text-foreground"
-              aria-label={t('Clear the selection')}
-              onClick={() => {
-                setCombineIds([]);
-                setCombineInstruction('');
-              }}
-            >
-              <X className="size-4" />
-            </button>
-          }
         >
           <div className="grid grid-cols-2 gap-2">
             <AgentGraphIntentionSelect
@@ -1235,7 +1314,15 @@ function WhatsNextCanvas({
                   className="text-muted-foreground transition hover:text-foreground"
                   aria-label={`Remove ${node.title}`}
                   onClick={() =>
-                    setCombineIds((current) => toggle(current, node.id))
+                    setCombineIds((current) => {
+                      const next = toggle(current, node.id);
+                      if (next.length === 0) {
+                        setCombineInstruction('');
+                        setCombineRefs([]);
+                        setCombineFiles([]);
+                      }
+                      return next;
+                    })
                   }
                 >
                   <X className="size-3" />
@@ -1262,28 +1349,75 @@ function WhatsNextCanvas({
             </Button>
           ) : null}
 
-          <label className="mt-3 block text-[10px] font-medium text-muted-foreground">
-            {t('User Input')} · {t('required')}
+          <AgentComposerAttachments
+            className="mt-3"
+            label={t('Optional sources')}
+            items={[
+              ...combineRefs.map((ref) => ({
+                id: ref,
+                label: contextAttachmentTitle(folders, ref),
+                onRemove: () =>
+                  setCombineRefs((current) =>
+                    current.filter((item) => item !== ref),
+                  ),
+              })),
+              ...combineFiles.map((file, index) => ({
+                id: `${file.name}:${index}`,
+                label: file.name,
+                onRemove: () =>
+                  setCombineFiles((current) =>
+                    current.filter((_, item) => item !== index),
+                  ),
+              })),
+            ]}
+          />
+
+          <AgentComposerShell
+            className="mt-3"
+            controls={
+              <AgentRunControls
+                extraInfo={
+                  <ContextAttachmentPicker
+                    embedded
+                    folders={folders}
+                    folderPath={combineFolderPath}
+                    onFolderPath={setCombineFolderPath}
+                    refs={combineRefs}
+                    onToggleRef={(ref) =>
+                      setCombineRefs((current) => toggle(current, ref))
+                    }
+                    files={combineFiles}
+                    onAddFiles={(added) =>
+                      setCombineFiles((current) => [...current, ...added])
+                    }
+                    onRemoveFile={(index) =>
+                      setCombineFiles((current) =>
+                        current.filter((_, item) => item !== index),
+                      )
+                    }
+                    label={t('Optional sources')}
+                  />
+                }
+                extraInfoCount={combineRefs.length + combineFiles.length}
+                extraInfoLabel="Optional sources"
+                value={agentProfile}
+                onChange={setAgentProfile}
+                mode={developmentPreview ? 'demo' : 'live'}
+                disabled={!combineInstruction.trim() || developmentPreview}
+                onRun={() => void submitCombine()}
+              />
+            }
+          >
             <Textarea
               value={combineInstruction}
               onChange={(event) => setCombineInstruction(event.target.value)}
               rows={3}
               required
               placeholder={t('Describe the result you want from these cards.')}
-              className="mt-1 resize-none text-sm"
+              className="resize-none text-sm"
               aria-label={t('What to do with the selected cards')}
             />
-          </label>
-
-          <div className="mt-3">
-            <AgentRunControls
-              value={agentProfile}
-              onChange={setAgentProfile}
-              mode={developmentPreview ? 'demo' : 'live'}
-              disabled={!combineInstruction.trim() || developmentPreview}
-              onRun={() => void submitCombine()}
-            />
-          </div>
+          </AgentComposerShell>
         </AgentGraphComposerCard>
       ) : null}
 
@@ -2069,6 +2203,15 @@ function WhatsNextCanvas({
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function hasCombineDraft(draft: CombineDraft) {
+  return Boolean(
+    draft.sourceNodeIds.length ||
+    draft.instruction.trim() ||
+    draft.contextRefs.length ||
+    draft.files.length,
   );
 }
 
