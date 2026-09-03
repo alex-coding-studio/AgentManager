@@ -156,6 +156,7 @@ export type WhatsNextRunRecord = {
   updatedAt: string;
   endedAt: string | null;
   usage: LocalAgentUsage | null;
+  sessionUsage?: LocalAgentUsage | null;
   activity: AgentGraphActivity[];
   result: WhatsNextHarnessResult | null;
   error: string | null;
@@ -518,6 +519,7 @@ async function startWhatsNextRunUnlocked(
     updatedAt: timestamp,
     endedAt: null,
     usage: null,
+    sessionUsage: null,
     activity: initialAgentGraphActivity(
       'Exploring the selected direction.',
       timestamp,
@@ -563,6 +565,8 @@ async function startWhatsNextRunUnlocked(
     workingDirectory: runPath,
     prompt,
     resumeSessionId: coordinatorRun?.agentSessionId ?? undefined,
+    sessionUsageBaseline:
+      coordinatorRun?.sessionUsage ?? coordinatorRun?.usage ?? undefined,
     model: profile.model || undefined,
     effort: profile.effort || undefined,
     onActivity: activityRecorder.onActivity,
@@ -1034,6 +1038,7 @@ async function finishWhatsNextRun(
     record.status = 'validating';
     record.agentSessionId = agentResult.agentSessionId;
     record.usage = agentResult.usage;
+    record.sessionUsage = agentResult.sessionUsage ?? agentResult.usage;
     record.updatedAt = new Date().toISOString();
     await writeRunRecord(project, record);
     if (isRunCanceled(record)) return;

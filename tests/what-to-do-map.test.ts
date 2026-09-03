@@ -10,7 +10,7 @@ import type { WhatToDoHarnessResult } from '../lib/what-to-do-harness.ts';
 
 const result: Extract<WhatToDoHarnessResult, { outcome: 'map-proposal' }> = {
   schemaVersion: 1,
-  harness: { id: 'praxis.what-to-do', revision: 1 },
+  harness: { id: 'praxis.what-to-do', revision: 2 },
   request: {
     sessionId: 'SESSION-1',
     requestId: 'RUN-1',
@@ -199,6 +199,64 @@ void test('a retained Contract preserves formal identity across terminal Map upd
       contract.uid,
       contract.outputPath,
     ]),
+  );
+});
+
+void test('a dependency-only update retains identity and republishes the Contract document', () => {
+  const uids = [
+    '11111111-1111-4111-8111-111111111111',
+    '22222222-2222-4222-8222-222222222222',
+  ];
+  const sourceSnapshots = [
+    {
+      logicalPath: 'feature.md',
+      sha256: '1'.repeat(64),
+      storedPath:
+        'what-to-do/runs/RUN-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/context/primary/feature.md',
+    },
+  ];
+  const currentMap = materializeWhatToDoDeliveryMap(
+    {
+      runId: 'RUN-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      updatedAt: '2026-09-02T00:00:00.000Z',
+      sourceUids: ['feature-1'],
+      result,
+      sourceSnapshots,
+    },
+    () => uids.shift()!,
+  );
+  const retainedIds = currentMap.contracts.map(whatToDoContractCandidateId);
+  const adjusted = materializeWhatToDoDeliveryMap({
+    runId: 'RUN-bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    updatedAt: '2026-09-02T01:00:00.000Z',
+    sourceUids: ['feature-1'],
+    currentMap,
+    sourceSnapshots,
+    result: {
+      ...result,
+      candidates: [],
+      sourceClaims: [
+        { ...result.sourceClaims[0]!, contractCandidateIds: retainedIds },
+      ],
+      contractDependencyUpdates: [
+        { candidateId: retainedIds[1]!, dependsOn: [] },
+      ],
+      recomposition: {
+        effects: retainedIds.map((candidateId) => ({
+          kind: 'retain' as const,
+          from: [candidateId],
+          to: [candidateId],
+        })),
+      },
+    },
+  });
+
+  assert.equal(adjusted.contracts[1]!.id, currentMap.contracts[1]!.id);
+  assert.equal(adjusted.contracts[1]!.uid, currentMap.contracts[1]!.uid);
+  assert.deepEqual(adjusted.contracts[1]!.dependsOn, []);
+  assert.match(
+    adjusted.contracts[1]!.outputPath,
+    /RUN-bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/,
   );
 });
 

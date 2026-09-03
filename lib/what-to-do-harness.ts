@@ -8,7 +8,7 @@ import {
 } from './agent-graph-recompose.ts';
 
 export const WHAT_TO_DO_HARNESS_ID = 'praxis.what-to-do';
-export const WHAT_TO_DO_HARNESS_REVISION = 1;
+export const WHAT_TO_DO_HARNESS_REVISION = 2;
 
 export const WHAT_TO_DO_HARNESS_PROMPT = `You are Praxis's What to Do Agent. Turn accepted Product Design Features, the current Delivery Map and current project evidence into one complete Delivery Map whose Contracts can be added to Just Do It one at a time.
 
@@ -24,7 +24,7 @@ Every material source claim must cite the entry.logicalPath from REQUEST, its fr
 
 Classify each Contract's Domain Impact as none, reuse, change, add or uncertain. Pure UI work may use none. A Map with uncertain Domain Impact or an Open Decision cannot be published; return clarification or insufficient-evidence instead. Do not invent database work.
 
-For adjust-map, selected Candidate IDs are feedback focus, not local edit permission. Review the complete current Map, but return only new or replacement Candidates; represent every unchanged Contract with a retain effect and never repeat its Candidate payload. Return recomposition effects using retain, replace, split, merge, add and remove literally. In sourceClaims return only brand-new claims from current input or newly selected sources. Use sourceClaimUpdates to change the disposition or Contract assignment of an existing claim by claimId; omit every unchanged existing claim because the Host carries it forward. Preserve identity only for retained Contracts. Never directly mutate an accepted Contract or silently drop acknowledged source meaning.
+For adjust-map, selected Candidate IDs are feedback focus, not local edit permission. Review the complete current Map, but return only new or replacement Candidates; represent every unchanged Contract with a retain effect and never repeat its Candidate payload. Use contractDependencyUpdates to change only dependsOn for a retained Contract without re-emitting its Candidate payload. A dependency update must target a Contract represented by a retain effect. Return recomposition effects using retain, replace, split, merge, add and remove literally. In sourceClaims return only brand-new claims from current input or newly selected sources. Use sourceClaimUpdates to change the disposition or Contract assignment of an existing claim by claimId; omit every unchanged existing claim because the Host carries it forward. Preserve identity only for retained Contracts. Never directly mutate an accepted Contract or silently drop acknowledged source meaning.
 
 The repositorySummary is a compact, evidence-bounded orientation aid, not authority over the repository. Keep unknown facts unknown. Do not prescribe an exhaustive filename inventory, class design, database schema or Action list unless an accepted source already makes it authoritative. Do not implement work, create Just Do It Cards or claim user approval.`;
 
@@ -177,6 +177,11 @@ export type WhatToDoSourceClaimUpdate = Pick<
   | 'exclusionAuthority'
 >;
 
+export type WhatToDoContractDependencyUpdate = {
+  candidateId: string;
+  dependsOn: string[];
+};
+
 type WhatToDoResultBase = {
   schemaVersion: 1;
   harness: {
@@ -196,6 +201,7 @@ export type WhatToDoHarnessResult = WhatToDoResultBase &
         candidates: WhatToDoContractCandidate[];
         sourceClaims: WhatToDoSourceClaim[];
         sourceClaimUpdates?: WhatToDoSourceClaimUpdate[];
+        contractDependencyUpdates?: WhatToDoContractDependencyUpdate[];
         recomposition?: { effects: AgentGraphRecomposeEffect[] };
       }
     | {
@@ -346,6 +352,10 @@ const sourceClaimUpdate = object({
     ],
   },
 });
+const contractDependencyUpdate = object({
+  candidateId,
+  dependsOn: { type: 'array', uniqueItems: true, items: candidateId },
+});
 const base = {
   schemaVersion: { const: 1 },
   harness: object({
@@ -420,6 +430,12 @@ export const WHAT_TO_DO_HARNESS_OUTPUT_SCHEMA = {
           maxItems: 1_000,
           uniqueItems: true,
           items: sourceClaimUpdate,
+        },
+        contractDependencyUpdates: {
+          type: 'array',
+          maxItems: 200,
+          uniqueItems: true,
+          items: contractDependencyUpdate,
         },
       },
     },
@@ -521,6 +537,11 @@ export function validateWhatToDoHarnessResult(
     fail('A new Delivery Map requires at least one Contract Candidate.');
   if (context.operation === 'create-map' && result.sourceClaimUpdates?.length)
     fail('A new Delivery Map cannot update an existing Source Claim.');
+  if (
+    context.operation === 'create-map' &&
+    result.contractDependencyUpdates?.length
+  )
+    fail('A new Delivery Map cannot update an existing Contract dependency.');
   if (context.operation === 'adjust-map' && result.recomposition) {
     const retainedIds = new Set(
       result.recomposition.effects
@@ -561,6 +582,7 @@ export function validateWhatToDoHarnessResult(
   }
   normalizeClaimAssignments(result.candidates, result.sourceClaims);
   let retainedIds: string[] = [];
+  let retainedCandidates = context.knownCandidates ?? [];
   if (context.operation === 'adjust-map') {
     if (!result.recomposition)
       fail('An adjusted Delivery Map requires Recompose effects.');
@@ -572,6 +594,12 @@ export function validateWhatToDoHarnessResult(
     retainedIds = result.recomposition.effects
       .filter((effect) => effect.kind === 'retain')
       .flatMap((effect) => effect.from);
+    retainedCandidates = applyContractDependencyUpdates(
+      result.contractDependencyUpdates ?? [],
+      retainedIds,
+      [...retainedIds, ...result.candidates.map((item) => item.candidateId)],
+      context.knownCandidates ?? [],
+    );
     validateAgentGraphRecomposePlan({
       selectedIds,
       outputIds: [
@@ -584,11 +612,11 @@ export function validateWhatToDoHarnessResult(
       selectedIds,
       retainedIds,
       outputCandidates: result.candidates,
-      knownCandidates: context.knownCandidates ?? [],
+      knownCandidates: retainedCandidates,
     });
   }
   const completeMap = [
-    ...(context.knownCandidates ?? []).filter((candidate) =>
+    ...retainedCandidates.filter((candidate) =>
       retainedIds.includes(candidate.candidateId),
     ),
     ...result.candidates,
@@ -596,6 +624,37 @@ export function validateWhatToDoHarnessResult(
   validateCompleteMap(completeMap);
   validateClaims(result.sourceClaims, completeMap, context);
   return result;
+}
+
+function applyContractDependencyUpdates(
+  updates: WhatToDoContractDependencyUpdate[],
+  retainedIds: string[],
+  outputIds: string[],
+  knownCandidates: NonNullable<WhatToDoValidationContext['knownCandidates']>,
+) {
+  requireUnique(
+    updates.map((update) => update.candidateId),
+    'Contract dependency update identifiers must be unique.',
+  );
+  const retained = new Set(retainedIds);
+  const outputs = new Set(outputIds);
+  const updateById = new Map(
+    updates.map((update) => [update.candidateId, update]),
+  );
+  for (const update of updates) {
+    if (!retained.has(update.candidateId))
+      fail('A Contract dependency update must target a retained Contract.');
+    if (update.dependsOn.some((dependency) => !outputs.has(dependency)))
+      fail(
+        'A Contract dependency update references an unknown output Contract.',
+      );
+  }
+  return knownCandidates.map((candidate) => {
+    const update = updateById.get(candidate.candidateId);
+    return update
+      ? { ...candidate, dependsOn: [...update.dependsOn] }
+      : structuredClone(candidate);
+  });
 }
 
 function normalizeClaimAssignments(

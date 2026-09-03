@@ -27,6 +27,7 @@ export type LocalAgentResult = {
   agentSessionId: string | null;
   finalOutput: string;
   usage: LocalAgentUsage | null;
+  sessionUsage?: LocalAgentUsage | null;
   executionAccess?: ExecutionAccess;
 };
 
@@ -42,6 +43,7 @@ export type LocalAgentRunInput = {
   workingDirectory: string;
   prompt: string;
   resumeSessionId?: string;
+  sessionUsageBaseline?: LocalAgentUsage | null;
   model?: string;
   effort?: ReasoningEffort;
   access?: 'read-only' | 'workspace-write';
@@ -164,7 +166,13 @@ function launchCodexRun(
   child.stdin.end(input.prompt);
   return trackLocalAgentRun(
     child,
-    (child, canceled) => consumeCodexRun(child, canceled, input.onActivity),
+    (child, canceled) =>
+      consumeCodexRun(
+        child,
+        canceled,
+        input.onActivity,
+        input.sessionUsageBaseline,
+      ),
     Boolean(input.isolatedProcessGroup || input.access === 'workspace-write'),
   );
 }
@@ -342,6 +350,7 @@ async function consumeCodexRun(
   child: ChildProcessWithoutNullStreams,
   wasCanceled: () => boolean,
   listener?: (activity: LocalAgentActivity) => void,
+  sessionUsageBaseline?: LocalAgentUsage | null,
 ) {
   let agentSessionId: string | null = null;
   let finalOutput = '';
@@ -380,7 +389,12 @@ async function consumeCodexRun(
     );
   }
   if (!finalOutput) throw new Error('Codex returned no final output.');
-  return { agentSessionId, finalOutput, usage };
+  return {
+    agentSessionId,
+    finalOutput,
+    usage: localAgentUsageDelta(usage, sessionUsageBaseline),
+    sessionUsage: usage,
+  };
 }
 
 async function consumeClaudeRun(
@@ -458,6 +472,24 @@ function normalizeCodexUsage(
     outputTokens: usage.output_tokens ?? 0,
     reasoningOutputTokens: usage.reasoning_output_tokens ?? 0,
   };
+}
+
+export function localAgentUsageDelta(
+  cumulative: LocalAgentUsage | null,
+  baseline?: LocalAgentUsage | null,
+) {
+  if (!cumulative || !baseline) return cumulative;
+  const keys = [
+    'inputTokens',
+    'cachedInputTokens',
+    'cacheWriteInputTokens',
+    'outputTokens',
+    'reasoningOutputTokens',
+  ] as const;
+  if (keys.some((key) => cumulative[key] < baseline[key])) return cumulative;
+  return Object.fromEntries(
+    keys.map((key) => [key, cumulative[key] - baseline[key]]),
+  ) as LocalAgentUsage;
 }
 
 export function normalizeClaudeUsage(

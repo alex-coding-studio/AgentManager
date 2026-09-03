@@ -6,6 +6,7 @@ import test from 'node:test';
 import type { LocalAgentRunInput } from '../lib/local-agent-transport.ts';
 import type { RegisteredProject } from '../lib/project-registry.ts';
 import type { TaskGraphNode } from '../lib/task-graph.ts';
+import { WHAT_TO_DO_HARNESS_REVISION } from '../lib/what-to-do-harness.ts';
 import {
   cancelWhatToDoRun,
   listLatestWhatToDoRuns,
@@ -461,6 +462,65 @@ void test('a Clarification Answer amends the frozen request and resumes its Sess
   control.calls[1]!.reject(new Error('canceled'));
 });
 
+void test('a legacy Clarification keeps frozen Context but starts a current Harness Session', async (t) => {
+  const { project, planningPath } = await fixture(t);
+  const control = controlled();
+  const first = await startWhatToDoRun(project, input(), control.transport);
+  control.calls[0]!.resolve({
+    agentSessionId: 'legacy-session',
+    finalOutput: JSON.stringify(clarificationResult(first)),
+    usage: null,
+  });
+  const clarification = await settled(project, first.id);
+  const runPath = path.join(
+    planningPath,
+    'what-to-do/runs',
+    clarification.id,
+    'run.json',
+  );
+  await writeFile(
+    runPath,
+    `${JSON.stringify(
+      {
+        ...clarification,
+        request: {
+          ...clarification.request,
+          harness: { ...clarification.request.harness, revision: 1 },
+        },
+        result: {
+          ...clarification.result,
+          harness: { ...clarification.result!.harness, revision: 1 },
+        },
+      },
+      null,
+      2,
+    )}\n`,
+  );
+
+  const continued = await startWhatToDoRun(
+    project,
+    {
+      ...input(),
+      instruction: 'Use the recommended option.',
+      clarificationRunId: first.id,
+      sourceUids: [],
+    },
+    control.transport,
+  );
+
+  assert.equal(control.calls[1]!.input.resumeSessionId, undefined);
+  assert.equal(continued.request.harness.revision, WHAT_TO_DO_HARNESS_REVISION);
+  assert.equal(
+    continued.request.request.sessionId,
+    first.request.request.sessionId,
+  );
+  const draft = await readWhatToDoRunDraft(project, continued);
+  assert.match(draft.instruction, /Turn this accepted design/);
+  assert.match(draft.instruction, /Use the recommended option/);
+  await cancelWhatToDoRun(project, continued.id);
+  control.calls[1]!.reject(new Error('canceled'));
+});
+
 void test('the current formal Map is default Context and focus is optional emphasis', async (t) => {
   const { project, planningPath } = await fixture(t);
   const control = controlled();
@@ -548,6 +608,42 @@ void test('the current formal Map is default Context and focus is optional empha
   await assert.rejects(
     startWhatToDoRun(project, input(), control.transport),
     /already part of the current Delivery Map/,
+  );
+});
+
+void test('a dependency-only Map update reports the retained Contract change', async (t) => {
+  const { project, planningPath } = await fixture(t);
+  const control = controlled();
+  const first = await startWhatToDoRun(project, input(), control.transport);
+  control.calls[0]!.resolve({
+    agentSessionId: 'agent-session-1',
+    finalOutput: JSON.stringify(result(first)),
+    usage: null,
+  });
+  const completed = await settled(project, first.id);
+  const candidateId = `CANDIDATE-${completed.map!.contracts[0]!.id.slice(5)}`;
+  const second = await startWhatToDoRun(
+    project,
+    { ...input(), sourceUids: [] },
+    control.transport,
+  );
+  control.calls[1]!.resolve({
+    agentSessionId: 'agent-session-2',
+    finalOutput: JSON.stringify({
+      ...retainedResult(second, completed.map!),
+      contractDependencyUpdates: [{ candidateId, dependsOn: [] }],
+    }),
+    usage: null,
+  });
+  const adjusted = await settled(project, second.id);
+
+  assert.equal(adjusted.status, 'succeeded');
+  assert.match(
+    await readFile(
+      path.join(planningPath, 'what-to-do/runs', second.id, 'summary.md'),
+      'utf8',
+    ),
+    /Applied 1 Contract changes: 0 new or replacement boundaries and 1 dependency-only updates/,
   );
 });
 

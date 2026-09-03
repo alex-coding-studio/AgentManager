@@ -67,6 +67,7 @@ export type DomainModelRunRecord = {
   endedAt: string | null;
   agentSessionId: string | null;
   usage: LocalAgentUsage | null;
+  sessionUsage?: LocalAgentUsage | null;
   activity: Array<{ at: string; summary: string }>;
   result: DomainModelAgentResult | null;
   change: DomainChange | null;
@@ -198,6 +199,7 @@ export async function startDomainModelRun(
         endedAt: null,
         agentSessionId: null,
         usage: null,
+        sessionUsage: null,
         activity,
         result: null,
         change: null,
@@ -215,6 +217,8 @@ export async function startDomainModelRun(
         model: input.profile.model || undefined,
         effort: input.profile.effort || undefined,
         resumeSessionId: coordinatorRun?.agentSessionId ?? undefined,
+        sessionUsageBaseline:
+          coordinatorRun?.sessionUsage ?? coordinatorRun?.usage ?? undefined,
         access: 'read-only',
         disableDelegation: true,
         isolatedProcessGroup: true,
@@ -368,6 +372,7 @@ async function settle(
     agentSessionId: string | null;
     finalOutput: string;
     usage: LocalAgentUsage | null;
+    sessionUsage?: LocalAgentUsage | null;
   },
 ) {
   if (active.canceled) return;
@@ -401,6 +406,7 @@ async function settle(
     endedAt: new Date().toISOString(),
     agentSessionId: agent.agentSessionId,
     usage: agent.usage,
+    sessionUsage: agent.sessionUsage ?? agent.usage,
     activity: [...active.activity],
     result,
     change,
