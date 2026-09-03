@@ -13,6 +13,11 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import {
+  instructionFromWhatToDoMarkdown,
+  shouldRestoreWhatToDoDraft,
+  whatToDoRunContextResourcePath,
+} from '../lib/what-to-do-draft.ts';
+import {
   prepareWhatToDoContext,
   renderDomainModelSummary,
 } from '../lib/what-to-do-context.ts';
@@ -184,6 +189,35 @@ void test('What to Do prepares one frozen standard Packet', async (t) => {
   assert.equal(index.schemaVersion, 1);
   assert.equal(index.primary.length, 4);
   assert.equal(index.related.length, 6);
+});
+
+void test('failed What to Do Runs retain a replayable frozen draft', () => {
+  assert.equal(
+    instructionFromWhatToDoMarkdown('# User Input\n\nTry another boundary.\n'),
+    'Try another boundary.',
+  );
+  assert.equal(
+    whatToDoRunContextResourcePath('RUN-1', 'input/user-input.md'),
+    'what-to-do/runs/RUN-1/context/input/user-input.md',
+  );
+  assert.equal(
+    shouldRestoreWhatToDoDraft({ status: 'failed', result: null }),
+    true,
+  );
+  assert.equal(
+    shouldRestoreWhatToDoDraft({
+      status: 'succeeded',
+      result: { outcome: 'insufficient-evidence' } as never,
+    }),
+    true,
+  );
+  assert.equal(
+    shouldRestoreWhatToDoDraft({
+      status: 'succeeded',
+      result: { outcome: 'map-proposal' } as never,
+    }),
+    false,
+  );
 });
 
 void test('What to Do rejects incomplete input before publishing a Run workspace', async (t) => {

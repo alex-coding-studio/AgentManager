@@ -15,6 +15,7 @@ import {
   whatToDoAgentEnvironment,
 } from '../lib/what-to-do-runs.ts';
 import { readWhatToDoCurrentMap } from '../lib/what-to-do-storage.ts';
+import { readWhatToDoRunDraft } from '../lib/what-to-do-run-draft.ts';
 import { planningService } from '../lib/just-do-it-planning-service.ts';
 import { appendCardWorkRecord } from '../lib/just-do-it-worklog.ts';
 
@@ -626,7 +627,14 @@ void test('an uncommitted terminal record rolls back to an interrupted Run', asy
 void test('invalid Agent output fails while preserving the raw response', async (t) => {
   const { project, planningPath } = await fixture(t);
   const control = controlled();
-  const run = await startWhatToDoRun(project, input(), control.transport);
+  const run = await startWhatToDoRun(
+    project,
+    {
+      ...input(),
+      files: [new File(['# Retry evidence\n'], 'retry-evidence.md')],
+    },
+    control.transport,
+  );
   control.calls[0]!.resolve({
     agentSessionId: null,
     finalOutput: '{"not":"a delivery map"}',
@@ -641,6 +649,16 @@ void test('invalid Agent output fails while preserving the raw response', async 
     ),
     /not.*delivery map/,
   );
+  assert.deepEqual(await readWhatToDoRunDraft(project, failed), {
+    instruction: input().instruction,
+    files: [
+      {
+        name: 'retry-evidence.md',
+        mediaType: 'text/markdown',
+        content: '# Retry evidence\n',
+      },
+    ],
+  });
 });
 
 void test('cancel releases the project and rejects late completion', async (t) => {
