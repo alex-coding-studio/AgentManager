@@ -1135,14 +1135,10 @@ function WhatsNextCanvas({
               })
             }
             onOpenSummary={() =>
-              setPreview({
-                title: t('Summary'),
-                path: `whats-next/runs/${latestResponse.runId}/summary.md`,
-                markdown:
-                  latestResponse.result && 'reflection' in latestResponse.result
-                    ? latestResponse.result.reflection.markdown
-                    : `# ${t('Summary')}\n\n${t(latestResponsePresentation.summary)}\n`,
-              })
+              void openMarkdown(
+                `whats-next/runs/${latestResponse.runId}/summary.md`,
+                t('Summary'),
+              )
             }
             onOpenLog={() =>
               setPreview({

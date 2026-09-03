@@ -233,6 +233,18 @@ export function DomainModelWorkspace({
     setSelectedIds([]);
   }
 
+  async function openResponseResource(path: string, title: string) {
+    const response = await fetch(
+      `/api/projects/${projectId}/resources?path=${encodeURIComponent(path)}`,
+    ).catch(() => null);
+    if (!response?.ok) {
+      setError('Could not read the source document.');
+      return;
+    }
+    const result = (await response.json()) as { markdown: string };
+    setResponsePreview({ title, path, markdown: result.markdown });
+  }
+
   function toggleSelection(id: string) {
     setSelectedIds((current) =>
       current.includes(id)
@@ -306,6 +318,7 @@ export function DomainModelWorkspace({
             canUndo={canUndo}
             onUndo={undo}
             onPreview={setResponsePreview}
+            onOpenResource={openResponseResource}
           />
         ) : null}
 
@@ -474,6 +487,7 @@ function LatestDomainResponse({
   canUndo,
   onUndo,
   onPreview,
+  onOpenResource,
 }: {
   run: DomainModelRunRecord;
   canUndo: boolean;
@@ -483,6 +497,7 @@ function LatestDomainResponse({
     path: string;
     markdown: string;
   }) => void;
+  onOpenResource: (path: string, title: string) => Promise<void>;
 }) {
   const { t } = useUiText();
   const presentation = latestDomainModelResponse(run);
@@ -527,11 +542,10 @@ function LatestDomainResponse({
             })
           }
           onOpenSummary={() =>
-            onPreview({
-              title: t('Summary'),
-              path: `domain-model/runs/${run.id}/summary.md`,
-              markdown: `# ${t('Summary')}\n\n${t(presentation.summary)}\n`,
-            })
+            void onOpenResource(
+              `domain-model/runs/${run.id}/summary.md`,
+              t('Summary'),
+            )
           }
           onOpenLog={() =>
             onPreview({

@@ -110,9 +110,16 @@ export const TASK_GRAPH_MARKDOWN_SHAPES: readonly PlanningPathShape[] = [
     ),
   },
   {
-    name: 'What’s Next Run response',
+    name: 'What’s Next Run response or summary',
     pattern: new RegExp(
-      String.raw`^whats-next\/runs\/${RUN_ID}\/response\.md$`,
+      String.raw`^whats-next\/runs\/${RUN_ID}\/(?:response|summary)\.md$`,
+      'i',
+    ),
+  },
+  {
+    name: 'Domain Model Run summary',
+    pattern: new RegExp(
+      String.raw`^domain-model\/runs\/${RUN_ID}\/summary\.md$`,
       'i',
     ),
   },
