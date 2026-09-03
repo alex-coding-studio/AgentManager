@@ -5,6 +5,7 @@ import {
   readFile,
   readdir,
   realpath,
+  rename,
   rm,
 } from 'node:fs/promises';
 import path from 'node:path';
@@ -295,8 +296,13 @@ function settleLater(
               );
             }),
         );
-      await writeRunRecord(project, terminal);
-      if (map) await writeWhatToDoCurrentMap(project, map);
+      if (map) {
+        await stageTerminalRunRecord(project, terminal);
+        await writeWhatToDoCurrentMap(project, map);
+        await publishTerminalRunRecord(project, run.id).catch(() => undefined);
+      } else {
+        await writeRunRecord(project, terminal);
+      }
       active.terminal = terminal;
       await writeWhatToDoRepositorySummary(
         project,
@@ -317,6 +323,9 @@ function settleLater(
         error: 'The What to Do Agent did not complete.',
       };
       const runPath = await whatToDoRunDirectory(project, run.id);
+      await rm(path.join(runPath, 'terminal.json'), { force: true }).catch(
+        () => undefined,
+      );
       await active.recorder?.flush().catch(() => undefined);
       await writeAgentGraphRunEvidence(runPath, {
         activity: terminal.activity,
@@ -369,6 +378,9 @@ export async function readWhatToDoRun(
   project: RegisteredProject,
   runId: string,
 ) {
+  const currentActive = activeRuns.get(project.planningPath);
+  if (!currentActive || currentActive.runId !== runId)
+    await reconcileTerminalRunRecord(project, runId);
   const file = path.join(
     await whatToDoRunDirectory(project, runId),
     'run.json',
@@ -392,7 +404,7 @@ export async function readWhatToDoRun(
     !['running', 'succeeded', 'failed', 'canceled'].includes(run.status)
   )
     throw new Error('Invalid What to Do Run record.');
-  const active = activeRuns.get(project.planningPath);
+  const active = currentActive;
   if (active?.runId === run.id && active.terminal) return active.terminal;
   if (active?.runId === run.id && active.settling)
     return {
@@ -472,6 +484,58 @@ async function writeRunRecord(
     path.join(await whatToDoRunDirectory(project, run.id), 'run.json'),
     `${JSON.stringify(run, null, 2)}\n`,
   );
+}
+
+async function stageTerminalRunRecord(
+  project: RegisteredProject,
+  run: WhatToDoRunRecord,
+) {
+  await atomicWhatToDoText(
+    path.join(await whatToDoRunDirectory(project, run.id), 'terminal.json'),
+    `${JSON.stringify(run, null, 2)}\n`,
+  );
+}
+
+async function publishTerminalRunRecord(
+  project: RegisteredProject,
+  runId: string,
+) {
+  const directory = await whatToDoRunDirectory(project, runId);
+  await rename(
+    path.join(directory, 'terminal.json'),
+    path.join(directory, 'run.json'),
+  );
+}
+
+async function reconcileTerminalRunRecord(
+  project: RegisteredProject,
+  runId: string,
+) {
+  const directory = await whatToDoRunDirectory(project, runId);
+  const terminalFile = path.join(directory, 'terminal.json');
+  try {
+    const info = await lstat(terminalFile);
+    if (!info.isFile() || info.isSymbolicLink() || info.size > 4 * 1024 * 1024)
+      throw new Error('Invalid What to Do terminal Run record.');
+    const terminal = JSON.parse(
+      await readFile(terminalFile, 'utf8'),
+    ) as WhatToDoRunRecord;
+    const currentMap = await readWhatToDoCurrentMap(project);
+    if (
+      terminal.schemaVersion === 1 &&
+      terminal.id === runId &&
+      terminal.status === 'succeeded' &&
+      terminal.map?.runId === runId &&
+      currentMap?.runId === runId
+    ) {
+      await publishTerminalRunRecord(project, runId);
+      return;
+    }
+    await rm(terminalFile, { force: true });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+    throw error;
+  }
 }
 
 function renderRunSummary(result: WhatToDoHarnessResult) {

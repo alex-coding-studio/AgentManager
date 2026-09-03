@@ -350,6 +350,85 @@ void test('the current formal Map is default Context and focus is optional empha
   );
 });
 
+void test('a committed current Map completes an interrupted terminal Run publication', async (t) => {
+  const { project, planningPath } = await fixture(t);
+  const control = controlled();
+  const run = await startWhatToDoRun(project, input(), control.transport);
+  control.calls[0]!.resolve({
+    agentSessionId: 'agent-session-1',
+    finalOutput: JSON.stringify(result(run)),
+    usage: null,
+  });
+  const completed = await settled(project, run.id);
+  await new Promise((resolve) => setImmediate(resolve));
+  const directory = path.join(planningPath, 'what-to-do/runs', run.id);
+  await writeFile(
+    path.join(directory, 'run.json'),
+    `${JSON.stringify(
+      {
+        ...completed,
+        status: 'running',
+        endedAt: null,
+        result: null,
+        map: null,
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  await writeFile(
+    path.join(directory, 'terminal.json'),
+    `${JSON.stringify(completed, null, 2)}\n`,
+  );
+  const recovered = await readWhatToDoRun(project, run.id);
+  assert.equal(recovered.status, 'succeeded');
+  assert.equal(recovered.map?.runId, run.id);
+  await assert.rejects(
+    readFile(path.join(directory, 'terminal.json')),
+    /ENOENT/,
+  );
+});
+
+void test('an uncommitted terminal record rolls back to an interrupted Run', async (t) => {
+  const { project, planningPath } = await fixture(t);
+  const control = controlled();
+  const run = await startWhatToDoRun(project, input(), control.transport);
+  control.calls[0]!.resolve({
+    agentSessionId: 'agent-session-1',
+    finalOutput: JSON.stringify(result(run)),
+    usage: null,
+  });
+  const completed = await settled(project, run.id);
+  await new Promise((resolve) => setImmediate(resolve));
+  const directory = path.join(planningPath, 'what-to-do/runs', run.id);
+  await rm(path.join(planningPath, 'what-to-do/current-map.json'));
+  await writeFile(
+    path.join(directory, 'run.json'),
+    `${JSON.stringify(
+      {
+        ...completed,
+        status: 'running',
+        endedAt: null,
+        result: null,
+        map: null,
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  await writeFile(
+    path.join(directory, 'terminal.json'),
+    `${JSON.stringify(completed, null, 2)}\n`,
+  );
+  const recovered = await readWhatToDoRun(project, run.id);
+  assert.equal(recovered.status, 'failed');
+  assert.match(recovered.error ?? '', /interrupted/);
+  await assert.rejects(
+    readFile(path.join(directory, 'terminal.json')),
+    /ENOENT/,
+  );
+});
+
 void test('invalid Agent output fails while preserving the raw response', async (t) => {
   const { project, planningPath } = await fixture(t);
   const control = controlled();
