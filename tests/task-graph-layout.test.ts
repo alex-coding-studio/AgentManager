@@ -195,6 +195,35 @@ void test('renders execution dependencies separately from lineage', () => {
   });
 });
 
+void test('lays out a dependency DAG from prerequisites on the left to dependents on the right', () => {
+  const foundation = node('NODE-00000001');
+  const search = node('NODE-00000002');
+  search.dependsOn = [foundation.id];
+  const photo = node('NODE-00000003');
+  photo.dependsOn = [foundation.id, search.id];
+  const activity = node('NODE-00000004');
+  activity.dependsOn = [foundation.id, photo.id];
+
+  const graph = buildTaskGraphLayout(
+    [foundation, search, photo, activity],
+    [],
+    undefined,
+    true,
+  );
+
+  assert.ok(position(graph, foundation.id).x < position(graph, search.id).x);
+  assert.ok(position(graph, search.id).x < position(graph, photo.id).x);
+  assert.ok(position(graph, photo.id).x < position(graph, activity.id).x);
+  assert.ok(
+    graph.edges.some(
+      (edge) =>
+        edge.relation === 'dependency' &&
+        edge.source === foundation.id &&
+        edge.target === search.id,
+    ),
+  );
+});
+
 void test('renders a dependency between Candidates in one proposal', () => {
   const graph = buildTaskGraphLayout(
     [node('NODE-00000001')],

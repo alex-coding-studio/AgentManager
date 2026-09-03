@@ -487,6 +487,24 @@ void test('Delivery Planning restores clarification Context independently of opt
   assert.doesNotMatch(selectOption, /setSourceUids|setProfile|startRun/);
 });
 
+void test('Delivery Planning always renders its hard dependency DAG', async () => {
+  const workspace = await readFile(
+    new URL('../components/what-to-do-workspace.tsx', import.meta.url),
+    'utf8',
+  );
+  const canvas = await readFile(
+    new URL('../components/task-graph-canvas.tsx', import.meta.url),
+    'utf8',
+  );
+  assert.match(workspace, /showAllDependencies/);
+  assert.match(workspace, /showLineageLegend=\{false\}/);
+  assert.match(
+    canvas,
+    /edge\.relation !== 'dependency' \|\|\s*showAllDependencies/,
+  );
+  assert.match(canvas, /showAllDependencies \? 'Hard dependencies'/);
+});
+
 void test('Domain Modeling separates the current answer, compact summary and change log', async () => {
   const source = await readFile(
     new URL('../components/domain-model-workspace.tsx', import.meta.url),

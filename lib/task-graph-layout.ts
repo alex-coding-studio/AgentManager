@@ -55,6 +55,7 @@ export function buildTaskGraphLayout(
   nodes: TaskGraphNode[],
   previews: TaskGraphPreview[],
   projectedRootId?: string,
+  layoutDependencies = false,
 ) {
   const nodeUid = (node: TaskGraphNode) =>
     node.uid ?? node.provenance?.candidateId ?? node.id;
@@ -136,40 +137,6 @@ export function buildTaskGraphLayout(
         relation: node.kind === 'preview' ? 'request' : 'lineage',
       })),
   );
-
-  const graph = new dagre.graphlib.Graph()
-    .setDefaultEdgeLabel(() => ({}))
-    .setGraph({
-      rankdir: 'LR',
-      ranker: 'network-simplex',
-      ranksep: 180,
-      nodesep: 144,
-      marginx: 24,
-      marginy: 24,
-    });
-  for (const node of [...layoutNodes].sort((left, right) =>
-    compareIds(left.id, right.id),
-  )) {
-    graph.setNode(layoutId(node.id), { width: nodeWidth, height: nodeHeight });
-  }
-  for (const edge of [...lineageEdges].sort(
-    (left, right) =>
-      compareIds(left.source, right.source) ||
-      compareIds(left.target, right.target),
-  )) {
-    graph.setEdge(layoutId(edge.source), layoutId(edge.target));
-  }
-  dagre.layout(graph);
-
-  const positionedNodes: TaskGraphLayoutNode[] = layoutNodes.map((node) => {
-    const stableId = layoutId(node.id);
-    const position = graph.node(stableId) as { x: number; y: number };
-    return {
-      ...node,
-      x: position.x - nodeWidth / 2 + horizontalOffset(stableId),
-      y: position.y - nodeHeight / 2 + verticalOffset(stableId),
-    };
-  });
   const dependencySources = [
     ...nodes.map((node) => ({
       id: node.id,
@@ -190,11 +157,49 @@ export function buildTaskGraphLayout(
         .filter((dependency) => knownIds.has(dependency))
         .map((dependency) => ({
           id: `depends:${node.id}:${dependency}`,
-          source: node.id,
-          target: dependency,
+          source: layoutDependencies ? dependency : node.id,
+          target: layoutDependencies ? node.id : dependency,
           relation: 'dependency',
         })),
   );
+
+  const graph = new dagre.graphlib.Graph()
+    .setDefaultEdgeLabel(() => ({}))
+    .setGraph({
+      rankdir: 'LR',
+      ranker: 'network-simplex',
+      ranksep: 180,
+      nodesep: 144,
+      marginx: 24,
+      marginy: 24,
+    });
+  for (const node of [...layoutNodes].sort((left, right) =>
+    compareIds(left.id, right.id),
+  )) {
+    graph.setNode(layoutId(node.id), { width: nodeWidth, height: nodeHeight });
+  }
+  const layoutEdges = [
+    ...lineageEdges,
+    ...(layoutDependencies ? dependencyEdges : []),
+  ];
+  for (const edge of [...layoutEdges].sort(
+    (left, right) =>
+      compareIds(left.source, right.source) ||
+      compareIds(left.target, right.target),
+  )) {
+    graph.setEdge(layoutId(edge.source), layoutId(edge.target));
+  }
+  dagre.layout(graph);
+
+  const positionedNodes: TaskGraphLayoutNode[] = layoutNodes.map((node) => {
+    const stableId = layoutId(node.id);
+    const position = graph.node(stableId) as { x: number; y: number };
+    return {
+      ...node,
+      x: position.x - nodeWidth / 2 + horizontalOffset(stableId),
+      y: position.y - nodeHeight / 2 + verticalOffset(stableId),
+    };
+  });
   return {
     nodes: positionedNodes,
     edges: [...lineageEdges, ...dependencyEdges],

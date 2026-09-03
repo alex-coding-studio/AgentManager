@@ -59,6 +59,8 @@ export function TaskGraphCanvas({
   plusLabel,
   edgeAlignedOverlays = false,
   avoidBottomRightPanel = false,
+  showAllDependencies = false,
+  showLineageLegend = true,
   showCandidateLegend = true,
   projectedRootId,
   readOnly = false,
@@ -81,6 +83,8 @@ export function TaskGraphCanvas({
   plusLabel?: string;
   edgeAlignedOverlays?: boolean;
   avoidBottomRightPanel?: boolean;
+  showAllDependencies?: boolean;
+  showLineageLegend?: boolean;
   showCandidateLegend?: boolean;
   projectedRootId?: string;
   readOnly?: boolean;
@@ -125,6 +129,7 @@ export function TaskGraphCanvas({
         selectableKinds,
         onToggleSelection,
         projectedRootId,
+        showAllDependencies,
       ),
     [
       focusedNodeId,
@@ -142,6 +147,7 @@ export function TaskGraphCanvas({
       selectableKinds,
       onToggleSelection,
       projectedRootId,
+      showAllDependencies,
     ],
   );
   const [flowNodes, setFlowNodes, onNodesChange] = useNodesState(graph.nodes);
@@ -153,6 +159,9 @@ export function TaskGraphCanvas({
     .sort()
     .join('|');
   const graphNodeIdsKey = graph.nodes.map((node) => node.id).join('|');
+  const graphLayoutKey = graph.nodes
+    .map((node) => `${node.id}:${node.position.x}:${node.position.y}`)
+    .join('|');
   const fitNodeIdsKey = (fitRequest?.nodeIds ?? []).join('|');
   const flowInstance = useRef<ReactFlowInstance<TaskFlowNode, Edge> | null>(
     null,
@@ -168,7 +177,7 @@ export function TaskGraphCanvas({
       );
     });
     return () => cancelAnimationFrame(frame);
-  }, [fitNodeIdsKey, fitRequest?.sequence, graphNodeIdsKey]);
+  }, [fitNodeIdsKey, fitRequest?.sequence, graphLayoutKey]);
 
   useEffect(() => {
     setFlowNodes(graph.nodes);
@@ -266,13 +275,17 @@ export function TaskGraphCanvas({
           avoidBottomRightPanel ? '!right-[380px]' : '!right-28',
         )}
       >
-        <span className="flex items-center gap-1.5">
-          <span className="h-px w-5 bg-muted-foreground" />
-          {t('Lineage')}
-        </span>
+        {showLineageLegend ? (
+          <span className="flex items-center gap-1.5">
+            <span className="h-px w-5 bg-muted-foreground" />
+            {t('Lineage')}
+          </span>
+        ) : null}
         <span className="flex items-center gap-1.5">
           <span className="w-5 border-t border-dashed border-amber-600" />
-          {t('Selected dependencies')}
+          {t(
+            showAllDependencies ? 'Hard dependencies' : 'Selected dependencies',
+          )}
         </span>
         {showCandidateLegend ? (
           <span className="flex items-center gap-1.5">
@@ -369,8 +382,14 @@ function buildFlowGraph(
   selectableKinds: Array<'formal' | 'candidate'> = defaultSelectableKinds,
   onToggleSelection?: (nodeId: string) => void,
   projectedRootId?: string,
+  showAllDependencies = false,
 ) {
-  const layout = buildTaskGraphLayout(nodes, previews, projectedRootId);
+  const layout = buildTaskGraphLayout(
+    nodes,
+    previews,
+    projectedRootId,
+    showAllDependencies,
+  );
   const focusedNodeId =
     layout.nodes.find(
       (entry) =>
@@ -388,6 +407,7 @@ function buildFlowGraph(
   const visibleEdges = layout.edges.filter(
     (edge) =>
       edge.relation !== 'dependency' ||
+      showAllDependencies ||
       (focusedNodeId &&
         (edge.source === focusedNodeId || edge.target === focusedNodeId)),
   );
