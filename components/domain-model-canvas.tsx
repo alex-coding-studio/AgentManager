@@ -166,7 +166,6 @@ function EntityCard({ data }: NodeProps<EntityFlowNode>) {
       <Handle type="target" position={Position.Left} className="opacity-0" />
       <CanvasNodeCardFrame
         density="compact"
-        bodyInset
         selected={data.selectedForContext}
         focused={data.focused}
         dimmed={data.dimmed}
