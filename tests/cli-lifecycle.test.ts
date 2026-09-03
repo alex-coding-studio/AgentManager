@@ -291,6 +291,45 @@ void test('stale log output cannot fake readiness', async () => {
   );
 });
 
+void test('an existing listener cannot satisfy readiness for a new server', async () => {
+  const env = isolatedEnv();
+  const server = net.createServer();
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  const address = server.address();
+  assert.ok(address && typeof address === 'object');
+  const port = String(address.port);
+  try {
+    const started = run(
+      ['start', '-d', '--port', port, '--hostname', '127.0.0.1'],
+      env,
+    );
+    assert.equal(started.status, 1);
+    assert.match(started.stderr, /port .* is already in use/);
+    assert.ok(!existsSync(stateFile(env, port)));
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+
+void test('process identity is stable across timezone changes', async () => {
+  const env = isolatedEnv(READY_STUB, { TZ: 'UTC' });
+  const port = String(await freePort());
+  try {
+    const started = run(['start', '-d', '--port', port], env);
+    assert.equal(started.status, 0, started.stderr);
+    const changedTimezone = { ...env, TZ: 'America/Los_Angeles' };
+    const status = run(['status', '--port', port], changedTimezone);
+    assert.equal(status.status, 0, status.stderr);
+    assert.match(status.stdout, /running \(start, detached\)/);
+    assert.ok(existsSync(stateFile(env, port)));
+  } finally {
+    run(['stop', '--port', port], env);
+  }
+});
+
 void test('stop reports a timeout without escalating to SIGKILL', async () => {
   const stubbornStub = `import net from 'node:net';
 process.on('SIGTERM', () => {});

@@ -279,6 +279,7 @@ function processStartMarker(pid) {
   try {
     const result = spawnSync('ps', ['-p', String(pid), '-o', 'lstart='], {
       encoding: 'utf8',
+      env: { ...process.env, LANG: 'C', LC_ALL: 'C', TZ: 'UTC' },
     });
     if (result.status !== 0) return null;
     const marker = result.stdout.trim();
@@ -380,6 +381,8 @@ async function startServer(parsed, stored) {
 
   if (detach) {
     mkdirSync(runDir(), { recursive: true });
+    if (await canConnect(port, hostname))
+      fail(`Cannot start Praxis: ${describeTarget(port)} is already in use.`);
     const logOffset = existsSync(logPath(port))
       ? statSync(logPath(port)).size
       : 0;
@@ -638,7 +641,10 @@ async function waitForReady(pid, port, hostname) {
   const deadline = Date.now() + readyTimeoutMs();
   while (Date.now() < deadline) {
     if (!isAlive(pid)) return 'dead';
-    if (await canConnect(port, hostname)) return 'ready';
+    if (await canConnect(port, hostname)) {
+      await sleep(150);
+      return isAlive(pid) ? 'ready' : 'dead';
+    }
     await sleep(100);
   }
   return isAlive(pid) ? 'timeout' : 'dead';
