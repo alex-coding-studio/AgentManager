@@ -51,6 +51,16 @@ import type { ContextBrowserFolder } from '@/lib/modules/product-context/catalog
 
 const justDoItAgents = ['codex', 'claude'] as const;
 
+function actionStatusPillTone(status: string) {
+  if (status === 'Verified')
+    return 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400';
+  if (status === 'Agent running' || status === 'Ready to verify')
+    return 'bg-blue-500/10 text-blue-700 dark:text-blue-300';
+  if (status === 'Needs your input' || status === 'Execution failed')
+    return 'bg-amber-500/10 text-amber-800 dark:text-amber-300';
+  return 'bg-secondary text-secondary-foreground';
+}
+
 export function JustDoItAction({
   projectId,
   card,
@@ -967,7 +977,7 @@ export function JustDoItAction({
                   {t('Redo')}
                 </Button>
               ) : null}
-              {latest?.status !== 'running' && latest?.result ? (
+              {!accepted && latest?.status !== 'running' && latest?.result ? (
                 <Button
                   disabled={!enabled || preparingAcceptance}
                   onClick={() => void prepareAcceptance()}
@@ -987,7 +997,9 @@ export function JustDoItAction({
       {headerStatusTarget
         ? createPortal(
             <>
-              <span className="rounded-full bg-secondary px-2 py-1 text-[10px] font-medium text-secondary-foreground">
+              <span
+                className={`rounded-full px-2 py-1 text-[10px] font-medium ${actionStatusPillTone(currentStatus)}`}
+              >
                 {t(currentStatus)}
               </span>
               {latest?.acceptanceChecklist ? (
