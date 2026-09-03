@@ -32,17 +32,6 @@ export function readAgentProfile(form: FormData): AgentProfile {
   return profile;
 }
 
-export function assertExecutionWorkerAgent(
-  agent: AgentProfile['agent'],
-): 'codex' | 'claude' {
-  if (agent === 'deepseek')
-    throw new PublicApiError(
-      'DeepSeek is not available as an execution worker.',
-      400,
-    );
-  return agent;
-}
-
 export function sameModelSelection(
   previous: Pick<AgentProfile, 'model' | 'effort'> | undefined,
   current: Pick<AgentProfile, 'model' | 'effort'>,

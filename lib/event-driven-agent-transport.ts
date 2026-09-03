@@ -9,6 +9,7 @@ import {
 } from './local-agent-transport.ts';
 import { CodexAppServerDriver } from './codex-app-server-driver.ts';
 import { ClaudeSessionDriver } from './claude-session-driver.ts';
+import { DeepseekSessionDriver } from './dsh/session-driver.ts';
 import { HostJobBroker } from './host-job-broker.ts';
 import { publishCardCandidate } from './card-host-operations.ts';
 import type { AgentSessionDriver, HostTool } from './agent-runtime-driver.ts';
@@ -57,8 +58,9 @@ export function startEventDrivenWorkerRun(
   agent: LocalAgentKind,
   input: LocalAgentRunInput,
 ): LocalAgentRun {
-  if (input.access !== 'workspace-write' || agent === 'deepseek')
+  if (input.access !== 'workspace-write')
     return startLocalAgentRun(agent, input);
+  if (agent === 'deepseek') return startDeepseekWorkerRun(input);
   if (agent === 'claude') return startClaudeWorkerRun(input);
   let canceled = false;
   let driver: CodexAppServerDriver | undefined;
@@ -265,6 +267,85 @@ function startClaudeWorkerRun(input: LocalAgentRunInput): LocalAgentRun {
     });
     const hostToolContext =
       '\n\nHost job tool: use the praxis run_job tool for builds, tests and other commands that may run longer than a quick inspection. The Host owns waiting, progress, logs and cancellation. After starting a job, end this turn immediately with one short line; Praxis resumes this same session with the result when the operating-system process exits. Never poll for it with shell commands and never start an overlapping job. Short read-only commands and file edits may use normal tools.';
+    const candidateToolContext = input.candidatePublication
+      ? '\n\nCandidate publication tool: after creating one or more local commits and reaching a clean Candidate HEAD, call publish_candidate once. Do not run gh auth, permission, push, PR creation or PR lookup commands yourself. The Host returns the Draft PR bound to the exact HEAD. Further repair commits may call it again with the new HEAD.'
+      : '';
+    const turn = driver.startTurn(thread, {
+      prompt: input.prompt + hostToolContext + candidateToolContext,
+      onEvent: (event) => {
+        if (event.type === 'activity')
+          input.onActivity?.({ kind: 'message', summary: event.summary });
+      },
+    });
+    interrupt = turn.interrupt;
+    if (canceled) turn.interrupt();
+    try {
+      const result = await turn.completion;
+      return {
+        agentSessionId: result.threadId,
+        finalOutput: result.finalOutput,
+        usage: result.usage,
+        executionAccess: 'workspace-write' as const,
+      };
+    } finally {
+      await driver.close();
+    }
+  })();
+  return {
+    completion,
+    cancel: () => {
+      canceled = true;
+      interrupt?.();
+      void driver.close();
+    },
+  };
+}
+
+function startDeepseekWorkerRun(input: LocalAgentRunInput): LocalAgentRun {
+  let canceled = false;
+  let interrupt: (() => void) | undefined;
+  const recordRoot = path.join(
+    input.protectedPath ?? input.workingDirectory,
+    'runtime/jobs',
+  );
+  const driver = new DeepseekSessionDriver({
+    brokerFactory: (thread) =>
+      new HostJobBroker(
+        thread.workingDirectory,
+        recordRoot,
+        (event) =>
+          input.onActivity?.({
+            kind: 'tool',
+            phase: event.status === 'running' ? 'started' : 'completed',
+            summary:
+              event.status === 'running'
+                ? `Running job: ${event.label}`
+                : `Finished: ${event.command} (exit ${event.exitCode ?? 'none'})`,
+          }),
+        (progress) =>
+          input.onActivity?.({
+            kind: 'tool',
+            phase: 'started',
+            summary: `Running job: ${progress.label} — ${progress.outputTail}`,
+          }),
+      ),
+    hostTools: input.candidatePublication
+      ? [candidatePublicationTool(input.candidatePublication)]
+      : [],
+  });
+  const completion = (async () => {
+    if (canceled) throw new Error('Execution canceled before Agent startup.');
+    const thread = await driver.startThread({
+      profile: {
+        agent: 'deepseek',
+        model: input.model ?? '',
+        effort: input.effort ?? '',
+      },
+      workingDirectory: input.workingDirectory,
+      access: 'workspace-write',
+    });
+    const hostToolContext =
+      '\n\nHost job tool: use the run_job tool for builds, tests and other commands that may run longer than a quick inspection. The Host owns waiting, progress, logs and cancellation. After starting a job, end this turn immediately with one short line; Praxis resumes this same session with the result when the operating-system process exits. Never poll for it with shell commands and never start an overlapping job. Short read-only commands and file edits may use normal tools.';
     const candidateToolContext = input.candidatePublication
       ? '\n\nCandidate publication tool: after creating one or more local commits and reaching a clean Candidate HEAD, call publish_candidate once. Do not run gh auth, permission, push, PR creation or PR lookup commands yourself. The Host returns the Draft PR bound to the exact HEAD. Further repair commits may call it again with the new HEAD.'
       : '';

@@ -44,7 +44,7 @@ import type { AgentProfile } from '@/lib/agent-profile';
 import type { GitHubPullRequest } from '@/lib/github-delivery';
 import type { ContextBrowserFolder } from '@/lib/product-context';
 
-const justDoItAgents = ['codex', 'claude'] as const;
+const justDoItAgents = ['codex', 'claude', 'deepseek'] as const;
 
 export function JustDoItAction({
   projectId,

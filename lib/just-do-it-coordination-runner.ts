@@ -164,7 +164,7 @@ export function totalCoordinationUsage(
 export function startCoordinatedExecution(input: {
   request: CardHarnessRequest;
   workerOptions: Options;
-  workerAgent: 'codex' | 'claude';
+  workerAgent: 'codex' | 'claude' | 'deepseek';
   settings: CoordinationSettings;
   priorEvidence: PriorEvidence[];
   previousContext: string;

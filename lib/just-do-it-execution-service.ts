@@ -39,10 +39,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { lstat, readFile } from 'node:fs/promises';
 import { checkpointWorkspace } from './just-do-it-git.ts';
-import {
-  assertExecutionWorkerAgent,
-  validateAgentProfile,
-} from './agent-profile.ts';
+import { validateAgentProfile } from './agent-profile.ts';
 import {
   assertCurrentPlanningCardSource,
   planningService,
@@ -806,7 +803,7 @@ export function createExecutionService(
           reservation.handle = coordinate({
             request,
             workerOptions: options,
-            workerAgent: assertExecutionWorkerAgent(input.profile.agent),
+            workerAgent: input.profile.agent,
             settings: coordinationSettings,
             priorEvidence: evidence.slice(-80),
             previousContext:

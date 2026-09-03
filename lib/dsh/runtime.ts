@@ -65,7 +65,9 @@ export type DshModules = {
   installModelSelection: (ctx: unknown, selection: unknown) => unknown;
 };
 
-const DISABLED_TOOL_ROWS = [
+export type DeepseekSandboxMode = 'read-only' | 'workspace-write';
+
+const READ_ONLY_DISABLED_TOOL_ROWS = [
   'tool-bash',
   'tool-pwsh',
   'tool-jobs',
@@ -85,18 +87,33 @@ const DISABLED_TOOL_ROWS = [
   'tool-ralph',
 ];
 
+const WRITE_DISABLED_TOOL_ROWS = [
+  'tool-subagent',
+  'tool-subagent-fork',
+  'tool-subagent-control',
+  'tool-subagent-list-agents',
+  'tool-subagent-report',
+  'tool-workflow',
+  'tool-ralph',
+];
+
 export function buildDeepseekPatches(
   basePatches: unknown[],
   workingDirectory: string,
+  mode: DeepseekSandboxMode = 'read-only',
 ): unknown[] {
+  const disabledRows =
+    mode === 'read-only'
+      ? READ_ONLY_DISABLED_TOOL_ROWS
+      : WRITE_DISABLED_TOOL_ROWS;
   return [
     ...basePatches,
     { id: 'hmr', disabled: true },
     {
       id: 'sandbox-policy',
-      config: { mode: 'read-only', workspaceRoot: workingDirectory },
+      config: { mode, workspaceRoot: workingDirectory },
     },
-    ...DISABLED_TOOL_ROWS.map((id) => ({ id, disabled: true })),
+    ...disabledRows.map((id) => ({ id, disabled: true })),
   ];
 }
 
