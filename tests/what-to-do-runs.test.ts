@@ -9,6 +9,7 @@ import type { TaskGraphNode } from '../lib/task-graph.ts';
 import {
   cancelWhatToDoRun,
   listLatestWhatToDoRuns,
+  publishDeliveryMap,
   readWhatToDoRun,
   startWhatToDoRun,
   whatToDoAgentEnvironment,
@@ -422,6 +423,59 @@ void test('Map replacement and Contract import leave no deletable stale Card', a
     planningService.read(project, contract.uid),
     /not found/,
   );
+});
+
+void test('a staged Card transition failure restores the prior Map and Cards', async (t) => {
+  const { project } = await fixture(t);
+  const control = controlled();
+  const first = await startWhatToDoRun(project, input(), control.transport);
+  control.calls[0]!.resolve({
+    agentSessionId: 'agent-session-1',
+    finalOutput: JSON.stringify(result(first)),
+    usage: null,
+  });
+  const completed = await settled(project, first.id);
+  const contract = completed.map!.contracts[0]!;
+  const card = await planningService.importSource(
+    project,
+    'what-to-do',
+    contract.uid,
+  );
+  const secondCard = {
+    ...card,
+    id: '11111111-1111-4111-8111-111111111111',
+    source: {
+      ...card.source,
+      uid: '11111111-1111-4111-8111-111111111111',
+    },
+  };
+  let transitionCount = 0;
+  await assert.rejects(
+    publishDeliveryMap(
+      project,
+      {
+        ...completed.map!,
+        runId: 'RUN-22222222-2222-4222-8222-222222222222',
+        contracts: [],
+      },
+      {
+        list: async () => [card, secondCard],
+        stageDeleteCard: async (targetProject, cardId, revision) => {
+          transitionCount += 1;
+          if (transitionCount === 2)
+            throw new Error('Injected Card transition failure.');
+          return planningService.stageDeleteCard(
+            targetProject,
+            cardId,
+            revision,
+          );
+        },
+      },
+    ),
+    /Injected Card transition failure/,
+  );
+  assert.equal((await readWhatToDoCurrentMap(project))?.runId, first.id);
+  assert.equal((await planningService.read(project, card.id)).id, card.id);
 });
 
 void test('Map replacement is blocked by a Contract Card with a confirmed Plan', async (t) => {

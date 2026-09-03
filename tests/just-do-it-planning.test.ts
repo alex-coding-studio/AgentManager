@@ -517,7 +517,7 @@ void test('an unconfirmed Card can be deleted without changing its source Node',
   const card = await service.importSource(project, 'whats-next', uid);
   const deleted = await service.deleteCard(project, card.id, card.revision);
   assert.deepEqual(deleted, { deleted: true, cardId: uid });
-  assert.match(trashed, new RegExp(`${uid}$`));
+  assert.match(trashed, new RegExp(`\\.superseded/${uid}-`));
   await assert.rejects(service.read(project, uid), /not found/);
   assert.equal(await readFile(sourceFile, 'utf8'), sourceBefore);
 });

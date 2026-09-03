@@ -103,6 +103,7 @@ export async function startWhatToDoRun(
 ) {
   validateAgentProfile(input.profile);
   const key = project.planningPath;
+  if (activeRuns.get(key)?.terminal) activeRuns.delete(key);
   if (activeRuns.has(key))
     throw new PublicApiError('A What to Do Agent Run is already active.', 409);
   const runId = `RUN-${randomUUID()}`;
@@ -317,12 +318,12 @@ function settleLater(
       } else {
         await writeRunRecord(project, terminal);
       }
-      active.terminal = terminal;
       await writeWhatToDoRepositorySummary(
         project,
         result.repositorySummary.markdown,
         run.request.repository.fingerprint,
       ).catch(() => undefined);
+      active.terminal = terminal;
     })
     .catch(async (error: unknown) => {
       if (active.canceled) return;
@@ -360,9 +361,15 @@ function settleLater(
     });
 }
 
-async function publishDeliveryMap(
+type DeliveryPlanningStore = Pick<
+  typeof planningService,
+  'list' | 'stageDeleteCard'
+>;
+
+export async function publishDeliveryMap(
   project: RegisteredProject,
   map: WhatToDoDeliveryMap,
+  store: DeliveryPlanningStore = planningService,
 ) {
   await withDeliveryState(project, async () => {
     const nextSources = new Map(
@@ -371,7 +378,7 @@ async function publishDeliveryMap(
         return [source.uid, source] as const;
       }),
     );
-    const superseded = (await planningService.list(project)).filter((card) => {
+    const superseded = (await store.list(project)).filter((card) => {
       if (card.source.module !== 'what-to-do') return false;
       const source = nextSources.get(card.source.uid);
       return (
@@ -386,12 +393,22 @@ async function publishDeliveryMap(
         `The Delivery Map cannot replace Contracts already in progress: ${protectedCards.map((card) => card.source.title).join(', ')}.`,
         409,
       );
-    await writeWhatToDoCurrentMap(project, map);
-    await Promise.allSettled(
-      superseded.map((card) =>
-        planningService.deleteCard(project, card.id, card.revision),
-      ),
-    );
+    const staged: Array<
+      Awaited<ReturnType<DeliveryPlanningStore['stageDeleteCard']>>
+    > = [];
+    try {
+      for (const card of superseded)
+        staged.push(
+          await store.stageDeleteCard(project, card.id, card.revision),
+        );
+      await writeWhatToDoCurrentMap(project, map);
+    } catch (error) {
+      await Promise.allSettled(
+        staged.reverse().map((transition) => transition.rollback()),
+      );
+      throw error;
+    }
+    await Promise.allSettled(staged.map((transition) => transition.finalize()));
   });
 }
 

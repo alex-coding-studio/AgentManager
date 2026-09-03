@@ -386,6 +386,21 @@ export function createPlanningService(
     cardId: string,
     expectedRevision: number,
   ) {
+    const staged = await stageDeleteCard(project, cardId, expectedRevision);
+    try {
+      await staged.finalize();
+    } catch (error) {
+      await staged.rollback().catch(() => undefined);
+      throw error;
+    }
+    return { deleted: true as const, cardId };
+  }
+
+  async function stageDeleteCard(
+    project: RegisteredProject,
+    cardId: string,
+    expectedRevision: number,
+  ) {
     assertCardUuid(cardId);
     assertRevision(expectedRevision);
     const card = await read(project, cardId);
@@ -418,8 +433,27 @@ export function createPlanningService(
       !actualDirectory.startsWith(actualRoot + path.sep)
     )
       throw new Error('Card storage ownership changed.');
-    await trashCard(actualDirectory);
-    return { deleted: true as const, cardId };
+    const stagingRoot = path.join(actualRoot, '.superseded');
+    await mkdir(stagingRoot, { recursive: true });
+    const stagingInfo = await lstat(stagingRoot);
+    if (!stagingInfo.isDirectory() || stagingInfo.isSymbolicLink())
+      throw new Error('Invalid Card removal staging directory.');
+    const stagedDirectory = path.join(stagingRoot, `${cardId}-${randomUUID()}`);
+    await rename(actualDirectory, stagedDirectory);
+    let settled = false;
+    return {
+      cardId,
+      async rollback() {
+        if (settled) return;
+        await rename(stagedDirectory, actualDirectory);
+        settled = true;
+      },
+      async finalize() {
+        if (settled) return;
+        await trashCard(stagedDirectory);
+        settled = true;
+      },
+    };
   }
 
   async function importSourceUnlocked(
@@ -989,6 +1023,7 @@ export function createPlanningService(
     dependencyReviews,
     resolveDependency,
     deleteCard,
+    stageDeleteCard,
     start,
     update,
     sources: listPlanningSources,
