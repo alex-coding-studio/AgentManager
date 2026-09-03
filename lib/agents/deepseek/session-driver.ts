@@ -31,6 +31,7 @@ const require = createRequire(import.meta.url);
 export type DeepseekSessionDriverOptions = {
   brokerFactory: (input: AgentRuntimeThreadInput) => HostJobBroker;
   hostTools?: HostTool[];
+  load?: () => Promise<SessionModules>;
 };
 
 type DshAgent = {
@@ -42,7 +43,7 @@ type DshAgent = {
 
 type DshAgentHandle = { agent: DshAgent; dispose: () => Promise<void> };
 
-type SessionModules = {
+export type SessionModules = {
   boot: (
     name: string,
     configPath: string,
@@ -313,7 +314,7 @@ export class DeepseekSessionDriver implements AgentSessionDriver {
     if (this.runtime) return this.runtime;
     const runtime = await bootSessionRuntime(
       workingDirectory,
-      loadSessionModules,
+      this.options.load ?? loadSessionModules,
     );
     runtime.tools.register(this.runJobDefinition());
     for (const tool of this.hostTools.values())
@@ -337,6 +338,9 @@ export class DeepseekSessionDriver implements AgentSessionDriver {
       turnId: turn.turnId,
       at: new Date().toISOString(),
     });
+    await agent.whenIdle();
+    if (turn.stopped) throw new Error('Agent turn interrupted.');
+    const firstSeq = agent.session.seq;
     agent.followup(
       runtime.createUserMessage({
         content: [{ type: 'text', text: prompt }],
@@ -345,7 +349,6 @@ export class DeepseekSessionDriver implements AgentSessionDriver {
     );
     await agent.whenIdle();
     if (turn.stopped) throw new Error('Agent turn interrupted.');
-    const firstSeq = agent.session.seq;
     turn.finalOutput = summarize(agent.session.events, firstSeq);
     turn.onEvent?.({
       type: 'turn-completed',
@@ -395,6 +398,8 @@ export class DeepseekSessionDriver implements AgentSessionDriver {
   }): string {
     const turn = this.activeTurn;
     if (!turn) throw new Error('No active DeepSeek turn.');
+    if (turn.pendingSuspension)
+      throw new Error('A Host operation is already pending.');
     turn.pendingSuspension = {
       tool: suspension.tool,
       completion: suspension.completion,
@@ -418,7 +423,10 @@ export class DeepseekSessionDriver implements AgentSessionDriver {
           { type: 'text', text: value.message },
         ],
       },
-      execute: async (args: Record<string, unknown>) => {
+      execute: async (
+        args: Record<string, unknown>,
+        exec: { concludeTurn: () => void },
+      ) => {
         const result = await tool.call(args);
         if (isHostToolSuspension(result)) {
           const message = this.armSuspension({
@@ -426,6 +434,7 @@ export class DeepseekSessionDriver implements AgentSessionDriver {
             acknowledgement: result.acknowledgement,
             completion: result.continuation,
           });
+          exec.concludeTurn();
           return { message };
         }
         return { message: JSON.stringify(result) };
@@ -463,6 +472,7 @@ export class DeepseekSessionDriver implements AgentSessionDriver {
       },
       execute: async (
         args: Partial<HostJobRequest> & { workingDirectory?: string },
+        exec: { concludeTurn: () => void },
       ) => {
         const turn = this.activeTurn;
         if (!turn) throw new Error('No active DeepSeek turn.');
@@ -497,6 +507,7 @@ export class DeepseekSessionDriver implements AgentSessionDriver {
             jobResult: result,
           })),
         });
+        exec.concludeTurn();
         return { message };
       },
     };
