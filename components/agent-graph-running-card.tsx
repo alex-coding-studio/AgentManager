@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { AgentGraphComposerCard } from '@/components/agent-graph-composer-card';
 import { Button } from '@/components/ui/button';
 import { useUiText } from '@/components/ui-language-provider';
-import type { AgentProfile } from '@/lib/agent-profile';
+import type { AgentProfile } from '@/lib/agents/profile';
 
 export function AgentGraphRunningCard({
   agent,

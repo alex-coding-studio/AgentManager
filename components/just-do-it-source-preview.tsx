@@ -11,9 +11,9 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useUiText } from '@/components/ui-language-provider';
-import { graphCardLabel } from '@/lib/graph-identity';
-import type { DemoGoal } from '@/lib/just-do-it-demo';
-import type { TaskGraphNode } from '@/lib/task-graph';
+import { graphCardLabel } from '@/lib/graph/identity';
+import type { DemoGoal } from '@/lib/modules/implementation/demo';
+import type { TaskGraphNode } from '@/lib/graph/task/model';
 
 const noAction = () => {};
 

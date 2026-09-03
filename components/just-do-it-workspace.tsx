@@ -78,7 +78,7 @@ import {
   type DemoGoal,
   type DemoSimulation,
   type DemoState,
-} from '@/lib/just-do-it-demo';
+} from '@/lib/modules/implementation/demo';
 import { cn } from '@/lib/utils';
 
 const sectionStyle = 'rounded-2xl border border-border bg-card';

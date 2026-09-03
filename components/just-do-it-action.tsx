@@ -6,9 +6,12 @@ import {
   unverifiedDeliveryRefs,
   hasUnsupportedAppArtifact,
   hasReviewableReport,
-} from '@/lib/just-do-it-result-display';
+} from '@/lib/modules/implementation/result-display';
 import { CheckDetails } from '@/components/check-details';
-import { assessRequiredChecks, splitChecks } from '@/lib/just-do-it-checklist';
+import {
+  assessRequiredChecks,
+  splitChecks,
+} from '@/lib/modules/implementation/checklist';
 import {
   LoaderCircle,
   Check,
@@ -40,11 +43,11 @@ import {
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useUiText } from '@/components/ui-language-provider';
-import type { PlanningCard } from '@/lib/just-do-it-planning-service';
-import type { ActionContract } from '@/lib/just-do-it-harness';
-import type { AgentProfile } from '@/lib/agent-profile';
+import type { PlanningCard } from '@/lib/modules/implementation/planning-service';
+import type { ActionContract } from '@/lib/modules/implementation/harness';
+import type { AgentProfile } from '@/lib/agents/profile';
 import type { GitHubPullRequest } from '@/lib/github-delivery';
-import type { ContextBrowserFolder } from '@/lib/product-context';
+import type { ContextBrowserFolder } from '@/lib/modules/product-context/catalog';
 
 const justDoItAgents = ['codex', 'claude'] as const;
 

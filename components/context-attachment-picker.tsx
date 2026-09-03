@@ -4,7 +4,7 @@ import { useUiText } from '@/components/ui-language-provider';
 import { useRef, useState, type DragEvent } from 'react';
 import { ChevronDown, FileText, Upload, X } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
-import type { ContextBrowserFolder } from '@/lib/product-context';
+import type { ContextBrowserFolder } from '@/lib/modules/product-context/catalog';
 import { cn } from '@/lib/utils';
 
 export function contextAttachmentTitle(

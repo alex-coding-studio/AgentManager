@@ -17,7 +17,7 @@ import {
   publishCardCandidate,
   type HostCommandRunner,
 } from '../lib/card-host-operations.ts';
-import type { CardWorkspace } from '../lib/just-do-it-worktree.ts';
+import type { CardWorkspace } from '../lib/modules/implementation/worktree.ts';
 
 const execute = promisify(execFile);
 

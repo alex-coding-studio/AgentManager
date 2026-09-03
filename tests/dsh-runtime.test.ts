@@ -9,7 +9,7 @@ import {
   renderDeepseekContext,
   summarize,
   type DshModules,
-} from '../lib/dsh/runtime.ts';
+} from '../lib/agents/deepseek/runtime.ts';
 
 type Patch = { id?: string; disabled?: boolean; config?: unknown };
 

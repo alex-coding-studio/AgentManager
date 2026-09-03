@@ -1,16 +1,16 @@
 import { notFound } from 'next/navigation';
 import { ProjectShell } from '@/components/project-shell';
 import { WhatToDoWorkspace } from '@/components/what-to-do-workspace';
-import { readContextBrowser } from '@/lib/product-context';
+import { readContextBrowser } from '@/lib/modules/product-context/catalog';
 import {
   getGitHubRepositoryUrl,
   getProject,
   listProjects,
 } from '@/lib/project-registry';
-import { listTaskGraphNodes } from '@/lib/task-graph';
-import { listLatestWhatToDoRuns } from '@/lib/what-to-do-runs';
-import { isWhatToDoFeatureNode } from '@/lib/what-to-do-sources';
-import { readWhatToDoCurrentMap } from '@/lib/what-to-do-storage';
+import { listTaskGraphNodes } from '@/lib/graph/task/model';
+import { listLatestWhatToDoRuns } from '@/lib/modules/delivery-planning/runs';
+import { isWhatToDoFeatureNode } from '@/lib/modules/delivery-planning/sources';
+import { readWhatToDoCurrentMap } from '@/lib/modules/delivery-planning/storage';
 
 export const dynamic = 'force-dynamic';
 

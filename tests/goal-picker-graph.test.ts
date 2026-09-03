@@ -7,7 +7,7 @@ import {
   GOAL_PICKER_WIDTH,
   GOAL_PICKER_HEIGHT,
   type GoalPickerEntry,
-} from '../lib/goal-picker-graph.ts';
+} from '../lib/graph/goal-picker.ts';
 
 void test('waiting, added, running and finalized entries remain non-selectable', () => {
   assert.equal(canAddGoalSource(entry(1)), true);

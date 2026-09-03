@@ -3,24 +3,24 @@ import test from 'node:test';
 import {
   createCardHarnessRequest,
   type CardHarnessRequest,
-} from '../lib/just-do-it-harness.ts';
+} from '../lib/modules/implementation/harness.ts';
 import {
   coordinationPrompt,
   createCoordinationRequest,
   parseCoordinationDecision,
   type CoordinationDecision,
   type CoordinationRequest,
-} from '../lib/just-do-it-coordination.ts';
+} from '../lib/modules/implementation/coordination.ts';
 import {
   startCoordinatedExecution,
   coordinationLimits,
   CoordinationRunError,
-} from '../lib/just-do-it-coordination-runner.ts';
-import { readLocalAgentActivity } from '../lib/local-agent-activity.ts';
+} from '../lib/modules/implementation/coordination-runner.ts';
+import { readLocalAgentActivity } from '../lib/agents/activity.ts';
 import type {
   startLocalAgentRun,
   LocalAgentResult,
-} from '../lib/local-agent-transport.ts';
+} from '../lib/agents/transport.ts';
 import {
   isHostToolSuspension,
   type AgentRuntimeCapabilities,
@@ -30,10 +30,10 @@ import {
   type AgentRuntimeTurnInput,
   type AgentSessionDriver,
   type HostTool,
-} from '../lib/agent-runtime-driver.ts';
-import type { CoordinatorSession } from '../lib/event-driven-agent-transport.ts';
-import { CodexAppServerDriver } from '../lib/codex-app-server-driver.ts';
-import { HostJobBroker } from '../lib/host-job-broker.ts';
+} from '../lib/agents/runtime-driver.ts';
+import type { CoordinatorSession } from '../lib/agents/event-driven-transport.ts';
+import { CodexAppServerDriver } from '../lib/agents/codex/app-server-driver.ts';
+import { HostJobBroker } from '../lib/agents/host-job-broker.ts';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -629,7 +629,7 @@ void test('coordinator filters ignored diagnostics, surfaces material extras, an
     return d;
   });
   const output = (await f.start()
-    .completion) as import('../lib/just-do-it-coordination-runner.ts').CoordinatedResult;
+    .completion) as import('../lib/modules/implementation/coordination-runner.ts').CoordinatedResult;
   const report = JSON.parse(output.finalOutput);
   assert.equal(f.calls.length, 2);
   assert.equal(report.outcome, 'delivered');

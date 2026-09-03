@@ -94,7 +94,7 @@ mock.module('node:fs/promises', {
 });
 
 const { importTaskDecompositionAttachments, readTaskDecompositionContext } =
-  await import('../lib/task-decomposition-context.ts');
+  await import('../lib/modules/scope-decomposition/context.ts');
 const { PublicApiError } = await import('../lib/api-errors.ts');
 
 const managerHome = await realFs.mkdtemp(

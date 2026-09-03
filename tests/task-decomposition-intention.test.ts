@@ -3,17 +3,17 @@ import test from 'node:test';
 import {
   whatsNextIntentionRegistry,
   whatsNextMotionRegistry,
-} from '../lib/whats-next-intention.ts';
+} from '../lib/modules/product-discovery/intention.ts';
 import {
   taskDecompositionIntentionRegistry,
   validateTaskDecompositionIntentionResult,
-} from '../lib/task-decomposition-intention.ts';
-import { buildTaskDecompositionPrompt } from '../lib/task-decomposition-prompt.ts';
-import type { TaskDecompositionHarnessResult } from '../lib/task-decomposition-harness.ts';
+} from '../lib/modules/scope-decomposition/intention.ts';
+import { buildTaskDecompositionPrompt } from '../lib/modules/scope-decomposition/prompt.ts';
+import type { TaskDecompositionHarnessResult } from '../lib/modules/scope-decomposition/harness.ts';
 import {
   taskDecompositionMotionRegistry,
   validateTaskDecompositionMotionResult,
-} from '../lib/task-decomposition-motion.ts';
+} from '../lib/modules/scope-decomposition/motion.ts';
 
 void test('Intention Profile registries are module-scoped', () => {
   assert.deepEqual(

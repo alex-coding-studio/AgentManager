@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 import {
   type CanvasNodeCardDensity,
   canvasNodeCardMinHeight,
-} from '@/lib/canvas-node-card-metrics';
+} from '@/lib/graph/canvas-node-card-metrics';
 
 export type CanvasNodeCardAppearance = 'default' | 'provisional';
 

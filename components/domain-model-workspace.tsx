@@ -27,7 +27,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { Textarea } from '@/components/ui/textarea';
-import type { AgentProfile } from '@/lib/agent-profile';
+import type { AgentProfile } from '@/lib/agents/profile';
 import type {
   DerivedDomainRelationship,
   DomainChange,
@@ -35,14 +35,14 @@ import type {
   DomainEntity,
   DomainModel,
   DomainRelationship,
-} from '@/lib/domain-model';
-import type { DomainModelRunRecord } from '@/lib/domain-model-runs';
-import { deriveDomainRelationships } from '@/lib/domain-model-view';
+} from '@/lib/modules/domain-modeling/model';
+import type { DomainModelRunRecord } from '@/lib/modules/domain-modeling/runs';
+import { deriveDomainRelationships } from '@/lib/modules/domain-modeling/view';
 import {
   latestDomainModelResponse,
   renderLatestResponseActivityLog,
 } from '@/lib/latest-response';
-import type { ContextBrowserFolder } from '@/lib/product-context';
+import type { ContextBrowserFolder } from '@/lib/modules/product-context/catalog';
 import { useUiText } from '@/components/ui-language-provider';
 
 export function DomainModelWorkspace({

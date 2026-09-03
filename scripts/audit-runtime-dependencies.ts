@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import {
   analyzeRuntimeDependencies,
   type DependencyGraph,
-} from '../lib/runtime-dependency-graph.ts';
+} from '../lib/graph/runtime-dependencies.ts';
 
 export const AUDIT_SOURCE_ROOTS = [
   'app',

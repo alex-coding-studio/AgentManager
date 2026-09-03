@@ -10,12 +10,12 @@ import {
   executionAccessFromConfig,
   withSkillCatalog,
   type SkillCatalog,
-} from '../lib/local-agent-skills.ts';
+} from '../lib/agents/skills.ts';
 import {
   startCodexRun,
   buildCodexArguments,
   type LocalAgentRun,
-} from '../lib/local-agent-transport.ts';
+} from '../lib/agents/transport.ts';
 
 const cwd = '/tmp/skill-fixture';
 const catalog: SkillCatalog = {

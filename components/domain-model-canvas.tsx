@@ -26,11 +26,11 @@ import {
   type DomainEntity,
   type DomainModel,
   type DomainRelationship,
-} from '@/lib/domain-model';
+} from '@/lib/modules/domain-modeling/model';
 import {
   deriveDomainRelationships,
   domainModelTopologyKey,
-} from '@/lib/domain-model-view';
+} from '@/lib/modules/domain-modeling/view';
 import { cn } from '@/lib/utils';
 import { useUiText } from '@/components/ui-language-provider';
 

@@ -6,7 +6,7 @@ import {
   getProject,
   listProjects,
 } from '@/lib/project-registry';
-import { readTaskDecompositionContext } from '@/lib/task-decomposition-context';
+import { readTaskDecompositionContext } from '@/lib/modules/scope-decomposition/context';
 
 export const dynamic = 'force-dynamic';
 

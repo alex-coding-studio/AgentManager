@@ -5,11 +5,11 @@ import {
   renderWhatToDoContract,
   whatToDoContractCandidateId,
   whatToDoCurrentMapPromptView,
-} from '../lib/what-to-do-map.ts';
+} from '../lib/modules/delivery-planning/map.ts';
 import {
   WHAT_TO_DO_HARNESS_REVISION,
   type WhatToDoHarnessResult,
-} from '../lib/what-to-do-harness.ts';
+} from '../lib/modules/delivery-planning/harness.ts';
 
 const result: Extract<WhatToDoHarnessResult, { outcome: 'map-proposal' }> = {
   schemaVersion: 1,

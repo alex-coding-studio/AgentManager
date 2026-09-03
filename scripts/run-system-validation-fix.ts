@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import {
   runSystemValidationFixAgent,
   type SystemValidationFixRequest,
-} from '../lib/system-validation-fix-agent.ts';
+} from '../lib/modules/implementation/system-validation-fix-agent.ts';
 
 const input = await requestInput<SystemValidationFixRequest>();
 process.stdout.write(

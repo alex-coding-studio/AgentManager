@@ -3,7 +3,7 @@ import {
   createSystemValidationFixPacket,
   runSystemValidation,
   type SystemValidationRequest,
-} from '../lib/system-validation-runner.ts';
+} from '../lib/modules/implementation/system-validation-runner.ts';
 
 const input = await requestInput<
   SystemValidationRequest & { existingRepairAttempts?: number }

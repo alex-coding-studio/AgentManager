@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import type { WhatsNextRunRecord } from '../lib/whats-next-runs.ts';
-import type { TaskDecompositionRunRecord } from '../lib/task-decomposition-runs.ts';
+import type { WhatsNextRunRecord } from '../lib/modules/product-discovery/runs.ts';
+import type { TaskDecompositionRunRecord } from '../lib/modules/scope-decomposition/runs.ts';
 import {
   latestTaskDecompositionResponse,
   latestTerminalTaskDecompositionRun,

@@ -1,7 +1,7 @@
 import { getProject } from '@/lib/project-registry';
-import { planningService } from '@/lib/just-do-it-planning-service';
-import { assertCardUuid } from '@/lib/just-do-it-harness';
-import { readCheckpointDiff } from '@/lib/just-do-it-git';
+import { planningService } from '@/lib/modules/implementation/planning-service';
+import { assertCardUuid } from '@/lib/modules/implementation/harness';
+import { readCheckpointDiff } from '@/lib/modules/implementation/git';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

@@ -11,7 +11,7 @@ import {
   uuidAlias,
   graphCardLabel,
   type GraphIdentityIndex,
-} from '../lib/graph-identity.ts';
+} from '../lib/graph/identity.ts';
 import {
   ensureGraphIdentities,
   identifyCandidates,
@@ -19,23 +19,23 @@ import {
   reserveNodeIdentity,
   reservedCandidateAliases,
   parseIdentifiedResult,
-} from '../lib/graph-identity-store.ts';
-import { buildTaskGraphLayout } from '../lib/task-graph-layout.ts';
-import type { TaskGraphNode } from '../lib/task-graph.ts';
+} from '../lib/graph/identity-store.ts';
+import { buildTaskGraphLayout } from '../lib/graph/task/layout.ts';
+import type { TaskGraphNode } from '../lib/graph/task/model.ts';
 import {
   parseWhatsNextHarnessResult,
   WHATS_NEXT_HARNESS_ID,
   WHATS_NEXT_HARNESS_REVISION,
   type WhatsNextValidationContext,
-} from '../lib/whats-next-harness.ts';
+} from '../lib/modules/product-discovery/harness.ts';
 import {
   parseTaskDecompositionHarnessResult,
   TASK_DECOMPOSITION_HARNESS_ID,
   TASK_DECOMPOSITION_HARNESS_REVISION,
   type HarnessValidationContext,
-} from '../lib/task-decomposition-harness.ts';
-import { buildWhatsNextContinuationPrompt } from '../lib/whats-next-prompt.ts';
-import { buildTaskDecompositionContinuationPrompt } from '../lib/task-decomposition-prompt.ts';
+} from '../lib/modules/scope-decomposition/harness.ts';
+import { buildWhatsNextContinuationPrompt } from '../lib/modules/product-discovery/prompt.ts';
+import { buildTaskDecompositionContinuationPrompt } from '../lib/modules/scope-decomposition/prompt.ts';
 
 async function save(root: string, file: string, value: unknown) {
   const target = path.join(root, file);
@@ -273,7 +273,7 @@ for (const scope of ['whats-next', 'task-graph'] as const) {
                 operation: 'refine-candidate' as const,
                 revisionCandidateId: a!.candidateId,
                 revisionTarget:
-                  a as import('../lib/whats-next-harness.ts').WhatsNextCandidate,
+                  a as import('../lib/modules/product-discovery/harness.ts').WhatsNextCandidate,
               }
             : {}),
         },

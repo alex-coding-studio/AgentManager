@@ -4,7 +4,7 @@ import {
   candidateDependencyBlockers,
   resolveCandidateDependencies,
   unresolvedCandidateDependencies,
-} from '../lib/task-decomposition-dependencies.ts';
+} from '../lib/modules/scope-decomposition/dependencies.ts';
 import { PublicApiError } from '../lib/api-errors.ts';
 
 const nodes = [

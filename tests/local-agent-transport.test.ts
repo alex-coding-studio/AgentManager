@@ -6,7 +6,7 @@ import {
   normalizeClaudeUsage,
   parseClaudeEvent,
   parseCodexEvent,
-} from '../lib/local-agent-transport.ts';
+} from '../lib/agents/transport.ts';
 
 void test('subtracts the prior Session total from resumed Codex usage', () => {
   const baseline = {

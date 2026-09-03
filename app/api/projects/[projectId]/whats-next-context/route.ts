@@ -4,7 +4,7 @@ import { guardJsonRequest } from '@/lib/request-boundary';
 import {
   readWhatsNextInstructions,
   saveWhatsNextInstructions,
-} from '@/lib/whats-next-context';
+} from '@/lib/modules/product-discovery/context';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

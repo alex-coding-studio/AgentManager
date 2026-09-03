@@ -7,10 +7,10 @@ import { promisify } from 'node:util';
 import {
   ensureCardWorkspace,
   cardGitWritePaths,
-} from '../lib/just-do-it-worktree.ts';
-import { buildCodexArguments } from '../lib/local-agent-transport.ts';
+} from '../lib/modules/implementation/worktree.ts';
+import { buildCodexArguments } from '../lib/agents/transport.ts';
 import type { RegisteredProject } from '../lib/project-registry.ts';
-import type { PlanningCard } from '../lib/just-do-it-planning-service.ts';
+import type { PlanningCard } from '../lib/modules/implementation/planning-service.ts';
 
 if (process.platform !== 'darwin')
   throw new Error('This sandbox smoke requires macOS.');

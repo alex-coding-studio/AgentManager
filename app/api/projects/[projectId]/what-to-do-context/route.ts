@@ -4,7 +4,7 @@ import { guardJsonRequest } from '@/lib/request-boundary';
 import {
   readWhatToDoInstructions,
   saveWhatToDoInstructions,
-} from '@/lib/what-to-do-instructions';
+} from '@/lib/modules/delivery-planning/instructions';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

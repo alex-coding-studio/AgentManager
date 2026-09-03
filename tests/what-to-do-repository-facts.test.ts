@@ -9,7 +9,7 @@ import type { RegisteredProject } from '../lib/project-registry.ts';
 import {
   collectWhatToDoRepositoryFacts,
   readWhatToDoTargetedRepositoryEvidence,
-} from '../lib/what-to-do-repository-facts.ts';
+} from '../lib/modules/delivery-planning/repository-facts.ts';
 
 const execute = promisify(execFile);
 

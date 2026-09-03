@@ -7,15 +7,15 @@ import {
   ClaudeSessionDriver,
   buildClaudeSessionArguments,
   claudeMcpServerName,
-} from '../lib/claude-session-driver.ts';
-import { coordinationLimits } from '../lib/just-do-it-coordination-runner.ts';
-import { coordinatorThreadInstructions } from '../lib/coordinator-events.ts';
-import { HostJobBroker } from '../lib/host-job-broker.ts';
-import { startPushCoordinatorSession } from '../lib/event-driven-agent-transport.ts';
+} from '../lib/agents/claude/session-driver.ts';
+import { coordinationLimits } from '../lib/modules/implementation/coordination-runner.ts';
+import { coordinatorThreadInstructions } from '../lib/modules/implementation/coordinator-events.ts';
+import { HostJobBroker } from '../lib/agents/host-job-broker.ts';
+import { startPushCoordinatorSession } from '../lib/agents/event-driven-transport.ts';
 import type {
   AgentRuntimeEvent,
   HostTool,
-} from '../lib/agent-runtime-driver.ts';
+} from '../lib/agents/runtime-driver.ts';
 
 const fakeClaude = path.resolve('tests/fixtures/fake-claude.mjs');
 

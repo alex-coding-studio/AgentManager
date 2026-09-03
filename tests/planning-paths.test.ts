@@ -427,7 +427,7 @@ void test('the Context Library shape is narrower than the Task Graph set', async
 
 void test('readTaskGraphMarkdownResource uses the shared boundary and keeps its public message', async () => {
   const { readTaskGraphMarkdownResource } =
-    await import('../lib/task-graph.ts');
+    await import('../lib/graph/task/model.ts');
   const { PublicApiError } = await import('../lib/api-errors.ts');
   const { project, planningPath } = await planningProject('read-resource');
   await writeInside(planningPath, 'context/product/notes.md', '# kept');
@@ -463,7 +463,7 @@ void test('readTaskGraphMarkdownResource uses the shared boundary and keeps its 
 void test('Latest Response reads canonical What’s Next and Domain Model summaries', async () => {
   const { project, planningPath } = await planningProject('run-summaries');
   const { readTaskGraphMarkdownResource } =
-    await import('../lib/task-graph.ts');
+    await import('../lib/graph/task/model.ts');
   const summaries = [
     [
       `whats-next/runs/${RUN}/summary.md`,
@@ -485,7 +485,7 @@ void test('Latest Response reads canonical What’s Next and Domain Model summar
 
 void test('readTaskGraphMarkdownResource keeps a missing file internal, not public', async () => {
   const { readTaskGraphMarkdownResource } =
-    await import('../lib/task-graph.ts');
+    await import('../lib/graph/task/model.ts');
   const { PublicApiError, apiErrorResponse } =
     await import('../lib/api-errors.ts');
   const { project } = await planningProject('read-missing');
@@ -528,7 +528,7 @@ void test('readTaskGraphMarkdownResource keeps a missing file internal, not publ
 
 void test('readPlanningFile keeps its internal messages and size boundary', async () => {
   const { readPlanningFile } =
-    await import('../lib/just-do-it-planning-sources.ts');
+    await import('../lib/modules/implementation/planning-sources.ts');
   const { PublicApiError } = await import('../lib/api-errors.ts');
   const { project, planningPath } = await planningProject('planning-file');
   await writeInside(planningPath, 'runtime/notes.txt', 'body');
@@ -587,12 +587,15 @@ void test('readPlanningFile keeps its internal messages and size boundary', asyn
 
 void test('the migrated call sites import the shared resolver', async () => {
   const { readFile } = await import('node:fs/promises');
-  for (const name of ['task-graph.ts', 'just-do-it-planning-sources.ts']) {
+  for (const name of [
+    'graph/task/model.ts',
+    'modules/implementation/planning-sources.ts',
+  ]) {
     const source = await readFile(
       new URL(`../lib/${name}`, import.meta.url),
       'utf8',
     );
-    assert.match(source, /from '\.\/planning-paths\.ts'/, name);
+    assert.match(source, /from '\.\.\/\.\.\/planning-paths\.ts'/, name);
     assert.match(source, /resolvePlanningPath\(/, name);
     assert.ok(
       !/startsWith\(`\$\{[a-zA-Z]+Root\}\$\{path\.sep\}`\)/.test(source),
@@ -616,7 +619,7 @@ async function nodeDirectories(planningPath: string, graphRoot: string) {
 }
 
 void test('createStartNode rejects a Context reference that symlinks outside the planning root', async () => {
-  const { createStartNode } = await import('../lib/task-graph.ts');
+  const { createStartNode } = await import('../lib/graph/task/model.ts');
   const { PublicApiError } = await import('../lib/api-errors.ts');
   const { project, planningPath } = await contextProject('ctx-escape');
   const outside = await mkdtemp(path.join(os.tmpdir(), 'am-planning-ctx-out-'));
@@ -659,7 +662,7 @@ void test('createStartNode rejects a Context reference that symlinks outside the
 
 void test('updateStartNode rejects the same escape without changing the stored node', async () => {
   const { createStartNode, updateStartNode, listTaskGraphNodes } =
-    await import('../lib/task-graph.ts');
+    await import('../lib/graph/task/model.ts');
   const { PublicApiError } = await import('../lib/api-errors.ts');
   const { project, planningPath } = await contextProject('ctx-escape-update');
   await writeFile(
@@ -718,7 +721,7 @@ void test('updateStartNode rejects the same escape without changing the stored n
 });
 
 void test('duplicate Context references are deduplicated in first-occurrence order', async () => {
-  const { createStartNode } = await import('../lib/task-graph.ts');
+  const { createStartNode } = await import('../lib/graph/task/model.ts');
   const { project, planningPath } = await contextProject('ctx-dedup');
   for (const name of ['alpha.md', 'beta.md', 'gamma.md'])
     await writeFile(
@@ -754,7 +757,7 @@ void test('duplicate Context references are deduplicated in first-occurrence ord
 });
 
 void test('a Context reference outside the Context Library shape is rejected by the real call path', async () => {
-  const { createStartNode } = await import('../lib/task-graph.ts');
+  const { createStartNode } = await import('../lib/graph/task/model.ts');
   const { PublicApiError } = await import('../lib/api-errors.ts');
   const { project, planningPath } = await contextProject('ctx-shape');
   await writeInside(planningPath, `whats-next/nodes/${NODE}/output.md`, 'node');
