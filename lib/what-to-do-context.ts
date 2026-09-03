@@ -9,6 +9,10 @@ import {
   type ContextWorkspaceInput,
 } from './agent-graph-context-workspace.ts';
 import { PublicApiError } from './api-errors.ts';
+import {
+  resolveProductContextReferences,
+  type ResolvedProductContextResource,
+} from './product-context-resource.ts';
 import { readDomainModel, type DomainModel } from './domain-model.ts';
 import type { RegisteredProject } from './project-registry.ts';
 import { resolvePlanningPath } from './planning-paths.ts';
@@ -87,6 +91,11 @@ export async function prepareWhatToDoContext(
       'Select no more than 50 repository evidence files.',
       400,
     );
+  const contextResources = await resolveProductContextReferences(
+    project,
+    contextRefs,
+    ['delivery-contract'],
+  );
 
   const [sources, repositoryFacts, repositorySummary, domainModel] =
     await Promise.all([
@@ -151,7 +160,7 @@ export async function prepareWhatToDoContext(
       'Repository facts changed. Reload before continuing.',
       409,
     );
-  const extraInputs = await contextInputs(project, contextRefs, files, runId);
+  const extraInputs = await contextInputs(contextResources, files, runId);
   const userInput = userInputWorkspaceInput(
     `what-to-do/runs/${runId}/context/input/user-input.md`,
     instruction,
@@ -298,25 +307,16 @@ async function currentMapSourceInputs(
 }
 
 async function contextInputs(
-  project: RegisteredProject,
-  contextRefs: string[],
+  contextResources: ResolvedProductContextResource[],
   files: File[],
   runId: string,
 ): Promise<ContextWorkspaceInput[]> {
-  const references = await Promise.all(
-    contextRefs.map(async (resourcePath) => {
-      const resource = await readTaskGraphMarkdownResource(
-        project,
-        resourcePath,
-      );
-      return {
-        role: 'primary' as const,
-        kind: 'context',
-        logicalPath: resource.path,
-        content: resource.markdown,
-      };
-    }),
-  );
+  const references = contextResources.map((resource) => ({
+    role: 'primary' as const,
+    kind: 'context',
+    logicalPath: resource.path,
+    content: resource.markdown,
+  }));
   const external = await Promise.all(
     files.map(async (file, index) => {
       if (!/\.(md|markdown)$/i.test(file.name))

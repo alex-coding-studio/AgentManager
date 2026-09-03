@@ -1,16 +1,17 @@
-import { PublicApiError, retainCleanupFailures } from './api-errors.ts';
-import { randomUUID } from 'node:crypto';
-import {
-  access,
-  mkdir,
-  readFile,
-  readdir,
-  rename,
-  unlink,
-  writeFile,
-} from 'node:fs/promises';
+import { readdir } from 'node:fs/promises';
 import path from 'node:path';
-import type { RegisteredProject } from '@/lib/project-registry';
+import { readDomainModel } from './domain-model.ts';
+import type { PlanningCard } from './just-do-it-planning-service.ts';
+import { readPlanningFile } from './just-do-it-planning-sources.ts';
+import {
+  PRODUCT_CONTEXT_DOCUMENT_SHAPES,
+  isAcceptedPlanningShape,
+} from './planning-paths.ts';
+import { resolveProductContextResource } from './product-context-resource.ts';
+import { readCardWorkDocument, readCardWorklog } from './just-do-it-worklog.ts';
+import type { RegisteredProject } from './project-registry.ts';
+import { listTaskGraphNodes } from './task-graph.ts';
+import { readWhatToDoCurrentMap } from './what-to-do-storage.ts';
 
 export type ContextSection = {
   slug: string;
@@ -22,6 +23,7 @@ export type ContextSection = {
 
 export type ContextDocument = {
   fileName: string;
+  path?: string;
   title: string;
   summary: string;
   markdown: string;
@@ -48,657 +50,325 @@ export type ContextBrowserEntry =
       title: string;
     };
 
-export class ContextDocumentConflictError extends PublicApiError {
-  conflicts: string[];
-
-  constructor(conflicts: string[]) {
-    super('One or more Markdown files already exist.', 409);
-    this.name = 'ContextDocumentConflictError';
-    this.conflicts = conflicts;
-  }
-}
-
-const sectionTemplates = [
+const systemSectionDefinitions = [
   {
-    slug: 'product',
-    markdown: `# Product
-
-Product documents define who the product serves, which problems it solves, and how user-visible behavior should work.
-
-## Put here
-
-- Product foundations and positioning
-- User journeys and experience contracts
-- Behavioral rules and product decisions
-
-## Keep elsewhere
-
-Visual specifications belong in Design. Implementation constraints belong in Engineering. Active task state belongs in the task graph.
-
-## Agent reading guidance
-
-Read this section when clarifying requirements, decomposing user-facing capabilities, or checking whether implementation matches product intent.
-`,
+    slug: 'mvp-prototype',
+    title: 'MVP Prototype',
+    summary: 'Accepted discovery outputs that define an early product slice.',
   },
   {
-    slug: 'design',
-    markdown: `# Design
-
-Design documents describe the intended visual language, interaction patterns, information hierarchy, and human acceptance references.
-
-## Put here
-
-- Visual direction and interface principles
-- Interaction flows and component behavior
-- Reference screenshots and design acceptance notes
-
-## Keep elsewhere
-
-Product behavior that remains true without a particular interface belongs in Product. Code architecture belongs in Engineering.
-
-## Agent reading guidance
-
-Read this section for UI-bearing work, interaction decisions, and preparation for human visual acceptance.
-`,
+    slug: 'product-design',
+    title: 'Product Design',
+    summary: 'Accepted product behavior and experience Features.',
   },
   {
-    slug: 'engineering',
-    markdown: `# Engineering
-
-Engineering documents capture durable technical boundaries that affect how work can be implemented and verified.
-
-## Put here
-
-- Architecture and data-model decisions
-- Platform constraints and integration boundaries
-- Repository conventions that are specific to this product
-
-## Keep elsewhere
-
-Generic agent instructions belong in shared infrastructure. Temporary debugging notes and task status do not belong here.
-
-## Agent reading guidance
-
-Read only the relevant documents when a task crosses a technical boundary or requires an architectural decision.
-`,
+    slug: 'domain-model',
+    title: 'Domain Model',
+    summary: 'The latest applied entities, fields, relationships, and rules.',
   },
   {
-    slug: 'milestones',
-    markdown: `# Milestones
-
-Milestone documents describe bounded, human-verifiable product outcomes that provide context for task decomposition.
-
-## Put here
-
-- Accepted milestone scope
-- User-visible acceptance journeys
-- Frozen handoffs that explain a milestone boundary
-
-## Keep elsewhere
-
-Live task readiness, dependency state, pull requests, and completion status belong in the task graph rather than these documents.
-
-## Agent reading guidance
-
-Read the active milestone when decomposing or implementing work inside that outcome. Do not treat milestone prose as live task state.
-`,
+    slug: 'task-breakdown',
+    title: 'Task Breakdown',
+    summary: 'Accepted decomposition outputs with stable scope boundaries.',
   },
   {
-    slug: 'references',
-    markdown: `# References
-
-Reference documents preserve external research and supporting material that may inform product or implementation decisions.
-
-## Put here
-
-- Research summaries and source notes
-- Platform documentation relevant to this product
-- Competitive or comparative observations
-
-## Keep elsewhere
-
-Verified product decisions should be promoted to Product, Design, or Engineering instead of remaining only as reference material.
-
-## Agent reading guidance
-
-Read this section only when the task names a source or when a specific unresolved question requires supporting evidence.
-`,
+    slug: 'delivery-contract',
+    title: 'Delivery Contract',
+    summary: 'Current formal delivery boundaries and their dependencies.',
   },
   {
-    slug: 'other',
-    markdown: `# Other
-
-This section is a temporary home for useful product context that does not yet have a clear category.
-
-## Put here
-
-- Relevant context that cannot currently be classified
-- Early material awaiting a durable owner
-
-## Keep elsewhere
-
-Move stable material into Product, Design, Engineering, Milestones, or References once its role becomes clear.
-
-## Agent reading guidance
-
-Do not load this section by default. Read it only when a task explicitly points here or other sections are insufficient.
-`,
+    slug: 'task-execution',
+    title: 'Task Execution',
+    summary: 'Confirmed implementation plans and accepted Action outputs.',
   },
 ] as const;
 
-const rootReadme = `# Product Context
-
-This directory contains the human-readable context that Praxis uses to understand and decompose work for this product.
-
-Each section is a folder with its own README. Read the section README before loading its individual documents so Agent context can remain bounded.
-
-## Sections
-
-- Product defines user-visible intent and behavior.
-- Design defines visual and interaction intent.
-- Engineering defines durable technical boundaries.
-- Milestones define bounded outcomes used for decomposition.
-- References preserve supporting research and source material.
-- Other temporarily holds material without a clear owner.
-
-The directory layout is owned by Praxis. Task state and dependency relationships are stored separately from Product Context.
-`;
-
-async function writeIfMissing(filePath: string, content: string) {
-  try {
-    await writeFile(filePath, content, { flag: 'wx' });
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-  }
-}
-
-export async function initializeProductContext(project: RegisteredProject) {
-  const contextPath = path.join(project.planningPath, 'context');
-  await mkdir(contextPath, { recursive: true });
-  await writeIfMissing(path.join(contextPath, 'README.md'), rootReadme);
-
-  for (const section of sectionTemplates) {
-    const sectionPath = path.join(contextPath, section.slug);
-    await mkdir(sectionPath, { recursive: true });
-    await writeIfMissing(path.join(sectionPath, 'README.md'), section.markdown);
-  }
-
-  return readProductContext(project);
-}
-
 export async function readProductContext(project: RegisteredProject) {
-  const contextPath = path.join(project.planningPath, 'context');
-  const entries = await readdir(contextPath, { withFileTypes: true }).catch(
-    () => [],
+  const [systemSections, manualSections] = await Promise.all([
+    readSystemProductContext(project),
+    readManualProductContext(project),
+  ]);
+  const sections = new Map(
+    systemSections.map((section) => [section.slug, section]),
   );
-  const directories = entries.filter(
-    (entry) => entry.isDirectory() && /^[a-z0-9][a-z0-9-]*$/.test(entry.name),
-  );
-  const preferredOrder = sectionTemplates.map((section) => section.slug);
-  directories.sort((left, right) => {
-    const leftIndex = preferredOrder.indexOf(left.name as never);
-    const rightIndex = preferredOrder.indexOf(right.name as never);
-    if (leftIndex === -1 && rightIndex === -1) {
-      return left.name.localeCompare(right.name);
+  for (const manual of manualSections) {
+    const system = sections.get(manual.slug);
+    if (!system) {
+      sections.set(manual.slug, manual);
+      continue;
     }
-    if (leftIndex === -1) return 1;
-    if (rightIndex === -1) return -1;
-    return leftIndex - rightIndex;
-  });
+    const known = new Set(system.documents.map((document) => document.path));
+    system.documents.push(
+      ...manual.documents.filter((document) => !known.has(document.path)),
+    );
+    system.documents.sort((left, right) =>
+      left.title.localeCompare(right.title),
+    );
+  }
+  return [...sections.values()];
+}
 
-  const sections = await Promise.all(
-    directories.map(async (directory) => {
-      const sectionPath = path.join(contextPath, directory.name);
-      const documentEntries = await readdir(sectionPath, {
-        withFileTypes: true,
-      });
-      const fileNames = documentEntries
-        .filter(
-          (entry) => entry.isFile() && /\.(md|markdown)$/i.test(entry.name),
-        )
-        .map((entry) => entry.name)
-        .sort(compareDocumentNames);
-      const documents = await Promise.all(
-        fileNames.map(async (fileName) =>
-          documentFromMarkdown(
-            fileName,
-            await readFile(path.join(sectionPath, fileName), 'utf8'),
-          ),
-        ),
-      );
-      return buildSection(directory.name, documents);
-    }),
+export async function readContextBrowser(
+  project: RegisteredProject,
+  excludeSections: readonly string[] = [],
+): Promise<ContextBrowserFolder[]> {
+  const sections = await readProductContext(project);
+  const excluded = new Set(excludeSections);
+  return sections
+    .filter((section) => !excluded.has(section.slug))
+    .map((section) => ({
+      path: `product-context/${section.slug}`,
+      name: section.slug,
+      title: section.title,
+      entries: section.documents.flatMap((document) =>
+        document.path
+          ? [
+              {
+                kind: 'file' as const,
+                path: document.path,
+                name: document.fileName,
+                title: document.title,
+              },
+            ]
+          : [],
+      ),
+    }));
+}
+
+async function readManualProductContext(
+  project: RegisteredProject,
+): Promise<ContextSection[]> {
+  const contextRoot = path.join(project.planningPath, 'context');
+  const entries = await readdir(contextRoot, { withFileTypes: true }).catch(
+    (error: NodeJS.ErrnoException) => {
+      if (error.code === 'ENOENT') return [];
+      throw error;
+    },
   );
-
+  const sections: ContextSection[] = [];
+  for (const entry of entries
+    .filter(
+      (candidate) =>
+        candidate.isDirectory() && /^[a-z0-9][a-z0-9-]*$/i.test(candidate.name),
+    )
+    .sort((left, right) => left.name.localeCompare(right.name))) {
+    const documents = await readManualDocuments(project, entry.name);
+    if (!documents.length) continue;
+    const readme = documents.find(
+      (document) => document.fileName.toLowerCase() === 'readme.md',
+    );
+    sections.push({
+      slug: entry.name.toLowerCase(),
+      title: readme?.title ?? titleFromFileName(entry.name),
+      summary: readme?.summary ?? 'Manually managed project resources.',
+      markdown: readme?.markdown ?? '',
+      documents,
+    });
+  }
   return sections;
 }
 
-function compareDocumentNames(left: string, right: string) {
-  if (left.toLowerCase() === 'readme.md') return -1;
-  if (right.toLowerCase() === 'readme.md') return 1;
-  return left.localeCompare(right);
-}
-
-function documentFromMarkdown(fileName: string, markdown: string) {
-  return {
-    fileName,
-    title: readTitle(markdown, path.parse(fileName).name),
-    summary: readSummary(markdown),
-    markdown,
-  } satisfies ContextDocument;
-}
-
-function buildSection(slug: string, documents: ContextDocument[]) {
-  const readme = documents.find(
-    (document) => document.fileName.toLowerCase() === 'readme.md',
-  );
-  return {
-    slug,
-    title: readme?.title ?? readTitle('', slug),
-    summary: readme?.summary ?? 'No section guidance yet.',
-    markdown: readme?.markdown ?? '',
-    documents,
-  } satisfies ContextSection;
-}
-
-export async function readContextBrowser(project: RegisteredProject) {
-  const contextPath = path.join(project.planningPath, 'context');
-  const entries = await readdir(contextPath, { withFileTypes: true }).catch(
-    () => [],
-  );
-  const directories = entries
-    .filter(
-      (entry) => entry.isDirectory() && /^[a-z0-9][a-z0-9-]*$/.test(entry.name),
-    )
-    .map((entry) => entry.name);
-  const preferredOrder = sectionTemplates.map((section) => section.slug);
-  directories.sort((left, right) => {
-    const leftIndex = preferredOrder.indexOf(left as never);
-    const rightIndex = preferredOrder.indexOf(right as never);
-    if (leftIndex === -1 && rightIndex === -1) {
-      return left.localeCompare(right);
-    }
-    if (leftIndex === -1) return 1;
-    if (rightIndex === -1) return -1;
-    return leftIndex - rightIndex;
-  });
-
-  const folders: ContextBrowserFolder[] = [];
-  for (const directory of directories) {
-    await readContextBrowserFolder(
-      path.join(contextPath, directory),
-      `context/${directory}`,
-      folders,
-    );
-  }
-  return folders;
-}
-
-async function readContextBrowserFolder(
-  folderPath: string,
-  relativePath: string,
-  folders: ContextBrowserFolder[],
+async function readManualDocuments(
+  project: RegisteredProject,
+  section: string,
 ) {
-  const entries = await readdir(folderPath, { withFileTypes: true });
-  const childDirectories = entries
-    .filter(
-      (entry) => entry.isDirectory() && /^[a-z0-9][a-z0-9-]*$/.test(entry.name),
-    )
-    .sort((left, right) => left.name.localeCompare(right.name));
-  const markdownFiles = entries
-    .filter((entry) => entry.isFile() && /\.(md|markdown)$/i.test(entry.name))
-    .sort((left, right) => {
-      if (left.name.toLowerCase() === 'readme.md') return -1;
-      if (right.name.toLowerCase() === 'readme.md') return 1;
-      return left.name.localeCompare(right.name);
+  const root = path.join(project.planningPath, 'context', section);
+  const documents: ContextDocument[] = [];
+  async function visit(directory: string, segments: string[]) {
+    const entries = await readdir(directory, { withFileTypes: true });
+    for (const entry of entries.sort((left, right) =>
+      left.name.localeCompare(right.name),
+    )) {
+      if (entry.isDirectory() && /^[a-z0-9][a-z0-9-]*$/i.test(entry.name)) {
+        await visit(path.join(directory, entry.name), [
+          ...segments,
+          entry.name,
+        ]);
+        continue;
+      }
+      if (!entry.isFile() || !/\.(md|markdown)$/i.test(entry.name)) continue;
+      const resourcePath = ['context', section, ...segments, entry.name].join(
+        '/',
+      );
+      const resource = await resolveProductContextResource(
+        project,
+        resourcePath,
+      );
+      if (!resource) continue;
+      documents.push({
+        fileName: [...segments, entry.name].join('/'),
+        path: resource.path,
+        title: titleFromMarkdown(resource.markdown, entry.name),
+        summary: readSummary(resource.markdown),
+        markdown: resource.markdown,
+      });
+    }
+  }
+  await visit(root, []);
+  return documents;
+}
+
+async function readSystemProductContext(
+  project: RegisteredProject,
+): Promise<ContextSection[]> {
+  const documents = new Map<string, ContextDocument[]>();
+  const add = async (
+    section: string,
+    input: { path: string; fileName: string; title: string; summary?: string },
+  ) => {
+    if (!isAcceptedPlanningShape(input.path, PRODUCT_CONTEXT_DOCUMENT_SHAPES))
+      throw new Error('Invalid Product Context document path.');
+    const markdown = await readPlanningFile(project, input.path, 2_097_152);
+    const current = documents.get(section) ?? [];
+    if (current.some((document) => document.path === input.path)) return;
+    current.push({
+      path: input.path,
+      fileName: input.fileName,
+      title: input.title,
+      summary: input.summary?.trim() || readSummary(markdown),
+      markdown,
     });
-  const documents = await Promise.all(
-    markdownFiles.map(async (entry) => {
-      const markdown = await readFile(
-        path.join(folderPath, entry.name),
-        'utf8',
-      );
-      return {
-        kind: 'file' as const,
-        path: `${relativePath}/${entry.name}`,
-        name: entry.name,
-        title: readTitle(markdown, path.parse(entry.name).name),
-      };
-    }),
-  );
-  const readme = documents.find(
-    (document) => document.name.toLowerCase() === 'readme.md',
-  );
-  const name = path.basename(relativePath);
-  const childFolders = childDirectories.map((entry) => ({
-    kind: 'folder' as const,
-    path: `${relativePath}/${entry.name}`,
-    name: entry.name,
-    title: readTitle('', entry.name),
-  }));
-  folders.push({
-    path: relativePath,
-    name,
-    title: readme?.title ?? readTitle('', name),
-    entries: [...childFolders, ...documents],
-  });
-  for (const directory of childDirectories) {
-    await readContextBrowserFolder(
-      path.join(folderPath, directory.name),
-      `${relativePath}/${directory.name}`,
-      folders,
-    );
-  }
-}
-
-export async function createContextDocument(
-  project: RegisteredProject,
-  section: string,
-  title: string,
-) {
-  const sectionPath = await resolveSectionPath(project, section);
-  const fileName = await writeUniqueMarkdown(
-    sectionPath,
-    slugify(title),
-    `# ${title.trim()}\n\n`,
-  );
-  return { fileName, sections: await readProductContext(project) };
-}
-
-export async function createContextSection(
-  project: RegisteredProject,
-  title: string,
-) {
-  const slug = slugify(title);
-  const contextPath = path.join(project.planningPath, 'context');
-  await mkdir(contextPath, { recursive: true });
-  try {
-    await mkdir(path.join(contextPath, slug));
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
-      throw new PublicApiError(
-        'A context folder with this name already exists.',
-        409,
-      );
-    }
-    throw error;
-  }
-  return { slug, sections: await readProductContext(project) };
-}
-
-export async function renameContextSection(
-  project: RegisteredProject,
-  section: string,
-  title: string,
-) {
-  const sectionPath = await resolveSectionPath(project, section);
-  const slug = slugify(title);
-  if (slug === section) {
-    return { slug, sections: await readProductContext(project) };
-  }
-  const destinationPath = path.join(project.planningPath, 'context', slug);
-  try {
-    await access(destinationPath);
-    throw new PublicApiError(
-      'A context folder with this name already exists.',
-      409,
-    );
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-  }
-  await rename(sectionPath, destinationPath);
-  return { slug, sections: await readProductContext(project) };
-}
-
-export async function importContextDocuments(
-  project: RegisteredProject,
-  section: string,
-  files: File[],
-  overwrite = false,
-) {
-  const sectionPath = await resolveSectionPath(project, section);
-  const existingNames = new Map(
-    (await readdir(sectionPath)).map((fileName) => [
-      fileName.toLowerCase(),
-      fileName,
-    ]),
-  );
-  const imports = await Promise.all(
-    files.map(async (file) => {
-      if (!/\.(md|markdown)$/i.test(file.name)) {
-        throw new PublicApiError(
-          'Only Markdown files can be imported right now.',
-          400,
-        );
-      }
-      if (file.size > 2 * 1024 * 1024) {
-        throw new PublicApiError(
-          'Each Markdown file must be 2 MB or smaller.',
-          400,
-        );
-      }
-      const baseName = path.parse(path.basename(file.name)).name;
-      const requestedName = `${slugify(baseName)}.md`;
-      return {
-        requestedName,
-        fileName:
-          existingNames.get(requestedName.toLowerCase()) ?? requestedName,
-        content: await file.text(),
-      };
-    }),
-  );
-  const requestedNames = imports.map((entry) =>
-    entry.requestedName.toLowerCase(),
-  );
-  if (new Set(requestedNames).size !== requestedNames.length) {
-    throw new PublicApiError(
-      'The import contains multiple files with the same destination name.',
-      400,
-    );
-  }
-  const conflicts = imports
-    .filter((entry) => existingNames.has(entry.requestedName.toLowerCase()))
-    .map((entry) => entry.fileName);
-  if (conflicts.length > 0 && !overwrite) {
-    throw new ContextDocumentConflictError(conflicts);
-  }
-
-  const sections = await readProductContext(project);
-  if (overwrite) await replaceDocuments(sectionPath, imports);
-  else await createDocuments(sectionPath, imports);
-
-  const importedDocuments = imports.map((entry) =>
-    documentFromMarkdown(entry.fileName, entry.content),
-  );
-  const replaced = new Set(imports.map((entry) => entry.fileName));
-  const target = sections.find((current) => current.slug === section);
-  const merged = buildSection(
-    section,
-    [
-      ...(target?.documents ?? []).filter(
-        (document) => !replaced.has(document.fileName),
-      ),
-      ...importedDocuments,
-    ].sort((left, right) =>
-      compareDocumentNames(left.fileName, right.fileName),
-    ),
-  );
-  return {
-    created: imports.map((entry) => entry.fileName),
-    sections: target
-      ? sections.map((current) => (current === target ? merged : current))
-      : [...sections, merged],
+    documents.set(section, current);
   };
-}
 
-type PreparedImport = { fileName: string; content: string };
+  const [whatsNextNodes, breakdownNodes, domainModel, deliveryMap, cards] =
+    await Promise.all([
+      listTaskGraphNodes(project, 'whats-next'),
+      listTaskGraphNodes(project, 'task-graph'),
+      readDomainModel(project),
+      readWhatToDoCurrentMap(project),
+      listPlanningCardsForContext(project),
+    ]);
 
-async function createDocuments(sectionPath: string, imports: PreparedImport[]) {
-  const createdPaths: string[] = [];
-  try {
-    for (const entry of imports) {
-      const destination = path.join(sectionPath, entry.fileName);
-      await writeFile(destination, entry.content, { flag: 'wx' });
-      createdPaths.push(destination);
-    }
-  } catch (error) {
-    retainCleanupFailures(
-      error,
-      await removeAll(createdPaths),
-      'Cleanup after a failed import did not complete.',
-    );
-    throw error;
-  }
-}
-
-async function replaceDocuments(
-  sectionPath: string,
-  imports: PreparedImport[],
-) {
-  const originals = new Map<string, Buffer>();
-  for (const entry of imports) {
-    const destination = path.join(sectionPath, entry.fileName);
-    const original = await readFile(destination).catch(
-      (error: NodeJS.ErrnoException) => {
-        if (error.code !== 'ENOENT') throw error;
-        return null;
+  for (const node of whatsNextNodes) {
+    if (node.role !== 'node' || !['accepted', 'formal'].includes(node.status))
+      continue;
+    const outputPath = node.resources.find(
+      (resource) => resource.kind === 'output',
+    )?.path;
+    if (!outputPath) continue;
+    await add(
+      (node.layer ?? 'discovery') === 'product-design'
+        ? 'product-design'
+        : 'mvp-prototype',
+      {
+        path: outputPath,
+        fileName: `${node.id}.md`,
+        title: node.title,
+        summary: node.summary,
       },
     );
-    if (original) originals.set(destination, original);
   }
 
-  const staged: Array<{ temporaryPath: string; destination: string }> = [];
-  const published: string[] = [];
-  try {
-    for (const entry of imports) {
-      const destination = path.join(sectionPath, entry.fileName);
-      const temporaryPath = stagingPath(destination);
-      staged.push({ temporaryPath, destination });
-      await writeFile(temporaryPath, entry.content, { flag: 'wx' });
-    }
-    for (const { temporaryPath, destination } of staged) {
-      await rename(temporaryPath, destination);
-      published.push(destination);
-    }
-  } catch (error) {
-    const unpublished = staged
-      .slice(published.length)
-      .map((entry) => entry.temporaryPath);
-    retainCleanupFailures(
-      error,
-      [
-        ...(await removeAll(unpublished, true)),
-        ...(await restoreAll(published, originals)),
-      ],
-      'Restoring the previous documents after a failed import did not complete.',
-    );
-    throw error;
+  for (const node of breakdownNodes) {
+    if (node.role !== 'node' || !['accepted', 'formal'].includes(node.status))
+      continue;
+    const outputPath = node.resources.find(
+      (resource) => resource.kind === 'output',
+    )?.path;
+    if (!outputPath) continue;
+    await add('task-breakdown', {
+      path: outputPath,
+      fileName: `${node.id}.md`,
+      title: node.title,
+      summary: node.summary,
+    });
   }
-}
 
-function stagingPath(destination: string) {
-  return `${destination}.${randomUUID()}.tmp`;
-}
+  if (domainModel.lastRunId)
+    await add('domain-model', {
+      path: `domain-model/runs/${domainModel.lastRunId}/summary.md`,
+      fileName: 'domain-model.md',
+      title: 'Domain Model',
+    });
 
-async function removeAll(paths: string[], tolerateMissing = false) {
-  const outcomes = await Promise.all(
-    paths.map((filePath) =>
-      unlink(filePath).then(
-        () => null,
-        (failure: NodeJS.ErrnoException) =>
-          tolerateMissing && failure.code === 'ENOENT' ? null : failure,
-      ),
-    ),
-  );
-  return outcomes.filter((failure) => failure !== null);
-}
+  for (const contract of deliveryMap?.contracts ?? [])
+    await add('delivery-contract', {
+      path: contract.outputPath,
+      fileName: `${contract.id}.md`,
+      title: contract.title,
+      summary: contract.summary,
+    });
 
-async function restoreAll(published: string[], originals: Map<string, Buffer>) {
-  const outcomes = await Promise.all(
-    published.map(async (destination) => {
-      const original = originals.get(destination);
-      try {
-        if (original === undefined) {
-          await unlink(destination);
-        } else {
-          const temporaryPath = stagingPath(destination);
-          await writeFile(temporaryPath, original, { flag: 'wx' });
-          await rename(temporaryPath, destination);
-        }
-        return null;
-      } catch (failure) {
-        return failure;
-      }
-    }),
-  );
-  return outcomes.filter((failure) => failure !== null);
-}
-
-export async function deleteContextDocument(
-  project: RegisteredProject,
-  section: string,
-  fileName: string,
-) {
-  const sectionPath = await resolveSectionPath(project, section);
-  if (
-    path.basename(fileName) !== fileName ||
-    !/^[a-zA-Z0-9][a-zA-Z0-9._-]*\.(md|markdown)$/i.test(fileName)
-  ) {
-    throw new PublicApiError('Markdown document name is invalid.', 400);
-  }
-  await unlink(path.join(sectionPath, fileName));
-  return { sections: await readProductContext(project) };
-}
-
-async function resolveSectionPath(project: RegisteredProject, section: string) {
-  if (!/^[a-z0-9][a-z0-9-]*$/.test(section)) {
-    throw new PublicApiError('Context section is invalid.', 400);
-  }
-  const sectionPath = path.join(project.planningPath, 'context', section);
-  const entries = await readdir(sectionPath).catch(() => null);
-  if (!entries) throw new PublicApiError('Context section was not found.', 404);
-  return sectionPath;
-}
-
-async function writeUniqueMarkdown(
-  sectionPath: string,
-  baseName: string,
-  content: string,
-) {
-  for (let suffix = 1; suffix <= 999; suffix += 1) {
-    const fileName =
-      suffix === 1 ? `${baseName}.md` : `${baseName}-${suffix}.md`;
-    try {
-      await writeFile(path.join(sectionPath, fileName), content, {
-        flag: 'wx',
+  for (const card of cards) {
+    if (card.plan?.status === 'finalized' && card.planRef)
+      await add('task-execution', {
+        path: card.planRef,
+        fileName: `${card.id}-plan.md`,
+        title: `${card.source.title} · Plan`,
+        summary: card.plan.overview,
       });
-      return fileName;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    for (const actionId of card.execution?.acceptedActionIds ?? []) {
+      const run = card.execution?.runs.findLast(
+        (candidate) =>
+          candidate.actionId === actionId &&
+          candidate.status === 'succeeded' &&
+          candidate.outputRef,
+      );
+      if (!run?.outputRef) continue;
+      const action = card.actions.find(
+        (candidate) => candidate.id === actionId,
+      );
+      await add('task-execution', {
+        path: run.outputRef,
+        fileName: `${card.id}-${actionId}.md`,
+        title: `${card.source.title} · ${action?.title ?? 'Action'}`,
+        summary: run.result?.summary,
+      });
     }
   }
-  throw new Error('Could not choose a unique Markdown file name.');
+
+  return systemSectionDefinitions.flatMap((definition) => {
+    const sectionDocuments = documents.get(definition.slug) ?? [];
+    if (!sectionDocuments.length) return [];
+    sectionDocuments.sort((left, right) =>
+      left.title.localeCompare(right.title),
+    );
+    return [
+      {
+        slug: definition.slug,
+        title: definition.title,
+        summary: definition.summary,
+        markdown: `# ${definition.title}\n\n${definition.summary}\n`,
+        documents: sectionDocuments,
+      },
+    ];
+  });
 }
 
-function slugify(value: string) {
-  return (
-    value
-      .normalize('NFKD')
-      .replace(/[^a-zA-Z0-9\s_-]/g, '')
-      .trim()
-      .toLowerCase()
-      .replace(/[\s_-]+/g, '-')
-      .replace(/^-+|-+$/g, '') || 'document'
-  );
-}
-
-function readTitle(markdown: string, fallback: string) {
-  const heading = markdown.match(/^#\s+(.+)$/m)?.[1]?.trim();
-  if (heading) return heading;
-  return fallback
-    .split('-')
-    .map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`)
-    .join(' ');
+async function listPlanningCardsForContext(project: RegisteredProject) {
+  const root = path.join(project.planningPath, 'implementation', 'cards');
+  const cardIds = await readdir(root).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === 'ENOENT') return [];
+    throw error;
+  });
+  const cards: PlanningCard[] = [];
+  for (const cardId of cardIds) {
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
+        cardId,
+      )
+    )
+      continue;
+    const log = await readCardWorklog(root, cardId);
+    if (!log.revision) continue;
+    const card = JSON.parse(
+      await readCardWorkDocument(
+        root,
+        cardId,
+        log.revision,
+        'planning-state.json',
+      ),
+    ) as PlanningCard;
+    if (
+      card.schemaVersion !== 1 ||
+      card.id !== cardId ||
+      card.revision !== log.revision
+    )
+      throw new Error('Invalid Planning Card state.');
+    cards.push(card);
+  }
+  return cards;
 }
 
 function readSummary(markdown: string) {
@@ -707,6 +377,21 @@ function readSummary(markdown: string) {
       .split(/\n\s*\n/)
       .map((paragraph) => paragraph.trim())
       .find((paragraph) => paragraph && !paragraph.startsWith('#')) ??
-    'No section guidance yet.'
+    'No summary yet.'
   );
+}
+
+function titleFromMarkdown(markdown: string, fileName: string) {
+  return (
+    markdown.match(/^#\s+(.+)$/m)?.[1]?.trim() ?? titleFromFileName(fileName)
+  );
+}
+
+function titleFromFileName(fileName: string) {
+  return path
+    .parse(fileName)
+    .name.split(/[-_]/)
+    .filter(Boolean)
+    .map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`)
+    .join(' ');
 }

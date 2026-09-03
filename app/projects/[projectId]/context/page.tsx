@@ -29,10 +29,7 @@ export default async function ProductContextPage({
       projects={projects}
       repositoryUrl={getGitHubRepositoryUrl(project)}
     >
-      <ProductContextWorkspace
-        projectId={project.id}
-        initialSections={sections}
-      />
+      <ProductContextWorkspace initialSections={sections} />
     </ProjectShell>
   );
 }

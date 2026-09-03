@@ -116,29 +116,16 @@ Markdown upload, Product Foundation generation, SQLite task storage, task decomp
 
 ## Second implementation slice
 
-The second slice establishes Product Context as a readable filesystem-backed
-library:
-
-1. Initialize fixed Product, Design, Engineering, Milestones, References, and
-   Other folders.
-2. Give the context root and every section an English `README.md` explaining its
-   purpose and Agent loading boundary.
-3. Discover sections directly from the filesystem without a database or
-   manifest.
-4. Select a section and read its rendered Markdown in a persistent preview
-   area.
-5. Open any README in a reusable focus-reading overlay for long documents.
-6. Reveal the selected section in the operating system's file manager for
-   external editing.
-7. Create a titled Markdown document in the selected section.
-8. Import one or more Markdown files through a file picker or drag and drop,
-   explicitly confirming before replacing existing content.
-9. Create and rename context folders while leaving folder deletion to the
-   operating system's file manager.
-10. Delete individual Markdown documents without deleting their folder.
-
-Editing Markdown in the browser, moving documents between folders, and
-previewing non-Markdown assets remain deferred.
+The original user-managed Product Context library has been superseded. Product
+Context now derives a read-only catalog from accepted module outputs and groups
+them as MVP Prototype, Product Design, Domain Model, Task Breakdown, Delivery
+Contract, and Task Execution. Categories appear only after a formal artifact
+exists. Other modules can attach those canonical documents as cross-module
+Context, excluding their own category. Temporary uploads remain in the current
+Run Packet and do not enter Product Context automatically. A person or Agent
+may place durable Markdown under `.praxis/context/<section>/`; Praxis discovers
+it as manually managed Context without reintroducing browser creation, rename,
+or deletion controls.
 
 ## Third implementation slice
 
@@ -146,7 +133,7 @@ The third slice captures stable starting points for later Agent decomposition:
 
 1. Open a canvas-backed Task Decomposition workspace.
 2. Give a start node a concise title.
-3. Select one or more Markdown documents already stored in Product Context.
+3. Select one or more formal documents exposed through Product Context.
 4. Add one or more local Markdown sources by file picker or drag and drop.
 5. Copy external sources into the node's own Resource folder.
 6. Persist one human-readable JSON record with relative source references.

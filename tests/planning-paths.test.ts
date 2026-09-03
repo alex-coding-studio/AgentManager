@@ -21,6 +21,7 @@ import {
   PlanningPathKindError,
   PlanningPathShapeError,
   PlanningPathSizeError,
+  PRODUCT_CONTEXT_DOCUMENT_SHAPES,
   TASK_GRAPH_MARKDOWN_SHAPES,
   resolvePlanningPath,
 } from '../lib/planning-paths.ts';
@@ -32,6 +33,7 @@ process.env.PRAXIS_HOME = HOME;
 const RUN = 'RUN-11111111-2222-4333-8444-555555555555';
 const CANDIDATE = 'CANDIDATE-abcdef12';
 const NODE = 'NODE-abcdef12';
+const CARD = '11111111-2222-4333-8444-555555555555';
 
 const SUPPORTED_SHAPES: Array<[string, string]> = [
   ['Context Library Markdown', 'context/product/notes.md'],
@@ -62,6 +64,8 @@ const SUPPORTED_SHAPES: Array<[string, string]> = [
     'What’s Next Run User Input',
     `whats-next/runs/${RUN}/context/input/user-input.md`,
   ],
+  ['Implementation Plan', `implementation/cards/${CARD}/00000003/plan.md`],
+  ['Accepted Action output', `implementation/cards/${CARD}/00000004/output.md`],
 ];
 
 async function planningProject(label: string) {
@@ -144,6 +148,38 @@ void test('every supported Task Graph Markdown shape is accepted', async () => {
     });
     assert.equal(resolved.relativePath, relative, label);
   }
+});
+
+void test('Product Context accepts formal artifacts but excludes transient Agent output', async () => {
+  const accepted = [
+    'context/product/notes.md',
+    `whats-next/nodes/${NODE}/output.md`,
+    `task-graph/nodes/${NODE}/output.md`,
+    `domain-model/runs/${RUN}/summary.md`,
+    `what-to-do/runs/${RUN}/contracts/${NODE}/output.md`,
+    `implementation/cards/${CARD}/00000003/plan.md`,
+    `implementation/cards/${CARD}/00000004/output.md`,
+  ];
+  const { project, planningPath } = await planningProject('context-shapes');
+  for (const relative of accepted) {
+    await writeInside(planningPath, relative);
+    assert.equal(
+      (
+        await resolvePlanningPath(project, relative, {
+          shapes: PRODUCT_CONTEXT_DOCUMENT_SHAPES,
+        })
+      ).relativePath,
+      relative,
+    );
+  }
+  await writeInside(planningPath, `whats-next/runs/${RUN}/response.md`);
+  await assert.rejects(
+    () =>
+      resolvePlanningPath(project, `whats-next/runs/${RUN}/response.md`, {
+        shapes: PRODUCT_CONTEXT_DOCUMENT_SHAPES,
+      }),
+    PlanningPathShapeError,
+  );
 });
 
 void test('an unrelated shape is rejected', async () => {
@@ -608,9 +644,9 @@ void test('createStartNode rejects a Context reference that symlinks outside the
       assert.ok(error instanceof PublicApiError);
       assert.equal(
         (error as Error).message,
-        'A selected Context Library reference is invalid.',
+        'A selected Product Context document is no longer available.',
       );
-      assert.equal((error as { status: number }).status, 400);
+      assert.equal((error as { status: number }).status, 409);
       return true;
     },
   );
@@ -665,7 +701,7 @@ void test('updateStartNode rejects the same escape without changing the stored n
       assert.ok(error instanceof PublicApiError);
       assert.equal(
         (error as Error).message,
-        'A selected Context Library reference is invalid.',
+        'A selected Product Context document is no longer available.',
       );
       return true;
     },
@@ -746,7 +782,7 @@ void test('a Context reference outside the Context Library shape is rejected by 
         assert.ok(error instanceof PublicApiError, hostile);
         assert.equal(
           (error as Error).message,
-          'A selected Context Library reference is invalid.',
+          'A selected Product Context document is no longer available.',
         );
         return true;
       },

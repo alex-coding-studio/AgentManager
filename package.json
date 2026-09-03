@@ -47,7 +47,7 @@
     "test:decomposition-concurrency": "node --experimental-strip-types --experimental-test-module-mocks --test-timeout=20000 --test tests/task-decomposition-acceptance-concurrency.test.ts",
     "test:task-graph-concurrency": "node --experimental-strip-types --experimental-test-module-mocks --import ./tests/helpers/register-alias.mjs --test-timeout=20000 --test tests/task-graph-concurrency.test.ts",
     "test:task-graph-failures": "node --experimental-strip-types --experimental-test-module-mocks --import ./tests/helpers/register-alias.mjs --test-timeout=20000 --test tests/task-graph-failure-boundary.test.ts",
-    "test:context-publication": "node --experimental-strip-types --experimental-test-module-mocks --import ./tests/helpers/register-alias.mjs --test-timeout=20000 --test tests/context-import-publication.test.ts"
+    "test:context-publication": "node --experimental-strip-types --experimental-test-module-mocks --import ./tests/helpers/register-alias.mjs --test-timeout=20000 --test tests/context-import-publication.test.ts tests/product-context-catalog.test.ts"
   },
   "dependencies": {
     "@base-ui/react": "1.7.0",

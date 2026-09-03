@@ -83,9 +83,9 @@ block.
 Status codes that previously came from matching the error text now come from the
 error itself. `/already has an active Agent Run/` deciding between 409 and 400 is
 gone; the throw site says `409`. Conflict classes
-(`ContextDocumentConflictError`, `TaskDecompositionAttachmentConflictError`,
-`CanvasStartConflictError`, `NodeReferencedError`) extend `PublicApiError`, so their
-messages and extra fields still reach the client while unknown errors cannot.
+(`TaskDecompositionAttachmentConflictError`, `CanvasStartConflictError`,
+`NodeReferencedError`) extend `PublicApiError`, so their messages and extra fields
+still reach the client while unknown errors cannot.
 
 `ENOENT` on a Run lookup still answers 404, now with a fixed message instead of the
 `realpath` text.

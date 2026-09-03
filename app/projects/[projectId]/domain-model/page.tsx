@@ -23,7 +23,7 @@ export default async function DomainModelPage({
     listProjects(),
     readDomainModelView(project),
     listLatestDomainModelRuns(project),
-    readContextBrowser(project),
+    readContextBrowser(project, ['domain-model']),
   ]);
   return (
     <ProjectShell

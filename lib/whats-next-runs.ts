@@ -1,4 +1,8 @@
 import { PublicApiError } from './api-errors.ts';
+import {
+  resolveProductContextReferences,
+  type ResolvedProductContextResource,
+} from './product-context-resource.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import {
   validateAgentProfile,
@@ -283,6 +287,11 @@ async function startWhatsNextRunUnlocked(
       409,
     );
   }
+  const productContextResources = await resolveProductContextReferences(
+    project,
+    input.contextRefs,
+    ['mvp-prototype', 'product-design'],
+  );
   const runId = `RUN-${randomUUID()}`;
   const sessionId = coordinatorRun?.sessionId ?? `SESSION-${randomUUID()}`;
   const requestId = `REQUEST-${randomUUID()}`;
@@ -352,7 +361,7 @@ async function startWhatsNextRunUnlocked(
     project,
     sourceNodes,
     nodes,
-    input.contextRefs,
+    productContextResources,
     uploadedResources,
     featureContext.attachments.map((attachment) => attachment.fileName),
     redo ? false : continuesExistingSession,
@@ -1110,7 +1119,7 @@ async function collectContextWorkspaceInputs(
   project: RegisteredProject,
   sourceNodes: TaskGraphNode[],
   nodes: TaskGraphNode[],
-  contextRefs: string[],
+  contextResources: ResolvedProductContextResource[],
   uploads: ContextWorkspaceInput[],
   featureAttachmentNames: string[],
   continuesExistingSession: boolean,
@@ -1167,12 +1176,6 @@ async function collectContextWorkspaceInputs(
             : undefined,
         })),
     ),
-    ...contextRefs.map((resourcePath) => ({
-      path: resourcePath,
-      role: 'primary' as const,
-      kind: 'run-context',
-      nodeId: undefined,
-    })),
     ...(revision?.resourcePaths.map((resourcePath) => ({
       path: resourcePath,
       role: 'related' as const,
@@ -1228,7 +1231,18 @@ async function collectContextWorkspaceInputs(
       };
     }),
   );
-  return [...graphResources, ...featureResources, ...uploads];
+  const selectedContext = contextResources.map((resource) => ({
+    role: 'primary' as const,
+    kind: 'run-context',
+    logicalPath: resource.path,
+    content: resource.markdown,
+  }));
+  return [
+    ...graphResources,
+    ...selectedContext,
+    ...featureResources,
+    ...uploads,
+  ];
 }
 
 async function saveUploadedResources(

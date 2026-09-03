@@ -72,7 +72,7 @@ export function ContextAttachmentPicker({
                   >
                     {folders.map((entry) => (
                       <option key={entry.path} value={entry.path}>
-                        {entry.path}
+                        {t(entry.title)}
                       </option>
                     ))}
                   </select>
@@ -93,7 +93,7 @@ export function ContextAttachmentPicker({
                           aria-label={entry.name}
                         />
                         <FileText className="size-3.5 shrink-0 text-muted-foreground" />
-                        <span className="truncate">{entry.name}</span>
+                        <span className="truncate">{entry.title}</span>
                       </label>
                     ))}
                   {(folder?.entries ?? []).filter(

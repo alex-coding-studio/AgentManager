@@ -44,7 +44,7 @@ export default async function TaskDecompositionPage({
   }
   const [projects, folders, nodes, runs] = await Promise.all([
     listProjects(),
-    readContextBrowser(project),
+    readContextBrowser(project, ['task-breakdown']),
     listTaskGraphNodes(project),
     listLatestTaskDecompositionRuns(project),
   ]);

@@ -43,6 +43,7 @@ import {
 } from './just-do-it-planning-sources.ts';
 import { unmetPlanningSourceDependencies } from './planning-source-dependencies.ts';
 import { withDeliveryState } from './delivery-state-lock.ts';
+import { resolveProductContextReferences } from './product-context-resource.ts';
 
 export type PlanningProfile = AgentProfile;
 export type PlanningResource = { name: string; ref: string };
@@ -716,15 +717,15 @@ export function createPlanningService(
         );
       return { ...file };
     });
-    for (const ref of new Set(input.contextRefs)) {
-      if (
-        typeof ref !== 'string' ||
-        !/^context\/[a-zA-Z0-9/_.-]+\.(md|markdown)$/i.test(ref)
-      )
-        throw new PublicApiError('Invalid library resource.', 400);
+    const contextResources = await resolveProductContextReferences(
+      project,
+      input.contextRefs,
+      ['task-execution'],
+    );
+    for (const resource of contextResources) {
       uploads.push({
-        name: path.basename(ref),
-        content: await readPlanningFile(project, ref),
+        name: resource.fileName,
+        content: resource.markdown,
       });
     }
     let size = uploads.reduce(

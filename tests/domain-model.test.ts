@@ -542,6 +542,31 @@ void test('a Domain Model Run packages User Input, references and external files
   );
   await mkdir(path.dirname(contextPath), { recursive: true });
   await writeFile(contextPath, '# Item\n\nAn Item has a title.\n');
+  const productDesignPath = path.join(
+    project.planningPath,
+    'whats-next/nodes/NODE-abcdef12/output.md',
+  );
+  await mkdir(path.dirname(productDesignPath), { recursive: true });
+  await writeFile(
+    productDesignPath,
+    '# Search Feature\n\nUsers can find stored Items.\n',
+  );
+  await writeFile(
+    path.join(path.dirname(productDesignPath), 'node.json'),
+    JSON.stringify({
+      schemaVersion: 1,
+      id: 'NODE-abcdef12',
+      role: 'node',
+      status: 'accepted',
+      layer: 'product-design',
+      resources: [
+        {
+          kind: 'output',
+          path: 'whats-next/nodes/NODE-abcdef12/output.md',
+        },
+      ],
+    }),
+  );
   let rejectCompletion!: (error: Error) => void;
   let request!: DomainModelRequest;
   const hanging: typeof startLocalAgentRun = (_agent, options) => {
@@ -561,7 +586,10 @@ void test('a Domain Model Run packages User Input, references and external files
       instruction: `Use the supplied product rules.\n\n${'x'.repeat(25_000)}`,
       selectedIds: [],
       profile: { agent: 'codex', model: '', effort: '' },
-      contextRefs: ['context/Product/item.md'],
+      contextRefs: [
+        'context/Product/item.md',
+        'whats-next/nodes/NODE-abcdef12/output.md',
+      ],
       files: [new File(['# Lifecycle'], 'lifecycle.md')],
     },
     hanging,
@@ -569,7 +597,7 @@ void test('a Domain Model Run packages User Input, references and external files
   assert.equal(request.content.input?.kind, 'user-input');
   assert.deepEqual(
     request.content.references.map((item) => item.kind),
-    ['context', 'module-instructions'],
+    ['context', 'context', 'module-instructions'],
   );
   assert.deepEqual(
     request.content.external.map((item) => item.kind),

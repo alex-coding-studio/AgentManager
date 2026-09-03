@@ -93,8 +93,6 @@ mock.module('node:fs/promises', {
   },
 });
 
-const { importContextDocuments, readProductContext } =
-  await import('../lib/product-context.ts');
 const { importTaskDecompositionAttachments, readTaskDecompositionContext } =
   await import('../lib/task-decomposition-context.ts');
 const { PublicApiError } = await import('../lib/api-errors.ts');
@@ -105,11 +103,6 @@ const managerHome = await realFs.mkdtemp(
 process.env.PRAXIS_HOME = managerHome;
 
 const HOST = 'localhost:3000';
-const UNRELATED = Buffer.from(
-  '\ufeff# Unrelated\n\nOriginal unrelated bytes: κείμενο 文本\r\n',
-);
-const FIRST_ORIGINAL = Buffer.from('# First\n\nfirst original bytes\n');
-const SECOND_ORIGINAL = Buffer.from('# Second\n\nsecond original bytes\n');
 const EXISTING_ATTACHMENT = '# Existing\n\nexisting attachment bytes\n';
 
 async function makeProject() {
@@ -124,16 +117,12 @@ async function makeProject() {
     planningPath: path.join(rootPath, 'planning'),
     createdAt: new Date(0).toISOString(),
   };
-  const sectionPath = path.join(project.planningPath, 'context', 'product');
-  await realFs.mkdir(sectionPath, { recursive: true });
-  await realFs.writeFile(path.join(sectionPath, 'unrelated.md'), UNRELATED);
   await realFs.writeFile(
     path.join(managerHome, 'config.json'),
     `${JSON.stringify({ schemaVersion: 1, projects: [project] }, null, 2)}\n`,
   );
   return {
     project,
-    sectionPath,
     attachmentsPath: path.join(
       project.planningPath,
       'task-decomposition',
@@ -141,11 +130,6 @@ async function makeProject() {
     ),
     cleanup: () => realFs.rm(rootPath, { recursive: true, force: true }),
   };
-}
-
-async function seedOriginals(sectionPath: string) {
-  await realFs.writeFile(path.join(sectionPath, 'first.md'), FIRST_ORIGINAL);
-  await realFs.writeFile(path.join(sectionPath, 'second.md'), SECOND_ORIGINAL);
 }
 
 async function seedAttachment(project: RegisteredProject) {
@@ -178,15 +162,6 @@ async function snapshot(directory: string) {
 
 function hex(value: string | Buffer) {
   return Buffer.from(value).toString('hex');
-}
-
-async function productDocumentNames(project: RegisteredProject) {
-  const sections = await readProductContext(project);
-  return (
-    sections
-      .find((section) => section.slug === 'product')
-      ?.documents.map((document) => document.fileName) ?? []
-  );
 }
 
 async function attachmentNames(project: RegisteredProject) {
@@ -225,23 +200,8 @@ async function captureDiagnostics<T>(run: () => Promise<T>) {
   }
 }
 
-async function contextRoute() {
-  return import('../app/api/projects/[projectId]/context/documents/route.ts');
-}
-
 async function attachmentsRoute() {
   return import('../app/api/projects/[projectId]/decomposition-context/route.ts');
-}
-
-function contextImportRequest(files: File[], overwrite = false) {
-  const body = new FormData();
-  body.set('section', 'product');
-  if (overwrite) body.set('overwrite', 'true');
-  for (const file of files) body.append('files', file);
-  return new Request(
-    'http://localhost:3000/api/projects/PROJECT-0001/context/documents',
-    { method: 'POST', headers: { host: HOST }, body },
-  );
 }
 
 function attachmentImportRequest(files: File[]) {
@@ -260,106 +220,6 @@ function isInternalFailure(error: unknown, code = 'EIO') {
   assert.ok(!(error instanceof PublicApiError));
   return true;
 }
-
-void test('a Context create batch that fails on its second document publishes none of it and retries cleanly', async () => {
-  const { project, sectionPath, cleanup } = await makeProject();
-  try {
-    const before = await snapshot(sectionPath);
-    resetInjections();
-    inject('writeFile', (target) => target.endsWith('second.md'));
-    await assert.rejects(
-      () => importContextDocuments(project, 'product', twoDocuments()),
-      (error) => isInternalFailure(error),
-    );
-    assert.deepEqual(
-      await snapshot(sectionPath),
-      before,
-      'the first document is removed, no temporary file remains and unrelated bytes are identical',
-    );
-    assert.deepEqual(await productDocumentNames(project), ['unrelated.md']);
-
-    resetInjections();
-    const retried = await importContextDocuments(
-      project,
-      'product',
-      twoDocuments(),
-    );
-    assert.deepEqual(retried.created, ['first.md', 'second.md']);
-    assert.deepEqual(await snapshot(sectionPath), {
-      ...before,
-      'first.md': hex('# First\n\nfirst replacement\n'),
-      'second.md': hex('# Second\n\nsecond replacement\n'),
-    });
-  } finally {
-    resetInjections();
-    await cleanup();
-  }
-});
-
-void test('a Context overwrite batch that fails on its second document preserves every original byte', async (t) => {
-  for (const [label, arm] of [
-    [
-      'writing the second replacement',
-      () => inject('writeFile', (target) => target.includes('second.md')),
-    ],
-    [
-      'publishing the second replacement',
-      () => inject('rename', (target) => target.endsWith('second.md')),
-    ],
-  ] as Array<[string, () => void]>) {
-    await t.test(label, async () => {
-      const { project, sectionPath, cleanup } = await makeProject();
-      try {
-        await seedOriginals(sectionPath);
-        const before = await snapshot(sectionPath);
-        resetInjections();
-        arm();
-        await assert.rejects(
-          () =>
-            importContextDocuments(project, 'product', twoDocuments(), true),
-          (error) => isInternalFailure(error),
-        );
-        const after = await snapshot(sectionPath);
-        assert.equal(after['first.md'], hex(FIRST_ORIGINAL));
-        assert.equal(after['second.md'], hex(SECOND_ORIGINAL));
-        assert.deepEqual(
-          after,
-          before,
-          'no document is partially replaced and no temporary file remains',
-        );
-        const sections = await readProductContext(project);
-        assert.deepEqual(
-          sections
-            .find((section) => section.slug === 'product')
-            ?.documents.map((document) => document.markdown),
-          [
-            FIRST_ORIGINAL.toString(),
-            SECOND_ORIGINAL.toString(),
-            UNRELATED.toString(),
-          ],
-          'a fresh reader sees only original content',
-        );
-
-        resetInjections();
-        const retried = await importContextDocuments(
-          project,
-          'product',
-          twoDocuments(),
-          true,
-        );
-        assert.deepEqual(retried.created, ['first.md', 'second.md']);
-        assert.deepEqual(await snapshot(sectionPath), {
-          ...before,
-          'first.md': hex('# First\n\nfirst replacement\n'),
-          'second.md': hex('# Second\n\nsecond replacement\n'),
-        });
-      } finally {
-        resetInjections();
-        await cleanup();
-      }
-    });
-  }
-});
 
 void test('a Break It Down batch that fails on its second attachment removes the first and retries cleanly', async () => {
   const { project, attachmentsPath, cleanup } = await makeProject();
@@ -403,16 +263,6 @@ void test('a Break It Down batch that fails on its second attachment removes the
 
 void test('a failed batch whose cleanup also fails keeps both causes in Host diagnostics and neither in the response', async (t) => {
   for (const [label, run, fallback, directoryOf] of [
-    [
-      'Context Library',
-      async () => {
-        const { POST } = await contextRoute();
-        return (files: File[]) =>
-          POST(contextImportRequest(files), routeParams);
-      },
-      'Could not add the document.',
-      (fixture: Awaited<ReturnType<typeof makeProject>>) => fixture.sectionPath,
-    ],
     [
       'Break It Down attachments',
       async () => {
@@ -524,75 +374,6 @@ void test('a failed batch whose cleanup also fails keeps both causes in Host dia
   }
 });
 
-void test('the Context import Route never reports a committed batch as a failure', async () => {
-  const { project, sectionPath, cleanup } = await makeProject();
-  try {
-    const { POST } = await contextRoute();
-    resetInjections();
-    inject('readFile', (target) => target.endsWith('unrelated.md'));
-    const { result: response } = await captureDiagnostics(() =>
-      POST(contextImportRequest(twoDocuments()), routeParams),
-    );
-    const after = await snapshot(sectionPath);
-    const committed = 'first.md' in after || 'second.md' in after;
-    assert.equal(
-      response.ok,
-      committed,
-      'a failure response and committed documents never coincide',
-    );
-    if (committed)
-      assert.deepEqual(
-        readsAfterLastPublication(),
-        [],
-        'nothing fallible is read after publication',
-      );
-    assert.deepEqual(
-      Object.keys(after).filter((name) => name.endsWith('.tmp')),
-      [],
-    );
-
-    if (!committed) {
-      resetInjections();
-      const retry = await POST(
-        contextImportRequest(twoDocuments()),
-        routeParams,
-      );
-      assert.equal(retry.status, 201);
-      const payload = (await retry.json()) as {
-        created: string[];
-        sections: Array<{
-          slug: string;
-          documents: Array<{ fileName: string; markdown: string }>;
-        }>;
-      };
-      assert.deepEqual(payload.created, ['first.md', 'second.md']);
-      const product = payload.sections.find(
-        (section) => section.slug === 'product',
-      );
-      assert.deepEqual(
-        product?.documents.map((document) => document.fileName),
-        ['first.md', 'second.md', 'unrelated.md'],
-        'the response carries the committed batch in reader order',
-      );
-      assert.equal(
-        product?.documents[1]?.markdown,
-        '# Second\n\nsecond replacement\n',
-      );
-      assert.deepEqual(readsAfterLastPublication(), []);
-      resetInjections();
-      const fresh = await readProductContext(project);
-      assert.deepEqual(
-        fresh.find((section) => section.slug === 'product'),
-        product,
-        'a fresh reader sees exactly what the response reported',
-      );
-    }
-  } finally {
-    resetInjections();
-    await cleanup();
-  }
-});
-
 void test('the Break It Down import Route answers with the committed attachments without a second read', async () => {
   const { project, attachmentsPath, cleanup } = await makeProject();
   try {
@@ -652,35 +433,11 @@ void test('the Break It Down import Route answers with the committed attachments
 });
 
 void test('public validation and conflict responses stay distinct from internal filesystem failures', async () => {
-  const { project, sectionPath, attachmentsPath, cleanup } =
-    await makeProject();
+  const { project, attachmentsPath, cleanup } = await makeProject();
   try {
-    await seedOriginals(sectionPath);
     await seedAttachment(project);
-    const context = await contextRoute();
     const attachments = await attachmentsRoute();
-    const sectionBefore = await snapshot(sectionPath);
     const attachmentsBefore = await snapshot(attachmentsPath);
-
-    resetInjections();
-    const conflict = await captureDiagnostics(() =>
-      context.POST(contextImportRequest(twoDocuments()), routeParams),
-    );
-    assert.equal(conflict.result.status, 409);
-    assert.deepEqual(await conflict.result.json(), {
-      error: 'One or more Markdown files already exist.',
-      conflicts: ['first.md', 'second.md'],
-    });
-    assert.deepEqual(conflict.captured, [], 'a conflict is not a diagnostic');
-
-    const invalid = await context.POST(
-      contextImportRequest([new File(['x'], 'notes.txt')]),
-      routeParams,
-    );
-    assert.equal(invalid.status, 400);
-    assert.deepEqual(await invalid.json(), {
-      error: 'Only Markdown files can be imported right now.',
-    });
 
     const attachmentConflict = await captureDiagnostics(() =>
       attachments.POST(
@@ -696,11 +453,6 @@ void test('public validation and conflict responses stay distinct from internal 
     assert.deepEqual(attachmentConflict.captured, []);
 
     for (const [post, fallback] of [
-      [
-        () =>
-          context.POST(contextImportRequest(twoDocuments(), true), routeParams),
-        'Could not add the document.',
-      ],
       [
         () =>
           attachments.POST(
@@ -724,130 +476,9 @@ void test('public validation and conflict responses stay distinct from internal 
       assert.match(internal.captured[0]!, /EIO: injected failure/);
     }
 
-    assert.deepEqual(await snapshot(sectionPath), sectionBefore);
     assert.deepEqual(await snapshot(attachmentsPath), attachmentsBefore);
   } finally {
     resetInjections();
-    await cleanup();
-  }
-});
-
-const missingProjectParams = {
-  params: Promise.resolve({ projectId: 'PROJECT-MISSING' }),
-};
-
-function jsonCreateRequest(
-  body: unknown,
-  headers: Record<string, string> = {},
-  url = 'http://localhost:3000/api/projects/PROJECT-0001/context/documents',
-) {
-  return new Request(url, {
-    method: 'POST',
-    headers: { host: HOST, 'content-type': 'application/json', ...headers },
-    body: JSON.stringify(body),
-  });
-}
-
-void test('the Context Route selects one guard before any project work', async () => {
-  const { project, cleanup } = await makeProject();
-  try {
-    const { POST } = await contextRoute();
-
-    const imported = await POST(
-      contextImportRequest([
-        new File([FIRST_ORIGINAL], 'routed-one.md', { type: 'text/markdown' }),
-      ]),
-      routeParams,
-    );
-    assert.equal(imported.status, 201, 'valid multipart still reaches import');
-    assert.ok(
-      (await productDocumentNames(project)).includes('routed-one.md'),
-      'the imported document is published',
-    );
-
-    const created = await POST(
-      jsonCreateRequest({ section: 'product', title: 'Routed JSON' }),
-      routeParams,
-    );
-    assert.equal(created.status, 201, 'valid JSON creation still works');
-
-    const unsupported = await POST(
-      new Request(
-        'http://localhost:3000/api/projects/PROJECT-0001/context/documents',
-        {
-          method: 'POST',
-          headers: { host: HOST, 'content-type': 'text/plain' },
-          body: 'section=product',
-        },
-      ),
-      routeParams,
-    );
-    assert.equal(
-      unsupported.status,
-      415,
-      'an unsupported Content-Type is rejected at the boundary',
-    );
-
-    const unsupportedMissingProject = await POST(
-      new Request(
-        'http://localhost:3000/api/projects/PROJECT-MISSING/context/documents',
-        {
-          method: 'POST',
-          headers: { host: HOST, 'content-type': 'text/plain' },
-          body: 'section=product',
-        },
-      ),
-      missingProjectParams,
-    );
-    assert.equal(
-      unsupportedMissingProject.status,
-      415,
-      'the guard runs before the project lookup, so a missing project still answers 415',
-    );
-
-    const hostileHost = await POST(
-      jsonCreateRequest(
-        { section: 'product', title: 'Hostile' },
-        { host: 'evil.example.com' },
-      ),
-      routeParams,
-    );
-    assert.equal(
-      hostileHost.status,
-      421,
-      'a hostile Host is rejected before any body parse',
-    );
-    const hostileMultipart = await POST(
-      new Request(
-        'http://localhost:3000/api/projects/PROJECT-0001/context/documents',
-        {
-          method: 'POST',
-          headers: { host: HOST, origin: 'https://evil.example.com' },
-          body: (() => {
-            const form = new FormData();
-            form.set('section', 'product');
-            form.append(
-              'files',
-              new File([FIRST_ORIGINAL], 'hostile.md', {
-                type: 'text/markdown',
-              }),
-            );
-            return form;
-          })(),
-        },
-      ),
-      routeParams,
-    );
-    assert.equal(
-      hostileMultipart.status,
-      403,
-      'a hostile Origin is rejected on the multipart branch too',
-    );
-    assert.ok(
-      !(await productDocumentNames(project)).includes('hostile.md'),
-      'a rejected request never reaches the import',
-    );
-  } finally {
     await cleanup();
   }
 });

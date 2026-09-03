@@ -1,10 +1,10 @@
 import { PublicApiError } from './api-errors.ts';
 import {
-  CONTEXT_LIBRARY_MARKDOWN,
   TASK_GRAPH_MARKDOWN_SHAPES,
   isPlanningPathRejection,
   resolvePlanningPath,
 } from './planning-paths.ts';
+import { validateProductContextReferences } from './product-context-resource.ts';
 import { randomUUID } from 'node:crypto';
 
 const MAX_REPORTED_CLEANUP_FAILURES = 4;
@@ -244,7 +244,11 @@ async function createStartNodeWithinCanvas(
     );
   }
 
-  const contextRefs = await validateContextRefs(project, input.contextRefs);
+  const contextRefs = await validateContextRefs(
+    project,
+    input.contextRefs,
+    graphRoot,
+  );
   const uploads = await prepareUploads(input.files);
 
   const taskGraphPath = path.join(project.planningPath, graphRoot);
@@ -414,7 +418,11 @@ async function updateStartNodeWithinCanvas(
     throw new Error('The start node could not be edited.');
   }
 
-  const contextRefs = await validateContextRefs(project, input.contextRefs);
+  const contextRefs = await validateContextRefs(
+    project,
+    input.contextRefs,
+    graphRoot,
+  );
   const existingAttachments = new Map(
     node.resources
       .filter((resource) => resource.kind === 'attachment')
@@ -602,30 +610,18 @@ export async function readTaskGraphMarkdownResource(
   };
 }
 
-async function validateContextRefs(project: RegisteredProject, refs: string[]) {
-  const uniqueRefs = [...new Set(refs)];
-  for (const ref of uniqueRefs) {
-    let resolved;
-    try {
-      resolved = await resolvePlanningPath(project, ref, {
-        shapes: [CONTEXT_LIBRARY_MARKDOWN],
-        within: 'context',
-      });
-    } catch (error) {
-      if (isPlanningPathRejection(error))
-        throw new PublicApiError(
-          'A selected Context Library reference is invalid.',
-          400,
-        );
-      throw new Error(`The selected source ${ref} could not be read.`);
-    }
-    try {
-      await readFile(resolved.absolutePath, 'utf8');
-    } catch {
-      throw new Error(`The selected source ${ref} could not be read.`);
-    }
-  }
-  return uniqueRefs;
+async function validateContextRefs(
+  project: RegisteredProject,
+  refs: string[],
+  graphRoot: GraphRoot,
+) {
+  return validateProductContextReferences(
+    project,
+    refs,
+    graphRoot === 'whats-next'
+      ? ['mvp-prototype', 'product-design']
+      : ['task-breakdown'],
+  );
 }
 
 function chooseUniqueName(baseName: string, usedNames: Set<string>) {
