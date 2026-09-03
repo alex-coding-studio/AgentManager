@@ -76,14 +76,14 @@ machine. It does not include a hosted Agent service or its own account system.
 npm install
 npm run build
 npm link
-praxis
+praxis start
 ```
 
 Open [http://localhost:3000](http://localhost:3000). Pass normal Next.js options
 through the command when needed:
 
 ```bash
-praxis --port 3100
+praxis start --port 3100
 ```
 
 For development with live reload:
