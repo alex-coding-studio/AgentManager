@@ -940,6 +940,12 @@ void test('Just Do It separates the Task coordinator from the Action Composer', 
   assert.match(workspace, /params\.set\('card', cardId\)/);
   assert.match(workspace, /params\.set\('action', actionId\)/);
   assert.match(workspace, /router\.replace/);
+  assert.match(workspace, /sticky top-0 z-30/);
+  assert.match(workspace, /planHeaderStuck/);
+  assert.match(workspace, /rounded-b-xl border-t-0/);
+  assert.match(workspace, /rounded-xl/);
+  assert.match(workspace, /ref=\{setActionHeaderTarget\}/);
+  assert.match(workspace, /headerActionsTarget=\{actionHeaderTarget\}/);
   assert.match(workspace, /folders=\{view\.folders\}/);
   assert.doesNotMatch(workspace, /Last run usage/);
 
@@ -957,6 +963,17 @@ void test('Just Do It separates the Task coordinator from the Action Composer', 
   assert.match(action, /label="Execution profile"/);
   assert.match(action, /<AgentGraphRunningCard/);
   assert.match(action, /coordination: \{ profile: coordinatorProfile \}/);
+  assert.match(action, /createPortal/);
+  assert.match(action, /\{t\('Redo'\)\}/);
+  assert.match(action, /\{t\('Pass'\)\}/);
+  const floatingComposer = action.slice(
+    action.indexOf('title={t(currentStatus)}'),
+    action.indexOf(
+      '</AgentGraphComposerCard>',
+      action.indexOf('title={t(currentStatus)}'),
+    ),
+  );
+  assert.doesNotMatch(floatingComposer, /Accept this output/);
   assert.doesNotMatch(action, /data-action-controls/);
   assert.doesNotMatch(action, /setCoordinatorProfile/);
 });

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   unverifiedDeliveryRefs,
   hasUnsupportedAppArtifact,
@@ -16,6 +17,7 @@ import {
   RefreshCw,
   FolderOpen,
   GitBranch,
+  RotateCcw,
 } from 'lucide-react';
 import {
   AgentComposerAttachments,
@@ -52,6 +54,7 @@ export function JustDoItAction({
   action,
   coordinatorProfile,
   folders,
+  headerActionsTarget,
   onChange,
 }: {
   projectId: string;
@@ -59,6 +62,7 @@ export function JustDoItAction({
   action: ActionContract;
   coordinatorProfile: AgentProfile;
   folders: ContextBrowserFolder[];
+  headerActionsTarget: HTMLElement | null;
   onChange: (card: PlanningCard) => void;
 }) {
   const { t } = useUiText();
@@ -839,27 +843,6 @@ export function JustDoItAction({
               ? `${t('Required checks')} · ${requiredAssessment.items.filter((item) => item.status === 'passed').length}/${requiredAssessment.items.length}`
               : undefined
           }
-          action={
-            latest?.status !== 'running' && latest?.result ? (
-              <Button
-                size="sm"
-                variant={
-                  hasReviewableReport(latest) && requiredPassed
-                    ? 'default'
-                    : 'outline'
-                }
-                disabled={!enabled || preparingAcceptance}
-                onClick={() => void prepareAcceptance()}
-              >
-                {preparingAcceptance ? (
-                  <LoaderCircle className="animate-spin" />
-                ) : (
-                  <Check />
-                )}
-                {t('Accept this output')}
-              </Button>
-            ) : undefined
-          }
         >
           {error ? (
             <p role="alert" className="mb-3 text-xs text-destructive">
@@ -965,21 +948,42 @@ export function JustDoItAction({
           </AgentComposerShell>
         </AgentGraphComposerCard>
       ) : null}
-      {card.execution?.workspace &&
-        !card.execution.acceptedActionIds.length &&
-        latest &&
-        latest.status !== 'running' && (
-          <Button
-            variant="outline"
-            disabled={pending || running}
-            onClick={() => {
-              setResetPreview(null);
-              void resetCard();
-            }}
-          >
-            {t('Restart this Card from its base')}
-          </Button>
-        )}
+      {headerActionsTarget
+        ? createPortal(
+            <>
+              {card.execution?.workspace &&
+              !card.execution.acceptedActionIds.length &&
+              latest &&
+              latest.status !== 'running' ? (
+                <Button
+                  variant="outline"
+                  disabled={pending || running}
+                  onClick={() => {
+                    setResetPreview(null);
+                    void resetCard();
+                  }}
+                >
+                  <RotateCcw />
+                  {t('Redo')}
+                </Button>
+              ) : null}
+              {latest?.status !== 'running' && latest?.result ? (
+                <Button
+                  disabled={!enabled || preparingAcceptance}
+                  onClick={() => void prepareAcceptance()}
+                >
+                  {preparingAcceptance ? (
+                    <LoaderCircle className="animate-spin" />
+                  ) : (
+                    <Check />
+                  )}
+                  {t('Pass')}
+                </Button>
+              ) : null}
+            </>,
+            headerActionsTarget,
+          )
+        : null}
       <Dialog
         open={Boolean(stopPreview)}
         onOpenChange={(open) => {

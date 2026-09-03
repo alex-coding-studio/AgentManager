@@ -342,6 +342,8 @@ export const chineseUi: Record<string, string> = {
   'Continue this Action': '继续修改这一步',
   'Start this Action': '开始执行这一步',
   'Accept this output': '验收当前产出',
+  Redo: '重做',
+  Pass: '通过',
   passed: '通过',
   failed: '失败',
   'not-run': '未执行',
