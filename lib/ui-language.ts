@@ -876,6 +876,7 @@ export const chineseUi: Record<string, string> = {
   Acceptance: '验收标准',
   Capability: '能力',
   'More evidence needed': '需要补充资料',
+  Recommended: '推荐',
   'Updated {elapsed} ago': '{elapsed} 前更新',
   'Key Rules': '关键规则',
   'No change': '无需修改',

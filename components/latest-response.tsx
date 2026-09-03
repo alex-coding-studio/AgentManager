@@ -141,3 +141,49 @@ export function LatestResponseActions({
     </div>
   );
 }
+
+export function LatestResponseOptions({
+  options,
+  recommendedLabel,
+  selectedId,
+  onSelect,
+}: {
+  options: Array<{
+    id: string;
+    label: string;
+    effect: string;
+    recommended: boolean;
+  }>;
+  recommendedLabel: string;
+  selectedId?: string;
+  onSelect: (option: (typeof options)[number]) => void;
+}) {
+  return (
+    <div className="space-y-1.5">
+      {options.map((option) => (
+        <Button
+          key={option.id}
+          type="button"
+          variant={selectedId === option.id ? 'secondary' : 'outline'}
+          aria-pressed={selectedId === option.id}
+          className="h-auto w-full items-start justify-start gap-2 px-2.5 py-2 text-left whitespace-normal"
+          onClick={() => onSelect(option)}
+        >
+          <span className="min-w-0 flex-1">
+            <span className="flex items-center gap-1.5 text-xs font-medium">
+              <span>{option.label}</span>
+              {option.recommended ? (
+                <span className="rounded-full bg-emerald-500/12 px-1.5 py-0.5 text-[9px] font-medium text-emerald-700 dark:text-emerald-300">
+                  {recommendedLabel}
+                </span>
+              ) : null}
+            </span>
+            <span className="mt-0.5 block text-[10px] leading-4 text-muted-foreground">
+              {option.effect}
+            </span>
+          </span>
+        </Button>
+      ))}
+    </div>
+  );
+}

@@ -9,6 +9,7 @@ import { ContextAttachmentPicker } from '@/components/context-attachment-picker'
 import {
   LatestResponse,
   LatestResponseActions,
+  LatestResponseOptions,
 } from '@/components/latest-response';
 import { MarkdownReader } from '@/components/markdown-reader';
 import { ProjectModuleHeader } from '@/components/project-module-header';
@@ -54,6 +55,7 @@ export function WhatToDoWorkspace({
   const [sourceUids, setSourceUids] = useState(initialSourceUids);
   const [focusContractIds, setFocusContractIds] = useState<string[]>([]);
   const [instruction, setInstruction] = useState('');
+  const [clarificationOptionId, setClarificationOptionId] = useState('');
   const [profile, setProfile] = useState<AgentProfile>({
     agent: 'codex',
     model: '',
@@ -136,6 +138,7 @@ export function WhatToDoWorkspace({
       if (!response.ok) throw new Error(data.error);
       setRuns((current) => [data.run, ...current]);
       setInstruction('');
+      setClarificationOptionId('');
       setSourceUids([]);
       setFocusContractIds([]);
       setFiles([]);
@@ -188,6 +191,47 @@ export function WhatToDoWorkspace({
     setPreview({ title, path: resourcePath, markdown: data.markdown });
   }
 
+  function selectClarificationOption(
+    option: Extract<
+      NonNullable<WhatToDoRunRecord['result']>,
+      { outcome: 'clarification' }
+    >['clarification']['options'][number],
+  ) {
+    if (!latestTerminal) return;
+    const answer = `${option.label}\n\n${option.effect}`;
+    const previous =
+      latestTerminal.result?.outcome === 'clarification'
+        ? latestTerminal.result.clarification.options.find(
+            (item) => item.id === clarificationOptionId,
+          )
+        : null;
+    const previousAnswer = previous
+      ? `${previous.label}\n\n${previous.effect}`
+      : '';
+    const supplementalInput = previousAnswer
+      ? instruction.startsWith(`${previousAnswer}\n\n`)
+        ? instruction.slice(previousAnswer.length + 2)
+        : instruction === previousAnswer
+          ? ''
+          : instruction
+      : instruction;
+    if (clarificationOptionId === option.id) {
+      setClarificationOptionId('');
+      setInstruction(supplementalInput);
+      return;
+    }
+    setClarificationOptionId(option.id);
+    setInstruction(
+      supplementalInput.trim()
+        ? `${answer}\n\n${supplementalInput.trim()}`
+        : answer,
+    );
+    setSourceUids(latestTerminal.sourceUids);
+    setFocusContractIds(latestTerminal.focusContractIds);
+    setContextRefs(latestTerminal.contextRefs);
+    setProfile(latestTerminal.profile);
+  }
+
   const presentation = latestTerminal
     ? latestWhatToDoResponse(latestTerminal)
     : null;
@@ -225,7 +269,7 @@ export function WhatToDoWorkspace({
         />
         {presentation && latestTerminal ? (
           <LatestResponse
-            className="absolute top-4 left-4 z-10 w-[min(320px,calc(100%-2rem))]"
+            className="absolute top-4 left-4 z-10 w-[min(380px,calc(100%-2rem))]"
             title={t('Latest Response')}
             statusLabel={t(presentation.statusLabel)}
             summary={t(presentation.summary)}
@@ -233,35 +277,45 @@ export function WhatToDoWorkspace({
             attention={presentation.attention}
             icon={presentation.icon}
           >
-            <LatestResponseActions
-              responseLabel={t('Response')}
-              summaryLabel={t('Summary')}
-              logLabel={t('Log')}
-              onOpenResponse={() =>
-                void openResource(
-                  t('Latest Response'),
-                  `what-to-do/runs/${latestTerminal.id}/response.md`,
-                )
-              }
-              onOpenSummary={() =>
-                void openResource(
-                  t('Summary'),
-                  `what-to-do/runs/${latestTerminal.id}/summary.md`,
-                )
-              }
-              onOpenLog={() =>
-                setPreview({
-                  title: t('Activity Log'),
-                  path: latestTerminal.id,
-                  markdown: renderLatestResponseActivityLog(
-                    latestTerminal.activity,
-                    t('Activity Log'),
-                    t('No recorded activity.'),
-                    t,
-                  ),
-                })
-              }
-            />
+            <div className="space-y-2.5">
+              {latestTerminal.result?.outcome === 'clarification' ? (
+                <LatestResponseOptions
+                  options={latestTerminal.result.clarification.options}
+                  recommendedLabel={t('Recommended')}
+                  selectedId={clarificationOptionId}
+                  onSelect={selectClarificationOption}
+                />
+              ) : null}
+              <LatestResponseActions
+                responseLabel={t('Response')}
+                summaryLabel={t('Summary')}
+                logLabel={t('Log')}
+                onOpenResponse={() =>
+                  void openResource(
+                    t('Latest Response'),
+                    `what-to-do/runs/${latestTerminal.id}/response.md`,
+                  )
+                }
+                onOpenSummary={() =>
+                  void openResource(
+                    t('Summary'),
+                    `what-to-do/runs/${latestTerminal.id}/summary.md`,
+                  )
+                }
+                onOpenLog={() =>
+                  setPreview({
+                    title: t('Activity Log'),
+                    path: latestTerminal.id,
+                    markdown: renderLatestResponseActivityLog(
+                      latestTerminal.activity,
+                      t('Activity Log'),
+                      t('No recorded activity.'),
+                      t,
+                    ),
+                  })
+                }
+              />
+            </div>
           </LatestResponse>
         ) : null}
         {running ? (
