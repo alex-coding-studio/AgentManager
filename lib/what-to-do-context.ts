@@ -1,5 +1,4 @@
 import type { AgentProfile } from './agent-profile.ts';
-import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
@@ -15,8 +14,6 @@ import {
 } from './product-context-resource.ts';
 import { readDomainModel, type DomainModel } from './domain-model.ts';
 import type { RegisteredProject } from './project-registry.ts';
-import { resolvePlanningPath } from './planning-paths.ts';
-import { readTaskGraphMarkdownResource } from './task-graph.ts';
 import {
   whatToDoCurrentMapPromptView,
   type WhatToDoDeliveryMap,
@@ -107,32 +104,7 @@ export async function prepareWhatToDoContext(
       readDomainModel(project),
     ]);
   const featureInputs = await whatToDoFeatureWorkspaceInputs(project, sources);
-  const mapInputs = await Promise.all(
-    (currentMap?.contracts ?? []).map(async (contract) => {
-      const resource = await readTaskGraphMarkdownResource(
-        project,
-        contract.outputPath,
-      );
-      return {
-        role: 'related' as const,
-        kind: focusContractIds.includes(contract.id)
-          ? 'focused-delivery-contract'
-          : 'delivery-contract',
-        logicalPath: resource.path,
-        content: resource.markdown,
-        nodeId: contract.id,
-      };
-    }),
-  );
-  const sourceSnapshotInputs = await currentMapSourceInputs(
-    project,
-    currentMap,
-  );
-  const sourceInputs = [
-    ...featureInputs,
-    ...mapInputs,
-    ...sourceSnapshotInputs,
-  ];
+  const sourceInputs = featureInputs;
   let repositoryEvidence: Array<{ path: string; content: string }>;
   try {
     const [automatic, targeted] = await Promise.all([
@@ -282,35 +254,6 @@ export async function prepareWhatToDoContext(
       manifestEntries.map((entry) => [entry.workspacePath, entry.logicalPath]),
     ),
   };
-}
-
-async function currentMapSourceInputs(
-  project: RegisteredProject,
-  map: WhatToDoDeliveryMap | null,
-): Promise<ContextWorkspaceInput[]> {
-  return Promise.all(
-    (map?.sourceSnapshots ?? []).map(async (snapshot) => {
-      const resolved = await resolvePlanningPath(project, snapshot.storedPath, {
-        require: 'file',
-        maxBytes: 2 * 1024 * 1024,
-        within: 'what-to-do/runs',
-      });
-      const content = await readFile(resolved.absolutePath, 'utf8');
-      if (
-        createHash('sha256').update(content).digest('hex') !== snapshot.sha256
-      )
-        throw new PublicApiError(
-          'Current Delivery Map source evidence changed. Reload before continuing.',
-          409,
-        );
-      return {
-        role: 'related' as const,
-        kind: 'delivery-map-source',
-        logicalPath: snapshot.logicalPath,
-        content,
-      };
-    }),
-  );
 }
 
 async function contextInputs(

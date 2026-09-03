@@ -333,7 +333,7 @@ void test('a real What to Do Run persists the frozen request and Agent result', 
 });
 
 void test('the current formal Map is default Context and focus is optional emphasis', async (t) => {
-  const { project } = await fixture(t);
+  const { project, planningPath } = await fixture(t);
   const control = controlled();
   const first = await startWhatToDoRun(project, input(), control.transport);
   control.calls[0]!.resolve({
@@ -352,14 +352,35 @@ void test('the current formal Map is default Context and focus is optional empha
     },
     control.transport,
   );
+  assert.equal(
+    second.request.request.sessionId,
+    first.request.request.sessionId,
+  );
+  assert.equal(control.calls[1]!.input.resumeSessionId, 'agent-session-1');
   assert.deepEqual(second.request.sourceFeatures, []);
-  assert.ok(
+  assert.equal(
     second.request.content.references.some(
       (entry) =>
-        entry.kind === 'focused-delivery-contract' &&
-        entry.logicalPath === contract.outputPath,
+        entry.kind === 'delivery-contract' ||
+        entry.kind === 'delivery-map-source',
     ),
+    false,
   );
+  const mapEntry = second.request.content.references.find(
+    (entry) => entry.kind === 'delivery-map',
+  );
+  assert.ok(mapEntry);
+  const promptMap = await readFile(
+    path.join(
+      planningPath,
+      'what-to-do/runs',
+      second.id,
+      'context',
+      mapEntry.workspacePath,
+    ),
+    'utf8',
+  );
+  assert.doesNotMatch(promptMap, /"anchor"|"sourceSha256"/);
   assert.equal(second.request.operation, 'adjust-map');
   assert.deepEqual(second.request.focusCandidateIds, [
     `CANDIDATE-${contract.id.slice(5)}`,
@@ -379,6 +400,22 @@ void test('the current formal Map is default Context and focus is optional empha
     (await readWhatToDoCurrentMap(project))?.contracts[0]?.id,
     contract.id,
   );
+  const changedProfile = await startWhatToDoRun(
+    project,
+    {
+      ...input(),
+      sourceUids: [],
+      profile: { ...input().profile, model: 'gpt-5.6-sol' },
+    },
+    control.transport,
+  );
+  assert.notEqual(
+    changedProfile.request.request.sessionId,
+    second.request.request.sessionId,
+  );
+  assert.equal(control.calls[2]!.input.resumeSessionId, undefined);
+  await cancelWhatToDoRun(project, changedProfile.id);
+  control.calls[2]!.reject(new Error('canceled'));
   await assert.rejects(
     startWhatToDoRun(project, input(), control.transport),
     /already part of the current Delivery Map/,

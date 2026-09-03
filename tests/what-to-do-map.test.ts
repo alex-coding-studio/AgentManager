@@ -4,6 +4,7 @@ import {
   materializeWhatToDoDeliveryMap,
   renderWhatToDoContract,
   whatToDoContractCandidateId,
+  whatToDoCurrentMapPromptView,
 } from '../lib/what-to-do-map.ts';
 import type { WhatToDoHarnessResult } from '../lib/what-to-do-harness.ts';
 
@@ -199,4 +200,32 @@ void test('a retained Contract preserves formal identity across terminal Map upd
       contract.outputPath,
     ]),
   );
+});
+
+void test('the current Map prompt keeps Claim assignments without repeating frozen excerpts', () => {
+  const map = materializeWhatToDoDeliveryMap(
+    {
+      runId: 'RUN-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      updatedAt: '2026-09-02T00:00:00.000Z',
+      sourceUids: ['feature-1'],
+      result,
+      sourceSnapshots: [
+        {
+          logicalPath: 'feature.md',
+          sha256: '1'.repeat(64),
+          storedPath: 'what-to-do/runs/RUN-source/context/feature.md',
+        },
+      ],
+    },
+    () => '11111111-1111-4111-8111-111111111111',
+  );
+
+  const view = whatToDoCurrentMapPromptView(map);
+
+  assert.equal(view.sourceClaims[0]!.claimId, 'CLAIM-1');
+  assert.ok(
+    view.sourceClaims[0]!.contractCandidateIds.includes('CANDIDATE-11111111'),
+  );
+  assert.equal('anchor' in view.sourceClaims[0]!, false);
+  assert.equal('sourceSha256' in view.sourceClaims[0]!, false);
 });

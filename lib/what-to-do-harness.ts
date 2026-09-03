@@ -16,15 +16,15 @@ Authority order: Harness and output contract; content.input User Input; selected
 
 Read content.input first and every newly selected Product Design Feature. Existing Delivery Contracts are default Context and must be considered together. A focused-delivery-contract narrows attention without removing the rest of the Map from Context. The User Input determines whether the result adds, reshapes, combines or otherwise updates delivery boundaries. Read repository-facts.json and the current repository-summary.md when present. Perform ordinary project onboarding from real evidence: understand the product, languages, architecture, commands and critical standards without forcing a platform taxonomy. Read domain-model-summary.md every time and inspect domain-model.json only when the request may touch domain meaning. Record every expanded repository or Domain path and why it was needed.
 
-Return exactly one JSON result matching the schema. A map-proposal is an internal validation envelope for the complete coordinated Map, never a user-visible Candidate stage or partial patch. After validation, the Host atomically replaces the current formal Map with its Contracts. There is no fixed Contract count. Split by independently deliverable outcomes, shared foundations, risk gates or distinct acceptance boundaries. Keep end-to-end work together when a split would leave unusable scaffolding. Each Contract must be independently understandable, support one linear Just Do It Plan, and require no new product-design decision before execution.
+Return exactly one JSON result matching the schema. A map-proposal is an internal validation envelope for one complete coordinated Map, never a user-visible Candidate stage. After validation, the Host atomically composes and replaces the current formal Map. There is no fixed Contract count. Split by independently deliverable outcomes, shared foundations, risk gates or distinct acceptance boundaries. Keep end-to-end work together when a split would leave unusable scaffolding. Each Contract must be independently understandable, support one linear Just Do It Plan, and require no new product-design decision before execution.
 
-dependsOn contains hard prerequisites only: the dependent Contract cannot be completed or honestly accepted without the prerequisite's delivered result. Do not encode preferred chronology or technical layer order as dependencies. Recommend Foundation-first, Experience-first, Vertical slice or Risk-first only when supported by current evidence.
+dependsOn contains hard prerequisites only: the dependent Contract cannot be completed or honestly accepted without the prerequisite's delivered result. Do not encode preferred chronology, technical layer order, a cross-Feature interaction or the need to test that something does not happen as a dependency. Negative behavior can be validated through an accepted rule, fixture or capability boundary without requiring the excluded Feature to be delivered. Recommend Foundation-first, Experience-first, Vertical slice or Risk-first only when supported by current evidence.
 
 Every material source claim must cite the entry.logicalPath from REQUEST, its frozen SHA-256 and a bounded excerpt that occurs exactly once in that source. Use workspacePath only to read the file inside CONTEXT ROOT; never return workspacePath as an evidence or source path. Assign every in-scope claim to at least one Contract. Mark a claim out of scope only with an equally verified excerpt from current User Input that authorizes the exclusion. Do not claim semantic completeness beyond the evidence read.
 
 Classify each Contract's Domain Impact as none, reuse, change, add or uncertain. Pure UI work may use none. A Map with uncertain Domain Impact or an Open Decision cannot be published; return clarification or insufficient-evidence instead. Do not invent database work.
 
-For adjust-map, selected Candidate IDs are feedback focus, not local edit permission. Return the complete replacement Map and recomposition effects using retain, replace, split, merge, add and remove literally. Preserve identity only for retained Contracts. Never directly mutate an accepted Contract or silently drop acknowledged source meaning.
+For adjust-map, selected Candidate IDs are feedback focus, not local edit permission. Review the complete current Map, but return only new or replacement Candidates; represent every unchanged Contract with a retain effect and never repeat its Candidate payload. Return recomposition effects using retain, replace, split, merge, add and remove literally. In sourceClaims return only brand-new claims from current input or newly selected sources. Use sourceClaimUpdates to change the disposition or Contract assignment of an existing claim by claimId; omit every unchanged existing claim because the Host carries it forward. Preserve identity only for retained Contracts. Never directly mutate an accepted Contract or silently drop acknowledged source meaning.
 
 The repositorySummary is a compact, evidence-bounded orientation aid, not authority over the repository. Keep unknown facts unknown. Do not prescribe an exhaustive filename inventory, class design, database schema or Action list unless an accepted source already makes it authoritative. Do not implement work, create Just Do It Cards or claim user approval.`;
 
@@ -168,6 +168,15 @@ export type WhatToDoSourceClaim = {
   } | null;
 };
 
+export type WhatToDoSourceClaimUpdate = Pick<
+  WhatToDoSourceClaim,
+  | 'claimId'
+  | 'disposition'
+  | 'contractCandidateIds'
+  | 'exclusionReason'
+  | 'exclusionAuthority'
+>;
+
 type WhatToDoResultBase = {
   schemaVersion: 1;
   harness: {
@@ -186,6 +195,7 @@ export type WhatToDoHarnessResult = WhatToDoResultBase &
         outcome: 'map-proposal';
         candidates: WhatToDoContractCandidate[];
         sourceClaims: WhatToDoSourceClaim[];
+        sourceClaimUpdates?: WhatToDoSourceClaimUpdate[];
         recomposition?: { effects: AgentGraphRecomposeEffect[] };
       }
     | {
@@ -316,6 +326,26 @@ const sourceClaim = object({
     ],
   },
 });
+const sourceClaimUpdate = object({
+  claimId: text,
+  disposition: { enum: ['in-scope', 'out-of-scope'] },
+  contractCandidateIds: {
+    type: 'array',
+    uniqueItems: true,
+    items: candidateId,
+  },
+  exclusionReason: { oneOf: [text, { type: 'null' }] },
+  exclusionAuthority: {
+    oneOf: [
+      object({
+        userInputPath: text,
+        userInputSha256: sha256,
+        anchor,
+      }),
+      { type: 'null' },
+    ],
+  },
+});
 const base = {
   schemaVersion: { const: 1 },
   harness: object({
@@ -371,7 +401,6 @@ const mapProposal = object({
   candidates: { type: 'array', maxItems: 200, items: contractCandidate },
   sourceClaims: {
     type: 'array',
-    minItems: 1,
     maxItems: 1_000,
     items: sourceClaim,
   },
@@ -383,7 +412,16 @@ export const WHAT_TO_DO_HARNESS_OUTPUT_SCHEMA = {
   oneOf: [
     {
       ...mapProposal,
-      properties: { ...mapProposal.properties, recomposition },
+      properties: {
+        ...mapProposal.properties,
+        recomposition,
+        sourceClaimUpdates: {
+          type: 'array',
+          maxItems: 1_000,
+          uniqueItems: true,
+          items: sourceClaimUpdate,
+        },
+      },
     },
     object({ ...base, outcome: { const: 'clarification' }, clarification }),
     object({
@@ -481,6 +519,8 @@ export function validateWhatToDoHarnessResult(
 
   if (context.operation === 'create-map' && result.candidates.length === 0)
     fail('A new Delivery Map requires at least one Contract Candidate.');
+  if (context.operation === 'create-map' && result.sourceClaimUpdates?.length)
+    fail('A new Delivery Map cannot update an existing Source Claim.');
   if (context.operation === 'adjust-map' && result.recomposition) {
     const retainedIds = new Set(
       result.recomposition.effects
@@ -500,6 +540,8 @@ export function validateWhatToDoHarnessResult(
         ),
     );
   }
+  if (context.operation === 'adjust-map')
+    mergeAdjustedSourceClaims(result, context);
   validateCandidates(result.candidates, context, knownEvidence);
   if (context.operation === 'create-map' && result.recomposition) {
     const candidateIds = new Set(
@@ -578,6 +620,33 @@ function normalizeClaimAssignments(
     }
 }
 
+function mergeAdjustedSourceClaims(
+  result: Extract<WhatToDoHarnessResult, { outcome: 'map-proposal' }>,
+  context: WhatToDoValidationContext,
+) {
+  const claims = new Map(
+    (context.knownSourceClaims ?? []).map((claim) => [
+      claim.claimId,
+      structuredClone(claim),
+    ]),
+  );
+  for (const claim of result.sourceClaims) claims.set(claim.claimId, claim);
+  const updates = result.sourceClaimUpdates ?? [];
+  requireUnique(
+    updates.map((update) => update.claimId),
+    'Source Claim update identifiers must be unique.',
+  );
+  for (const update of updates) {
+    if (result.sourceClaims.some((claim) => claim.claimId === update.claimId))
+      fail('A Source Claim cannot be replaced and updated together.');
+    const current = claims.get(update.claimId);
+    if (!current) fail(`Source Claim update ${update.claimId} does not exist.`);
+    claims.set(update.claimId, { ...current, ...update });
+  }
+  result.sourceClaims = [...claims.values()];
+  delete result.sourceClaimUpdates;
+}
+
 function normalizeEvidencePaths(
   result: WhatToDoHarnessResult,
   aliases: Readonly<Record<string, string>>,
@@ -604,6 +673,15 @@ function normalizeEvidencePaths(
       ? {
           ...claim.exclusionAuthority,
           userInputPath: canonical(claim.exclusionAuthority.userInputPath),
+        }
+      : null,
+  }));
+  result.sourceClaimUpdates = result.sourceClaimUpdates?.map((update) => ({
+    ...update,
+    exclusionAuthority: update.exclusionAuthority
+      ? {
+          ...update.exclusionAuthority,
+          userInputPath: canonical(update.exclusionAuthority.userInputPath),
         }
       : null,
   }));
@@ -656,6 +734,9 @@ function validateClaims(
   );
   const claimIds = new Set(claims.map((claim) => claim.claimId));
   const claimById = new Map(claims.map((claim) => [claim.claimId, claim]));
+  const previousClaims = new Map(
+    (context.knownSourceClaims ?? []).map((claim) => [claim.claimId, claim]),
+  );
   for (const candidate of candidates) {
     if (candidate.sourceClaimIds.some((claimId) => !claimIds.has(claimId)))
       fail('A Contract Candidate references an unknown Source Claim.');
@@ -668,14 +749,27 @@ function validateClaims(
         fail('Source Claim assignment must be bidirectional.');
   }
   for (const claim of claims) {
-    const source = context.knownSources[claim.sourcePath];
-    if (!source || source.sha256 !== claim.sourceSha256)
-      fail('A Source Claim does not match a frozen source.');
-    requireUniqueExcerpt(
-      source.content,
-      claim.anchor,
-      'A Source Claim anchor must occur exactly once in its frozen source.',
-    );
+    const previous = previousClaims.get(claim.claimId);
+    if (
+      previous &&
+      (claim.sourcePath !== previous.sourcePath ||
+        claim.sourceSha256 !== previous.sourceSha256 ||
+        claim.anchor !== previous.anchor ||
+        claim.summary !== previous.summary)
+    )
+      fail(
+        `Previously acknowledged Source Claim ${claim.claimId} changed identity.`,
+      );
+    if (!previous) {
+      const source = context.knownSources[claim.sourcePath];
+      if (!source || source.sha256 !== claim.sourceSha256)
+        fail('A Source Claim does not match a frozen source.');
+      requireUniqueExcerpt(
+        source.content,
+        claim.anchor,
+        'A Source Claim anchor must occur exactly once in its frozen source.',
+      );
+    }
     if (
       claim.contractCandidateIds.some(
         (candidate) => !candidateById.has(candidate),
@@ -715,20 +809,10 @@ function validateClaims(
       );
     }
   }
-  const previousClaims = new Map(
-    (context.knownSourceClaims ?? []).map((claim) => [claim.claimId, claim]),
-  );
-  for (const [claimId, previous] of previousClaims) {
+  for (const claimId of previousClaims.keys()) {
     const current = claimById.get(claimId);
     if (!current)
       fail(`Previously acknowledged Source Claim ${claimId} is missing.`);
-    if (
-      current.sourcePath !== previous.sourcePath ||
-      current.sourceSha256 !== previous.sourceSha256 ||
-      current.anchor !== previous.anchor ||
-      current.summary !== previous.summary
-    )
-      fail(`Previously acknowledged Source Claim ${claimId} changed identity.`);
   }
   for (const sourcePath of context.requiredSourcePaths ??
     Object.keys(context.knownSources))
