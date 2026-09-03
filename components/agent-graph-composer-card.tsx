@@ -1,6 +1,9 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { ChevronDown, Sparkles } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
+import { Button } from '@/components/ui/button';
+import { useUiText } from '@/components/ui-language-provider';
 import { cn } from '@/lib/utils';
 
 export function AgentGraphComposerCard({
@@ -16,6 +19,25 @@ export function AgentGraphComposerCard({
   children?: ReactNode;
   className?: string;
 }) {
+  const { t } = useUiText();
+  const [collapsed, setCollapsed] = useState(false);
+  if (collapsed)
+    return (
+      <Button
+        type="button"
+        variant="outline"
+        size="icon-lg"
+        aria-label={t('Expand input panel')}
+        aria-expanded={false}
+        className={cn(
+          'absolute right-5 bottom-5 z-10 rounded-xl bg-background shadow-[0_12px_35px_rgb(15_23_42/12%)]',
+          className,
+        )}
+        onClick={() => setCollapsed(false)}
+      >
+        <Sparkles className="size-4" />
+      </Button>
+    );
   return (
     <aside
       className={cn(
@@ -32,7 +54,19 @@ export function AgentGraphComposerCard({
             </p>
           ) : null}
         </div>
-        {action ? <div className="shrink-0">{action}</div> : null}
+        <div className="flex shrink-0 items-center gap-1">
+          {action}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            aria-label={t('Collapse input panel')}
+            aria-expanded={true}
+            onClick={() => setCollapsed(true)}
+          >
+            <ChevronDown className="size-3.5" />
+          </Button>
+        </div>
       </header>
       {children ? <div className="mt-3">{children}</div> : null}
     </aside>
