@@ -420,6 +420,50 @@ void test('Latest Response exposes the standard Response, Summary and Log action
   }
 });
 
+void test('Latest Response renders clarification options with their effects', async () => {
+  const { LatestResponse, LatestResponseOptions } =
+    await import('../components/latest-response.tsx');
+  const html = renderToStaticMarkup(
+    createElement(
+      LatestResponse,
+      {
+        title: 'Latest Response',
+        statusLabel: 'Answer needed',
+        summary: 'Choose one persistence strategy.',
+        tone: 'attention',
+        attention: 'action-required',
+        icon: 'attention',
+      },
+      createElement(LatestResponseOptions, {
+        options: [
+          {
+            id: 'keep-ios-16',
+            label: 'Keep iOS 16',
+            effect: 'Use one compatible persistence path.',
+            recommended: true,
+          },
+          {
+            id: 'raise-ios-17',
+            label: 'Raise to iOS 17',
+            effect: 'Use SwiftData as the persistence foundation.',
+            recommended: false,
+          },
+        ],
+        recommendedLabel: 'Recommended',
+        selectedId: 'keep-ios-16',
+        onSelect: () => {},
+      }),
+    ),
+  );
+  assert.match(html, /Keep iOS 16/);
+  assert.match(html, /Use one compatible persistence path/);
+  assert.match(html, /Recommended/);
+  assert.match(html, /Raise to iOS 17/);
+  assert.match(html, /aria-pressed="true"/);
+  assert.match(html, /aria-pressed="false"/);
+  assert.equal((html.match(/<button/g) ?? []).length, 2);
+});
+
 void test('Domain Modeling separates the current answer, compact summary and change log', async () => {
   const source = await readFile(
     new URL('../components/domain-model-workspace.tsx', import.meta.url),
