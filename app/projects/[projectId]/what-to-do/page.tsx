@@ -16,8 +16,10 @@ export const dynamic = 'force-dynamic';
 
 export default async function WhatToDoPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ projectId: string }>;
+  searchParams: Promise<{ feature?: string | string[] }>;
 }) {
   const project = await getProject((await params).projectId);
   if (!project) notFound();
@@ -28,6 +30,21 @@ export default async function WhatToDoPage({
     listLatestWhatToDoRuns(project),
     readWhatToDoCurrentMap(project),
   ]);
+  const requestedFeatures = (await searchParams).feature;
+  const requestedUids = Array.isArray(requestedFeatures)
+    ? requestedFeatures
+    : requestedFeatures
+      ? [requestedFeatures]
+      : [];
+  const availableUids = new Set(
+    nodes
+      .filter(isWhatToDoFeatureNode)
+      .flatMap((node) =>
+        node.uid && !currentMap?.sourceUids.includes(node.uid)
+          ? [node.uid]
+          : [],
+      ),
+  );
   return (
     <ProjectShell
       project={project}
@@ -42,6 +59,9 @@ export default async function WhatToDoPage({
         )}
         initialRuns={runs}
         initialMap={currentMap}
+        initialSourceUids={[
+          ...new Set(requestedUids.filter((uid) => availableUids.has(uid))),
+        ]}
       />
     </ProjectShell>
   );

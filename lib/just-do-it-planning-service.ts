@@ -41,6 +41,7 @@ import {
   readPlanningFile,
   type PlanningSource,
 } from './just-do-it-planning-sources.ts';
+import { unmetPlanningSourceDependencies } from './planning-source-dependencies.ts';
 
 export type PlanningProfile = AgentProfile;
 export type PlanningResource = { name: string; ref: string };
@@ -425,7 +426,7 @@ export function createPlanningService(
     module: string,
     uid: string,
   ) {
-    if (!['whats-next', 'task-graph'].includes(module))
+    if (!['whats-next', 'task-graph', 'what-to-do'].includes(module))
       throw new PublicApiError('Unknown source module.', 400);
     assertCardUuid(uid);
     await checkStorageRoot(project);
@@ -436,6 +437,16 @@ export function createPlanningService(
       module,
       uid,
     );
+    const [cards, sources] = await Promise.all([
+      list(project),
+      listPlanningSources(project),
+    ]);
+    const unmet = unmetPlanningSourceDependencies(source, cards, sources);
+    if (source.module === 'what-to-do' && unmet.length)
+      throw new PublicApiError(
+        `Complete ${unmet.map((dependency) => dependency.title).join(', ')} before adding this Delivery Contract.`,
+        409,
+      );
     const now = new Date().toISOString();
     const card: PlanningCard = {
       schemaVersion: 1,

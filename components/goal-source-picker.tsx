@@ -34,6 +34,7 @@ import {
   type GoalPickerEntry,
 } from '@/lib/goal-picker-graph';
 import type { PlanningCard } from '@/lib/just-do-it-planning-service';
+import { unmetPlanningSourceDependencies } from '@/lib/planning-source-dependencies';
 import type { PlanningSource } from '@/lib/just-do-it-planning-sources';
 
 type CompactNode = Node<
@@ -80,7 +81,10 @@ function GoalRelationEdge({
 function CompactGoalCard({ data }: NodeProps<CompactNode>) {
   const { t } = useUiText();
   const { entry } = data;
-  const alreadyAdded = entry.executionStatus !== 'not-started';
+  const waiting = entry.executionStatus === 'waiting';
+  const alreadyAdded = !['not-started', 'waiting'].includes(
+    entry.executionStatus,
+  );
   const canAdd = canAddGoalSource(entry, data.disabled);
   return (
     <>
@@ -99,13 +103,17 @@ function CompactGoalCard({ data }: NodeProps<CompactNode>) {
         type="button"
         disabled={!canAdd}
         title={entry.title}
-        aria-label={`${t(alreadyAdded ? 'Already added' : 'Add a goal')}: ${entry.title}`}
+        aria-label={`${t(waiting ? 'Waiting for prerequisites' : alreadyAdded ? 'Already added' : 'Add a goal')}: ${entry.title}`}
         onClick={() => {
           if (canAdd) data.onChoose(entry);
         }}
         className={cn(
-          'nodrag nopan pointer-events-auto flex h-full w-full flex-col justify-between rounded-xl border border-border px-3 py-3 text-left shadow-sm transition enabled:hover:border-foreground/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50',
-          alreadyAdded ? 'bg-muted text-muted-foreground' : 'bg-card',
+          'nodrag nopan pointer-events-auto flex h-full w-full flex-col justify-between rounded-xl border border-border px-3 py-3 text-left text-foreground shadow-sm transition enabled:hover:border-foreground/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none disabled:cursor-default disabled:focus-visible:outline-none',
+          alreadyAdded
+            ? 'bg-muted/60'
+            : waiting
+              ? 'bg-secondary/35'
+              : 'bg-card',
         )}
       >
         <span className="line-clamp-2 text-[13px] font-medium leading-[18px]">
@@ -113,7 +121,13 @@ function CompactGoalCard({ data }: NodeProps<CompactNode>) {
         </span>
         <span className="mt-2 flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
           <span className="shrink-0">
-            {t(alreadyAdded ? 'Already added' : 'Not started')}
+            {t(
+              waiting
+                ? 'Waiting'
+                : alreadyAdded
+                  ? 'Already added'
+                  : 'Not started',
+            )}
           </span>
           <span className="min-w-0 truncate font-mono" title={entry.id}>
             Node-{entry.id.slice(5)}
@@ -248,6 +262,7 @@ export function GoalSourcePicker({
   cards,
   pending,
   error,
+  initialModule = 'whats-next',
   onChoose,
 }: {
   open: boolean;
@@ -256,22 +271,38 @@ export function GoalSourcePicker({
   cards: PlanningCard[];
   pending: boolean;
   error: string | null;
+  initialModule?: PlanningSource['module'];
   onChoose: (source: PlanningSource) => void;
 }) {
   const { t } = useUiText();
   const [moduleName, setModuleName] =
-    useState<PlanningSource['module']>('whats-next');
+    useState<PlanningSource['module']>(initialModule);
   const entries: GoalPickerEntry[] = sources.map((source) => {
     const existing = cards.find((card) => card.source.uid === source.uid);
+    const completed = Boolean(
+      existing?.actions.length &&
+      existing.actions.every((action) =>
+        existing.execution?.acceptedActionIds.includes(action.id),
+      ),
+    );
+    const waiting = Boolean(
+      !existing &&
+      source.module === 'what-to-do' &&
+      unmetPlanningSourceDependencies(source, cards, sources).length,
+    );
     return {
       ...source,
-      executionStatus: !existing
-        ? 'not-started'
-        : existing.run?.status === 'running'
-          ? 'planning'
-          : existing.plan?.status === 'finalized'
-            ? 'plan-ready'
-            : 'added',
+      executionStatus: completed
+        ? 'completed'
+        : !existing
+          ? waiting
+            ? 'waiting'
+            : 'not-started'
+          : existing.run?.status === 'running'
+            ? 'planning'
+            : existing.plan?.status === 'finalized'
+              ? 'plan-ready'
+              : 'added',
     };
   });
   return (
@@ -288,56 +319,61 @@ export function GoalSourcePicker({
         <div
           role="tablist"
           aria-label={t('Goal source')}
-          className="grid shrink-0 grid-cols-2 border-b border-border px-5"
+          className="grid shrink-0 grid-cols-3 border-b border-border px-5"
         >
-          {(['whats-next', 'task-graph'] as const).map((value) => (
-            <button
-              key={value}
-              type="button"
-              role="tab"
-              id={`goal-source-tab-${value}`}
-              aria-selected={moduleName === value}
-              aria-controls="goal-source-panel"
-              tabIndex={moduleName === value ? 0 : -1}
-              onKeyDown={(event) => {
-                if (
-                  !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(
-                    event.key,
+          {(['whats-next', 'task-graph', 'what-to-do'] as const).map(
+            (value, index, modules) => (
+              <button
+                key={value}
+                type="button"
+                role="tab"
+                id={`goal-source-tab-${value}`}
+                aria-selected={moduleName === value}
+                aria-controls="goal-source-panel"
+                tabIndex={moduleName === value ? 0 : -1}
+                onKeyDown={(event) => {
+                  if (
+                    !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(
+                      event.key,
+                    )
                   )
-                )
-                  return;
-                event.preventDefault();
-                const next =
-                  event.key === 'Home'
-                    ? 'whats-next'
-                    : event.key === 'End'
-                      ? 'task-graph'
-                      : value === 'whats-next'
-                        ? 'task-graph'
-                        : 'whats-next';
-                setModuleName(next);
-                document.getElementById(`goal-source-tab-${next}`)?.focus();
-              }}
-              onClick={() => setModuleName(value)}
-              className={cn(
-                'flex items-center justify-center gap-2 border-b-2 px-3 py-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-ring',
-                moduleName === value
-                  ? 'border-foreground text-foreground'
-                  : 'border-transparent text-muted-foreground hover:text-foreground',
-              )}
-            >
-              {value === 'whats-next' ? "What's Next" : 'Break It Down'}
-              <span className="rounded-md bg-secondary px-1.5 text-[10px] text-muted-foreground">
-                {
-                  entries.filter(
-                    (entry) =>
-                      entry.module === value &&
-                      entry.executionStatus !== 'completed',
-                  ).length
-                }
-              </span>
-            </button>
-          ))}
+                    return;
+                  event.preventDefault();
+                  const next =
+                    event.key === 'Home'
+                      ? modules[0]
+                      : event.key === 'End'
+                        ? modules.at(-1)!
+                        : modules[
+                            (index +
+                              (event.key === 'ArrowRight' ? 1 : -1) +
+                              modules.length) %
+                              modules.length
+                          ];
+                  setModuleName(next);
+                  document.getElementById(`goal-source-tab-${next}`)?.focus();
+                }}
+                onClick={() => setModuleName(value)}
+                className={cn(
+                  'flex items-center justify-center gap-2 border-b-2 px-3 py-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-ring',
+                  moduleName === value
+                    ? 'border-foreground text-foreground'
+                    : 'border-transparent text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {t(moduleLabel(value))}
+                <span className="rounded-md bg-secondary px-1.5 text-[10px] text-muted-foreground">
+                  {
+                    entries.filter(
+                      (entry) =>
+                        entry.module === value &&
+                        entry.executionStatus !== 'completed',
+                    ).length
+                  }
+                </span>
+              </button>
+            ),
+          )}
         </div>
         {error && (
           <p role="alert" className="px-5 py-2 text-sm text-destructive">
@@ -361,4 +397,10 @@ export function GoalSourcePicker({
       </DialogContent>
     </Dialog>
   );
+}
+
+function moduleLabel(module: PlanningSource['module']) {
+  if (module === 'whats-next') return "What's Next";
+  if (module === 'task-graph') return 'Break It Down';
+  return 'What to Do';
 }

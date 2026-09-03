@@ -1,6 +1,7 @@
 'use client';
 
 import { summarizeGitHub } from '@/lib/github-delivery-summary';
+import { useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArrowLeft,
@@ -14,7 +15,8 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { AgentProfileSelector } from '@/components/agent-profile-selector';
+import { AgentGraphComposerCard } from '@/components/agent-graph-composer-card';
+import { AgentRunControls } from '@/components/agent-run-controls';
 import { JustDoItAction } from '@/components/just-do-it-action';
 import {
   Dialog,
@@ -67,6 +69,7 @@ function initialDraft(card: PlanningCard): Draft {
 
 export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
   const { t } = useUiText();
+  const initialSourceUid = useSearchParams().get('source') ?? undefined;
   const endpoint = `/api/projects/${projectId}/planning`;
   const [view, setView] = useState<View | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -80,6 +83,7 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
   const [instructions, setInstructions] = useState<string | null>(null);
   const [contextOpen, setContextOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const initialSourceHandled = useRef(false);
   const mounted = useRef(true);
   const refreshBusy = useRef(false);
 
@@ -90,6 +94,27 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
       const response = await fetch(endpoint, { cache: 'no-store' });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
+      if (
+        mounted.current &&
+        initialSourceUid &&
+        !initialSourceHandled.current
+      ) {
+        initialSourceHandled.current = true;
+        const existing = (data.cards as PlanningCard[]).find(
+          (item) => item.source.uid === initialSourceUid,
+        );
+        if (existing) {
+          setSelectedId(existing.id);
+          setStepId('overview');
+          setError(null);
+        } else if (
+          (data.sources as PlanningSource[]).some(
+            (source) => source.uid === initialSourceUid,
+          )
+        ) {
+          setImporting(true);
+        }
+      }
       if (mounted.current)
         setView((old) => {
           const cards = new Map<string, PlanningCard>(
@@ -108,7 +133,7 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
     } finally {
       refreshBusy.current = false;
     }
-  }, [endpoint, t]);
+  }, [endpoint, initialSourceUid, t]);
   useEffect(() => {
     mounted.current = true;
     const initial = setTimeout(() => void refresh(), 0);
@@ -141,6 +166,9 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
     card.plan?.status !== 'finalized' &&
     !card.actions.length &&
     !card.execution?.runs.length,
+  );
+  const requestedSource = view?.sources.find(
+    (source) => source.uid === initialSourceUid,
   );
 
   function patchDraft(id: string, patch: Partial<Draft>) {
@@ -267,11 +295,11 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
   }
 
   const setup = card && draft && (
-    <div className="space-y-5">
-      <label className="block text-sm">
+    <div className="space-y-3">
+      <label className="block text-xs font-medium">
         {t('Your additional requirements')}
         <Textarea
-          className="mt-2 min-h-28"
+          className="mt-1 min-h-24 resize-none text-sm"
           value={draft.requirements}
           disabled={busy}
           onChange={(event) =>
@@ -319,22 +347,11 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
         disabled={busy}
         accept=".md,.markdown,.txt"
       />
-      <AgentProfileSelector
-        key={card.id}
-        value={draft.profile}
-        disabled={busy}
-        onChange={(profile) => patchDraft(card.id, { profile })}
-      />
-      <p className="text-xs text-muted-foreground">
-        {t(
-          'Uses your local Agent login. Unsupported model settings return an error, without silently changing models.',
-        )}
-      </p>
     </div>
   );
 
   return (
-    <div className="flex min-h-dvh flex-col">
+    <div className="relative flex min-h-dvh flex-col">
       <ProjectModuleHeader
         title={t('Just Do It')}
         description={t(
@@ -352,7 +369,12 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
           </Button>
         }
       />
-      <div className="mx-auto w-full max-w-[1440px] space-y-5 px-5 py-6 lg:px-8">
+      <div
+        className={cn(
+          'w-full space-y-5 px-5 py-6 lg:px-8',
+          card && 'mx-auto max-w-[1440px]',
+        )}
+      >
         {error && (
           <p
             role="alert"
@@ -372,7 +394,7 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
               <p className="text-sm text-muted-foreground">
                 {t('Add a formal Node, then plan with your Agent.')}
               </p>
-              <Button onClick={() => setImporting(true)}>
+              <Button className="ml-auto" onClick={() => setImporting(true)}>
                 <Plus />
                 {t('Add a goal')}
               </Button>
@@ -558,43 +580,48 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
               </p>
             )}
             {running && !scopedBusy ? (
-              <section
-                aria-busy="true"
-                className="mx-auto grid min-h-80 max-w-2xl place-content-center justify-items-center gap-4 rounded-2xl border border-border bg-card p-8"
+              <AgentGraphComposerCard
+                title={
+                  <span className="flex items-center gap-2">
+                    <LoaderCircle className="size-4 animate-spin text-blue-500" />
+                    {t('Preparing your plan…')}
+                  </span>
+                }
+                description={`${card.run?.profile.agent === 'codex' ? 'Codex' : 'Claude'} · ${t('Agent running')}`}
               >
-                <LoaderCircle className="size-7 animate-spin text-blue-500" />
-                <h2 className="text-lg font-semibold">
-                  {t('Preparing your plan…')}
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  {card.run?.profile.agent === 'codex' ? 'Codex' : 'Claude'} ·{' '}
-                  {t('Agent running')}
-                </p>
                 <Button
+                  className="w-full"
                   variant="outline"
                   disabled={pending}
                   onClick={() => command('cancel')}
                 >
                   {t('Cancel')}
                 </Button>
-              </section>
+              </AgentGraphComposerCard>
             ) : !card.plan ? (
-              <section className="mx-auto max-w-2xl space-y-5 rounded-2xl border border-border bg-card p-6">
-                <Sparkles className="size-6" />
-                <h2 className="text-xl font-semibold">{t('Start planning')}</h2>
-                <p className="text-sm text-muted-foreground">
-                  {t(
-                    'This goal is here. Nothing has been planned or started yet.',
-                  )}
-                </p>
+              <AgentGraphComposerCard
+                title={
+                  <span className="flex items-center gap-2">
+                    <Sparkles className="size-4 text-muted-foreground" />
+                    {t('Start planning')}
+                  </span>
+                }
+                description={t(
+                  'This goal is here. Nothing has been planned or started yet.',
+                )}
+              >
                 {setup}
-                <Button
-                  disabled={busy || dependencyReview.length > 0}
-                  onClick={() => void generate(null)}
-                >
-                  {t('Start planning')}
-                </Button>
-              </section>
+                <div className="mt-3">
+                  <AgentRunControls
+                    key={card.id}
+                    value={draft!.profile}
+                    onChange={(profile) => patchDraft(card.id, { profile })}
+                    disabled={busy || dependencyReview.length > 0}
+                    actionLabel="Start planning"
+                    onRun={() => void generate(null)}
+                  />
+                </div>
+              </AgentGraphComposerCard>
             ) : (
               <section className="space-y-4">
                 <header className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-4">
@@ -835,7 +862,7 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
             <DialogTitle>{t('Delete this Card?')}</DialogTitle>
             <DialogDescription>
               {t(
-                'The Just Do It Card and its unconfirmed draft will move to system Trash. The source Node in What’s Next or Break It Down remains unchanged.',
+                'The Just Do It Card and its unconfirmed draft will move to system Trash. Its upstream source remains unchanged.',
               )}
             </DialogDescription>
           </DialogHeader>
@@ -902,12 +929,14 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
         </DialogContent>
       </Dialog>
       <GoalSourcePicker
+        key={requestedSource?.module ?? 'default'}
         open={importing}
         onOpenChange={setImporting}
         sources={view?.sources ?? []}
         cards={view?.cards ?? []}
         pending={pending}
         error={error}
+        initialModule={requestedSource?.module}
         onChoose={async (source) => {
           const existing = view?.cards.find(
             (item) => item.source.uid === source.uid,

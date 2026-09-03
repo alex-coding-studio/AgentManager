@@ -197,7 +197,9 @@ one-session, or one-PR correspondence.
 ## Goal dashboard and source association — settled
 
 The outer workspace is an operations dashboard, not a third product relationship
-graph. It manages goals explicitly added from What's Next or Break It Down.
+graph. It manages goals explicitly added from What's Next Discovery, Break It
+Down, or What to Do Delivery Contracts. Product Design Features enter Just Do
+It only through What to Do.
 Each goal Card summarizes its title and purpose, delivery progress, current
 Action/activity, and associated Git work or GitHub PRs. Opening it reveals its
 Plan, completed and remaining Actions, outputs, and verification details, with

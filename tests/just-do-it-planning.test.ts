@@ -18,6 +18,7 @@ import {
   type PlanningCard,
   type StartPlanningInput,
 } from '../lib/just-do-it-planning-service.ts';
+import { unmetPlanningSourceDependencies } from '../lib/planning-source-dependencies.ts';
 import {
   readCardWorklog,
   readCardWorkDocument,
@@ -40,6 +41,8 @@ const uid = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const step1 = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const step2 = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const originUid = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+const foundationUid = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+const deliveryUid = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
 
 async function fixture(t: { after: (fn: () => Promise<void>) => void }) {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'jdi-planning-test-'));
@@ -118,6 +121,49 @@ async function addUnfinishedLineage(project: RegisteredProject) {
   const source = JSON.parse(await readFile(sourceFile, 'utf8'));
   source.relations = { derivedFrom: [originUid], dependsOn: [] };
   await writeFile(sourceFile, JSON.stringify(source));
+}
+
+async function addDeliveryMap(project: RegisteredProject) {
+  const runId = 'RUN-11111111-2222-4333-8444-555555555555';
+  const contracts = [
+    {
+      id: 'NODE-eeeeeeee',
+      uid: foundationUid,
+      title: 'Shared search boundary',
+      summary: 'The shared search contract.',
+      relations: { derivedFrom: [], dependsOn: [] },
+      dependsOn: [],
+      outputPath: `what-to-do/runs/${runId}/contracts/NODE-eeeeeeee/output.md`,
+    },
+    {
+      id: 'NODE-ffffffff',
+      uid: deliveryUid,
+      title: 'Search experience',
+      summary: 'The dependent search experience.',
+      relations: { derivedFrom: [], dependsOn: [foundationUid] },
+      dependsOn: ['NODE-eeeeeeee'],
+      outputPath: `what-to-do/runs/${runId}/contracts/NODE-ffffffff/output.md`,
+    },
+  ];
+  for (const contract of contracts) {
+    const file = path.join(project.planningPath, contract.outputPath);
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, `# ${contract.title}\n\n${contract.summary}\n`);
+  }
+  const directory = path.join(project.planningPath, 'what-to-do');
+  await mkdir(directory, { recursive: true });
+  await writeFile(
+    path.join(directory, 'current-map.json'),
+    `${JSON.stringify({
+      schemaVersion: 1,
+      runId,
+      updatedAt: '2026-09-02T00:00:00.000Z',
+      sourceUids: [],
+      contracts,
+      sourceClaims: [],
+      sourceSnapshots: [],
+    })}\n`,
+  );
 }
 
 function controlled() {
@@ -285,6 +331,52 @@ void test('imports accepted formal Nodes idempotently and never imports Candidat
   assert.equal(
     (await service.read(project, uid)).source.title,
     card.source.title,
+  );
+});
+
+void test('imports only available Delivery Contracts and preserves hard dependencies', async (t) => {
+  const project = await fixture(t);
+  await addDeliveryMap(project);
+  const { service } = controlled();
+  const sources = await listPlanningSources(project);
+  const foundation = sources.find((source) => source.uid === foundationUid)!;
+  const delivery = sources.find((source) => source.uid === deliveryUid)!;
+  assert.equal(foundation.module, 'what-to-do');
+  assert.deepEqual(delivery.dependsOn, [foundationUid]);
+  await assert.rejects(
+    service.importSource(project, 'what-to-do', deliveryUid),
+    /Complete Shared search boundary/,
+  );
+  const foundationCard = await service.importSource(
+    project,
+    'what-to-do',
+    foundationUid,
+  );
+  assert.match(
+    await readCardWorkDocument(
+      path.join(project.planningPath, 'implementation/cards'),
+      foundationCard.id,
+      foundationCard.revision,
+      'source.md',
+    ),
+    /Shared search boundary/,
+  );
+  const deliveredFoundation = {
+    ...foundationCard,
+    actions: [
+      {
+        id: step1,
+        title: 'Deliver foundation',
+        input: 'Contract',
+        output: 'Delivered foundation',
+        validation: 'Verify delivery',
+      },
+    ],
+    execution: { acceptedActionIds: [step1], runs: [] },
+  } as PlanningCard;
+  assert.deepEqual(
+    unmetPlanningSourceDependencies(delivery, [deliveredFoundation], sources),
+    [],
   );
 });
 

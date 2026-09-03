@@ -10,9 +10,10 @@ import {
 } from './planning-paths.ts';
 import { assertCardUuid } from './just-do-it-harness.ts';
 import { primarySourceResourcePaths } from './agent-graph-context-workspace.ts';
+import { readWhatToDoCurrentMap } from './what-to-do-storage.ts';
 
 export type PlanningSource = {
-  module: 'whats-next' | 'task-graph';
+  module: 'whats-next' | 'task-graph' | 'what-to-do';
   id: string;
   uid: string;
   title: string;
@@ -105,6 +106,20 @@ export async function listPlanningSources(
           : outputs.filter((ref) => typeof ref === 'string'),
       });
     }
+  }
+  const deliveryMap = await readWhatToDoCurrentMap(project);
+  for (const contract of deliveryMap?.contracts ?? []) {
+    assertCardUuid(contract.uid);
+    sources.push({
+      module: 'what-to-do',
+      id: contract.id,
+      uid: contract.uid,
+      title: contract.title,
+      summary: contract.summary,
+      dependsOn: [...contract.relations.dependsOn],
+      derivedFrom: [],
+      outputPaths: [contract.outputPath],
+    });
   }
   return sources;
 }
