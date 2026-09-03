@@ -677,6 +677,31 @@ void test('every primary module uses one compact Project Header structure', asyn
     'utf8',
   );
   assert.doesNotMatch(justDoIt, /Open preview/);
+  assert.match(justDoIt, /<ModuleContextTrigger/);
+  const contextTrigger = await readFile(
+    new URL('../components/module-context-trigger.tsx', import.meta.url),
+    'utf8',
+  );
+  assert.match(
+    contextTrigger,
+    /buttonVariants\(\{ variant: 'outline', size: 'sm' \}\)/,
+  );
+  assert.match(contextTrigger, /<span>\{t\('Context'\)\}<\/span>/);
+  const instructionsDialog = await readFile(
+    new URL('../components/module-instructions-dialog.tsx', import.meta.url),
+    'utf8',
+  );
+  assert.match(instructionsDialog, /<ModuleContextTrigger/);
+  const decomposition = await readFile(
+    new URL('../components/task-decomposition-workspace.tsx', import.meta.url),
+    'utf8',
+  );
+  assert.match(decomposition, /<ModuleContextTrigger/);
+  const delivery = await readFile(
+    new URL('../components/what-to-do-workspace.tsx', import.meta.url),
+    'utf8',
+  );
+  assert.match(delivery, /what-to-do-context/);
 });
 
 void test('Product Context is a system-managed read-only catalog', async () => {
@@ -898,6 +923,36 @@ void test('the standard Composer Shell keeps input above its toolbar', async () 
     assert.match(source, /<ContextAttachmentPicker\s+embedded/, file);
     assert.match(source, /<AgentComposerAttachments/, file);
   }
+});
+
+void test('Just Do It separates the Task coordinator from the Action Composer', async () => {
+  const workspace = await readFile(
+    new URL('../components/just-do-it-live-workspace.tsx', import.meta.url),
+    'utf8',
+  );
+  assert.match(workspace, /coordinationProfile: PlanningProfile/);
+  assert.match(workspace, /value=\{draft!\.coordinationProfile\}/);
+  assert.match(workspace, /label="Coordination profile"/);
+  assert.match(workspace, /coordinatorProfile=\{draft!\.coordinationProfile\}/);
+  assert.match(workspace, /folders=\{view\.folders\}/);
+  assert.doesNotMatch(workspace, /Last run usage/);
+
+  const action = await readFile(
+    new URL('../components/just-do-it-action.tsx', import.meta.url),
+    'utf8',
+  );
+  assert.match(action, /<AgentGraphComposerCard/);
+  assert.match(action, /<AgentComposerShell/);
+  assert.match(action, /<AgentRunControls/);
+  assert.match(action, /<ContextAttachmentPicker/);
+  assert.match(action, /<AgentComposerAttachments/);
+  assert.match(action, /contextRefs/);
+  assert.match(action, /files: await Promise\.all/);
+  assert.match(action, /label="Execution profile"/);
+  assert.match(action, /<AgentGraphRunningCard/);
+  assert.match(action, /coordination: \{ profile: coordinatorProfile \}/);
+  assert.doesNotMatch(action, /data-action-controls/);
+  assert.doesNotMatch(action, /setCoordinatorProfile/);
 });
 
 void test('Latest Response Markdown uses one standard reader shell and close control', async () => {

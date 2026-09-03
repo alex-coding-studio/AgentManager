@@ -258,6 +258,72 @@ void test('execution cannot start from a Delivery Contract that is no longer cur
   assert.equal(calls.length, 0);
 });
 
+void test('Action supplemental Product Context and Markdown become validated request resources', async (t) => {
+  const { project, store, service, calls, input } = await fixture(t);
+  const contextPath = 'context/research/notes.md';
+  await mkdir(path.join(project.planningPath, 'context/research'), {
+    recursive: true,
+  });
+  await writeFile(
+    path.join(project.planningPath, contextPath),
+    '# Research\n\nKeep search local.',
+  );
+  await service.start(project, {
+    ...input,
+    contextRefs: [contextPath],
+    files: [{ name: 'constraints.md', content: '# Constraint\n\nUse Swift.' }],
+  });
+  const contextResource = calls[0].request.context.resources.find((resource) =>
+    resource.description.startsWith('Supplemental Product Context:'),
+  );
+  assert.equal(
+    contextResource?.ref,
+    path.join(project.planningPath, contextPath),
+  );
+  const uploadedResource = calls[0].request.context.resources.find(
+    (resource) =>
+      resource.description === 'Supplemental Markdown: constraints.md',
+  );
+  assert.ok(uploadedResource);
+  assert.equal(
+    await readFile(uploadedResource.ref, 'utf8'),
+    '# Constraint\n\nUse Swift.',
+  );
+  calls[0].reject(new Error('Fixture finished'));
+  await settled(store, project);
+});
+
+void test('Action supplemental input rejects unsupported files before dispatch', async (t) => {
+  const { project, service, calls, input } = await fixture(t);
+  await assert.rejects(
+    service.start(project, {
+      ...input,
+      files: [{ name: 'notes.txt', content: 'Not Markdown.' }],
+    }),
+    /Invalid execution resources/,
+  );
+  assert.equal(calls.length, 0);
+});
+
+void test('Action supplemental input rejects malformed collections and Task Execution self-context', async (t) => {
+  const { project, card, service, calls, input } = await fixture(t);
+  await assert.rejects(
+    service.start(project, {
+      ...input,
+      files: {} as never,
+    }),
+    /Invalid execution resources/,
+  );
+  await assert.rejects(
+    service.start(project, {
+      ...input,
+      contextRefs: [card.planRef!],
+    }),
+    /no longer available/,
+  );
+  assert.equal(calls.length, 0);
+});
+
 void test('coding output persists, feedback creates another round, and only user acceptance unlocks the next Action', async (t) => {
   const { project, store, service, calls, input } = await fixture(t);
   await savePlanningInstructions(project, 'Use local development rules.');

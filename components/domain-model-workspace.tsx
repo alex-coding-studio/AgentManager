@@ -278,7 +278,6 @@ export function DomainModelWorkspace({
             endpoint={`/api/projects/${projectId}/domain-model-context`}
             title="Domain Model instructions"
             description="Applies to new Domain Model requests. Running requests keep their original instructions. Leave blank to use only the Harness defaults."
-            triggerLabel="Module instructions"
           />
         }
       />
@@ -332,9 +331,7 @@ export function DomainModelWorkspace({
                     '{count} selected model entries will be treated as primary context.',
                     { count: selectedContext.length },
                   )
-                : t(
-                    'Describe an entity, field, relationship or rule to add or change.',
-                  )
+                : undefined
             }
           >
             {selectedContext.length ? (

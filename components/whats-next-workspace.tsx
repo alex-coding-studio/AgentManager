@@ -1071,6 +1071,7 @@ function WhatsNextCanvas({
               value={intention}
               onChange={changeIntention}
               label="Exploration purpose"
+              showDescription={false}
             />
           </div>
           {startRefs.length + startFiles.length > 0 ? (
@@ -1265,11 +1266,6 @@ function WhatsNextCanvas({
       {combineIds.length >= 1 ? (
         <AgentGraphComposerCard
           title={`${combineIds.length} ${combineIds.length === 1 ? t('card') : t('cards')} ${t('selected')}`}
-          description={
-            combineNodes[0]?.role === 'start'
-              ? t('Choose what this Source should generate.')
-              : t('Choose what these cards should become.')
-          }
         >
           <div className="grid grid-cols-2 gap-2">
             <AgentGraphIntentionSelect
@@ -1284,13 +1280,6 @@ function WhatsNextCanvas({
               value={motion}
               onChange={setMotion}
             />
-            <p className="col-span-2 text-[10px] leading-4 text-muted-foreground">
-              {t(
-                whatsNextIntentionRegistry.profiles.find(
-                  (profile) => profile.id === intention,
-                )?.description ?? '',
-              )}
-            </p>
           </div>
 
           {intention === 'product-design-completion' ? (

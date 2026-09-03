@@ -7,6 +7,9 @@ export function isUiLanguage(value: unknown): value is UiLanguage {
 export const chineseUi: Record<string, string> = {
   'Product Discovery & Design': '产品探索与设计',
   'Product Discovery & Design instructions': '产品探索与设计指令',
+  'Delivery Planning instructions': '交付规划指令',
+  'Applies to new Delivery Planning requests. Running requests keep their original instructions. Leave blank to use only the Harness defaults.':
+    '适用于新的交付规划请求。正在运行的请求继续使用原有指令；留空则只使用系统默认规则。',
   'Scope Decomposition': '范围分解',
   'Scope Decomposition canvas': '范围分解画布',
   'Scope Decomposition workspace': '范围分解工作区',
@@ -730,6 +733,7 @@ export const chineseUi: Record<string, string> = {
   'Read {title} context': '阅读 {title} 上下文',
   'MVP Prototype': 'MVP 原型',
   'Product Design': '产品设计',
+  Discovery: '探索',
   'Domain Model': '领域模型',
   'Task Breakdown': '任务分解',
   'Task Execution': '任务执行',
@@ -919,6 +923,8 @@ export const chineseUi: Record<string, string> = {
   'Optional Resources for this Agent Run only':
     '可选资料，仅用于本次 Agent 运行',
   'Optional sources': '可选资料',
+  'Only Markdown Resources can be added right now.':
+    '目前只能添加 Markdown 资料。',
   'Out Of Scope': '范围外',
   Outputs: '输出',
   'Previous User Input': '上一轮用户输入',

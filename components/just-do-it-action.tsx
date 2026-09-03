@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type CSSProperties } from 'react';
+import { useState } from 'react';
 import {
   unverifiedDeliveryRefs,
   hasUnsupportedAppArtifact,
@@ -16,10 +16,18 @@ import {
   RefreshCw,
   FolderOpen,
   GitBranch,
-  SlidersHorizontal,
 } from 'lucide-react';
-import { ActionRunProgress } from '@/components/action-run-progress';
-import { AgentProfileSelector } from '@/components/agent-profile-selector';
+import {
+  AgentComposerAttachments,
+  AgentComposerShell,
+} from '@/components/agent-composer-shell';
+import { AgentGraphComposerCard } from '@/components/agent-graph-composer-card';
+import { AgentGraphRunningCard } from '@/components/agent-graph-running-card';
+import { AgentRunControls } from '@/components/agent-run-controls';
+import {
+  ContextAttachmentPicker,
+  contextAttachmentTitle,
+} from '@/components/context-attachment-picker';
 import {
   Dialog,
   DialogContent,
@@ -34,33 +42,32 @@ import type { PlanningCard } from '@/lib/just-do-it-planning-service';
 import type { ActionContract } from '@/lib/just-do-it-harness';
 import type { AgentProfile } from '@/lib/agent-profile';
 import type { GitHubPullRequest } from '@/lib/github-delivery';
+import type { ContextBrowserFolder } from '@/lib/product-context';
 
 export function JustDoItAction({
   projectId,
   card,
   action,
+  coordinatorProfile,
+  folders,
   onChange,
 }: {
   projectId: string;
   card: PlanningCard;
   action: ActionContract;
+  coordinatorProfile: AgentProfile;
+  folders: ContextBrowserFolder[];
   onChange: (card: PlanningCard) => void;
 }) {
   const { t } = useUiText();
   const [instruction, setInstruction] = useState('');
-  const [editingFeedback, setEditingFeedback] = useState(false);
-  const [controlPanel, setControlPanel] = useState<
-    'feedback' | 'settings' | null
-  >(null);
+  const [contextRefs, setContextRefs] = useState<string[]>([]);
+  const [files, setFiles] = useState<File[]>([]);
+  const [folderPath, setFolderPath] = useState(folders[0]?.path ?? '');
   const [profile, setProfile] = useState<AgentProfile>(
     card.execution?.profile ??
       card.execution?.runs.at(-1)?.profile ??
       card.run?.profile ?? { agent: 'codex', model: '', effort: '' },
-  );
-  const [coordinatorProfile, setCoordinatorProfile] = useState<AgentProfile>(
-    card.execution?.coordinationSettings?.profile ??
-      card.run?.profile ??
-      profile,
   );
   const [pending, setPending] = useState(false);
   const [preparingAcceptance, setPreparingAcceptance] = useState(false);
@@ -110,6 +117,18 @@ export function JustDoItAction({
     setPending(true);
     setError('');
     try {
+      const supplementalInput =
+        operation === 'start'
+          ? {
+              contextRefs,
+              files: await Promise.all(
+                files.map(async (file) => ({
+                  name: file.name,
+                  content: await file.text(),
+                })),
+              ),
+            }
+          : {};
       const response = await fetch(`/api/projects/${projectId}/execution`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -125,15 +144,16 @@ export function JustDoItAction({
           initializeRepository,
           criterionId,
           note: decisionNote,
+          ...supplementalInput,
         }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
       onChange(data.card);
       if (operation === 'start') {
-        setEditingFeedback(false);
         setInstruction('');
-        setControlPanel(null);
+        setContextRefs([]);
+        setFiles([]);
       }
       if (operation === 'accept') setAcceptancePreview(null);
       if (operation === 'cancel') setStopPreview(null);
@@ -434,27 +454,6 @@ export function JustDoItAction({
                   </div>
                 )}
               </details>
-              {run.status === 'running' && <ActionRunProgress run={run} />}
-              {run.status === 'running' && (
-                <div className="mt-4 flex items-center gap-3">
-                  <LoaderCircle className="size-4 animate-spin text-blue-500" />
-                  <span className="text-sm">{t('Agent running')}</span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={pending}
-                    onClick={() => {
-                      setError('');
-                      setStopPreview({
-                        runId: run.id,
-                        revision: card.revision,
-                      });
-                    }}
-                  >
-                    {t('Stop execution')}
-                  </Button>
-                </div>
-              )}
               {run.error && !run.evidenceErrors && (
                 <p className="mt-3 text-sm text-destructive">{run.error}</p>
               )}
@@ -813,231 +812,160 @@ export function JustDoItAction({
           ))}
         </div>
       )}
-      {!accepted && current?.id === action.id && !history.length && (
-        <label className="block text-sm">
-          <span className="sr-only">{t('Additional Action instructions')}</span>
-          <Textarea
-            value={instruction}
-            onChange={(event) => setInstruction(event.target.value)}
-            maxLength={20000}
-            disabled={pending || running}
-            placeholder={t(
-              'Add requirements for this step, or leave empty to follow the confirmed Plan.',
-            )}
-          />
-        </label>
-      )}
-      {!accepted && current?.id === action.id && (
-        <div
-          data-action-controls
-          style={
-            {
-              colorScheme: 'dark',
-              '--background': '#18181b',
-              '--foreground': '#fafafa',
-              '--primary': '#fafafa',
-              '--primary-foreground': '#18181b',
-              '--secondary': '#3f3f46',
-              '--secondary-foreground': '#fafafa',
-              '--muted': '#27272a',
-              '--muted-foreground': '#a1a1aa',
-              '--border': '#52525b',
-              '--input': '#52525b',
-              '--ring': '#a1a1aa',
-            } as CSSProperties
+      {!accepted &&
+      current?.id === action.id &&
+      latest?.status === 'running' ? (
+        <AgentGraphRunningCard
+          className="fixed z-30"
+          agent={latest.profile.agent}
+          startedAt={latest.startedAt}
+          activity={
+            latest.progress ? [{ summary: latest.progress.summary }] : []
           }
-          className="sticky bottom-3 z-20 rounded-xl border border-border bg-background text-foreground shadow-xl"
-        >
-          <div
-            data-control-bar
-            className="flex min-h-16 flex-wrap items-center justify-between gap-3 p-3"
-          >
-            <div className="min-w-0 text-sm">
-              <p className="font-medium">
-                {t(
-                  editingFeedback ? 'Enter change instructions' : currentStatus,
-                )}
-              </p>
-              {!editingFeedback && latest?.acceptanceChecklist && (
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {t('Required checks')} ·{' '}
-                  {
-                    requiredAssessment.items.filter(
-                      (item) => item.status === 'passed',
-                    ).length
-                  }
-                  /{requiredAssessment.items.length}
-                </p>
-              )}
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
+          fallback="Preparing coordinated execution."
+          cancelDisabled={pending}
+          onCancel={() => {
+            setError('');
+            setStopPreview({
+              runId: latest.id,
+              revision: card.revision,
+            });
+          }}
+        />
+      ) : !accepted && current?.id === action.id ? (
+        <AgentGraphComposerCard
+          className="fixed z-30"
+          title={t(currentStatus)}
+          description={
+            latest?.acceptanceChecklist
+              ? `${t('Required checks')} · ${requiredAssessment.items.filter((item) => item.status === 'passed').length}/${requiredAssessment.items.length}`
+              : undefined
+          }
+          action={
+            latest?.status !== 'running' && latest?.result ? (
               <Button
                 size="sm"
-                variant={controlPanel === 'settings' ? 'secondary' : 'ghost'}
-                aria-expanded={controlPanel === 'settings'}
-                aria-controls={`controls-${action.id}`}
-                onClick={() =>
-                  setControlPanel(
-                    controlPanel === 'settings'
-                      ? editingFeedback
-                        ? 'feedback'
-                        : null
-                      : 'settings',
-                  )
+                variant={
+                  hasReviewableReport(latest) && requiredPassed
+                    ? 'default'
+                    : 'outline'
                 }
+                disabled={!enabled || preparingAcceptance}
+                onClick={() => void prepareAcceptance()}
               >
-                <SlidersHorizontal className="size-4" />
-                <span className="text-left text-xs">
-                  <span className="block">
-                    {t('Coordinator')}: {coordinatorProfile.agent} ·{' '}
-                    {coordinatorProfile.model || t('Agent default')} ·{' '}
-                    {coordinatorProfile.effort || t('Agent default')}
-                  </span>
-                  <span className="block">
-                    {t('Worker')}: {profile.agent} ·{' '}
-                    {profile.model || t('Agent default')} ·{' '}
-                    {profile.effort || t('Agent default')}
-                  </span>
-                </span>
+                {preparingAcceptance ? (
+                  <LoaderCircle className="animate-spin" />
+                ) : (
+                  <Check />
+                )}
+                {t('Accept this output')}
               </Button>
-              {editingFeedback ? (
-                <>
-                  <Button
-                    variant="outline"
-                    disabled={pending}
-                    onClick={() => {
-                      setEditingFeedback(false);
-                      setControlPanel(null);
-                      setInstruction('');
-                      setError('');
-                    }}
-                  >
-                    {t('Cancel changes')}
-                  </Button>
-                  <Button
-                    disabled={!enabled || !instruction.trim()}
-                    onClick={() => void send('start')}
-                  >
-                    {t('Confirm changes')}
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <Button
-                    variant={
-                      hasReviewableReport(latest) && requiredPassed
-                        ? 'outline'
-                        : 'default'
+            ) : undefined
+          }
+        >
+          {error ? (
+            <p role="alert" className="mb-3 text-xs text-destructive">
+              {error}
+            </p>
+          ) : null}
+          <AgentComposerAttachments
+            className="mb-3"
+            label={t('Optional sources')}
+            items={[
+              ...contextRefs.map((ref) => ({
+                id: ref,
+                label: contextAttachmentTitle(folders, ref),
+                onRemove: () =>
+                  setContextRefs((current) =>
+                    current.filter((item) => item !== ref),
+                  ),
+              })),
+              ...files.map((file, index) => ({
+                id: `${file.name}:${index}`,
+                label: file.name,
+                onRemove: () =>
+                  setFiles((current) =>
+                    current.filter((_, item) => item !== index),
+                  ),
+              })),
+            ]}
+          />
+          <AgentComposerShell
+            controls={
+              <AgentRunControls
+                extraInfo={
+                  <ContextAttachmentPicker
+                    embedded
+                    folders={folders}
+                    folderPath={folderPath}
+                    onFolderPath={setFolderPath}
+                    refs={contextRefs}
+                    onToggleRef={(ref) =>
+                      setContextRefs((current) =>
+                        current.includes(ref)
+                          ? current.filter((item) => item !== ref)
+                          : [...current, ref],
+                      )
                     }
-                    disabled={!enabled}
-                    onClick={() => {
-                      if (history.length) {
-                        setError('');
-                        setEditingFeedback(true);
-                        setControlPanel('feedback');
-                      } else {
-                        void send('start');
-                      }
+                    files={files}
+                    onAddFiles={(candidates) => {
+                      const markdown = candidates.filter((file) =>
+                        /\.(md|markdown)$/i.test(file.name),
+                      );
+                      if (markdown.length !== candidates.length)
+                        setError(
+                          t('Only Markdown Resources can be added right now.'),
+                        );
+                      setFiles((current) =>
+                        [...current, ...markdown].slice(0, 20),
+                      );
                     }}
-                  >
-                    {t(
-                      history.length
-                        ? 'Continue this Action'
-                        : 'Start this Action',
-                    )}
-                  </Button>
-                  {latest && latest.status !== 'running' && latest.result && (
-                    <Button
-                      variant={
-                        hasReviewableReport(latest) && requiredPassed
-                          ? 'default'
-                          : 'outline'
-                      }
-                      disabled={!enabled || preparingAcceptance}
-                      onClick={() => void prepareAcceptance()}
-                    >
-                      {preparingAcceptance ? (
-                        <LoaderCircle className="animate-spin" />
-                      ) : (
-                        <Check />
-                      )}
-                      {t('Accept this output')}
-                    </Button>
-                  )}
-                </>
+                    onRemoveFile={(index) =>
+                      setFiles((current) =>
+                        current.filter((_, item) => item !== index),
+                      )
+                    }
+                    label={t('Optional sources')}
+                    disabled={pending || running}
+                  />
+                }
+                extraInfoCount={contextRefs.length + files.length}
+                extraInfoLabel="Optional sources"
+                value={profile}
+                onChange={setProfile}
+                disabled={
+                  !enabled || (history.length > 0 && !instruction.trim())
+                }
+                running={pending}
+                label="Execution profile"
+                actionLabel={
+                  history.length ? 'Continue this Action' : 'Start this Action'
+                }
+                onRun={() => void send('start')}
+              />
+            }
+          >
+            <Textarea
+              value={instruction}
+              onChange={(event) => setInstruction(event.target.value)}
+              maxLength={20000}
+              disabled={pending || running}
+              rows={4}
+              className="min-h-24 resize-none text-sm"
+              placeholder={t(
+                history.length
+                  ? 'Tell the Agent what to change or clarify…'
+                  : 'Add requirements for this step, or leave empty to follow the confirmed Plan.',
               )}
-            </div>
-          </div>
-          {controlPanel && (
-            <div
-              id={`controls-${action.id}`}
-              className="max-h-[45dvh] space-y-3 overflow-y-auto rounded-b-xl border-t border-border bg-muted/50 p-4"
-            >
-              {controlPanel === 'feedback' ? (
-                <label className="block text-sm">
-                  <span className="sr-only">
-                    {t(
-                      history.length
-                        ? 'Feedback for this Action'
-                        : 'Additional Action instructions',
-                    )}
-                  </span>
-                  <Textarea
-                    value={instruction}
-                    onChange={(event) => setInstruction(event.target.value)}
-                    maxLength={20000}
-                    disabled={pending || running}
-                    placeholder={t(
-                      'Add requirements for this step, or leave empty to follow the confirmed Plan.',
-                    )}
-                  />
-                </label>
-              ) : (
-                <>
-                  <div>
-                    <h4 className="text-sm font-medium">
-                      {t('Execution settings')}
-                    </h4>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {t(
-                        'Applies to the next execution, not the recorded round.',
-                      )}
-                    </p>
-                  </div>
-                  <h5 className="text-xs font-medium">{t('Coordinator')}</h5>
-                  <AgentProfileSelector
-                    value={coordinatorProfile}
-                    onChange={setCoordinatorProfile}
-                    disabled={pending || running}
-                    label="Coordination profile"
-                  />
-                  <h5 className="text-xs font-medium">{t('Worker')}</h5>
-                  <AgentProfileSelector
-                    value={profile}
-                    onChange={setProfile}
-                    disabled={pending || running}
-                    label="Execution profile"
-                  />
-                  {profile.agent === 'codex' && (
-                    <p className="text-xs text-muted-foreground">
-                      {t(
-                        'Codex execution follows your local Full Access or read-only choice. Full Access relies on worktree and PR discipline, not an OS write barrier around main.',
-                      )}
-                    </p>
-                  )}
-                  {profile.agent === 'claude' && (
-                    <p className="text-xs text-muted-foreground">
-                      {t(
-                        'Claude can edit project files; commands requiring approval may return blocked in this non-interactive run.',
-                      )}
-                    </p>
-                  )}
-                </>
+              aria-label={t(
+                history.length
+                  ? 'Feedback for this Action'
+                  : 'Additional Action instructions',
               )}
-            </div>
-          )}
-        </div>
-      )}
+            />
+          </AgentComposerShell>
+        </AgentGraphComposerCard>
+      ) : null}
       {card.execution?.workspace &&
         !card.execution.acceptedActionIds.length &&
         latest &&

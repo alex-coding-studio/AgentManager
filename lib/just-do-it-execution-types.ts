@@ -64,6 +64,8 @@ export type ExecuteActionInput = {
   expectedRevision: number;
   instruction: string;
   profile: AgentProfile;
+  contextRefs?: string[];
+  files?: Array<{ name: string; content: string }>;
   initializeRepository?: boolean;
   coordination?: CoordinationSettings;
 };

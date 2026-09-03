@@ -25,6 +25,7 @@ void test('module names translate without renaming dependency terminology', () =
     assert.equal(translateUi('en', english), english);
     assert.equal(translateUi('zh-CN', english), chinese);
   }
+  assert.equal(translateUi('zh-CN', 'Discovery'), '探索');
 });
 
 void test('built-in Agent Graph profiles and effort levels are localized', () => {

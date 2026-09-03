@@ -17,6 +17,7 @@ import {
   LatestResponseOptions,
 } from '@/components/latest-response';
 import { MarkdownReaderDialog } from '@/components/markdown-reader-dialog';
+import { ModuleInstructionsDialog } from '@/components/module-instructions-dialog';
 import { ProjectModuleHeader } from '@/components/project-module-header';
 import { ProductDesignFeaturePicker } from '@/components/product-design-feature-picker';
 import { TaskGraphCanvas } from '@/components/task-graph-canvas';
@@ -320,6 +321,13 @@ export function WhatToDoWorkspace({
         description={t(
           'Turn accepted Product Design into deliverable Contracts.',
         )}
+        actions={
+          <ModuleInstructionsDialog
+            endpoint={`/api/projects/${projectId}/what-to-do-context`}
+            title="Delivery Planning instructions"
+            description="Applies to new Delivery Planning requests. Running requests keep their original instructions. Leave blank to use only the Harness defaults."
+          />
+        }
       />
       <section className="relative min-h-0 flex-1 overflow-hidden">
         <TaskGraphCanvas

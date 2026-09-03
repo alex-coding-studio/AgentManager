@@ -287,7 +287,9 @@ async function resolveClarificationRun(
     latest.id !== clarificationRunId ||
     latest.status !== 'succeeded' ||
     latest.result?.outcome !== 'clarification' ||
-    ![1, WHAT_TO_DO_HARNESS_REVISION].includes(latest.request.harness.revision)
+    ![1, 2, WHAT_TO_DO_HARNESS_REVISION].includes(
+      latest.request.harness.revision,
+    )
   )
     throw new PublicApiError(
       'The Clarification is no longer the current What to Do request.',

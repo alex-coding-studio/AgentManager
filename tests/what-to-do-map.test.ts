@@ -6,11 +6,17 @@ import {
   whatToDoContractCandidateId,
   whatToDoCurrentMapPromptView,
 } from '../lib/what-to-do-map.ts';
-import type { WhatToDoHarnessResult } from '../lib/what-to-do-harness.ts';
+import {
+  WHAT_TO_DO_HARNESS_REVISION,
+  type WhatToDoHarnessResult,
+} from '../lib/what-to-do-harness.ts';
 
 const result: Extract<WhatToDoHarnessResult, { outcome: 'map-proposal' }> = {
   schemaVersion: 1,
-  harness: { id: 'praxis.what-to-do', revision: 2 },
+  harness: {
+    id: 'praxis.what-to-do',
+    revision: WHAT_TO_DO_HARNESS_REVISION,
+  },
   request: {
     sessionId: 'SESSION-1',
     requestId: 'RUN-1',
