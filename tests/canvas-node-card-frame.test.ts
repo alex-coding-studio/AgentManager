@@ -935,6 +935,11 @@ void test('Just Do It separates the Task coordinator from the Action Composer', 
   assert.match(workspace, /label="Coordination profile"/);
   assert.match(workspace, /coordinatorProfile=\{draft!\.coordinationProfile\}/);
   assert.match(workspace, /lg:pr-5 lg:pl-8/);
+  assert.match(workspace, /searchParams\.get\('card'\)/);
+  assert.match(workspace, /searchParams\.get\('action'\)/);
+  assert.match(workspace, /params\.set\('card', cardId\)/);
+  assert.match(workspace, /params\.set\('action', actionId\)/);
+  assert.match(workspace, /router\.replace/);
   assert.match(workspace, /folders=\{view\.folders\}/);
   assert.doesNotMatch(workspace, /Last run usage/);
 
