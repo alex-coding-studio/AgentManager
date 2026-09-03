@@ -352,6 +352,7 @@ async function amendClarificationInput(
       ]),
     ],
     files,
+    clarificationContent: clarificationRun.request.content,
   };
 }
 

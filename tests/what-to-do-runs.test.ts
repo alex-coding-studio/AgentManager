@@ -387,6 +387,29 @@ void test('a Clarification Answer amends the frozen request and resumes its Sess
   const clarification = await settled(project, first.id);
   assert.equal(clarification.result?.outcome, 'clarification');
 
+  const featureOutput = path.join(
+    planningPath,
+    'whats-next/nodes/NODE-00000001/output.md',
+  );
+  await writeFile(featureOutput, '# Accepted Feature\n\nChanged meaning.\n');
+  await assert.rejects(
+    startWhatToDoRun(
+      project,
+      {
+        ...input(),
+        instruction: 'Use iOS 26.',
+        clarificationRunId: first.id,
+        sourceUids: [],
+      },
+      control.transport,
+    ),
+    /frozen Clarification Context changed/,
+  );
+  await writeFile(
+    featureOutput,
+    '# Accepted Feature\n\n## Behavior\n\nDeliver this behavior.\n',
+  );
+
   const second = await startWhatToDoRun(
     project,
     {
