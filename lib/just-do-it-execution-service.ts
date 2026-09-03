@@ -41,10 +41,12 @@ import { lstat, readFile } from 'node:fs/promises';
 import { checkpointWorkspace } from './just-do-it-git.ts';
 import { validateAgentProfile } from './agent-profile.ts';
 import {
+  assertCurrentPlanningCardSource,
   planningService,
   readPlanningInstructions,
   type PlanningCard,
 } from './just-do-it-planning-service.ts';
+import { withDeliveryState } from './delivery-state-lock.ts';
 import {
   appendCardWorkRecord,
   readCardWorklog,
@@ -423,7 +425,7 @@ export function createExecutionService(
     }
   }
 
-  async function start(project: Project, input: ExecuteActionInput) {
+  async function startUnlocked(project: Project, input: ExecuteActionInput) {
     assertCardUuid(input.cardId);
     assertCardUuid(input.actionId);
     validateAgentProfile(input.profile);
@@ -460,6 +462,7 @@ export function createExecutionService(
           );
       }
       let card = await store.read(project, input.cardId);
+      await assertCurrentPlanningCardSource(project, card);
       if (card.revision !== input.expectedRevision)
         throw new PublicApiError(
           'Card changed. Reload before trying again.',
@@ -1552,6 +1555,10 @@ export function createExecutionService(
       if (active.get(project.rootPath) === reservation)
         active.delete(project.rootPath);
     }
+  }
+
+  async function start(project: Project, input: ExecuteActionInput) {
+    return withDeliveryState(project, () => startUnlocked(project, input));
   }
 
   return {

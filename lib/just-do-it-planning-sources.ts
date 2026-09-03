@@ -1,4 +1,5 @@
 import { readFile, readdir } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import type { RegisteredProject } from './project-registry.ts';
 import {
@@ -10,9 +11,11 @@ import {
 } from './planning-paths.ts';
 import { assertCardUuid } from './just-do-it-harness.ts';
 import { primarySourceResourcePaths } from './agent-graph-context-workspace.ts';
+import { readWhatToDoCurrentMap } from './what-to-do-storage.ts';
+import type { WhatToDoDeliveryContract } from './what-to-do-map.ts';
 
 export type PlanningSource = {
-  module: 'whats-next' | 'task-graph';
+  module: 'whats-next' | 'task-graph' | 'what-to-do';
   id: string;
   uid: string;
   title: string;
@@ -20,7 +23,38 @@ export type PlanningSource = {
   dependsOn: string[];
   derivedFrom?: string[];
   outputPaths: string[];
+  version?: string;
 };
+
+export function deliveryContractPlanningSource(
+  contract: WhatToDoDeliveryContract,
+): PlanningSource {
+  const source: PlanningSource = {
+    module: 'what-to-do',
+    id: contract.id,
+    uid: contract.uid,
+    title: contract.title,
+    summary: contract.summary,
+    dependsOn: [...contract.relations.dependsOn],
+    derivedFrom: [],
+    outputPaths: [contract.outputPath],
+  };
+  source.version = createHash('sha256')
+    .update(
+      JSON.stringify({
+        module: source.module,
+        id: source.id,
+        uid: source.uid,
+        title: source.title,
+        summary: source.summary,
+        dependsOn: source.dependsOn,
+        derivedFrom: source.derivedFrom,
+        outputPaths: source.outputPaths,
+      }),
+    )
+    .digest('hex');
+  return source;
+}
 
 export async function readPlanningFile(
   project: RegisteredProject,
@@ -71,6 +105,11 @@ export async function listPlanningSources(
       );
       if (node.role !== 'node' || !['accepted', 'formal'].includes(node.status))
         continue;
+      if (
+        graphRoot === 'whats-next' &&
+        (node.layer ?? 'discovery') !== 'discovery'
+      )
+        continue;
       assertCardUuid(node.uid);
       if (
         node.id !== entry.name ||
@@ -105,6 +144,11 @@ export async function listPlanningSources(
           : outputs.filter((ref) => typeof ref === 'string'),
       });
     }
+  }
+  const deliveryMap = await readWhatToDoCurrentMap(project);
+  for (const contract of deliveryMap?.contracts ?? []) {
+    assertCardUuid(contract.uid);
+    sources.push(deliveryContractPlanningSource(contract));
   }
   return sources;
 }

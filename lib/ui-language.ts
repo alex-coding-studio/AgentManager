@@ -28,6 +28,8 @@ export const chineseUi: Record<string, string> = {
     '选择未加入的目标；已加入卡片仅作结构参考，不可再次选择。',
   'Not started': '未开始',
   'Already added': '已加入',
+  Waiting: '等待前置项',
+  'Waiting for prerequisites': '等待前置项',
   'Open goal': '打开目标',
   'Goal map': '任务框架',
   'Goal source': '目标来源',
@@ -72,8 +74,8 @@ export const chineseUi: Record<string, string> = {
   'Add as prerequisite': '添加为前置依赖',
   'Delete this Card': '删除这张卡片',
   'Delete this Card?': '删除这张卡片？',
-  'The Just Do It Card and its unconfirmed draft will move to system Trash. The source Node in What’s Next or Break It Down remains unchanged.':
-    'Just Do It 卡片和未确认的计划草稿会移到系统废纸篓。What’s Next 或 Break It Down 中的来源节点不会改变。',
+  'The Just Do It Card and its unconfirmed draft will move to system Trash. Its upstream source remains unchanged.':
+    'Just Do It 卡片和未确认的计划草稿会移到系统废纸篓，上游来源保持不变。',
   'Move Card to Trash': '移到废纸篓',
   'Model ID (optional)': '模型 ID（可选）',
   'Agent configuration': 'Agent 配置',
@@ -1047,6 +1049,8 @@ export const chineseUi: Record<string, string> = {
   'Revision {revision} · {count} Resources': '版本 {revision} · {count} 份资料',
   'Open details for {title}': '打开详情：{title}',
   'What to Do': '做什么',
+  'Open in What to Do': '在“做什么”中打开',
+  'Open in Just Do It': '在“动手做”中打开',
   'Turn accepted Product Design into deliverable Contracts.':
     '把已接受的产品设计整理成可交付的 Contract。',
   'Prepare a Delivery Map': '规划交付地图',

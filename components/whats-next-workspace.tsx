@@ -1,9 +1,11 @@
 'use client';
 import { useUiText } from '@/components/ui-language-provider';
+import { useRouter } from 'next/navigation';
 
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import {
   FileText,
+  ArrowRight,
   LoaderCircle,
   Pencil,
   RotateCcw,
@@ -131,6 +133,7 @@ function WhatsNextCanvas({
   developmentCompletionRun?: WhatsNextRunRecord;
 }) {
   const { t } = useUiText();
+  const router = useRouter();
   const [nodes, setNodes] = useState(initialNodes);
   const [previews, setPreviews] = useState<TaskGraphPreview[]>(
     mergePreviews([], initialRuns.flatMap(runToPreviews)),
@@ -258,6 +261,18 @@ function WhatsNextCanvas({
     const node = nodes.find((value) => value.id === nodeId);
     return node ? [node] : [];
   });
+  const selectedProductFeatures = combineNodes.filter(
+    (node) =>
+      node.role === 'node' &&
+      node.status === 'accepted' &&
+      node.layer === 'product-design' &&
+      node.artifactKind === 'feature' &&
+      node.uid,
+  );
+  const canOpenInWhatToDo =
+    activeLayer === 'product-design' &&
+    selectedProductFeatures.length > 0 &&
+    selectedProductFeatures.length === combineNodes.length;
   const visibleNodes = nodes.filter(
     (node) =>
       node.role === 'start' || (node.layer ?? 'discovery') === activeLayer,
@@ -1202,6 +1217,24 @@ function WhatsNextCanvas({
               </span>
             ))}
           </div>
+
+          {canOpenInWhatToDo ? (
+            <Button
+              className="mt-3 w-full"
+              variant="outline"
+              onClick={() => {
+                const query = new URLSearchParams();
+                for (const node of selectedProductFeatures)
+                  query.append('feature', node.uid!);
+                router.push(
+                  `/projects/${projectId}/what-to-do?${query.toString()}`,
+                );
+              }}
+            >
+              {t('Open in What to Do')}
+              <ArrowRight className="size-3.5" />
+            </Button>
+          ) : null}
 
           <label className="mt-3 block text-[10px] font-medium text-muted-foreground">
             {t('User Input')} · {t('required')}

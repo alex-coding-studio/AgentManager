@@ -5,6 +5,7 @@ export const GOAL_PICKER_WIDTH = 216;
 export const GOAL_PICKER_HEIGHT = 94;
 export type GoalPickerStatus =
   | 'not-started'
+  | 'waiting'
   | 'added'
   | 'planning'
   | 'plan-ready'

@@ -52,6 +52,12 @@ import {
   writeWhatToDoCurrentMap,
   writeWhatToDoRepositorySummary,
 } from './what-to-do-storage.ts';
+import {
+  planningService,
+  type PlanningCard,
+} from './just-do-it-planning-service.ts';
+import { deliveryContractPlanningSource } from './just-do-it-planning-sources.ts';
+import { withDeliveryState } from './delivery-state-lock.ts';
 
 export type WhatToDoRunRecord = {
   schemaVersion: 1;
@@ -97,6 +103,7 @@ export async function startWhatToDoRun(
 ) {
   validateAgentProfile(input.profile);
   const key = project.planningPath;
+  if (activeRuns.get(key)?.terminal) activeRuns.delete(key);
   if (activeRuns.has(key))
     throw new PublicApiError('A What to Do Agent Run is already active.', 409);
   const runId = `RUN-${randomUUID()}`;
@@ -306,21 +313,25 @@ function settleLater(
         );
       if (map) {
         await stageTerminalRunRecord(project, terminal);
-        await writeWhatToDoCurrentMap(project, map);
+        await publishDeliveryMap(project, map);
         await publishTerminalRunRecord(project, run.id).catch(() => undefined);
       } else {
         await writeRunRecord(project, terminal);
       }
-      active.terminal = terminal;
       await writeWhatToDoRepositorySummary(
         project,
         result.repositorySummary.markdown,
         run.request.repository.fingerprint,
       ).catch(() => undefined);
+      active.terminal = terminal;
     })
     .catch(async (error: unknown) => {
       if (active.canceled) return;
       active.settling = true;
+      const message =
+        error instanceof PublicApiError
+          ? error.message
+          : 'The What to Do Agent did not complete.';
       const terminal: WhatToDoRunRecord = {
         ...run,
         status: 'failed',
@@ -328,7 +339,7 @@ function settleLater(
         activity: [...active.activity],
         result: null,
         map: null,
-        error: 'The What to Do Agent did not complete.',
+        error: message,
       };
       const runPath = await whatToDoRunDirectory(project, run.id);
       await rm(path.join(runPath, 'terminal.json'), { force: true }).catch(
@@ -337,8 +348,8 @@ function settleLater(
       await active.recorder?.flush().catch(() => undefined);
       await writeAgentGraphRunEvidence(runPath, {
         activity: terminal.activity,
-        summary: '# Failed\n\nThe What to Do Agent did not complete.\n',
-        response: '# Failed\n\nThe What to Do Agent did not complete.\n',
+        summary: `# Failed\n\n${message}\n`,
+        response: `# Failed\n\n${message}\n`,
         agentOutput: active.agentOutput ?? String(error),
       }).catch(() => undefined);
       await writeRunRecord(project, terminal).catch(() => undefined);
@@ -348,6 +359,66 @@ function settleLater(
       if (activeRuns.get(project.planningPath) === active)
         activeRuns.delete(project.planningPath);
     });
+}
+
+type DeliveryPlanningStore = Pick<
+  typeof planningService,
+  'list' | 'stageDeleteCard'
+>;
+
+export async function publishDeliveryMap(
+  project: RegisteredProject,
+  map: WhatToDoDeliveryMap,
+  store: DeliveryPlanningStore = planningService,
+) {
+  await withDeliveryState(project, async () => {
+    const nextSources = new Map(
+      map.contracts.map((contract) => {
+        const source = deliveryContractPlanningSource(contract);
+        return [source.uid, source] as const;
+      }),
+    );
+    const superseded = (await store.list(project)).filter((card) => {
+      if (card.source.module !== 'what-to-do') return false;
+      const source = nextSources.get(card.source.uid);
+      return (
+        !source ||
+        source.id !== card.source.id ||
+        source.version !== card.source.version
+      );
+    });
+    const protectedCards = superseded.filter(planningCardProtectsDeliveryMap);
+    if (protectedCards.length)
+      throw new PublicApiError(
+        `The Delivery Map cannot replace Contracts already in progress: ${protectedCards.map((card) => card.source.title).join(', ')}.`,
+        409,
+      );
+    const staged: Array<
+      Awaited<ReturnType<DeliveryPlanningStore['stageDeleteCard']>>
+    > = [];
+    try {
+      for (const card of superseded)
+        staged.push(
+          await store.stageDeleteCard(project, card.id, card.revision),
+        );
+      await writeWhatToDoCurrentMap(project, map);
+    } catch (error) {
+      await Promise.allSettled(
+        staged.reverse().map((transition) => transition.rollback()),
+      );
+      throw error;
+    }
+    await Promise.allSettled(staged.map((transition) => transition.finalize()));
+  });
+}
+
+function planningCardProtectsDeliveryMap(card: PlanningCard) {
+  return Boolean(
+    card.run?.status === 'running' ||
+    card.plan?.status === 'finalized' ||
+    card.actions.length ||
+    card.execution?.runs.length,
+  );
 }
 
 export async function cancelWhatToDoRun(

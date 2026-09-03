@@ -25,12 +25,16 @@ an existing repository or from a product idea that has no code yet.
   relationships, and constraints. Valid Agent changes become the current model
   immediately; the latest successful change has one Undo opportunity rather
   than a Candidate/finalization lifecycle.
-- **Just Do It** imports a Formal Node as a goal, develops and finalizes an
+- **What to Do** turns accepted Product Design into one formal Delivery Map.
+  Every validated update atomically replaces the Map; its Contracts and hard
+  dependencies become executable sources without a separate Candidate phase.
+- **Just Do It** imports a Discovery Node, Break It Down Node, or Delivery
+  Contract as a goal, develops and finalizes an
   Agent-generated Plan, and executes one Action at a time in a Card-owned
   worktree. Required-check evidence, output review, user acceptance, local
   checkpoints, and GitHub delivery evidence remain distinct states.
 
-What's Next and Break It Down share the Agent Graph Workspace shell: canvas,
+What's Next, Break It Down, and What to Do share the Agent Graph Workspace shell: canvas,
 Card structure, Composer, Agent controls, file-backed input packets, Run status,
 Summary, Log, and Latest Response presentation. What's That? reuses the common
 input and Run surfaces while keeping a Domain Model-specific graph. Harnesses,
@@ -39,7 +43,7 @@ module-specific.
 
 ### Agent input and instructions
 
-What's Next, Break It Down, and What's That? package direct user input as
+What's Next, Break It Down, What's That?, and What to Do package direct user input as
 `user-input.md`. Selected Product Context and graph resources become references;
 temporary uploads become external inputs. The Agent receives an indexed packet
 whose file paths and hashes identify the captured request instead of one large
@@ -56,7 +60,8 @@ accepts Markdown or JSON.
 - Node.js 22.13 or later
 - npm
 - A locally installed and authenticated Codex CLI or Claude CLI for Agent
-  operations across What's Next, Break It Down, What's That?, and Just Do It
+  operations across What's Next, Break It Down, What's That?, What to Do, and
+  Just Do It
 - Git for Just Do It worktrees and repository delivery
 - Optional: GitHub CLI (`gh`) to resolve and refresh pull-request evidence
 

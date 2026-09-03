@@ -1,6 +1,7 @@
 'use client';
 
 import { Plus, Route, X } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { AgentGraphComposerCard } from '@/components/agent-graph-composer-card';
 import { AgentRunControls } from '@/components/agent-run-controls';
@@ -31,17 +32,20 @@ export function WhatToDoWorkspace({
   productDesignNodes,
   initialRuns,
   initialMap,
+  initialSourceUids,
 }: {
   projectId: string;
   folders: ContextBrowserFolder[];
   productDesignNodes: TaskGraphNode[];
   initialRuns: WhatToDoRunRecord[];
   initialMap: WhatToDoDeliveryMap | null;
+  initialSourceUids: string[];
 }) {
   const { t } = useUiText();
+  const router = useRouter();
   const [runs, setRuns] = useState(initialRuns);
   const [currentMap, setCurrentMap] = useState(initialMap);
-  const [sourceUids, setSourceUids] = useState<string[]>([]);
+  const [sourceUids, setSourceUids] = useState(initialSourceUids);
   const [focusContractIds, setFocusContractIds] = useState<string[]>([]);
   const [instruction, setInstruction] = useState('');
   const [profile, setProfile] = useState<AgentProfile>({
@@ -60,6 +64,7 @@ export function WhatToDoWorkspace({
     title: string;
     path: string;
     markdown: string;
+    contractUid?: string;
   } | null>(null);
   const running = runs.find((run) => run.status === 'running') ?? null;
   const latestTerminal = runs.find((run) => run.status !== 'running') ?? null;
@@ -162,6 +167,7 @@ export function WhatToDoWorkspace({
         title: contract.title,
         path: contract.outputPath,
         markdown: renderWhatToDoContract(contract),
+        contractUid: contract.uid,
       });
       return;
     }
@@ -459,12 +465,26 @@ export function WhatToDoWorkspace({
       >
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
           {preview ? (
-            <MarkdownReader
-              title={preview.title}
-              filePath={preview.path}
-              markdown={preview.markdown}
-              onClose={() => setPreview(null)}
-            />
+            <div className="space-y-3">
+              <MarkdownReader
+                title={preview.title}
+                filePath={preview.path}
+                markdown={preview.markdown}
+                onClose={() => setPreview(null)}
+              />
+              {preview.contractUid ? (
+                <Button
+                  className="w-full"
+                  onClick={() =>
+                    router.push(
+                      `/projects/${projectId}/implementation?source=${encodeURIComponent(preview.contractUid!)}`,
+                    )
+                  }
+                >
+                  {t('Open in Just Do It')}
+                </Button>
+              ) : null}
+            </div>
           ) : null}
         </DialogContent>
       </Dialog>

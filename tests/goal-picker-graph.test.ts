@@ -9,10 +9,11 @@ import {
   type GoalPickerEntry,
 } from '../lib/goal-picker-graph.ts';
 
-void test('already added, running and finalized entries remain non-selectable', () => {
+void test('waiting, added, running and finalized entries remain non-selectable', () => {
   assert.equal(canAddGoalSource(entry(1)), true);
   assert.equal(canAddGoalSource(entry(1), true), false);
   for (const executionStatus of [
+    'waiting',
     'added',
     'planning',
     'plan-ready',
