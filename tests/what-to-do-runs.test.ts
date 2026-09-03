@@ -352,6 +352,11 @@ void test('the current formal Map is default Context and focus is optional empha
     },
     control.transport,
   );
+  assert.equal(
+    second.request.request.sessionId,
+    first.request.request.sessionId,
+  );
+  assert.equal(control.calls[1]!.input.resumeSessionId, 'agent-session-1');
   assert.deepEqual(second.request.sourceFeatures, []);
   assert.equal(
     second.request.content.references.some(
@@ -395,6 +400,22 @@ void test('the current formal Map is default Context and focus is optional empha
     (await readWhatToDoCurrentMap(project))?.contracts[0]?.id,
     contract.id,
   );
+  const changedProfile = await startWhatToDoRun(
+    project,
+    {
+      ...input(),
+      sourceUids: [],
+      profile: { ...input().profile, model: 'gpt-5.6-sol' },
+    },
+    control.transport,
+  );
+  assert.notEqual(
+    changedProfile.request.request.sessionId,
+    second.request.request.sessionId,
+  );
+  assert.equal(control.calls[2]!.input.resumeSessionId, undefined);
+  await cancelWhatToDoRun(project, changedProfile.id);
+  control.calls[2]!.reject(new Error('canceled'));
   await assert.rejects(
     startWhatToDoRun(project, input(), control.transport),
     /already part of the current Delivery Map/,

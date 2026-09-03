@@ -9,7 +9,11 @@ import {
   rm,
 } from 'node:fs/promises';
 import path from 'node:path';
-import { validateAgentProfile, type AgentProfile } from './agent-profile.ts';
+import {
+  sameModelSelection,
+  validateAgentProfile,
+  type AgentProfile,
+} from './agent-profile.ts';
 import {
   createAgentGraphActivityRecorder,
   initialAgentGraphActivity,
@@ -32,6 +36,7 @@ import {
 import {
   createWhatToDoHarnessRequest,
   parseWhatToDoHarnessResult,
+  WHAT_TO_DO_HARNESS_REVISION,
   whatToDoHarnessPrompt,
   type WhatToDoHarnessRequest,
   type WhatToDoHarnessResult,
@@ -126,6 +131,7 @@ export async function startWhatToDoRun(
   let preparedRun = false;
   try {
     const currentMap = await readWhatToDoCurrentMap(project);
+    let coordinatorRun: WhatToDoRunRecord | null = null;
     if (currentMap) {
       const currentMapRun = await readWhatToDoRun(project, currentMap.runId);
       if (
@@ -133,6 +139,13 @@ export async function startWhatToDoRun(
         currentMapRun.map?.runId !== currentMap.runId
       )
         throw new Error('The current What to Do Map has no committed Run.');
+      if (
+        currentMapRun.agentSessionId &&
+        currentMapRun.profile.agent === input.profile.agent &&
+        sameModelSelection(currentMapRun.profile, input.profile) &&
+        currentMapRun.request.harness.revision === WHAT_TO_DO_HARNESS_REVISION
+      )
+        coordinatorRun = currentMapRun;
     }
     const prepared = await prepareWhatToDoContext(project, runId, {
       ...input,
@@ -144,7 +157,8 @@ export async function startWhatToDoRun(
       prepared.workspace.root,
     );
     const request = createWhatToDoHarnessRequest({
-      sessionId: `SESSION-${randomUUID()}`,
+      sessionId:
+        coordinatorRun?.request.request.sessionId ?? `SESSION-${randomUUID()}`,
       requestId: runId,
       contextRoot,
       content: prepared.packet,
@@ -213,6 +227,7 @@ export async function startWhatToDoRun(
       prompt: whatToDoHarnessPrompt(request),
       model: input.profile.model || undefined,
       effort: input.profile.effort || undefined,
+      resumeSessionId: coordinatorRun?.agentSessionId ?? undefined,
       access: 'read-only',
       disableDelegation: true,
       isolatedProcessGroup: true,
