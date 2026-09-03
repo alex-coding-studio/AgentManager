@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   materializeWhatToDoDeliveryMap,
   renderWhatToDoContract,
+  whatToDoContractCandidateId,
 } from '../lib/what-to-do-map.ts';
 import type { WhatToDoHarnessResult } from '../lib/what-to-do-harness.ts';
 
@@ -104,6 +105,14 @@ void test('a validated Agent result becomes one formal terminal Delivery Map', (
       updatedAt: '2026-09-02T00:00:00.000Z',
       sourceUids: ['feature-1', 'feature-1'],
       result,
+      sourceSnapshots: [
+        {
+          logicalPath: 'feature.md',
+          sha256: '1'.repeat(64),
+          storedPath:
+            'what-to-do/runs/RUN-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/context/primary/feature.md',
+        },
+      ],
     },
     () => uids.shift()!,
   );
@@ -123,5 +132,71 @@ void test('a validated Agent result becomes one formal terminal Delivery Map', (
   assert.match(
     renderWhatToDoContract(map.contracts[1]!),
     new RegExp(map.contracts[0]!.id),
+  );
+});
+
+void test('a retained Contract preserves formal identity across terminal Map updates', () => {
+  const uids = [
+    '11111111-1111-4111-8111-111111111111',
+    '22222222-2222-4222-8222-222222222222',
+  ];
+  const sourceSnapshots = [
+    {
+      logicalPath: 'feature.md',
+      sha256: '1'.repeat(64),
+      storedPath:
+        'what-to-do/runs/RUN-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/context/primary/feature.md',
+    },
+  ];
+  const currentMap = materializeWhatToDoDeliveryMap(
+    {
+      runId: 'RUN-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      updatedAt: '2026-09-02T00:00:00.000Z',
+      sourceUids: ['feature-1'],
+      result,
+      sourceSnapshots,
+    },
+    () => uids.shift()!,
+  );
+  const retainedIds = currentMap.contracts.map(whatToDoContractCandidateId);
+  const adjusted = materializeWhatToDoDeliveryMap(
+    {
+      runId: 'RUN-bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      updatedAt: '2026-09-02T01:00:00.000Z',
+      sourceUids: ['feature-1'],
+      currentMap,
+      sourceSnapshots,
+      result: {
+        ...result,
+        candidates: [],
+        sourceClaims: [
+          { ...result.sourceClaims[0]!, contractCandidateIds: retainedIds },
+        ],
+        recomposition: {
+          effects: retainedIds.map((candidateId) => ({
+            kind: 'retain' as const,
+            from: [candidateId],
+            to: [candidateId],
+          })),
+        },
+      },
+    },
+    () => {
+      throw new Error(
+        'A retained Contract must not allocate another identity.',
+      );
+    },
+  );
+  assert.deepEqual(
+    adjusted.contracts.map((contract) => [
+      contract.id,
+      contract.uid,
+      contract.outputPath,
+    ]),
+    currentMap.contracts.map((contract) => [
+      contract.id,
+      contract.uid,
+      contract.outputPath,
+    ]),
   );
 });

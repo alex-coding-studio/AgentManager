@@ -8,6 +8,7 @@ import {
   readWhatToDoRun,
   startWhatToDoRun,
 } from '@/lib/what-to-do-runs';
+import { readWhatToDoCurrentMap } from '@/lib/what-to-do-storage';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -61,10 +62,17 @@ export async function GET(
     return Response.json({ error: 'Project not found.' }, { status: 404 });
   try {
     const runId = new URL(request.url).searchParams.get('runId');
+    if (runId)
+      return Response.json(
+        { run: await readWhatToDoRun(project, runId) },
+        { headers: { 'Cache-Control': 'no-store' } },
+      );
+    const [runs, currentMap] = await Promise.all([
+      listLatestWhatToDoRuns(project),
+      readWhatToDoCurrentMap(project),
+    ]);
     return Response.json(
-      runId
-        ? { run: await readWhatToDoRun(project, runId) }
-        : { runs: await listLatestWhatToDoRuns(project) },
+      { runs, currentMap },
       { headers: { 'Cache-Control': 'no-store' } },
     );
   } catch (error) {

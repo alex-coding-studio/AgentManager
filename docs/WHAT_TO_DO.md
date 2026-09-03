@@ -395,6 +395,12 @@ Publication freezes the resulting dependency graph. It does not create Just Do
 It Cards automatically. A failed, canceled, or invalid Run leaves the current
 Map unchanged.
 
+`what-to-do/current-map.json` is the authoritative current Map and is read
+independently from paginated Run history. Every update freezes the prior source
+contents in its Run workspace, validates full-map Recompose effects and source
+coverage, then replaces this artifact only after all Contract outputs and Run
+evidence are durable.
+
 ## Delivery Contract
 
 Each formal Contract contains:

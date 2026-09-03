@@ -30,14 +30,17 @@ export function WhatToDoWorkspace({
   folders,
   productDesignNodes,
   initialRuns,
+  initialMap,
 }: {
   projectId: string;
   folders: ContextBrowserFolder[];
   productDesignNodes: TaskGraphNode[];
   initialRuns: WhatToDoRunRecord[];
+  initialMap: WhatToDoDeliveryMap | null;
 }) {
   const { t } = useUiText();
   const [runs, setRuns] = useState(initialRuns);
+  const [currentMap, setCurrentMap] = useState(initialMap);
   const [sourceUids, setSourceUids] = useState<string[]>([]);
   const [focusContractIds, setFocusContractIds] = useState<string[]>([]);
   const [instruction, setInstruction] = useState('');
@@ -60,10 +63,6 @@ export function WhatToDoWorkspace({
   } | null>(null);
   const running = runs.find((run) => run.status === 'running') ?? null;
   const latestTerminal = runs.find((run) => run.status !== 'running') ?? null;
-  const mapRun = runs.find(
-    (run) => run.status === 'succeeded' && run.map !== null,
-  );
-  const currentMap = mapRun?.map ?? null;
   const featureNodes = productDesignNodes.filter(
     (node) =>
       node.role === 'node' &&
@@ -91,8 +90,12 @@ export function WhatToDoWorkspace({
       cache: 'no-store',
     }).catch(() => null);
     if (!response?.ok) return;
-    const data = (await response.json()) as { runs: WhatToDoRunRecord[] };
+    const data = (await response.json()) as {
+      runs: WhatToDoRunRecord[];
+      currentMap: WhatToDoDeliveryMap | null;
+    };
     setRuns(data.runs);
+    setCurrentMap(data.currentMap);
   }
 
   useEffect(() => {
@@ -218,18 +221,45 @@ export function WhatToDoWorkspace({
             attention={presentation.attention}
             icon={presentation.icon}
           >
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() =>
-                void openResource(
-                  t('Latest Response'),
-                  `what-to-do/runs/${latestTerminal.id}/response.md`,
-                )
-              }
-            >
-              {t('Open full response')}
-            </Button>
+            <div className="flex flex-wrap gap-1.5">
+              <Button
+                variant="outline"
+                size="xs"
+                onClick={() =>
+                  void openResource(
+                    t('Latest Response'),
+                    `what-to-do/runs/${latestTerminal.id}/response.md`,
+                  )
+                }
+              >
+                {t('Response')}
+              </Button>
+              <Button
+                variant="outline"
+                size="xs"
+                onClick={() =>
+                  void openResource(
+                    t('Summary'),
+                    `what-to-do/runs/${latestTerminal.id}/summary.md`,
+                  )
+                }
+              >
+                {t('Summary')}
+              </Button>
+              <Button
+                variant="outline"
+                size="xs"
+                onClick={() =>
+                  setPreview({
+                    title: t('Activity Log'),
+                    path: latestTerminal.id,
+                    markdown: renderActivityLog(latestTerminal),
+                  })
+                }
+              >
+                {t('Log')}
+              </Button>
+            </div>
           </LatestResponse>
         ) : null}
         <AgentGraphComposerCard
@@ -494,4 +524,11 @@ function buildContractNodes(
       deliveryStrategy: contract.deliveryStrategy.kind,
     },
   }));
+}
+
+function renderActivityLog(run: WhatToDoRunRecord) {
+  const entries = run.activity.length
+    ? run.activity.map((item) => `- ${item.at} — ${item.summary}`).join('\n')
+    : '- No recorded activity.';
+  return `# Activity Log\n\n${entries}\n`;
 }

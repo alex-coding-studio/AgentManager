@@ -41,9 +41,11 @@ export type WhatToDoHarnessRequest = {
     revision: typeof WHAT_TO_DO_HARNESS_REVISION;
   };
   request: WhatToDoRequestIdentity;
-  operation: 'create-map';
+  operation: 'create-map' | 'adjust-map';
   contextRoot: string;
   content: AgentGraphContentPacket;
+  currentMapPath: string | null;
+  focusCandidateIds: string[];
   sourceFeatures: Array<{
     nodeId: string;
     uid: string;
@@ -70,6 +72,9 @@ export function createWhatToDoHarnessRequest(input: {
   requestId: string;
   contextRoot: string;
   content: AgentGraphContentPacket;
+  operation: WhatToDoHarnessRequest['operation'];
+  currentMapPath: string | null;
+  focusCandidateIds: string[];
   sourceFeatures: WhatToDoHarnessRequest['sourceFeatures'];
   repository: WhatToDoHarnessRequest['repository'];
   domain: WhatToDoHarnessRequest['domain'];
@@ -80,9 +85,11 @@ export function createWhatToDoHarnessRequest(input: {
       id: WHAT_TO_DO_HARNESS_ID,
       revision: WHAT_TO_DO_HARNESS_REVISION,
     } as const,
-    operation: 'create-map' as const,
+    operation: input.operation,
     contextRoot: input.contextRoot,
     content: structuredClone(input.content),
+    currentMapPath: input.currentMapPath,
+    focusCandidateIds: [...input.focusCandidateIds],
     sourceFeatures: structuredClone(input.sourceFeatures),
     repository: structuredClone(input.repository),
     domain: structuredClone(input.domain),
@@ -201,6 +208,7 @@ export type WhatToDoValidationContext = {
   request: WhatToDoRequestIdentity;
   operation: 'create-map' | 'adjust-map';
   knownSources: Readonly<Record<string, { sha256: string; content: string }>>;
+  requiredSourcePaths?: Iterable<string>;
   userInput: { path: string; sha256: string; content: string };
   knownEvidencePaths: Iterable<string>;
   focusCandidateIds?: string[];
@@ -630,7 +638,8 @@ function validateClaims(
     )
       fail(`Previously acknowledged Source Claim ${claimId} changed identity.`);
   }
-  for (const sourcePath of Object.keys(context.knownSources))
+  for (const sourcePath of context.requiredSourcePaths ??
+    Object.keys(context.knownSources))
     if (!claims.some((claim) => claim.sourcePath === sourcePath))
       fail('Every selected Product Design Feature needs a Source Claim.');
 }

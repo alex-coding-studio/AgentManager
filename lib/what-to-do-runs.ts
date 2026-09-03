@@ -38,12 +38,17 @@ import {
 import {
   materializeWhatToDoDeliveryMap,
   renderWhatToDoContract,
+  whatToDoContractCandidateId,
+  whatToDoKnownCandidates,
+  whatToDoKnownSourceClaims,
   type WhatToDoDeliveryMap,
 } from './what-to-do-map.ts';
 import {
   atomicWhatToDoText,
+  readWhatToDoCurrentMap,
   whatToDoDirectory,
   whatToDoRunDirectory,
+  writeWhatToDoCurrentMap,
   writeWhatToDoRepositorySummary,
 } from './what-to-do-storage.ts';
 
@@ -112,10 +117,7 @@ export async function startWhatToDoRun(
   activeRuns.set(key, active);
   let preparedRun = false;
   try {
-    const currentMap =
-      (await listLatestWhatToDoRuns(project)).find(
-        (candidate) => candidate.status === 'succeeded' && candidate.map,
-      )?.map ?? null;
+    const currentMap = await readWhatToDoCurrentMap(project);
     const prepared = await prepareWhatToDoContext(project, runId, {
       ...input,
       currentMap,
@@ -130,6 +132,17 @@ export async function startWhatToDoRun(
       requestId: runId,
       contextRoot,
       content: prepared.packet,
+      operation: currentMap ? 'adjust-map' : 'create-map',
+      currentMapPath: currentMap ? 'what-to-do/current-map.json' : null,
+      focusCandidateIds: currentMap
+        ? (input.focusContractIds ?? []).map((contractId) =>
+            whatToDoContractCandidateId(
+              currentMap.contracts.find(
+                (contract) => contract.id === contractId,
+              )!,
+            ),
+          )
+        : [],
       sourceFeatures: prepared.sources,
       repository: {
         factsPath: 'what-to-do/repository-context/facts.json',
@@ -150,7 +163,7 @@ export async function startWhatToDoRun(
     const run: WhatToDoRunRecord = {
       schemaVersion: 1,
       id: runId,
-      status: 'running',
+      status: 'running' as const,
       sourceUids: [...new Set(input.sourceUids)],
       contextRefs: [...new Set(input.contextRefs ?? [])],
       repositoryEvidencePaths: [
@@ -218,10 +231,18 @@ function settleLater(
       active.agentOutput = agent.finalOutput;
       const result = parseWhatToDoHarnessResult(agent.finalOutput, {
         request: run.request.request,
-        operation: 'create-map',
+        operation: run.request.operation,
         knownSources: prepared.knownSources,
+        requiredSourcePaths: prepared.requiredSourcePaths,
         userInput: prepared.userInput,
         knownEvidencePaths: prepared.knownEvidencePaths,
+        ...(currentMap
+          ? {
+              knownCandidates: whatToDoKnownCandidates(currentMap),
+              knownSourceClaims: whatToDoKnownSourceClaims(currentMap),
+              focusCandidateIds: run.request.focusCandidateIds,
+            }
+          : {}),
       });
       const endedAt = new Date().toISOString();
       const map =
@@ -234,6 +255,8 @@ function settleLater(
                 ...run.sourceUids,
               ],
               result,
+              currentMap,
+              sourceSnapshots: prepared.sourceSnapshots,
             })
           : null;
       const terminal: WhatToDoRunRecord = {
@@ -257,16 +280,23 @@ function settleLater(
       });
       if (map)
         await Promise.all(
-          map.contracts.map(async (contract) => {
-            const directory = path.join(runPath, 'contracts', contract.id);
-            await mkdir(directory, { recursive: true });
-            await atomicWhatToDoText(
-              path.join(directory, 'output.md'),
-              renderWhatToDoContract(contract),
-            );
-          }),
+          map.contracts
+            .filter((contract) =>
+              contract.outputPath.startsWith(
+                `what-to-do/runs/${run.id}/contracts/`,
+              ),
+            )
+            .map(async (contract) => {
+              const directory = path.join(runPath, 'contracts', contract.id);
+              await mkdir(directory, { recursive: true });
+              await atomicWhatToDoText(
+                path.join(directory, 'output.md'),
+                renderWhatToDoContract(contract),
+              );
+            }),
         );
       await writeRunRecord(project, terminal);
+      if (map) await writeWhatToDoCurrentMap(project, map);
       active.terminal = terminal;
       await writeWhatToDoRepositorySummary(
         project,
@@ -327,6 +357,7 @@ export async function cancelWhatToDoRun(
   await writeAgentGraphRunEvidence(await whatToDoRunDirectory(project, runId), {
     activity: canceled.activity,
     summary: '# Canceled\n\nThe What to Do Agent Run was canceled.\n',
+    response: '# Canceled\n\nThe What to Do Agent Run was canceled.\n',
   });
   await writeRunRecord(project, canceled);
   if (activeRuns.get(project.planningPath) === active)
@@ -363,6 +394,14 @@ export async function readWhatToDoRun(
     throw new Error('Invalid What to Do Run record.');
   const active = activeRuns.get(project.planningPath);
   if (active?.runId === run.id && active.terminal) return active.terminal;
+  if (active?.runId === run.id && active.settling)
+    return {
+      ...run,
+      status: 'running' as const,
+      endedAt: null,
+      result: null,
+      map: null,
+    };
   if (run.status === 'running' && active?.runId === run.id)
     return { ...run, activity: [...active.activity] };
   if (run.status === 'running') {

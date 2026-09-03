@@ -10,6 +10,7 @@ import {
 import { listTaskGraphNodes } from '@/lib/task-graph';
 import { listLatestWhatToDoRuns } from '@/lib/what-to-do-runs';
 import { isWhatToDoFeatureNode } from '@/lib/what-to-do-sources';
+import { readWhatToDoCurrentMap } from '@/lib/what-to-do-storage';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,11 +21,12 @@ export default async function WhatToDoPage({
 }) {
   const project = await getProject((await params).projectId);
   if (!project) notFound();
-  const [projects, folders, nodes, runs] = await Promise.all([
+  const [projects, folders, nodes, runs, currentMap] = await Promise.all([
     listProjects(),
     readContextBrowser(project),
     listTaskGraphNodes(project, 'whats-next'),
     listLatestWhatToDoRuns(project),
+    readWhatToDoCurrentMap(project),
   ]);
   return (
     <ProjectShell
@@ -39,6 +41,7 @@ export default async function WhatToDoPage({
           (node) => node.role === 'start' || isWhatToDoFeatureNode(node),
         )}
         initialRuns={runs}
+        initialMap={currentMap}
       />
     </ProjectShell>
   );

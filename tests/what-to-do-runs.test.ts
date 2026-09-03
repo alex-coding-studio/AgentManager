@@ -13,6 +13,7 @@ import {
   startWhatToDoRun,
   whatToDoAgentEnvironment,
 } from '../lib/what-to-do-runs.ts';
+import { readWhatToDoCurrentMap } from '../lib/what-to-do-storage.ts';
 
 const featureUid = '00000000-0000-4000-8000-000000000002';
 
@@ -199,6 +200,36 @@ function result(run: Awaited<ReturnType<typeof startWhatToDoRun>>) {
   };
 }
 
+function retainedResult(
+  run: Awaited<ReturnType<typeof startWhatToDoRun>>,
+  map: NonNullable<Awaited<ReturnType<typeof readWhatToDoCurrentMap>>>,
+) {
+  const contract = map.contracts[0]!;
+  const candidateId = `CANDIDATE-${contract.id.slice(5)}`;
+  const claim = map.sourceClaims[0]!;
+  const { contractIds: _contractIds, ...claimContent } = claim;
+  const factsPath = 'what-to-do/repository-context/facts.json';
+  return {
+    schemaVersion: 1,
+    harness: run.request.harness,
+    request: run.request.request,
+    responseMarkdown: '# Delivery Map\n\nThe focused Contract is retained.',
+    repositorySummary: {
+      markdown: '# Repository Summary\n\nA small fixture repository.',
+      evidencePaths: [factsPath],
+    },
+    reviewedEvidence: [
+      { path: factsPath, reason: 'Read the frozen repository facts.' },
+    ],
+    outcome: 'map-proposal',
+    candidates: [],
+    sourceClaims: [{ ...claimContent, contractCandidateIds: [candidateId] }],
+    recomposition: {
+      effects: [{ kind: 'retain', from: [candidateId], to: [candidateId] }],
+    },
+  };
+}
+
 async function settled(project: RegisteredProject, runId: string) {
   for (let index = 0; index < 100; index += 1) {
     const run = await readWhatToDoRun(project, runId);
@@ -294,8 +325,25 @@ void test('the current formal Map is default Context and focus is optional empha
         entry.logicalPath === contract.outputPath,
     ),
   );
-  await cancelWhatToDoRun(project, second.id);
-  control.calls[1]!.reject(new Error('canceled'));
+  assert.equal(second.request.operation, 'adjust-map');
+  assert.deepEqual(second.request.focusCandidateIds, [
+    `CANDIDATE-${contract.id.slice(5)}`,
+  ]);
+  control.calls[1]!.resolve({
+    agentSessionId: 'agent-session-2',
+    finalOutput: JSON.stringify(retainedResult(second, completed.map!)),
+    usage: null,
+  });
+  const adjusted = await settled(project, second.id);
+  assert.equal(adjusted.status, 'succeeded');
+  assert.equal(adjusted.map?.contracts[0]?.id, contract.id);
+  assert.equal(adjusted.map?.contracts[0]?.uid, contract.uid);
+  assert.equal((await readWhatToDoCurrentMap(project))?.runId, second.id);
+  assert.deepEqual(await listLatestWhatToDoRuns(project, 0), []);
+  assert.equal(
+    (await readWhatToDoCurrentMap(project))?.contracts[0]?.id,
+    contract.id,
+  );
   await assert.rejects(
     startWhatToDoRun(project, input(), control.transport),
     /already part of the current Delivery Map/,
@@ -323,11 +371,18 @@ void test('invalid Agent output fails while preserving the raw response', async 
 });
 
 void test('cancel releases the project and rejects late completion', async (t) => {
-  const { project } = await fixture(t);
+  const { project, planningPath } = await fixture(t);
   const control = controlled();
   const run = await startWhatToDoRun(project, input(), control.transport);
   const canceled = await cancelWhatToDoRun(project, run.id);
   assert.equal(canceled.status, 'canceled');
+  assert.match(
+    await readFile(
+      path.join(planningPath, 'what-to-do/runs', run.id, 'response.md'),
+      'utf8',
+    ),
+    /canceled/,
+  );
   assert.equal(control.calls[0]!.canceled, true);
   control.calls[0]!.resolve({
     agentSessionId: null,
