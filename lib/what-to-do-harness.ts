@@ -20,7 +20,7 @@ Return exactly one JSON result matching the schema. A map-proposal is an interna
 
 dependsOn contains hard prerequisites only: the dependent Contract cannot be completed or honestly accepted without the prerequisite's delivered result. Do not encode preferred chronology or technical layer order as dependencies. Recommend Foundation-first, Experience-first, Vertical slice or Risk-first only when supported by current evidence.
 
-Every material source claim must cite an exact packet path, frozen SHA-256 and bounded excerpt that occurs exactly once in that source. Assign every in-scope claim to at least one Contract. Mark a claim out of scope only with an equally verified excerpt from current User Input that authorizes the exclusion. Do not claim semantic completeness beyond the evidence read.
+Every material source claim must cite the entry.logicalPath from REQUEST, its frozen SHA-256 and a bounded excerpt that occurs exactly once in that source. Use workspacePath only to read the file inside CONTEXT ROOT; never return workspacePath as an evidence or source path. Assign every in-scope claim to at least one Contract. Mark a claim out of scope only with an equally verified excerpt from current User Input that authorizes the exclusion. Do not claim semantic completeness beyond the evidence read.
 
 Classify each Contract's Domain Impact as none, reuse, change, add or uncertain. Pure UI work may use none. A Map with uncertain Domain Impact or an Open Decision cannot be published; return clarification or insufficient-evidence instead. Do not invent database work.
 
@@ -211,6 +211,7 @@ export type WhatToDoValidationContext = {
   requiredSourcePaths?: Iterable<string>;
   userInput: { path: string; sha256: string; content: string };
   knownEvidencePaths: Iterable<string>;
+  evidencePathAliases?: Readonly<Record<string, string>>;
   focusCandidateIds?: string[];
   knownCandidates?: Array<{
     candidateId: string;
@@ -434,7 +435,10 @@ export function validateWhatToDoHarnessResult(
         ? `The What to Do result is invalid: ${validateStructure.errors[0].message}.`
         : 'The What to Do result is invalid.',
     );
-  const result = value as WhatToDoHarnessResult;
+  const result = normalizeEvidencePaths(
+    structuredClone(value as WhatToDoHarnessResult),
+    context.evidencePathAliases ?? {},
+  );
   if (
     result.request.sessionId !== context.request.sessionId ||
     result.request.requestId !== context.request.requestId ||
@@ -478,8 +482,23 @@ export function validateWhatToDoHarnessResult(
   if (context.operation === 'create-map' && result.candidates.length === 0)
     fail('A new Delivery Map requires at least one Contract Candidate.');
   validateCandidates(result.candidates, context, knownEvidence);
-  if (context.operation === 'create-map' && result.recomposition)
-    fail('A new Delivery Map cannot include Recompose effects.');
+  if (context.operation === 'create-map' && result.recomposition) {
+    const candidateIds = new Set(
+      result.candidates.map((candidate) => candidate.candidateId),
+    );
+    const addedIds = result.recomposition.effects.flatMap((effect) => {
+      if (effect.kind !== 'add' || effect.from.length > 0)
+        fail('A new Delivery Map cannot include Recompose effects.');
+      return effect.to;
+    });
+    if (
+      new Set(addedIds).size !== candidateIds.size ||
+      addedIds.some((candidateId) => !candidateIds.has(candidateId))
+    )
+      fail('A new Delivery Map cannot include Recompose effects.');
+    delete result.recomposition;
+  }
+  normalizeClaimAssignments(result.candidates, result.sourceClaims);
   let retainedIds: string[] = [];
   if (context.operation === 'adjust-map') {
     if (!result.recomposition)
@@ -515,6 +534,60 @@ export function validateWhatToDoHarnessResult(
   ];
   validateCompleteMap(completeMap);
   validateClaims(result.sourceClaims, completeMap, context);
+  return result;
+}
+
+function normalizeClaimAssignments(
+  candidates: WhatToDoContractCandidate[],
+  claims: WhatToDoSourceClaim[],
+) {
+  const candidateById = new Map(
+    candidates.map((candidate) => [candidate.candidateId, candidate]),
+  );
+  const claimById = new Map(claims.map((claim) => [claim.claimId, claim]));
+  for (const candidate of candidates)
+    for (const claimId of candidate.sourceClaimIds) {
+      const claim = claimById.get(claimId);
+      if (claim && !claim.contractCandidateIds.includes(candidate.candidateId))
+        claim.contractCandidateIds.push(candidate.candidateId);
+    }
+  for (const claim of claims)
+    for (const candidateId of claim.contractCandidateIds) {
+      const candidate = candidateById.get(candidateId);
+      if (candidate && !candidate.sourceClaimIds.includes(claim.claimId))
+        candidate.sourceClaimIds.push(claim.claimId);
+    }
+}
+
+function normalizeEvidencePaths(
+  result: WhatToDoHarnessResult,
+  aliases: Readonly<Record<string, string>>,
+) {
+  const canonical = (value: string) => aliases[value] ?? value;
+  result.repositorySummary.evidencePaths =
+    result.repositorySummary.evidencePaths.map(canonical);
+  result.reviewedEvidence = result.reviewedEvidence.map((entry) => ({
+    ...entry,
+    path: canonical(entry.path),
+  }));
+  if (result.outcome !== 'map-proposal') return result;
+  result.candidates = result.candidates.map((candidate) => ({
+    ...candidate,
+    domainImpact: {
+      ...candidate.domainImpact,
+      evidencePaths: candidate.domainImpact.evidencePaths.map(canonical),
+    },
+  }));
+  result.sourceClaims = result.sourceClaims.map((claim) => ({
+    ...claim,
+    sourcePath: canonical(claim.sourcePath),
+    exclusionAuthority: claim.exclusionAuthority
+      ? {
+          ...claim.exclusionAuthority,
+          userInputPath: canonical(claim.exclusionAuthority.userInputPath),
+        }
+      : null,
+  }));
   return result;
 }
 

@@ -252,6 +252,7 @@ function settleLater(
         requiredSourcePaths: prepared.requiredSourcePaths,
         userInput: prepared.userInput,
         knownEvidencePaths: prepared.knownEvidencePaths,
+        evidencePathAliases: prepared.evidencePathAliases,
         ...(currentMap
           ? {
               knownCandidates: whatToDoKnownCandidates(currentMap),
