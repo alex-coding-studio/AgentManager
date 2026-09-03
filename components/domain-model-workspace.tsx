@@ -6,10 +6,15 @@ import { AgentRunControls } from '@/components/agent-run-controls';
 import { AgentGraphComposerCard } from '@/components/agent-graph-composer-card';
 import { ContextAttachmentPicker } from '@/components/context-attachment-picker';
 import { DomainModelCanvas } from '@/components/domain-model-canvas';
-import { LatestResponse } from '@/components/latest-response';
+import {
+  LatestResponse,
+  LatestResponseActions,
+} from '@/components/latest-response';
+import { MarkdownReader } from '@/components/markdown-reader';
 import { ModuleInstructionsDialog } from '@/components/module-instructions-dialog';
 import { ProjectModuleHeader } from '@/components/project-module-header';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 import {
   Sheet,
   SheetContent,
@@ -28,7 +33,10 @@ import type {
 } from '@/lib/domain-model';
 import type { DomainModelRunRecord } from '@/lib/domain-model-runs';
 import { deriveDomainRelationships } from '@/lib/domain-model-view';
-import { latestDomainModelResponse } from '@/lib/latest-response';
+import {
+  latestDomainModelResponse,
+  renderLatestResponseActivityLog,
+} from '@/lib/latest-response';
 import type { ContextBrowserFolder } from '@/lib/product-context';
 import { useUiText } from '@/components/ui-language-provider';
 
@@ -69,6 +77,11 @@ export function DomainModelWorkspace({
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [responsePreview, setResponsePreview] = useState<{
+    title: string;
+    path: string;
+    markdown: string;
+  } | null>(null);
   const [now, setNow] = useState(0);
   const textarea = useRef<HTMLTextAreaElement | null>(null);
   const submittingRef = useRef(false);
@@ -279,16 +292,21 @@ export function DomainModelWorkspace({
 
         {showUndoNotice ? (
           <LatestResponse
-            title="Latest Response"
-            statusLabel="Undone"
-            summary="The last model change was undone."
+            title={t('Latest Response')}
+            statusLabel={t('Undone')}
+            summary={t('The last model change was undone.')}
             tone="neutral"
             attention="none"
             icon="neutral"
             className="absolute top-4 left-4 z-20 w-[min(360px,calc(100%-2rem))]"
           />
         ) : latest && latest.status !== 'running' ? (
-          <LatestDomainResponse run={latest} canUndo={canUndo} onUndo={undo} />
+          <LatestDomainResponse
+            run={latest}
+            canUndo={canUndo}
+            onUndo={undo}
+            onPreview={setResponsePreview}
+          />
         ) : null}
 
         {running ? (
@@ -300,25 +318,32 @@ export function DomainModelWorkspace({
                   <span className="absolute inline-flex size-full animate-ping rounded-full bg-sky-400 opacity-60" />
                   <span className="relative inline-flex size-2.5 rounded-full bg-sky-500" />
                 </span>
-                {profile.agent === 'codex' ? 'Codex' : 'Claude'} running ·{' '}
-                {formatDuration(elapsed)}
+                {t('{agent} is running', {
+                  agent: profile.agent === 'codex' ? 'Codex' : 'Claude',
+                })}{' '}
+                · {formatDuration(elapsed)}
               </span>
             }
-            description={lastActivity}
+            description={t(lastActivity)}
             action={
               <Button variant="outline" size="sm" onClick={cancelRun}>
-                <Square className="size-3.5" /> Cancel
+                <Square className="size-3.5" /> {t('Cancel')}
               </Button>
             }
           />
         ) : (
           <AgentGraphComposerCard
             className="z-20"
-            title="Describe the model change"
+            title={t('Describe the model change')}
             description={
               selectedContext.length
-                ? `${selectedContext.length} selected model entries will be treated as primary context.`
-                : 'Describe an entity, field, relationship or rule to add or change.'
+                ? t(
+                    '{count} selected model entries will be treated as primary context.',
+                    { count: selectedContext.length },
+                  )
+                : t(
+                    'Describe an entity, field, relationship or rule to add or change.',
+                  )
             }
           >
             {selectedContext.length ? (
@@ -338,7 +363,7 @@ export function DomainModelWorkspace({
                   className="ml-auto text-[10px] text-muted-foreground hover:text-foreground"
                   onClick={() => setSelectedIds([])}
                 >
-                  Clear context
+                  {t('Clear context')}
                 </button>
               </div>
             ) : null}
@@ -346,7 +371,9 @@ export function DomainModelWorkspace({
               ref={textarea}
               value={instruction}
               rows={3}
-              placeholder="Describe an entity, field, relationship or rule to add or change…"
+              placeholder={t(
+                'Describe an entity, field, relationship or rule to add or change…',
+              )}
               className="min-h-24 resize-none text-sm"
               onChange={(event) => setInstruction(event.target.value)}
               onKeyDown={(event) => {
@@ -380,7 +407,7 @@ export function DomainModelWorkspace({
                     current.filter((_, itemIndex) => itemIndex !== index),
                   )
                 }
-                label="Optional sources"
+                label={t('Optional sources')}
               />
             </div>
             <div className="mt-3">
@@ -395,7 +422,7 @@ export function DomainModelWorkspace({
             </div>
             {error ? (
               <p role="alert" className="mt-3 text-xs text-destructive">
-                {error}
+                {t(error)}
               </p>
             ) : null}
           </AgentGraphComposerCard>
@@ -417,6 +444,27 @@ export function DomainModelWorkspace({
           setTimeout(() => textarea.current?.focus(), 0);
         }}
       />
+      <Dialog
+        open={responsePreview !== null}
+        onOpenChange={(open) => {
+          if (!open) setResponsePreview(null);
+        }}
+      >
+        <DialogContent
+          showCloseButton={false}
+          className="max-h-[92vh] overflow-hidden bg-transparent p-0 ring-0 sm:max-w-[min(92vw,1100px)]"
+        >
+          {responsePreview ? (
+            <MarkdownReader
+              title={responsePreview.title}
+              filePath={responsePreview.path}
+              markdown={responsePreview.markdown}
+              onClose={() => setResponsePreview(null)}
+              className="max-h-[92vh] overflow-y-auto"
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -425,46 +473,103 @@ function LatestDomainResponse({
   run,
   canUndo,
   onUndo,
+  onPreview,
 }: {
   run: DomainModelRunRecord;
   canUndo: boolean;
   onUndo: () => void;
+  onPreview: (preview: {
+    title: string;
+    path: string;
+    markdown: string;
+  }) => void;
 }) {
+  const { t } = useUiText();
   const presentation = latestDomainModelResponse(run);
-  const detail = run.result?.summary ?? run.error;
-  const hasDetails = Boolean(
-    detail || run.change || run.result?.outcome === 'clarification' || canUndo,
-  );
+  const hasDetails = Boolean(run.change || canUndo);
   return (
     <LatestResponse
       {...presentation}
-      title="Latest Response"
+      statusLabel={t(presentation.statusLabel)}
+      summary={t(presentation.summary)}
+      title={t('Latest Response')}
       className="absolute top-4 left-4 z-20 w-[min(360px,calc(100%-2rem))]"
     >
-      {hasDetails ? (
-        <div className="space-y-3 text-xs">
-          {detail ? <p>{detail}</p> : null}
-          {run.change ? (
-            <div className="grid grid-cols-3 gap-2 text-center">
-              <Fact label="Added" value={run.change.added.length} />
-              <Fact label="Updated" value={run.change.updated.length} />
-              <Fact label="Removed" value={run.change.removed.length} />
-            </div>
-          ) : null}
-          {run.result?.outcome === 'clarification' ? (
-            <p className="rounded-lg bg-amber-500/10 p-2">
-              {run.result.question}
-            </p>
-          ) : null}
-          {canUndo ? (
-            <Button variant="outline" size="sm" onClick={onUndo}>
-              <RotateCcw /> Undo last change
-            </Button>
-          ) : null}
-        </div>
-      ) : null}
+      <div className="space-y-3 text-xs">
+        {hasDetails ? (
+          <div className="space-y-3">
+            {run.change ? (
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <Fact label={t('Added')} value={run.change.added.length} />
+                <Fact
+                  label={t('Updated entries')}
+                  value={run.change.updated.length}
+                />
+                <Fact label={t('Removed')} value={run.change.removed.length} />
+              </div>
+            ) : null}
+            {canUndo ? (
+              <Button variant="outline" size="sm" onClick={onUndo}>
+                <RotateCcw /> {t('Undo last change')}
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+        <LatestResponseActions
+          responseLabel={t('Response')}
+          summaryLabel={t('Summary')}
+          logLabel={t('Log')}
+          onOpenResponse={() =>
+            onPreview({
+              title: t('Latest Response'),
+              path: `domain-model/runs/${run.id}/response.md`,
+              markdown: renderDomainModelResponse(run, t),
+            })
+          }
+          onOpenSummary={() =>
+            onPreview({
+              title: t('Summary'),
+              path: `domain-model/runs/${run.id}/summary.md`,
+              markdown: `# ${t('Summary')}\n\n${t(presentation.summary)}\n`,
+            })
+          }
+          onOpenLog={() =>
+            onPreview({
+              title: t('Activity Log'),
+              path: `domain-model/runs/${run.id}/activity.jsonl`,
+              markdown: renderLatestResponseActivityLog(
+                run.activity,
+                t('Activity Log'),
+                t('No recorded activity.'),
+                t,
+              ),
+            })
+          }
+        />
+      </div>
     </LatestResponse>
   );
+}
+
+function renderDomainModelResponse(
+  run: DomainModelRunRecord,
+  t: (text: string, values?: Record<string, string | number>) => string,
+) {
+  const presentation = latestDomainModelResponse(run);
+  const sections = [`# ${t('Response')}`, '', t(presentation.summary)];
+  if (run.change) {
+    for (const [label, values] of [
+      [t('Added'), run.change.added],
+      [t('Updated entries'), run.change.updated],
+      [t('Removed'), run.change.removed],
+    ] as const) {
+      sections.push('', `## ${label}`, '');
+      sections.push(
+        values.length ? values.map((value) => `- ${value}`).join('\n') : '-',
+      );
+    }
+  }
+  return `${sections.join('\n')}\n`;
 }
 
 function Fact({ label, value }: { label: string; value: number }) {
@@ -489,6 +594,7 @@ function DomainInspector({
   onClose: () => void;
   onDiscuss: (ids: string[]) => void;
 }) {
+  const { t } = useUiText();
   const open = Boolean(entity || relationship);
   const primary =
     entity?.fields.filter((field) => field.display === 'primary') ?? [];
@@ -522,7 +628,7 @@ function DomainInspector({
         <div className="space-y-5 px-4 pb-6">
           {entity ? (
             <>
-              <InspectorSection title="Primary fields">
+              <InspectorSection title={t('Primary fields')}>
                 {primary.length ? (
                   primary.map((field) => (
                     <FieldRow key={field.id} field={field} />
@@ -534,7 +640,9 @@ function DomainInspector({
               {secondary.length ? (
                 <details className="rounded-xl border border-border p-3">
                   <summary className="cursor-pointer text-xs font-medium">
-                    Other fields · {secondary.length}
+                    {t('Other fields · {count}', {
+                      count: secondary.length,
+                    })}
                   </summary>
                   <div className="mt-3 space-y-2">
                     {secondary.map((field) => (
@@ -543,7 +651,7 @@ function DomainInspector({
                   </div>
                 </details>
               ) : null}
-              <InspectorSection title="Relationships">
+              <InspectorSection title={t('Relationships')}>
                 {relationships.length ? (
                   relationships.map((item) => (
                     <p
@@ -561,7 +669,7 @@ function DomainInspector({
               </InspectorSection>
             </>
           ) : relationship ? (
-            <InspectorSection title="Relationship">
+            <InspectorSection title={t('Relationship')}>
               <p className="text-sm">
                 {entityName(relationship.sourceEntityId)}{' '}
                 <strong>{relationship.label}</strong>{' '}
@@ -569,12 +677,12 @@ function DomainInspector({
               </p>
               <p className="text-xs text-muted-foreground">
                 {relationship.sourceCardinality} →{' '}
-                {relationship.targetCardinality} · {relationship.semanticRole} ·{' '}
-                {relationship.provenance}
+                {relationship.targetCardinality} ·{' '}
+                {t(relationship.semanticRole)} · {t(relationship.provenance)}
               </p>
             </InspectorSection>
           ) : null}
-          <InspectorSection title="Constraints">
+          <InspectorSection title={t('Constraints')}>
             {constraints.length ? (
               constraints.map((item) => (
                 <p
@@ -589,7 +697,7 @@ function DomainInspector({
             )}
           </InspectorSection>
           <p className="text-[10px] text-muted-foreground">
-            {entity?.provenance ?? relationship?.provenance ?? ''}
+            {t(entity?.provenance ?? relationship?.provenance ?? '')}
           </p>
           <Button
             variant="outline"
@@ -603,7 +711,9 @@ function DomainInspector({
               )
             }
           >
-            Discuss this {entity ? 'Entity' : 'relationship'}
+            {t('Discuss this {kind}', {
+              kind: t(entity ? 'Entity' : 'Relationship'),
+            })}
           </Button>
         </div>
       </SheetContent>
@@ -629,6 +739,7 @@ function InspectorSection({
 }
 
 function FieldRow({ field }: { field: DomainEntity['fields'][number] }) {
+  const { t } = useUiText();
   return (
     <div className="rounded-lg border border-border p-2.5">
       <div className="flex items-center justify-between gap-3 text-xs">
@@ -644,14 +755,15 @@ function FieldRow({ field }: { field: DomainEntity['fields'][number] }) {
         </p>
       ) : null}
       <p className="mt-1 text-[9px] text-muted-foreground">
-        {field.required ? 'required' : 'optional'} · {field.provenance}
+        {t(field.required ? 'required' : 'optional')} · {t(field.provenance)}
       </p>
     </div>
   );
 }
 
 function EmptyLine() {
-  return <p className="text-xs text-muted-foreground">None</p>;
+  const { t } = useUiText();
+  return <p className="text-xs text-muted-foreground">{t('None')}</p>;
 }
 
 function formatDuration(seconds: number) {

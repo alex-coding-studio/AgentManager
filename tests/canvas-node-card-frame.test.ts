@@ -376,8 +376,9 @@ void test('the shared proposal workspace renders counts and named metadata secti
   assert.doesNotMatch(html, /<pre/);
 });
 
-void test('Latest Response keeps its full-response action visible without a disclosure step', async () => {
-  const { LatestResponse } = await import('../components/latest-response.tsx');
+void test('Latest Response exposes the standard Response, Summary and Log actions', async () => {
+  const { LatestResponse, LatestResponseActions } =
+    await import('../components/latest-response.tsx');
   const html = renderToStaticMarkup(
     createElement(
       LatestResponse,
@@ -389,12 +390,34 @@ void test('Latest Response keeps its full-response action visible without a disc
         attention: 'none',
         icon: 'neutral',
       },
-      createElement('button', { type: 'button' }, 'Open full response'),
+      createElement(LatestResponseActions, {
+        responseLabel: 'Response',
+        summaryLabel: 'Summary',
+        logLabel: 'Log',
+        onOpenResponse: () => {},
+        onOpenSummary: () => {},
+        onOpenLog: () => {},
+      }),
     ),
   );
-  assert.match(html, /Open full response/);
-  assert.doesNotMatch(html, /aria-expanded/);
-  assert.equal((html.match(/<button/g) ?? []).length, 1);
+  assert.match(html, />Response</);
+  assert.match(html, />Summary</);
+  assert.match(html, />Log</);
+  assert.doesNotMatch(html, /aria-expanded="/);
+  assert.equal((html.match(/<button/g) ?? []).length, 3);
+
+  for (const file of [
+    'whats-next-workspace.tsx',
+    'task-decomposition-workspace.tsx',
+    'domain-model-workspace.tsx',
+    'what-to-do-workspace.tsx',
+  ]) {
+    const source = await readFile(
+      new URL(`../components/${file}`, import.meta.url),
+      'utf8',
+    );
+    assert.match(source, /LatestResponseActions/, file);
+  }
 });
 
 void test('every primary module uses one compact Project Header structure', async () => {

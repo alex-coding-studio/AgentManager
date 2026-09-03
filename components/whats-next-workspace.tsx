@@ -72,8 +72,14 @@ import {
   whatsNextMotionRegistry,
 } from '@/lib/whats-next-intention';
 import { toggleWhatsNextSelection } from '@/lib/whats-next-selection';
-import { LatestResponse } from '@/components/latest-response';
-import { latestWhatsNextResponse } from '@/lib/latest-response';
+import {
+  LatestResponse,
+  LatestResponseActions,
+} from '@/components/latest-response';
+import {
+  latestWhatsNextResponse,
+  renderLatestResponseActivityLog,
+} from '@/lib/latest-response';
 import {
   proposalFocusNodeIds,
   reconcileProposalRuns,
@@ -1110,29 +1116,47 @@ function WhatsNextCanvas({
           className="absolute top-4 left-4 z-10 w-[min(320px,calc(100%-2rem))]"
           title={t('Latest Response')}
           statusLabel={t(latestResponsePresentation.statusLabel)}
-          summary={latestResponsePresentation.summary}
+          summary={t(latestResponsePresentation.summary)}
           tone={latestResponsePresentation.tone}
           attention={latestResponsePresentation.attention}
           icon={latestResponsePresentation.icon}
         >
-          {latestResponse.result ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() =>
-                setPreview({
-                  title: 'Latest Response',
-                  path: `whats-next/runs/${latestResponse.runId}/response.md`,
-                  markdown: renderWhatsNextResponseMarkdown(
-                    latestResponse.result!,
-                  ),
-                })
-              }
-            >
-              {t('Open full response')}
-            </Button>
-          ) : null}
+          <LatestResponseActions
+            responseLabel={t('Response')}
+            summaryLabel={t('Summary')}
+            logLabel={t('Log')}
+            onOpenResponse={() =>
+              setPreview({
+                title: t('Latest Response'),
+                path: `whats-next/runs/${latestResponse.runId}/response.md`,
+                markdown: latestResponse.result
+                  ? renderWhatsNextResponseMarkdown(latestResponse.result)
+                  : `# ${t('Response')}\n\n${t(latestResponsePresentation.summary)}\n`,
+              })
+            }
+            onOpenSummary={() =>
+              setPreview({
+                title: t('Summary'),
+                path: `whats-next/runs/${latestResponse.runId}/summary.md`,
+                markdown:
+                  latestResponse.result && 'reflection' in latestResponse.result
+                    ? latestResponse.result.reflection.markdown
+                    : `# ${t('Summary')}\n\n${t(latestResponsePresentation.summary)}\n`,
+              })
+            }
+            onOpenLog={() =>
+              setPreview({
+                title: t('Activity Log'),
+                path: `whats-next/runs/${latestResponse.runId}/activity.jsonl`,
+                markdown: renderLatestResponseActivityLog(
+                  latestResponse.activity ?? [],
+                  t('Activity Log'),
+                  t('No recorded activity.'),
+                  t,
+                ),
+              })
+            }
+          />
         </LatestResponse>
       ) : null}
 

@@ -19,6 +19,20 @@ export type LatestResponsePresentation = {
   icon: 'success' | 'neutral' | 'attention' | 'warning' | 'error';
 };
 
+export function renderLatestResponseActivityLog(
+  activity: Array<{ at: string; summary: string }>,
+  heading = 'Activity Log',
+  empty = 'No recorded activity.',
+  translate: (summary: string) => string = (summary) => summary,
+) {
+  const entries = activity.length
+    ? activity
+        .map((item) => `- ${item.at} — ${translate(item.summary)}`)
+        .join('\n')
+    : `- ${empty}`;
+  return `# ${heading}\n\n${entries}\n`;
+}
+
 export function latestTerminalTaskDecompositionRun(
   runs: TaskDecompositionRunRecord[],
 ) {

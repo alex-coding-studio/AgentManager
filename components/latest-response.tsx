@@ -13,6 +13,7 @@ import type {
   LatestResponseTone,
 } from '@/lib/latest-response';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
 
 const toneClasses: Record<LatestResponseTone, string> = {
   neutral: 'border-border bg-background/95',
@@ -101,5 +102,42 @@ export function LatestResponse({
         {requiresAction ? `${statusLabel}: ${summary}` : ''}
       </span>
     </section>
+  );
+}
+
+export function LatestResponseActions({
+  responseLabel,
+  summaryLabel,
+  logLabel,
+  onOpenResponse,
+  onOpenSummary,
+  onOpenLog,
+}: {
+  responseLabel: string;
+  summaryLabel: string;
+  logLabel: string;
+  onOpenResponse: () => void;
+  onOpenSummary: () => void;
+  onOpenLog: () => void;
+}) {
+  const actions = [
+    { label: responseLabel, onSelect: onOpenResponse },
+    { label: summaryLabel, onSelect: onOpenSummary },
+    { label: logLabel, onSelect: onOpenLog },
+  ];
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {actions.map((action) => (
+        <Button
+          key={action.label}
+          type="button"
+          variant="outline"
+          size="xs"
+          onClick={action.onSelect}
+        >
+          {action.label}
+        </Button>
+      ))}
+    </div>
   );
 }
