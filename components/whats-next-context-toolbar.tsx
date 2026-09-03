@@ -14,12 +14,12 @@ export function WhatsNextContextToolbar({
   const { t } = useUiText();
   return (
     <ProjectModuleHeader
-      title={t("What's Next")}
+      title={t('Product Discovery & Design')}
       description={t('Explore the next supported product direction.')}
       actions={
         <ModuleInstructionsDialog
           endpoint={`/api/projects/${projectId}/whats-next-context`}
-          title="What's Next instructions"
+          title="Product Discovery & Design instructions"
           description="Applies to the next request, including continued sessions. Running requests keep their original instructions. Leave blank to use only the Harness defaults."
           disabled={disabled}
         />

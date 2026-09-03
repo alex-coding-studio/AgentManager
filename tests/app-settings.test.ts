@@ -15,10 +15,11 @@ import { chineseUi, isUiLanguage, translateUi } from '../lib/ui-language.ts';
 
 void test('module names translate without renaming dependency terminology', () => {
   for (const [english, chinese] of [
-    ["What's Next", '下一步'],
-    ['Break It Down', '拆开看'],
-    ["What's That?", '这是什么？'],
-    ['Just Do It', '动手做'],
+    ['Product Discovery & Design', '产品探索与设计'],
+    ['Scope Decomposition', '范围分解'],
+    ['Domain Modeling', '领域建模'],
+    ['Delivery Planning', '交付规划'],
+    ['Implementation', '开发执行'],
     ['Dependencies', '依赖关系'],
   ]) {
     assert.equal(translateUi('en', english), english);
@@ -46,7 +47,7 @@ void test('built-in Agent Graph profiles and effort levels are localized', () =>
   }
 });
 
-void test("What's That localizes its complete static workspace surface", () => {
+void test('Domain Modeling localizes its complete static workspace surface', () => {
   for (const [english, chinese] of [
     ['Describe the model change', '描述模型修改'],
     ['Domain Model instructions', '领域模型指令'],

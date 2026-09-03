@@ -14,36 +14,36 @@ an existing repository or from a product idea that has no code yet.
 
 - **Product Context** is the project-owned library for Markdown product,
   design, engineering, milestone, reference, and other source material.
-- **What's Next** explores supported product directions. It separates Discovery
+- **Product Discovery & Design** explores supported product directions. It separates Discovery
   from Product Design, applies module-specific Intention and Motion profiles,
   and keeps generated Candidates temporary until the user accepts them as
   Formal Nodes.
-- **Break It Down** turns a selected scope into coherent, human-manageable
+- **Scope Decomposition** turns a selected scope into coherent, human-manageable
   Candidates. A working set can be refined or atomically recomposed before its
   Candidates are accepted into the formal graph.
-- **What's That?** maintains a visual Domain Model of entities, fields,
+- **Domain Modeling** maintains a visual model of entities, fields,
   relationships, and constraints. Valid Agent changes become the current model
   immediately; the latest successful change has one Undo opportunity rather
   than a Candidate/finalization lifecycle.
-- **What to Do** turns accepted Product Design into one formal Delivery Map.
+- **Delivery Planning** turns accepted Product Design into one formal Delivery Map.
   Every validated update atomically replaces the Map; its Contracts and hard
   dependencies become executable sources without a separate Candidate phase.
-- **Just Do It** imports a Discovery Node, Break It Down Node, or Delivery
+- **Implementation** imports a Discovery Node, Scope Decomposition Node, or Delivery
   Contract as a goal, develops and finalizes an
   Agent-generated Plan, and executes one Action at a time in a Card-owned
   worktree. Required-check evidence, output review, user acceptance, local
   checkpoints, and GitHub delivery evidence remain distinct states.
 
-What's Next, Break It Down, and What to Do share the Agent Graph Workspace shell: canvas,
+Product Discovery & Design, Scope Decomposition, and Delivery Planning share the Agent Graph Workspace shell: canvas,
 Card structure, Composer, Agent controls, file-backed input packets, Run status,
-Summary, Log, and Latest Response presentation. What's That? reuses the common
+Summary, Log, and Latest Response presentation. Domain Modeling reuses the common
 input and Run surfaces while keeping a Domain Model-specific graph. Harnesses,
 profiles, context assembly, validation, and product language remain
 module-specific.
 
 ### Agent input and instructions
 
-What's Next, Break It Down, What's That?, and What to Do package direct user input as
+Product Discovery & Design, Scope Decomposition, Domain Modeling, and Delivery Planning package direct user input as
 `user-input.md`. Selected Product Context and graph resources become references;
 temporary uploads become external inputs. The Agent receives an indexed packet
 whose file paths and hashes identify the captured request instead of one large
@@ -51,8 +51,8 @@ inline prompt.
 
 Each Agent workspace provides persistent module instructions for later
 requests. Changing them does not rewrite an active Run. The graph Composers
-currently accept Markdown uploads; Just Do It also accepts plain-text files.
-Product Context imports Markdown, while Break It Down's persistent context area
+currently accept Markdown uploads; Implementation also accepts plain-text files.
+Product Context imports Markdown, while Scope Decomposition's persistent context area
 accepts Markdown or JSON.
 
 ## Requirements
@@ -60,9 +60,9 @@ accepts Markdown or JSON.
 - Node.js 22.13 or later
 - npm
 - A locally installed and authenticated Codex CLI or Claude CLI for Agent
-  operations across What's Next, Break It Down, What's That?, What to Do, and
-  Just Do It
-- Git for Just Do It worktrees and repository delivery
+  operations across Product Discovery & Design, Scope Decomposition, Domain Modeling,
+  Delivery Planning, and Implementation
+- Git for Implementation worktrees and repository delivery
 - Optional: GitHub CLI (`gh`) to resolve and refresh pull-request evidence
 
 Praxis uses the Agent account and model access already configured on the local
@@ -134,7 +134,7 @@ project registration, planning writes, and Agent Runs. See
 [API Request Boundary](docs/REQUEST_BOUNDARY.md) before exposing the server.
 
 Agent execution can read or change local files according to the selected Agent's
-effective permissions. Just Do It uses isolated Card worktrees and explicit
+effective permissions. Implementation uses isolated Card worktrees and explicit
 workflow rules, but these are not an operating-system security boundary when the
 Agent itself runs with Full Access.
 
@@ -176,10 +176,10 @@ their exact commands and prerequisites.
 
 - [Product foundation](docs/PRODUCT.md)
 - [Architecture decisions](docs/ARCHITECTURE.md)
-- [Break It Down](docs/BREAK_IT_DOWN_PRODUCT_EVOLUTION.md)
-- [What's That? Domain Model](docs/WHATS_THAT_DOMAIN_MODEL.md)
-- [Just Do It planning](docs/JUST_DO_IT_PLANNING.md)
-- [Just Do It execution](docs/JUST_DO_IT_EXECUTION.md)
+- [Scope Decomposition](docs/BREAK_IT_DOWN_PRODUCT_EVOLUTION.md)
+- [Domain Modeling](docs/WHATS_THAT_DOMAIN_MODEL.md)
+- [Implementation planning](docs/JUST_DO_IT_PLANNING.md)
+- [Implementation execution](docs/JUST_DO_IT_EXECUTION.md)
 - [Process boundaries](docs/PROCESS_BOUNDARIES.md)
 
 ## License

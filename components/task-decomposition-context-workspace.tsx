@@ -184,10 +184,11 @@ export function TaskDecompositionContextWorkspace({
             href={`/projects/${projectId}/decomposition`}
             className="mb-4 inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition hover:text-foreground"
           >
-            <ArrowLeft className="size-3.5" /> {t('Break It Down canvas')}
+            <ArrowLeft className="size-3.5" />
+            {t('Scope Decomposition canvas')}
           </Link>
           <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-            {t('Break It Down')}
+            {t('Scope Decomposition')}
           </p>
           <h1 className="text-3xl font-semibold tracking-[-0.035em]">
             {t('Context')}

@@ -194,7 +194,7 @@ export function WhatToDoWorkspace({
   return (
     <div className="flex h-dvh min-h-[480px] flex-col overflow-hidden">
       <ProjectModuleHeader
-        title={t('What to Do')}
+        title={t('Delivery Planning')}
         description={t(
           'Turn accepted Product Design into deliverable Contracts.',
         )}
@@ -477,7 +477,7 @@ export function WhatToDoWorkspace({
                     )
                   }
                 >
-                  {t('Open in Just Do It')}
+                  {t('Open in Implementation')}
                 </Button>
               ) : null}
             </div>

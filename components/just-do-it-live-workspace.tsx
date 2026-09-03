@@ -353,7 +353,7 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
   return (
     <div className="relative flex min-h-dvh flex-col">
       <ProjectModuleHeader
-        title={t('Just Do It')}
+        title={t('Implementation')}
         description={t(
           'Plan together, execute one Action, then verify the output.',
         )}
@@ -862,7 +862,7 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
             <DialogTitle>{t('Delete this Card?')}</DialogTitle>
             <DialogDescription>
               {t(
-                'The Just Do It Card and its unconfirmed draft will move to system Trash. Its upstream source remains unchanged.',
+                'The Implementation Card and its unconfirmed draft will move to system Trash. Its upstream source remains unchanged.',
               )}
             </DialogDescription>
           </DialogHeader>
@@ -893,7 +893,7 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
             <DialogTitle>{t('Working instructions')}</DialogTitle>
             <DialogDescription>
               {t(
-                'Applies to every Just Do It Card in this project. System workflow rules are built in; only add your own preferences here. Changes apply to new planning runs, not running Agents.',
+                'Applies to every Implementation Card in this project. System workflow rules are built in; only add your own preferences here. Changes apply to new planning runs, not running Agents.',
               )}
             </DialogDescription>
           </DialogHeader>

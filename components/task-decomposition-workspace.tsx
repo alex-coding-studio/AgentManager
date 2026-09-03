@@ -1215,7 +1215,7 @@ export function TaskDecompositionWorkspace({
   return (
     <div className="flex h-dvh min-h-[480px] flex-col overflow-hidden">
       <ProjectModuleHeader
-        title={t('Break It Down')}
+        title={t('Scope Decomposition')}
         description={t(
           'Break one scope into coherent, human-manageable nodes.',
         )}
@@ -1417,7 +1417,7 @@ export function TaskDecompositionWorkspace({
                   id="task-title"
                   value={title}
                   maxLength={160}
-                  placeholder={t('Break It Down workspace')}
+                  placeholder={t('Scope Decomposition workspace')}
                   onChange={(event) => setTitle(event.target.value)}
                 />
               </div>

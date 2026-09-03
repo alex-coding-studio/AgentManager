@@ -85,6 +85,7 @@ import {
   reconcileProposalRuns,
 } from '@/lib/agent-graph-proposal';
 import { titleFromAgentGraphIdea } from '@/lib/agent-graph-source';
+import { whatsNextRunToPreviews } from '@/lib/whats-next-previews';
 import {
   CandidateMetadataSections,
   CandidateResourceList,
@@ -142,7 +143,7 @@ function WhatsNextCanvas({
   const router = useRouter();
   const [nodes, setNodes] = useState(initialNodes);
   const [previews, setPreviews] = useState<TaskGraphPreview[]>(
-    mergePreviews([], initialRuns.flatMap(runToPreviews)),
+    mergePreviews([], initialRuns.flatMap(whatsNextRunToPreviews)),
   );
   const [runs, setRuns] = useState<WhatsNextRunRecord[]>(initialRuns);
   const [agentProfile, setAgentProfile] = useState<AgentProfile>(
@@ -389,7 +390,9 @@ function WhatsNextCanvas({
           })
         : current,
     );
-    setPreviews(mergePreviews([], payload.runs.flatMap(runToPreviews)));
+    setPreviews(
+      mergePreviews([], payload.runs.flatMap(whatsNextRunToPreviews)),
+    );
   }
 
   const restoreRuns = useEffectEvent(loadRunsFromServer);
@@ -416,7 +419,7 @@ function WhatsNextCanvas({
       setPreviews((current) =>
         mergePreviews(
           current.filter((preview) => !discardedRuns.has(preview.runId ?? '')),
-          runToPreviews(developmentTransitionRun),
+          whatsNextRunToPreviews(developmentTransitionRun),
         ),
       );
       setFocusedNodeId('');
@@ -447,7 +450,9 @@ function WhatsNextCanvas({
       const { run } = (await response.json()) as { run: WhatsNextRunRecord };
       if (['running', 'validating'].includes(run.status)) {
         setRuns((current) => upsertRun(current, run));
-        setPreviews((current) => mergePreviews(current, runToPreviews(run)));
+        setPreviews((current) =>
+          mergePreviews(current, whatsNextRunToPreviews(run)),
+        );
         continue;
       }
       if (run.revisionOf && run.result?.outcome !== 'proposal') {
@@ -523,7 +528,7 @@ function WhatsNextCanvas({
     setPreviews((current) =>
       mergePreviews(
         current.filter((preview) => !discardedRuns.has(preview.runId ?? '')),
-        runToPreviews(payload.run!),
+        whatsNextRunToPreviews(payload.run!),
       ),
     );
     if (input.revisionTarget || input.redoProposal) setFocusedNodeId('');
@@ -1251,7 +1256,7 @@ function WhatsNextCanvas({
                 );
               }}
             >
-              {t('Open in What to Do')}
+              {t('Open in Delivery Planning')}
               <ArrowRight className="size-3.5" />
             </Button>
           ) : null}
@@ -2305,7 +2310,11 @@ function mergeTerminalRunPreviews(
   current: TaskGraphPreview[],
   run: WhatsNextRunRecord,
 ) {
-  return replaceRunWithPreviewsInPlace(current, run.runId, runToPreviews(run));
+  return replaceRunWithPreviewsInPlace(
+    current,
+    run.runId,
+    whatsNextRunToPreviews(run),
+  );
 }
 
 function upsertRun(current: WhatsNextRunRecord[], run: WhatsNextRunRecord) {
@@ -2365,83 +2374,4 @@ function lineDiff(previous: string, current: string) {
     right += 1;
   }
   return lines;
-}
-
-function runToPreviews(run: WhatsNextRunRecord): TaskGraphPreview[] {
-  const base = {
-    sourceNodeId: run.sourceNodeIds[0] ?? '',
-    instruction: '',
-    inheritedResourceCount: run.input?.resourcePaths.length ?? 0,
-    additionalResourceCount: 0,
-    runId: run.runId,
-    startedAt: run.startedAt,
-    updatedAt: run.updatedAt,
-    derivedFrom: run.sourceNodeIds,
-    layer: intentionDestination(run.intention).layer,
-  };
-  const agentLabel = run.transport === 'claude-cli' ? 'Claude' : 'Codex';
-
-  if (['running', 'validating'].includes(run.status)) {
-    return [
-      {
-        ...base,
-        id: run.revisionOf ?? run.runId,
-        kind: 'run',
-        title: run.revisionOf ? 'Refining direction' : agentLabel,
-        type: run.revisionOf ? 'Refining' : 'Running',
-        description: run.activity?.at(-1)?.summary ?? '',
-        agentLabel,
-        status: run.status,
-        revisionOf: run.revisionOf,
-      },
-    ];
-  }
-
-  if (run.result?.outcome === 'proposal') {
-    return run.result.candidates.map((candidate) => ({
-      ...base,
-      id: candidate.candidateId,
-      kind: 'candidate' as const,
-      title: candidate.title,
-      type: candidate.type,
-      description: candidate.summary,
-      color: candidate.presentation?.color,
-      derivedFrom: candidate.derivedFrom,
-      dependsOn: candidate.dependsOn,
-      candidate,
-      layer: candidate.layer,
-      outputPath: `whats-next/runs/${run.runId}/candidates/${candidate.candidateId}/output.md`,
-      previousOutputPath:
-        run.revisionOf && run.parentRunId
-          ? `whats-next/runs/${run.parentRunId}/candidates/${candidate.candidateId}/output.md`
-          : undefined,
-      revisionOf: run.revisionOf,
-    }));
-  }
-
-  if (['failed', 'clarification', 'no-change'].includes(run.status)) {
-    return [
-      {
-        ...base,
-        id: run.runId,
-        kind: 'outcome' as const,
-        title:
-          run.status === 'failed'
-            ? 'Run failed'
-            : run.status === 'clarification'
-              ? 'Needs one answer'
-              : 'No further direction',
-        type: run.status,
-        description:
-          run.error ??
-          (run.result?.outcome === 'clarification'
-            ? run.result.clarification.question
-            : run.result?.outcome === 'no-change'
-              ? run.result.reason
-              : ''),
-        status: run.status,
-      },
-    ];
-  }
-  return [];
 }

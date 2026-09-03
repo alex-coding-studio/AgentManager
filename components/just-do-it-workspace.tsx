@@ -163,7 +163,7 @@ export function JustDoItWorkspace({
             <div>
               <p className={labelStyle}>{t('Execution workspace')}</p>
               <h1 className="mt-2 text-3xl font-semibold tracking-tight">
-                Just Do It
+                Implementation
               </h1>
               <p className="mt-2 text-sm text-muted-foreground">
                 {t(
