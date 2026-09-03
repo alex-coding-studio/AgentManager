@@ -144,6 +144,9 @@ void test('What to Do Harness owns delivery boundaries rather than implementatio
   assert.match(WHAT_TO_DO_HARNESS_PROMPT, /There is no fixed Contract count/);
   assert.match(WHAT_TO_DO_HARNESS_PROMPT, /hard prerequisites only/);
   assert.match(WHAT_TO_DO_HARNESS_PROMPT, /ordinary project onboarding/);
+  assert.match(WHAT_TO_DO_HARNESS_PROMPT, /only new or replacement Candidates/);
+  assert.match(WHAT_TO_DO_HARNESS_PROMPT, /sourceClaimUpdates/);
+  assert.match(WHAT_TO_DO_HARNESS_PROMPT, /Negative behavior/);
   assert.match(
     WHAT_TO_DO_HARNESS_PROMPT,
     /domain-model-summary\.md every time/,
@@ -542,8 +545,53 @@ void test('adjustment preserves prior claims and reserves old identity for retai
           knownSourceClaims,
         }),
       ),
-    /Previously acknowledged Source Claim CLAIM-1 is missing/,
+    /unknown Contract Candidate/,
   );
+});
+
+void test('adjustment carries old claims forward and applies compact assignment updates', () => {
+  const knownCandidates = [knownCandidate('CANDIDATE-0001')];
+  const knownSourceClaims = proposal().sourceClaims;
+  const replacement = candidate('CANDIDATE-0002');
+  const adjusted = proposal([replacement], {
+    sourceClaims: [],
+    sourceClaimUpdates: [
+      {
+        claimId: 'CLAIM-1',
+        disposition: 'in-scope',
+        contractCandidateIds: ['CANDIDATE-0002'],
+        exclusionReason: null,
+        exclusionAuthority: null,
+      },
+    ],
+    recomposition: {
+      effects: [
+        {
+          kind: 'replace',
+          from: ['CANDIDATE-0001'],
+          to: ['CANDIDATE-0002'],
+        },
+      ],
+    },
+  });
+
+  const validated = validateWhatToDoHarnessResult(
+    adjusted,
+    context({
+      operation: 'adjust-map',
+      knownCandidates,
+      knownSourceClaims,
+    }),
+  );
+
+  assert.equal(validated.outcome, 'map-proposal');
+  if (validated.outcome === 'map-proposal') {
+    assert.equal(validated.sourceClaimUpdates, undefined);
+    assert.equal(validated.sourceClaims[0]!.anchor, '## Accepted behavior');
+    assert.deepEqual(validated.sourceClaims[0]!.contractCandidateIds, [
+      'CANDIDATE-0002',
+    ]);
+  }
 });
 
 void test('the complete adjusted Map rejects cycles among retained Contracts', () => {

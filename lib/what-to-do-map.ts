@@ -102,7 +102,14 @@ export function whatToDoCurrentMapPromptView(map: WhatToDoDeliveryMap) {
         ),
       };
     }),
-    sourceClaims: whatToDoKnownSourceClaims(map),
+    sourceClaims: whatToDoKnownSourceClaims(map).map((claim) => ({
+      claimId: claim.claimId,
+      sourcePath: claim.sourcePath,
+      summary: claim.summary,
+      disposition: claim.disposition,
+      contractCandidateIds: claim.contractCandidateIds,
+      exclusionReason: claim.exclusionReason,
+    })),
   };
 }
 
