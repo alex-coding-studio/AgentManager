@@ -1,9 +1,10 @@
 'use client';
 
-import { Plus, Route, Square, X } from 'lucide-react';
+import { Plus, Route, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { AgentGraphComposerCard } from '@/components/agent-graph-composer-card';
+import { AgentGraphRunningCard } from '@/components/agent-graph-running-card';
 import { AgentRunControls } from '@/components/agent-run-controls';
 import { ContextAttachmentPicker } from '@/components/context-attachment-picker';
 import {
@@ -25,7 +26,6 @@ import {
   renderLatestResponseActivityLog,
 } from '@/lib/latest-response';
 import type { ContextBrowserFolder } from '@/lib/product-context';
-import type { TaskGraphPreview } from '@/lib/task-graph-layout';
 import type { TaskGraphNode } from '@/lib/task-graph';
 import {
   renderWhatToDoContract,
@@ -108,10 +108,6 @@ export function WhatToDoWorkspace({
   );
   const selectedContracts = currentMap?.contracts.filter((contract) =>
     focusContractIds.includes(contract.id),
-  );
-  const previews = useMemo(
-    () => buildPreviews(currentMap, running, t),
-    [currentMap, running, t],
   );
 
   async function refreshRuns() {
@@ -268,7 +264,7 @@ export function WhatToDoWorkspace({
       <section className="relative min-h-0 flex-1 overflow-hidden">
         <TaskGraphCanvas
           nodes={contractNodes}
-          previews={previews}
+          previews={[]}
           focusedNodeId={focusedNodeId}
           locateRequest={null}
           selectedNodeIds={focusContractIds}
@@ -348,21 +344,12 @@ export function WhatToDoWorkspace({
           </LatestResponse>
         ) : null}
         {running ? (
-          <AgentGraphComposerCard
-            title={t('Preparing Delivery Map')}
-            description={t(
-              running.activity.at(-1)?.summary ??
-                'Reading the frozen Packet and coordinating Contracts.',
-            )}
-            action={
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void cancelRun()}
-              >
-                <Square className="size-3.5" /> {t('Cancel')}
-              </Button>
-            }
+          <AgentGraphRunningCard
+            agent={running.profile.agent}
+            startedAt={running.startedAt}
+            activity={running.activity}
+            fallback="Reading the frozen Packet and coordinating Contracts."
+            onCancel={() => void cancelRun()}
           />
         ) : (
           <AgentGraphComposerCard
@@ -580,33 +567,6 @@ export function WhatToDoWorkspace({
       </Dialog>
     </div>
   );
-}
-
-function buildPreviews(
-  currentMap: WhatToDoDeliveryMap | null,
-  running: WhatToDoRunRecord | null,
-  t: (text: string) => string,
-): TaskGraphPreview[] {
-  if (!running) return [];
-  return [
-    {
-      id: running.id,
-      sourceNodeId:
-        running.focusContractIds[0] ?? currentMap?.contracts[0]?.id ?? '',
-      instruction: '',
-      inheritedResourceCount:
-        running.request.sourceFeatures.length +
-        (currentMap?.contracts.length ?? 0),
-      additionalResourceCount: 0,
-      kind: 'run',
-      title: t('Preparing Delivery Map'),
-      type: t('Agent Run'),
-      description: t('Reading the frozen Packet and coordinating Contracts.'),
-      status: 'running',
-      runId: running.id,
-      startedAt: running.startedAt,
-    },
-  ];
 }
 
 function buildContractNodes(

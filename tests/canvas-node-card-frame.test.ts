@@ -531,11 +531,48 @@ void test('Delivery Planning replaces the full Composer while its Agent is runni
     source.indexOf('{running ? ('),
     source.indexOf('<ProductDesignFeaturePicker'),
   );
-  assert.match(transition, /title=\{t\('Preparing Delivery Map'\)\}/);
-  assert.match(transition, /running\.activity\.at\(-1\)/);
-  assert.match(transition, /<Square/);
+  assert.match(transition, /<AgentGraphRunningCard/);
+  assert.match(transition, /activity=\{running\.activity\}/);
+  assert.match(transition, /onCancel=\{\(\) => void cancelRun\(\)\}/);
   assert.match(transition, /\) : \(\s*<AgentGraphComposerCard/);
   assert.match(transition, /<Textarea/);
+  assert.doesNotMatch(source, /function buildPreviews/);
+  assert.match(source, /previews=\{\[\]\}/);
+});
+
+void test('Domain Modeling and Delivery Planning share one running card', async () => {
+  const { latestReadableAgentActivity } =
+    await import('../components/agent-graph-running-card.tsx');
+  assert.equal(
+    latestReadableAgentActivity(
+      [
+        { summary: 'Preparing the request.' },
+        { summary: 'The accepted context is ready.' },
+        { summary: 'Running: sed -n 1,240p input.md' },
+        { summary: 'Finished: sed -n 1,240p input.md (exit 0)' },
+      ],
+      'Fallback',
+    ),
+    'The accepted context is ready.',
+  );
+  const runningCard = await readFile(
+    new URL('../components/agent-graph-running-card.tsx', import.meta.url),
+    'utf8',
+  );
+  assert.match(runningCard, /AgentGraphComposerCard/);
+  assert.match(runningCard, /\{agent\} is running/);
+  assert.match(runningCard, /latestReadableAgentActivity/);
+  assert.match(runningCard, /<Square/);
+  for (const file of [
+    'domain-model-workspace.tsx',
+    'what-to-do-workspace.tsx',
+  ]) {
+    const source = await readFile(
+      new URL(`../components/${file}`, import.meta.url),
+      'utf8',
+    );
+    assert.match(source, /<AgentGraphRunningCard/, file);
+  }
 });
 
 void test('terminal What’s Next outcomes leave the Canvas and stay in Latest Response', async () => {
