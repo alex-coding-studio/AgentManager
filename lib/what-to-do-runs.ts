@@ -119,6 +119,14 @@ export async function startWhatToDoRun(
   let preparedRun = false;
   try {
     const currentMap = await readWhatToDoCurrentMap(project);
+    if (currentMap) {
+      const currentMapRun = await readWhatToDoRun(project, currentMap.runId);
+      if (
+        currentMapRun.status !== 'succeeded' ||
+        currentMapRun.map?.runId !== currentMap.runId
+      )
+        throw new Error('The current What to Do Map has no committed Run.');
+    }
     const prepared = await prepareWhatToDoContext(project, runId, {
       ...input,
       currentMap,

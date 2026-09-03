@@ -380,6 +380,11 @@ void test('a committed current Map completes an interrupted terminal Run publica
     path.join(directory, 'terminal.json'),
     `${JSON.stringify(completed, null, 2)}\n`,
   );
+  const successor = await startWhatToDoRun(
+    project,
+    { ...input(), sourceUids: [] },
+    control.transport,
+  );
   const recovered = await readWhatToDoRun(project, run.id);
   assert.equal(recovered.status, 'succeeded');
   assert.equal(recovered.map?.runId, run.id);
@@ -387,6 +392,8 @@ void test('a committed current Map completes an interrupted terminal Run publica
     readFile(path.join(directory, 'terminal.json')),
     /ENOENT/,
   );
+  await cancelWhatToDoRun(project, successor.id);
+  control.calls[1]!.reject(new Error('canceled'));
 });
 
 void test('an uncommitted terminal record rolls back to an interrupted Run', async (t) => {
