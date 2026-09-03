@@ -5,6 +5,16 @@ export function isUiLanguage(value: unknown): value is UiLanguage {
 }
 
 export const chineseUi: Record<string, string> = {
+  'Product Discovery & Design': '产品探索与设计',
+  'Product Discovery & Design instructions': '产品探索与设计指令',
+  'Scope Decomposition': '范围分解',
+  'Scope Decomposition canvas': '范围分解画布',
+  'Scope Decomposition workspace': '范围分解工作区',
+  'Domain Modeling': '领域建模',
+  'Delivery Planning': '交付规划',
+  Implementation: '开发执行',
+  'Open in Delivery Planning': '在交付规划中打开',
+  'Open in Implementation': '在开发执行中打开',
   "What's That?": '这是什么？',
   "What's Next instructions": 'What’s Next 全局 Instructions',
   'Explore the next supported product direction.':
@@ -127,8 +137,8 @@ export const chineseUi: Record<string, string> = {
   'Execution not connected': '执行尚未接入',
   'Working instructions': '工作指令',
   'Custom instructions (optional)': '自定义工作指令（可选）',
-  'Applies to every Just Do It Card in this project. System workflow rules are built in; only add your own preferences here. Changes apply to new planning runs, not running Agents.':
-    '适用于当前项目的所有 Just Do It 任务卡。系统流程规则已内置，只需填写你的补充要求。修改将在新规划中生效，不影响运行中的 Agent。',
+  'Applies to every Implementation Card in this project. System workflow rules are built in; only add your own preferences here. Changes apply to new planning runs, not running Agents.':
+    '适用于当前项目的所有开发执行任务卡。系统流程规则已内置，只需填写你的补充要求。修改将在新规划中生效，不影响运行中的 Agent。',
   'Add development conventions or local Skill instructions. Leave empty to use the built-in workflow.':
     '填写开发约定、使用哪些本地 Skill 等。可以留空，系统会自动应用内置流程规则。',
   'Your additional requirements': '你的补充要求',
@@ -139,8 +149,8 @@ export const chineseUi: Record<string, string> = {
   'Add as prerequisite': '添加为前置依赖',
   'Delete this Card': '删除这张卡片',
   'Delete this Card?': '删除这张卡片？',
-  'The Just Do It Card and its unconfirmed draft will move to system Trash. Its upstream source remains unchanged.':
-    'Just Do It 卡片和未确认的计划草稿会移到系统废纸篓，上游来源保持不变。',
+  'The Implementation Card and its unconfirmed draft will move to system Trash. Its upstream source remains unchanged.':
+    '开发执行卡片和未确认的计划草稿会移到系统废纸篓，上游来源保持不变。',
   'Move Card to Trash': '移到废纸篓',
   'Model ID (optional)': '模型 ID（可选）',
   'Agent configuration': 'Agent 配置',

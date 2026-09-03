@@ -45,9 +45,9 @@ export function NodeProvenanceFacts({ node }: { node: TaskGraphNode }) {
         label={t('Created through')}
         value={
           node.provenance?.feature === 'whats-next'
-            ? t("What's Next")
+            ? t('Product Discovery & Design')
             : node.provenance
-              ? t('Break It Down')
+              ? t('Scope Decomposition')
               : t('Manual creation')
         }
       />

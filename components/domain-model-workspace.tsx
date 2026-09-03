@@ -278,7 +278,7 @@ export function DomainModelWorkspace({
   return (
     <div className="relative flex h-dvh min-h-[560px] flex-col overflow-hidden">
       <ProjectModuleHeader
-        title={t("What's That?")}
+        title={t('Domain Modeling')}
         description={t(
           'Define the entities, fields and relationships behind the product.',
         )}

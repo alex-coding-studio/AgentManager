@@ -420,6 +420,49 @@ void test('Latest Response exposes the standard Response, Summary and Log action
   }
 });
 
+void test('terminal What’s Next outcomes leave the Canvas and stay in Latest Response', async () => {
+  const { whatsNextRunToPreviews } =
+    await import('../lib/whats-next-previews.ts');
+  for (const status of ['no-change', 'clarification', 'failed'] as const) {
+    assert.deepEqual(
+      whatsNextRunToPreviews({
+        runId: 'RUN-11111111-1111-4111-8111-111111111111',
+        requestId: 'REQUEST-11111111-1111-4111-8111-111111111111',
+        sessionId: 'SESSION-11111111-1111-4111-8111-111111111111',
+        schemaVersion: 1,
+        status,
+        operation: 'explore',
+        intention: 'product-design-completion',
+        motion: 'converge',
+        sourceNodeIds: ['NODE-11111111'],
+        startedAt: '2026-09-03T00:00:00.000Z',
+        updatedAt: '2026-09-03T00:00:01.000Z',
+        endedAt: '2026-09-03T00:00:01.000Z',
+        transport: 'codex-cli',
+        agentSessionMode: 'persistent',
+        agentSessionId: null,
+        profile: { agent: 'codex', model: '', effort: '' },
+        harness: { id: 'praxis.whats-next', revision: 8 },
+        inputFingerprint: '0'.repeat(64),
+        input: {
+          userInputPath: 'input/user-input.md',
+          moduleInstructionsState: 'cleared',
+          resourcePaths: [],
+          feedbackAnchors: [],
+          requestArtifact: 'request.json',
+          intention: 'product-design-completion',
+          motion: 'converge',
+        },
+        activity: [],
+        usage: null,
+        result: null,
+        error: status === 'failed' ? 'Failed.' : null,
+      }),
+      [],
+    );
+  }
+});
+
 void test('every primary module uses one compact Project Header structure', async () => {
   const { ProjectModuleHeader } =
     await import('../components/project-module-header.tsx');

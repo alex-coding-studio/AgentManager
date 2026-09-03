@@ -400,7 +400,7 @@ export function GoalSourcePicker({
 }
 
 function moduleLabel(module: PlanningSource['module']) {
-  if (module === 'whats-next') return "What's Next";
-  if (module === 'task-graph') return 'Break It Down';
-  return 'What to Do';
+  if (module === 'whats-next') return 'Product Discovery & Design';
+  if (module === 'task-graph') return 'Scope Decomposition';
+  return 'Delivery Planning';
 }
