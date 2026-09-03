@@ -1,7 +1,7 @@
 'use client';
 
 import { summarizeGitHub } from '@/lib/github-delivery-summary';
-import { useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArrowLeft,
@@ -74,11 +74,18 @@ function initialDraft(card: PlanningCard): Draft {
 
 export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
   const { t } = useUiText();
-  const initialSourceUid = useSearchParams().get('source') ?? undefined;
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const initialSourceUid = searchParams.get('source') ?? undefined;
   const endpoint = `/api/projects/${projectId}/planning`;
   const [view, setView] = useState<View | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [stepId, setStepId] = useState('overview');
+  const [selectedId, setSelectedId] = useState<string | null>(() =>
+    searchParams.get('card'),
+  );
+  const [stepId, setStepId] = useState(
+    () => searchParams.get('action') ?? 'overview',
+  );
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [importing, setImporting] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
@@ -91,6 +98,22 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
   const initialSourceHandled = useRef(false);
   const mounted = useRef(true);
   const refreshBusy = useRef(false);
+
+  const updateSelectionLocation = useCallback(
+    (cardId: string | null, actionId = 'overview') => {
+      const params = new URLSearchParams(window.location.search);
+      params.delete('source');
+      if (cardId) params.set('card', cardId);
+      else params.delete('card');
+      if (cardId && actionId !== 'overview') params.set('action', actionId);
+      else params.delete('action');
+      const query = params.toString();
+      router.replace(query ? `${pathname}?${query}` : pathname, {
+        scroll: false,
+      });
+    },
+    [pathname, router],
+  );
 
   const refresh = useCallback(async () => {
     if (refreshBusy.current) return;
@@ -111,6 +134,7 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
         if (existing) {
           setSelectedId(existing.id);
           setStepId('overview');
+          updateSelectionLocation(existing.id);
           setError(null);
         } else if (
           (data.sources as PlanningSource[]).some(
@@ -138,7 +162,7 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
     } finally {
       refreshBusy.current = false;
     }
-  }, [endpoint, initialSourceUid, t]);
+  }, [endpoint, initialSourceUid, t, updateSelectionLocation]);
   useEffect(() => {
     mounted.current = true;
     const initial = setTimeout(() => void refresh(), 0);
@@ -222,6 +246,8 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
             : old,
         );
         setSelectedId(null);
+        setStepId('overview');
+        updateSelectionLocation(null);
       }
       return data.card as PlanningCard | undefined;
     } catch (err) {
@@ -268,7 +294,18 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
   function openCard(id: string) {
     setSelectedId(id);
     setStepId('overview');
+    updateSelectionLocation(id);
     setError(null);
+  }
+  function closeCard() {
+    setSelectedId(null);
+    setStepId('overview');
+    updateSelectionLocation(null);
+  }
+  function selectStep(id: string) {
+    if (!card) return;
+    setStepId(id);
+    updateSelectionLocation(card.id, id);
   }
   async function addFiles(files: File[]) {
     if (!card || !draft) return;
@@ -484,7 +521,7 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
           </>
         ) : (
           <>
-            <Button variant="ghost" onClick={() => setSelectedId(null)}>
+            <Button variant="ghost" onClick={closeCard}>
               <ArrowLeft />
               {t('All goals')}
             </Button>
@@ -688,7 +725,7 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
                         'mb-2 w-full rounded-xl px-3 py-3 text-left text-sm',
                         !selectedStep && 'bg-secondary',
                       )}
-                      onClick={() => setStepId('overview')}
+                      onClick={() => selectStep('overview')}
                     >
                       {t('Overview')}
                     </button>
@@ -697,7 +734,7 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
                         key={step.id}
                         aria-pressed={step.id === stepId}
                         aria-busy={running && card.run?.targetId === step.id}
-                        onClick={() => setStepId(step.id)}
+                        onClick={() => selectStep(step.id)}
                         className={cn(
                           'flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left',
                           step.id === stepId
