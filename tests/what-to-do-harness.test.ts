@@ -456,6 +456,34 @@ void test('new Maps discard a redundant add-only Recompose envelope', () => {
     assert.equal(validated.recomposition, undefined);
 });
 
+void test('adjusted Maps discard redundant copies of retained Contracts', () => {
+  const retained = candidate('CANDIDATE-0001');
+  const result = proposal([retained], {
+    recomposition: {
+      effects: [
+        {
+          kind: 'retain',
+          from: ['CANDIDATE-0001'],
+          to: ['CANDIDATE-0001'],
+        },
+      ],
+    },
+  });
+
+  const validated = validateWhatToDoHarnessResult(
+    result,
+    context({
+      operation: 'adjust-map',
+      knownCandidates: [knownCandidate('CANDIDATE-0001')],
+      knownSourceClaims: proposal().sourceClaims,
+    }),
+  );
+
+  assert.equal(validated.outcome, 'map-proposal');
+  if (validated.outcome === 'map-proposal')
+    assert.deepEqual(validated.candidates, []);
+});
+
 void test('adjustment preserves prior claims and reserves old identity for retain only', () => {
   const knownCandidates = [knownCandidate('CANDIDATE-0001')];
   const knownSourceClaims = proposal().sourceClaims;
