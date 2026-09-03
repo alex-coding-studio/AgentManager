@@ -480,7 +480,22 @@ void test('a controlled Agent Run applies one model and cancellation changes not
     },
     hanging,
   );
-  const stopped = await cancelDomainModelRun(project, second.id);
+  const cancellation = cancelDomainModelRun(project, second.id);
+  await Promise.resolve();
+  await Promise.resolve();
+  await assert.rejects(
+    startDomainModelRun(
+      project,
+      {
+        instruction: 'Start before cancellation is durable.',
+        selectedIds: [],
+        profile: { agent: 'codex', model: '', effort: '' },
+      },
+      hanging,
+    ),
+    /already active/,
+  );
+  const stopped = await cancellation;
   assert.equal(canceled, true);
   assert.equal(stopped.status, 'canceled');
   assert.equal((await readDomainModel(project)).stateVersion, 1);
@@ -497,6 +512,16 @@ void test('a controlled Agent Run applies one model and cancellation changes not
     ),
     /not changed/,
   );
+  const afterCancellation = await startDomainModelRun(
+    project,
+    {
+      instruction: 'Start after cancellation is durable.',
+      selectedIds: [],
+      profile: { agent: 'codex', model: '', effort: '' },
+    },
+    hanging,
+  );
+  await cancelDomainModelRun(project, afterCancellation.id);
 });
 
 void test('a Domain Model Run packages User Input, references and external files', async (t) => {

@@ -215,7 +215,8 @@ export async function startDomainModelRun(
         .then((result) => settle(project, request, run, active, result))
         .catch((error: unknown) => fail(project, run, active, error))
         .finally(() => {
-          if (activeRuns.get(key) === active) activeRuns.delete(key);
+          if (!active.canceled && activeRuns.get(key) === active)
+            activeRuns.delete(key);
         });
       return run;
     } catch (error) {
