@@ -851,6 +851,7 @@ export const chineseUi: Record<string, string> = {
     '接受此版本前，可以查看每一处行级变化。',
   'Explore more': '继续探索',
   'Expand input panel': '展开输入面板',
+  'Expand Agent Run': '展开 Agent 运行状态',
   'Feedback for this Refine': '本次细化的反馈',
   Folder: '文件夹',
   'Folder name': '文件夹名称',

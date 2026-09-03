@@ -12,12 +12,18 @@ export function AgentGraphComposerCard({
   action,
   children,
   className,
+  collapsedIcon,
+  collapsedLabel,
+  descriptionClassName,
 }: {
   title: ReactNode;
   description?: ReactNode;
   action?: ReactNode;
   children?: ReactNode;
   className?: string;
+  collapsedIcon?: ReactNode;
+  collapsedLabel?: string;
+  descriptionClassName?: string;
 }) {
   const { t } = useUiText();
   const [collapsed, setCollapsed] = useState(false);
@@ -27,7 +33,7 @@ export function AgentGraphComposerCard({
         type="button"
         variant="outline"
         size="icon-lg"
-        aria-label={t('Expand input panel')}
+        aria-label={collapsedLabel ?? t('Expand input panel')}
         aria-expanded={false}
         aria-hidden={!collapsed}
         tabIndex={collapsed ? 0 : -1}
@@ -40,7 +46,7 @@ export function AgentGraphComposerCard({
         )}
         onClick={() => setCollapsed(false)}
       >
-        <Sparkles className="size-4" />
+        {collapsedIcon ?? <Sparkles className="size-4" />}
       </Button>
       <aside
         aria-hidden={collapsed}
@@ -57,7 +63,12 @@ export function AgentGraphComposerCard({
           <div className="min-w-0">
             <div className="text-xs font-semibold">{title}</div>
             {description ? (
-              <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
+              <p
+                className={cn(
+                  'mt-1 text-[11px] leading-5 text-muted-foreground',
+                  descriptionClassName,
+                )}
+              >
                 {description}
               </p>
             ) : null}

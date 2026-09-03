@@ -580,6 +580,13 @@ void test('Domain Modeling and Delivery Planning share one running card', async 
   assert.match(runningCard, /AgentGraphComposerCard/);
   assert.match(runningCard, /\{agent\} is running/);
   assert.match(runningCard, /latestReadableAgentActivity/);
+  assert.match(runningCard, /collapsedIcon=\{<RunningIndicator \/>\}/);
+  assert.match(runningCard, /collapsedLabel=\{t\('Expand Agent Run'\)\}/);
+  assert.match(
+    runningCard,
+    /descriptionClassName="line-clamp-4 overflow-hidden/,
+  );
+  assert.doesNotMatch(runningCard, /overflow-y-auto/);
   assert.match(runningCard, /<Square/);
   for (const file of [
     'domain-model-workspace.tsx',
@@ -738,7 +745,10 @@ void test('the standard Agent Composer owns one collapsible panel control', asyn
     new URL('../components/agent-graph-composer-card.tsx', import.meta.url),
     'utf8',
   );
-  assert.match(source, /aria-label=\{t\('Expand input panel'\)\}/);
+  assert.match(
+    source,
+    /aria-label=\{collapsedLabel \?\? t\('Expand input panel'\)\}/,
+  );
   assert.match(source, /<Sparkles/);
   assert.match(source, /setCollapsed\(false\)/);
 });
