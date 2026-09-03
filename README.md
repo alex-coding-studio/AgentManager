@@ -93,6 +93,20 @@ praxis dev
 praxis dev --port 3100
 ```
 
+`start` runs in the foreground. Pass `-d` to run in the background and
+manage it with the lifecycle commands:
+
+```bash
+praxis start -d --port 3100
+praxis status --port 3100
+praxis logs --port 3100 -n 100
+praxis restart --port 3100
+praxis stop --port 3100
+```
+
+Only processes started by `praxis start` (or `dev`) are managed. Runtime
+state and logs live under `PRAXIS_HOME/run` (`~/.praxis/run` by default).
+
 Run `praxis --help` to see the supported command forms.
 
 ## Local data and trust boundary
