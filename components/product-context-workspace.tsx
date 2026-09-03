@@ -58,7 +58,6 @@ export function ProductContextWorkspace({
   const [selectedFileName, setSelectedFileName] = useState(
     initialSections[0]?.documents[0]?.fileName ?? '',
   );
-  const [initializing, setInitializing] = useState(false);
   const [adding, setAdding] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [creatingFolder, setCreatingFolder] = useState(false);
@@ -89,27 +88,6 @@ export function ProductContextWorkspace({
       ) ?? selectedSection?.documents[0],
     [selectedFileName, selectedSection],
   );
-
-  async function initialize() {
-    setInitializing(true);
-    setError('');
-    const response = await fetch(
-      `/api/projects/${projectId}/context/initialize`,
-      { method: 'POST' },
-    );
-    const result = (await response.json()) as {
-      sections?: ContextSection[];
-      error?: string;
-    };
-    setInitializing(false);
-    if (!response.ok || !result.sections) {
-      setError(result.error ?? 'Could not initialize Product Context.');
-      return;
-    }
-    setSections(result.sections);
-    setSelectedSlug(result.sections[0]?.slug ?? '');
-    setSelectedFileName(result.sections[0]?.documents[0]?.fileName ?? '');
-  }
 
   function selectSection(section: ContextSection) {
     setSelectedSlug(section.slug);
@@ -311,28 +289,16 @@ export function ProductContextWorkspace({
       <div className="mx-auto grid min-h-[calc(100vh-4rem)] max-w-3xl place-items-center px-5 py-12 lg:px-8">
         <div className="w-full rounded-2xl border border-dashed border-border bg-card p-8 text-center sm:p-12">
           <div className="mx-auto grid size-12 place-items-center rounded-2xl bg-secondary">
-            <FolderPlus className="size-5" />
+            <Folder className="size-5" />
           </div>
           <h1 className="mt-5 text-2xl font-semibold tracking-tight">
-            {t('Initialize Product Context')}
+            {t('Product Context is empty')}
           </h1>
           <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-muted-foreground">
             {t(
-              'Create the fixed Product, Design, Engineering, Milestones, References, and Other folders with README guidance for people and agents.',
+              'Formal documents will appear here as you use Product Discovery & Design, Scope Decomposition, Domain Modeling, Delivery Planning, and Implementation.',
             )}
           </p>
-          <Button
-            className="mt-6"
-            size="lg"
-            onClick={initialize}
-            disabled={initializing}
-          >
-            <FolderPlus />{' '}
-            {initializing ? t('Initializing…') : t('Create context structure')}
-          </Button>
-          {error ? (
-            <p className="mt-4 text-sm text-destructive">{error}</p>
-          ) : null}
         </div>
       </div>
     );

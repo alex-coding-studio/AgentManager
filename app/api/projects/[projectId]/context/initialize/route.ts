@@ -1,7 +1,5 @@
 import { getProject } from '@/lib/project-registry';
-import { apiErrorResponse } from '@/lib/api-errors';
 import { guardRequest } from '@/lib/request-boundary';
-import { initializeProductContext } from '@/lib/product-context';
 
 export const runtime = 'nodejs';
 
@@ -17,14 +15,11 @@ export async function POST(
     return Response.json({ error: 'Project not found.' }, { status: 404 });
   }
 
-  try {
-    const sections = await initializeProductContext(project);
-    return Response.json({ sections });
-  } catch (error) {
-    return apiErrorResponse(
-      error,
-      'Could not initialize Product Context.',
-      'POST /api/projects/[projectId]/context/initialize',
-    );
-  }
+  return Response.json(
+    {
+      error:
+        'Product Context is system-managed and cannot be initialized manually.',
+    },
+    { status: 410 },
+  );
 }
