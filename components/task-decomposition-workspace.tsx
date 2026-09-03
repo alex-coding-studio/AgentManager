@@ -27,7 +27,10 @@ import { AgentGraphComposerCard } from '@/components/agent-graph-composer-card';
 import { AgentGraphIntentionSelect } from '@/components/agent-graph-intention-select';
 import { AgentGraphMotionSelect } from '@/components/agent-graph-motion-select';
 import { ContextAttachmentPicker } from '@/components/context-attachment-picker';
-import { LatestResponse } from '@/components/latest-response';
+import {
+  LatestResponse,
+  LatestResponseActions,
+} from '@/components/latest-response';
 import {
   CandidateMetadataSections,
   CandidateResourceList,
@@ -78,6 +81,7 @@ import { replaceRunWithPreviewsInPlace } from '@/lib/task-graph-preview-state';
 import {
   latestTaskDecompositionResponse,
   latestTerminalTaskDecompositionRun,
+  renderLatestResponseActivityLog,
 } from '@/lib/latest-response';
 import { cn } from '@/lib/utils';
 import {
@@ -1119,7 +1123,7 @@ export function TaskDecompositionWorkspace({
     return () => window.clearInterval(timer);
   }, [developmentPreview, projectId, requestPreviews]);
 
-  async function previewResource(resourcePath: string) {
+  async function previewResource(resourcePath: string, title?: string) {
     setPreviewingPath(resourcePath);
     setError('');
     const response = await fetch(
@@ -1142,7 +1146,7 @@ export function TaskDecompositionWorkspace({
       return;
     }
     setPreview({
-      title: result.fileName,
+      title: title ?? result.fileName,
       path: result.path,
       markdown: result.markdown,
     });
@@ -1334,25 +1338,52 @@ export function TaskDecompositionWorkspace({
               className="absolute top-4 left-4 z-10 w-[min(320px,calc(100%-2rem))]"
               title={t('Latest Response')}
               statusLabel={t(latestRunPresentation.statusLabel)}
-              summary={latestRunPresentation.summary}
+              summary={t(latestRunPresentation.summary)}
               tone={latestRunPresentation.tone}
               attention={latestRunPresentation.attention}
               icon={latestRunPresentation.icon}
             >
-              {latestRun.result ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    void previewResource(
-                      `task-decomposition/runs/${latestRun.runId}/response.md`,
-                    )
-                  }
-                >
-                  {t('Open full response')}
-                </Button>
-              ) : null}
+              <LatestResponseActions
+                responseLabel={t('Response')}
+                summaryLabel={t('Summary')}
+                logLabel={t('Log')}
+                onOpenResponse={() =>
+                  latestRun.result
+                    ? void previewResource(
+                        `task-decomposition/runs/${latestRun.runId}/response.md`,
+                        t('Latest Response'),
+                      )
+                    : setPreview({
+                        title: t('Latest Response'),
+                        path: latestRun.runId,
+                        markdown: `# ${t('Response')}\n\n${t(latestRunPresentation.summary)}\n`,
+                      })
+                }
+                onOpenSummary={() =>
+                  latestRun.result
+                    ? void previewResource(
+                        `task-decomposition/runs/${latestRun.runId}/summary.md`,
+                        t('Summary'),
+                      )
+                    : setPreview({
+                        title: t('Summary'),
+                        path: latestRun.runId,
+                        markdown: `# ${t('Summary')}\n\n${t(latestRunPresentation.summary)}\n`,
+                      })
+                }
+                onOpenLog={() =>
+                  setPreview({
+                    title: t('Activity Log'),
+                    path: latestRun.runId,
+                    markdown: renderLatestResponseActivityLog(
+                      latestRun.activity,
+                      t('Activity Log'),
+                      t('No recorded activity.'),
+                      t,
+                    ),
+                  })
+                }
+              />
             </LatestResponse>
           ) : null}
 

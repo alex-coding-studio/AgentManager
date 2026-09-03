@@ -32,6 +32,7 @@ import {
   domainModelTopologyKey,
 } from '@/lib/domain-model-view';
 import { cn } from '@/lib/utils';
+import { useUiText } from '@/components/ui-language-provider';
 
 type EntityNodeData = {
   entity: DomainEntity;
@@ -159,6 +160,7 @@ function DomainEdge({
 }
 
 function EntityCard({ data }: NodeProps<EntityFlowNode>) {
+  const { t } = useUiText();
   return (
     <>
       <Handle type="target" position={Position.Left} className="opacity-0" />
@@ -171,7 +173,12 @@ function EntityCard({ data }: NodeProps<EntityFlowNode>) {
         selectionControl={
           <button
             type="button"
-            aria-label={`${data.selectedForContext ? 'Remove' : 'Add'} ${data.entity.name} ${data.selectedForContext ? 'from' : 'to'} context`}
+            aria-label={t(
+              data.selectedForContext
+                ? 'Remove {name} from context'
+                : 'Add {name} to context',
+              { name: data.entity.name },
+            )}
             aria-pressed={data.selectedForContext}
             className={cn(
               '-ml-1 mr-1 grid size-4 place-items-center rounded-full border transition',
@@ -189,13 +196,15 @@ function EntityCard({ data }: NodeProps<EntityFlowNode>) {
         }
         kindLabel={
           <span className="rounded-full bg-secondary px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground">
-            Entity
+            {t('Entity')}
           </span>
         }
         detailsControl={
           <button
             type="button"
-            aria-label={`Open ${data.entity.name} details`}
+            aria-label={t('Open {name} details', {
+              name: data.entity.name,
+            })}
             className="relative -mr-1 grid size-4 place-items-center text-muted-foreground after:absolute after:-inset-1 after:content-[''] hover:text-foreground"
             onClick={(event) => {
               event.stopPropagation();
@@ -209,11 +218,11 @@ function EntityCard({ data }: NodeProps<EntityFlowNode>) {
         summary={data.entity.meaning}
         footer={
           <span className="text-[9px] text-muted-foreground">
-            {
-              data.entity.fields.filter((field) => field.display !== 'system')
-                .length
-            }{' '}
-            fields
+            {t('{count} fields', {
+              count: data.entity.fields.filter(
+                (field) => field.display !== 'system',
+              ).length,
+            })}
           </span>
         }
       />

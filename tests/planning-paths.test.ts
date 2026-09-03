@@ -50,6 +50,8 @@ const SUPPORTED_SHAPES: Array<[string, string]> = [
   ],
   ['What’s Next reflection', `whats-next/runs/${RUN}/reflection.md`],
   ['What’s Next response', `whats-next/runs/${RUN}/response.md`],
+  ['What’s Next summary', `whats-next/runs/${RUN}/summary.md`],
+  ['Domain Model summary', `domain-model/runs/${RUN}/summary.md`],
   ['What to Do response', `what-to-do/runs/${RUN}/response.md`],
   [
     'What to Do Delivery Contract output',
@@ -420,6 +422,29 @@ void test('readTaskGraphMarkdownResource uses the shared boundary and keeps its 
         return true;
       },
     );
+});
+
+void test('Latest Response reads canonical What’s Next and Domain Model summaries', async () => {
+  const { project, planningPath } = await planningProject('run-summaries');
+  const { readTaskGraphMarkdownResource } =
+    await import('../lib/task-graph.ts');
+  const summaries = [
+    [
+      `whats-next/runs/${RUN}/summary.md`,
+      '# Summary\n\n## Suggested next step\n\nClose the loop.\n',
+    ],
+    [
+      `domain-model/runs/${RUN}/summary.md`,
+      '# Applied\n\nAdded 2, updated 1, removed 0.\n',
+    ],
+  ] as const;
+  for (const [relative, markdown] of summaries) {
+    await writeInside(planningPath, relative, markdown);
+    assert.equal(
+      (await readTaskGraphMarkdownResource(project, relative)).markdown,
+      markdown,
+    );
+  }
 });
 
 void test('readTaskGraphMarkdownResource keeps a missing file internal, not public', async () => {

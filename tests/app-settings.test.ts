@@ -17,6 +17,7 @@ void test('module names translate without renaming dependency terminology', () =
   for (const [english, chinese] of [
     ["What's Next", '下一步'],
     ['Break It Down', '拆开看'],
+    ["What's That?", '这是什么？'],
     ['Just Do It', '动手做'],
     ['Dependencies', '依赖关系'],
   ]) {
@@ -43,6 +44,22 @@ void test('built-in Agent Graph profiles and effort levels are localized', () =>
     assert.equal(translateUi('en', english), english);
     assert.equal(translateUi('zh-CN', english), chinese);
   }
+});
+
+void test("What's That localizes its complete static workspace surface", () => {
+  for (const [english, chinese] of [
+    ['Describe the model change', '描述模型修改'],
+    ['Domain Model instructions', '领域模型指令'],
+    ['Primary fields', '主要字段'],
+    ['Constraints', '约束'],
+    ['Undo last change', '撤销上次修改'],
+    ['The current Domain Model was updated.', '当前领域模型已更新。'],
+  ])
+    assert.equal(translateUi('zh-CN', english), chinese);
+  assert.equal(
+    translateUi('zh-CN', '{count} fields', { count: 3 }),
+    '3 个字段',
+  );
 });
 
 void test('running status supports named agents and the generic Agent label', () => {

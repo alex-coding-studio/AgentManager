@@ -6,7 +6,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { AgentGraphComposerCard } from '@/components/agent-graph-composer-card';
 import { AgentRunControls } from '@/components/agent-run-controls';
 import { ContextAttachmentPicker } from '@/components/context-attachment-picker';
-import { LatestResponse } from '@/components/latest-response';
+import {
+  LatestResponse,
+  LatestResponseActions,
+} from '@/components/latest-response';
 import { MarkdownReader } from '@/components/markdown-reader';
 import { ProjectModuleHeader } from '@/components/project-module-header';
 import { ProductDesignFeaturePicker } from '@/components/product-design-feature-picker';
@@ -16,7 +19,10 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { useUiText } from '@/components/ui-language-provider';
 import type { AgentProfile } from '@/lib/agent-profile';
-import { latestWhatToDoResponse } from '@/lib/latest-response';
+import {
+  latestWhatToDoResponse,
+  renderLatestResponseActivityLog,
+} from '@/lib/latest-response';
 import type { ContextBrowserFolder } from '@/lib/product-context';
 import type { TaskGraphPreview } from '@/lib/task-graph-layout';
 import type { TaskGraphNode } from '@/lib/task-graph';
@@ -227,45 +233,35 @@ export function WhatToDoWorkspace({
             attention={presentation.attention}
             icon={presentation.icon}
           >
-            <div className="flex flex-wrap gap-1.5">
-              <Button
-                variant="outline"
-                size="xs"
-                onClick={() =>
-                  void openResource(
-                    t('Latest Response'),
-                    `what-to-do/runs/${latestTerminal.id}/response.md`,
-                  )
-                }
-              >
-                {t('Response')}
-              </Button>
-              <Button
-                variant="outline"
-                size="xs"
-                onClick={() =>
-                  void openResource(
-                    t('Summary'),
-                    `what-to-do/runs/${latestTerminal.id}/summary.md`,
-                  )
-                }
-              >
-                {t('Summary')}
-              </Button>
-              <Button
-                variant="outline"
-                size="xs"
-                onClick={() =>
-                  setPreview({
-                    title: t('Activity Log'),
-                    path: latestTerminal.id,
-                    markdown: renderActivityLog(latestTerminal),
-                  })
-                }
-              >
-                {t('Log')}
-              </Button>
-            </div>
+            <LatestResponseActions
+              responseLabel={t('Response')}
+              summaryLabel={t('Summary')}
+              logLabel={t('Log')}
+              onOpenResponse={() =>
+                void openResource(
+                  t('Latest Response'),
+                  `what-to-do/runs/${latestTerminal.id}/response.md`,
+                )
+              }
+              onOpenSummary={() =>
+                void openResource(
+                  t('Summary'),
+                  `what-to-do/runs/${latestTerminal.id}/summary.md`,
+                )
+              }
+              onOpenLog={() =>
+                setPreview({
+                  title: t('Activity Log'),
+                  path: latestTerminal.id,
+                  markdown: renderLatestResponseActivityLog(
+                    latestTerminal.activity,
+                    t('Activity Log'),
+                    t('No recorded activity.'),
+                    t,
+                  ),
+                })
+              }
+            />
           </LatestResponse>
         ) : null}
         <AgentGraphComposerCard
@@ -544,11 +540,4 @@ function buildContractNodes(
       deliveryStrategy: contract.deliveryStrategy.kind,
     },
   }));
-}
-
-function renderActivityLog(run: WhatToDoRunRecord) {
-  const entries = run.activity.length
-    ? run.activity.map((item) => `- ${item.at} — ${item.summary}`).join('\n')
-    : '- No recorded activity.';
-  return `# Activity Log\n\n${entries}\n`;
 }

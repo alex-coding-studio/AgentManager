@@ -5,15 +5,80 @@ export function isUiLanguage(value: unknown): value is UiLanguage {
 }
 
 export const chineseUi: Record<string, string> = {
+  "What's That?": '这是什么？',
   "What's Next instructions": 'What’s Next 全局 Instructions',
   'Explore the next supported product direction.':
     '探索产品接下来值得推进的方向。',
-  'Domain Model instructions': 'Domain Model Instructions',
+  'Domain Model instructions': '领域模型指令',
   'Applies to new Domain Model requests. Running requests keep their original instructions. Leave blank to use only the Harness defaults.':
     '保存后对新的 Domain Model 请求生效，不改变正在运行的请求。留空则只使用 Harness 默认规则。',
   'Define the entities, fields and relationships behind the product.':
     '定义产品中的实体、字段与关系。',
-  'Module instructions': 'Instructions',
+  'Module instructions': '指令',
+  Undone: '已撤销',
+  'The last model change was undone.': '上一次领域模型修改已撤销。',
+  'Preparing the Agent request.': '正在准备 Agent 请求。',
+  'Generating the Domain Model.': '正在生成领域模型。',
+  'Describe the model change': '描述模型修改',
+  'Describe an entity, field, relationship or rule to add or change.':
+    '描述要添加或修改的实体、字段、关系或规则。',
+  'Describe an entity, field, relationship or rule to add or change…':
+    '描述要添加或修改的实体、字段、关系或规则…',
+  '{count} selected model entries will be treated as primary context.':
+    '已选择 {count} 个模型条目作为主要上下文。',
+  'Clear context': '清除上下文',
+  'Domain Model Agent': '领域模型 Agent',
+  Added: '新增',
+  'Updated entries': '更新',
+  Removed: '移除',
+  'Undo last change': '撤销上次修改',
+  'Primary fields': '主要字段',
+  'Other fields · {count}': '其他字段 · {count}',
+  Relationship: '关系',
+  Constraints: '约束',
+  'Discuss this {kind}': '讨论此{kind}',
+  Entity: '实体',
+  explicit: '明确',
+  inferred: '推断',
+  derived: '派生',
+  inheritance: '继承',
+  containment: '包含',
+  association: '关联',
+  'Add {name} to context': '将{name}添加到上下文',
+  'Remove {name} from context': '将{name}从上下文移除',
+  'Open {name} details': '打开{name}详情',
+  '{count} fields': '{count} 个字段',
+  'The current Domain Model was updated.': '当前领域模型已更新。',
+  'The Domain Model Agent failed.': '领域模型 Agent 运行失败。',
+  'The Agent Run was canceled. The Domain Model was not changed.':
+    'Agent 运行已取消，领域模型没有改变。',
+  'A Domain Model User Input is required.': '请输入领域模型修改要求。',
+  'Select no more than 20 Domain elements.': '最多选择 20 个领域模型元素。',
+  'Select no more than 50 Context documents.': '最多选择 50 份上下文文档。',
+  'Attach no more than 20 Markdown files.': '最多添加 20 个 Markdown 文件。',
+  'A Domain Model Agent Run is already active.':
+    '已有领域模型 Agent 正在运行。',
+  'A selected Domain element is no longer available.':
+    '选中的领域模型元素已不可用。',
+  'The Domain Model Run is not active.': '领域模型运行当前未在进行。',
+  'The Domain Model Run is already finishing.': '领域模型运行正在结束。',
+  'Invalid Domain Model Run.': '无效的领域模型运行。',
+  'The Agent Run was interrupted. The Domain Model was not changed.':
+    'Agent 运行被中断，领域模型没有改变。',
+  'Only Markdown files can be attached to a Domain Model Run.':
+    '领域模型运行只能添加 Markdown 文件。',
+  'Each Domain Model attachment must be 2 MB or smaller.':
+    '每个领域模型附件不能超过 2 MB。',
+  'Domain Model Context must remain inside the project.':
+    '领域模型上下文必须位于项目目录内。',
+  'The Domain Model changed while the Agent was running.':
+    'Agent 运行期间领域模型已发生变化。',
+  'There is no Domain Model change to undo.': '没有可以撤销的领域模型修改。',
+  'Could not start the Domain Model Agent.': '无法启动领域模型 Agent。',
+  'Could not undo the last change.': '无法撤销上次修改。',
+  'Could not refresh the Domain Model.': '无法刷新领域模型。',
+  'Could not cancel the Domain Model Agent.': '无法取消领域模型 Agent。',
+  'No recorded activity.': '没有活动记录。',
   'Open project location': '在本地路径打开',
   'Could not open project location.': '无法打开本地路径。',
   'Applies to the next request, including continued sessions. Running requests keep their original instructions. Leave blank to use only the Harness defaults.':
