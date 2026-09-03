@@ -121,8 +121,6 @@ is not a boundary, so ordering is asserted rather than mere presence. That asser
 is itself covered by negative cases, so a weakened check fails its own test.
 
 Route Handlers import through the `@/` alias, which Node does not resolve on its own.
-`tests/helpers/register-alias.mjs` installs a resolve hook, using the synchronous
-`module.registerHooks` where available and falling back to `module.register` with
-`tests/helpers/resolve-alias.mjs`. The fallback keeps the suite runnable on the
-minimum runtime declared in `package.json` (Node 22.13.0), where `registerHooks` does
-not exist. This is test-only infrastructure and is not loaded by the application.
+`tests/helpers/register-alias.mjs` installs a synchronous `module.registerHooks`
+resolve hook for the Node.js 26 runtime declared in `package.json`. This is
+test-only infrastructure and is not loaded by the application.
