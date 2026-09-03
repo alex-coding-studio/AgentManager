@@ -168,6 +168,42 @@ void test('an applied model allocates stable identities and derives self-contain
   );
   assert.ok(applied.change);
   assert.ok(applied.change.added.length >= 6);
+  assert.deepEqual(
+    applied.change.items?.added
+      .filter((item) => item.kind === 'card')
+      .map((item) => item.label),
+    ['Item', 'Container'],
+  );
+  assert.equal(applied.change.items?.added.length, applied.change.added.length);
+  await assert.rejects(
+    () =>
+      applyProposedDomainModel(project, {
+        baseVersion: applied.model.stateVersion,
+        runId: 'RUN-22222222-2222-4222-8222-222222222222',
+        instruction: 'Add an unclear relationship.',
+        summary: 'Should not persist.',
+        proposed: {
+          entities: structuredClone(applied.model.entities),
+          relationships: [
+            ...structuredClone(applied.model.relationships),
+            {
+              id: 'NEW_RELATIONSHIP_UNCLEAR',
+              sourceEntityId: applied.model.entities[0]!.id,
+              targetEntityId: applied.model.entities[1]!.id,
+              label: 'has',
+              meaning: 'An intentionally unclear relationship.',
+              semanticRole: 'association',
+              direction: 'directed',
+              sourceCardinality: '1',
+              targetCardinality: '0..*',
+              provenance: 'inferred',
+            },
+          ],
+          constraints: structuredClone(applied.model.constraints),
+        },
+      }),
+    /standalone product noun phrase/,
+  );
 });
 
 void test('an empty applied result preserves the one available undo', async (t) => {
@@ -195,6 +231,45 @@ void test('an empty applied result preserves the one available undo', async (t) 
   assert.equal(repeated.canUndo, true);
   const restored = await undoLastDomainModelChange(project);
   assert.equal(restored.model.entities.length, 0);
+  assert.deepEqual(
+    restored.change.items?.removed
+      .filter((item) => item.kind === 'card')
+      .map((item) => item.label),
+    ['Item', 'Container'],
+  );
+});
+
+void test('an unchanged legacy relationship label remains readable but cannot be newly introduced', async (t) => {
+  const project = await fixture(t);
+  const first = await applyProposedDomainModel(project, {
+    baseVersion: 0,
+    runId: 'RUN-11111111-1111-4111-8111-111111111111',
+    instruction: 'Create Item and Container.',
+    summary: 'Initial model.',
+    proposed: initialProposal(),
+  });
+  const statePath = path.join(
+    project.planningPath,
+    'domain-model',
+    'state.json',
+  );
+  const stored = JSON.parse(await readFile(statePath, 'utf8'));
+  stored.model.relationships[0].label = 'from';
+  await writeFile(statePath, `${JSON.stringify(stored, null, 2)}\n`);
+  const legacy = await readDomainModel(project);
+  const repeated = await applyProposedDomainModel(project, {
+    baseVersion: first.model.stateVersion,
+    runId: 'RUN-22222222-2222-4222-8222-222222222222',
+    instruction: 'Keep the current model.',
+    summary: 'No effective change.',
+    proposed: {
+      entities: structuredClone(legacy.entities),
+      relationships: structuredClone(legacy.relationships),
+      constraints: structuredClone(legacy.constraints),
+    },
+  });
+  assert.equal(repeated.change, null);
+  assert.equal(repeated.model.relationships[0]?.label, 'from');
 });
 
 void test('Domain Model storage rejects a linked module directory', async (t) => {
@@ -459,6 +534,17 @@ void test('a controlled Agent Run applies one model and cancellation changes not
   }
   assert.equal(run.status, 'succeeded', run.error ?? '');
   assert.equal((await readDomainModel(project)).stateVersion, 1);
+  const summary = await readFile(
+    path.join(
+      project.planningPath,
+      'domain-model/runs',
+      started.id,
+      'summary.md',
+    ),
+    'utf8',
+  );
+  assert.match(summary, /Added: 2 Cards · \d+ model entries · Item, Container/);
+  assert.doesNotMatch(summary, /ENTITY-|FIELD-|RELATIONSHIP-|CONSTRAINT-/);
 
   let reject!: (error: Error) => void;
   let canceled = false;

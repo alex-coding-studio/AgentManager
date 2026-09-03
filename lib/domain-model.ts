@@ -69,7 +69,17 @@ export type DomainChange = {
   added: string[];
   updated: string[];
   removed: string[];
+  items?: {
+    added: DomainChangeItem[];
+    updated: DomainChangeItem[];
+    removed: DomainChangeItem[];
+  };
   createdAt: string;
+};
+export type DomainChangeItem = {
+  id: string;
+  kind: 'card' | 'field' | 'relationship' | 'constraint';
+  label: string;
 };
 type DomainSnapshot = Pick<
   DomainModel,
@@ -370,11 +380,19 @@ function materializeProposedModel(
     const targetEntityId = ref(item.targetEntityId);
     if (!entityIds.has(sourceEntityId) || !entityIds.has(targetEntityId))
       throw new Error('A Domain relationship references a missing Entity.');
+    const label = text(item.label, 60, 'Relationship label');
+    const currentLabel = current.relationships.find(
+      (relationship) => relationship.id === id,
+    )?.label;
+    if (/^(?:from|to|has|with|of|for)$/i.test(label) && currentLabel !== label)
+      throw new Error(
+        'A Relationship label must be a standalone product noun phrase.',
+      );
     return {
       id,
       sourceEntityId,
       targetEntityId,
-      label: text(item.label, 60, 'Relationship label'),
+      label,
       meaning: text(item.meaning, 1000, 'Relationship meaning', true),
       semanticRole: oneOf(item.semanticRole, [
         'inheritance',
@@ -467,19 +485,62 @@ function changeBetween(
   ];
   const before = new Map(flatten(current).map((item) => [item.id, item]));
   const after = new Map(flatten(next).map((item) => [item.id, item]));
+  const beforeItems = domainChangeItems(current);
+  const afterItems = domainChangeItems(next);
+  const added = [...after.keys()].filter((id) => !before.has(id));
+  const removed = [...before.keys()].filter((id) => !after.has(id));
+  const updated = [...after.keys()].filter(
+    (id) =>
+      before.has(id) &&
+      JSON.stringify(before.get(id)) !== JSON.stringify(after.get(id)),
+  );
   return {
     ...input,
     baseVersion: current.stateVersion,
     stateVersion: next.stateVersion,
-    added: [...after.keys()].filter((id) => !before.has(id)),
-    removed: [...before.keys()].filter((id) => !after.has(id)),
-    updated: [...after.keys()].filter(
-      (id) =>
-        before.has(id) &&
-        JSON.stringify(before.get(id)) !== JSON.stringify(after.get(id)),
-    ),
+    added,
+    removed,
+    updated,
+    items: {
+      added: added.flatMap((id) =>
+        afterItems.has(id) ? [afterItems.get(id)!] : [],
+      ),
+      updated: updated.flatMap((id) =>
+        afterItems.has(id) ? [afterItems.get(id)!] : [],
+      ),
+      removed: removed.flatMap((id) =>
+        beforeItems.has(id) ? [beforeItems.get(id)!] : [],
+      ),
+    },
     createdAt: new Date().toISOString(),
   };
+}
+
+function domainChangeItems(model: DomainModel) {
+  const items = new Map<string, DomainChangeItem>();
+  const entities = new Map(model.entities.map((entity) => [entity.id, entity]));
+  for (const entity of model.entities) {
+    items.set(entity.id, { id: entity.id, kind: 'card', label: entity.name });
+    for (const field of entity.fields)
+      items.set(field.id, {
+        id: field.id,
+        kind: 'field',
+        label: `${entity.name} · ${field.name}`,
+      });
+  }
+  for (const relationship of model.relationships)
+    items.set(relationship.id, {
+      id: relationship.id,
+      kind: 'relationship',
+      label: `${entities.get(relationship.sourceEntityId)?.name ?? 'Unknown'} → ${entities.get(relationship.targetEntityId)?.name ?? 'Unknown'} · ${relationship.label}`,
+    });
+  for (const constraint of model.constraints)
+    items.set(constraint.id, {
+      id: constraint.id,
+      kind: 'constraint',
+      label: constraint.text,
+    });
+  return items;
 }
 
 async function writeDomainState(

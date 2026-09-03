@@ -82,7 +82,7 @@ Rules:
 - Separate explicit user meaning from necessary inference. Use provenance explicit or inferred. Never return derived objects; the Host computes derived visualization.
 - Create an Entity only when it has independent identity, lifecycle, behavior or relationships. Do not turn every noun or field into an Entity.
 - Fields use display primary, secondary or system. Do not add generic IDs, timestamps, audit or soft-delete fields without a concrete current need.
-- Relationship labels are concise product language. semanticRole is inheritance, containment or association; it does not dictate implementation technology.
+- Relationship labels are concise standalone product noun phrases that remain clear outside a sentence. Do not use bare prepositions or generic verbs such as from, to, has, with, of or for; name the role itself, such as source location or destination location. semanticRole is inheritance, containment or association; it does not dictate implementation technology.
 - Constraint target.kind is model, entity or relationship only. A field rule such as a default, range or format belongs in that field's meaning or in a Constraint attached to its owning Entity; never invent a field target kind.
 - Do not create dangling references, duplicate Entity names or inheritance cycles.
 - Selection narrows primary context but does not define direction or prevent consistency changes. Name any necessary expansion in the summary.

@@ -507,7 +507,17 @@ function summaryMarkdown(
   change: DomainChange | null,
 ) {
   const details = change
-    ? `\n- Added: ${change.added.length}\n- Updated: ${change.updated.length}\n- Removed: ${change.removed.length}\n`
+    ? `\n## Change summary\n\n${(['added', 'updated', 'removed'] as const)
+        .map((kind) => {
+          const entries = change[kind];
+          const cards = change.items?.[kind].filter(
+            (item) => item.kind === 'card',
+          );
+          const cardNames = cards?.map((item) => item.label).join(', ');
+          const label = `${kind.charAt(0).toUpperCase()}${kind.slice(1)}`;
+          return `- ${label}: ${cards?.length ?? 0} Cards · ${entries.length} model entries${cardNames ? ` · ${cardNames}` : ''}`;
+        })
+        .join('\n')}\n`
     : '';
   const attention =
     result.outcome === 'clarification'

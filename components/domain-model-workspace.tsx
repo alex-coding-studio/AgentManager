@@ -27,6 +27,7 @@ import type { AgentProfile } from '@/lib/agent-profile';
 import type {
   DerivedDomainRelationship,
   DomainChange,
+  DomainChangeItem,
   DomainEntity,
   DomainModel,
   DomainRelationship,
@@ -233,18 +234,6 @@ export function DomainModelWorkspace({
     setSelectedIds([]);
   }
 
-  async function openResponseResource(path: string, title: string) {
-    const response = await fetch(
-      `/api/projects/${projectId}/resources?path=${encodeURIComponent(path)}`,
-    ).catch(() => null);
-    if (!response?.ok) {
-      setError('Could not read the source document.');
-      return;
-    }
-    const result = (await response.json()) as { markdown: string };
-    setResponsePreview({ title, path, markdown: result.markdown });
-  }
-
   function toggleSelection(id: string) {
     setSelectedIds((current) =>
       current.includes(id)
@@ -315,10 +304,10 @@ export function DomainModelWorkspace({
         ) : latest && latest.status !== 'running' ? (
           <LatestDomainResponse
             run={latest}
+            model={model}
             canUndo={canUndo}
             onUndo={undo}
             onPreview={setResponsePreview}
-            onOpenResource={openResponseResource}
           />
         ) : null}
 
@@ -484,12 +473,13 @@ export function DomainModelWorkspace({
 
 function LatestDomainResponse({
   run,
+  model,
   canUndo,
   onUndo,
   onPreview,
-  onOpenResource,
 }: {
   run: DomainModelRunRecord;
+  model: DomainModel;
   canUndo: boolean;
   onUndo: () => void;
   onPreview: (preview: {
@@ -497,11 +487,10 @@ function LatestDomainResponse({
     path: string;
     markdown: string;
   }) => void;
-  onOpenResource: (path: string, title: string) => Promise<void>;
 }) {
   const { t } = useUiText();
   const presentation = latestDomainModelResponse(run);
-  const hasDetails = Boolean(run.change || canUndo);
+  const changes = domainChangeGroups(run.change, model);
   return (
     <LatestResponse
       {...presentation}
@@ -511,55 +500,76 @@ function LatestDomainResponse({
       className="absolute top-4 left-4 z-20 w-[min(360px,calc(100%-2rem))]"
     >
       <div className="space-y-3 text-xs">
-        {hasDetails ? (
-          <div className="space-y-3">
-            {run.change ? (
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <Fact label={t('Added')} value={run.change.added.length} />
-                <Fact
-                  label={t('Updated entries')}
-                  value={run.change.updated.length}
-                />
-                <Fact label={t('Removed')} value={run.change.removed.length} />
+        {changes.length ? (
+          <div className="space-y-2">
+            {changes.map((change) => (
+              <div
+                key={change.kind}
+                className="w-full rounded-lg bg-secondary px-3 py-2"
+              >
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="font-medium">{t(change.label)}</span>
+                  <span className="shrink-0 text-[10px] text-muted-foreground">
+                    {t('{cards} Cards · {entries} model entries', {
+                      cards: change.cards.length,
+                      entries: change.entryCount,
+                    })}
+                  </span>
+                </div>
+                {change.cards.length ? (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {change.cards.map((card) => (
+                      <span
+                        key={card.id}
+                        className="rounded-full border border-border bg-background px-2 py-0.5 text-[10px] font-medium"
+                      >
+                        {card.label}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
               </div>
-            ) : null}
-            {canUndo ? (
-              <Button variant="outline" size="sm" onClick={onUndo}>
-                <RotateCcw /> {t('Undo last change')}
-              </Button>
-            ) : null}
+            ))}
           </div>
         ) : null}
-        <LatestResponseActions
-          responseLabel={t('Response')}
-          summaryLabel={t('Summary')}
-          logLabel={t('Log')}
-          onOpenResponse={() =>
-            onPreview({
-              title: t('Latest Response'),
-              path: `domain-model/runs/${run.id}/response.md`,
-              markdown: renderDomainModelResponse(run, t),
-            })
-          }
-          onOpenSummary={() =>
-            void onOpenResource(
-              `domain-model/runs/${run.id}/summary.md`,
-              t('Summary'),
-            )
-          }
-          onOpenLog={() =>
-            onPreview({
-              title: t('Activity Log'),
-              path: `domain-model/runs/${run.id}/activity.jsonl`,
-              markdown: renderLatestResponseActivityLog(
-                run.activity,
-                t('Activity Log'),
-                t('No recorded activity.'),
-                t,
-              ),
-            })
-          }
-        />
+        <div className="flex items-center gap-2">
+          <LatestResponseActions
+            responseLabel={t('Response')}
+            summaryLabel={t('Summary')}
+            logLabel={t('Log')}
+            onOpenResponse={() =>
+              onPreview({
+                title: t('Latest Response'),
+                path: `domain-model/runs/${run.id}/response.md`,
+                markdown: renderDomainModelResponse(run, model, t),
+              })
+            }
+            onOpenSummary={() =>
+              onPreview({
+                title: t('Summary'),
+                path: `domain-model/runs/${run.id}/summary.md`,
+                markdown: renderDomainModelSummary(run, model, t),
+              })
+            }
+            onOpenLog={() =>
+              onPreview({
+                title: t('Activity Log'),
+                path: `domain-model/runs/${run.id}/activity.jsonl`,
+                markdown: renderDomainModelLog(run, model, t),
+              })
+            }
+          />
+          {canUndo ? (
+            <Button
+              variant="outline"
+              size="xs"
+              className="ml-auto shrink-0"
+              onClick={onUndo}
+            >
+              <RotateCcw /> {t('Undo last change')}
+            </Button>
+          ) : null}
+        </div>
       </div>
     </LatestResponse>
   );
@@ -567,32 +577,199 @@ function LatestDomainResponse({
 
 function renderDomainModelResponse(
   run: DomainModelRunRecord,
+  model: DomainModel,
   t: (text: string, values?: Record<string, string | number>) => string,
 ) {
   const presentation = latestDomainModelResponse(run);
   const sections = [`# ${t('Response')}`, '', t(presentation.summary)];
-  if (run.change) {
-    for (const [label, values] of [
-      [t('Added'), run.change.added],
-      [t('Updated entries'), run.change.updated],
-      [t('Removed'), run.change.removed],
-    ] as const) {
-      sections.push('', `## ${label}`, '');
-      sections.push(
-        values.length ? values.map((value) => `- ${value}`).join('\n') : '-',
-      );
+  if (model.entities.length) {
+    sections.push('', `## ${t('Cards')}`);
+    for (const entity of model.entities) {
+      sections.push('', `### ${entity.name}`, '', entity.meaning);
+      if (entity.fields.length)
+        sections.push(
+          '',
+          entity.fields
+            .map((field) => `- **${field.name}** — ${field.meaning}`)
+            .join('\n'),
+        );
     }
+  }
+  if (model.relationships.length)
+    sections.push(
+      '',
+      `## ${t('Relationships')}`,
+      '',
+      model.relationships
+        .map((relationship) => {
+          const source = model.entities.find(
+            (entity) => entity.id === relationship.sourceEntityId,
+          )?.name;
+          const target = model.entities.find(
+            (entity) => entity.id === relationship.targetEntityId,
+          )?.name;
+          return `- **${source} → ${target}: ${relationship.label}** — ${relationship.meaning}`;
+        })
+        .join('\n'),
+    );
+  if (model.constraints.length)
+    sections.push(
+      '',
+      `## ${t('Rules')}`,
+      '',
+      model.constraints.map((constraint) => `- ${constraint.text}`).join('\n'),
+    );
+  return `${sections.join('\n')}\n`;
+}
+
+function renderDomainModelSummary(
+  run: DomainModelRunRecord,
+  model: DomainModel,
+  t: (text: string, values?: Record<string, string | number>) => string,
+) {
+  const presentation = latestDomainModelResponse(run);
+  const sections = [`# ${t('Summary')}`, '', t(presentation.summary)];
+  for (const change of domainChangeGroups(run.change, model)) {
+    sections.push(
+      '',
+      `- **${t(change.label)}:** ${t(
+        '{cards} Cards · {entries} model entries',
+        {
+          cards: change.cards.length,
+          entries: change.entryCount,
+        },
+      )}${change.cards.length ? ` · ${change.cards.map((card) => card.label).join(', ')}` : ''}`,
+    );
   }
   return `${sections.join('\n')}\n`;
 }
 
-function Fact({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-lg bg-secondary px-2 py-1.5">
-      <strong className="block text-sm">{value}</strong>
-      <span className="text-[9px] text-muted-foreground">{label}</span>
-    </div>
+function renderDomainModelLog(
+  run: DomainModelRunRecord,
+  model: DomainModel,
+  t: (text: string, values?: Record<string, string | number>) => string,
+) {
+  const sections = [`# ${t('Activity Log')}`];
+  const changes = domainChangeGroups(run.change, model);
+  if (changes.length) {
+    sections.push('', `## ${t('Model changes')}`);
+    for (const change of changes) {
+      sections.push(
+        '',
+        `### ${t(change.label)} · ${t(
+          '{cards} Cards · {entries} model entries',
+          {
+            cards: change.cards.length,
+            entries: change.entryCount,
+          },
+        )}`,
+        '',
+        change.entries
+          .map(
+            (entry) =>
+              `- **${t(changeKindLabel(entry.kind))}:** ${entry.label}`,
+          )
+          .join('\n'),
+      );
+    }
+  }
+  sections.push(
+    '',
+    renderLatestResponseActivityLog(
+      run.activity,
+      t('Run activity'),
+      t('No recorded activity.'),
+      t,
+    ).replace(/^# .+\n/, ''),
   );
+  return `${sections.join('\n')}\n`;
+}
+
+type DisplayDomainChangeItem = Omit<DomainChangeItem, 'kind'> & {
+  kind: DomainChangeItem['kind'] | 'entry';
+};
+
+function domainChangeGroups(change: DomainChange | null, model: DomainModel) {
+  if (!change) return [];
+  return (
+    [
+      ['added', 'Added'],
+      ['updated', 'Updated entries'],
+      ['removed', 'Removed'],
+    ] as const
+  ).flatMap(([kind, label]) => {
+    const ids = change[kind];
+    if (!ids.length) return [];
+    const described =
+      change.items?.[kind] ??
+      ids.flatMap((id) => {
+        const item = describeDomainChangeItem(id, model);
+        return item ? [item] : [];
+      });
+    const missing = ids.length - described.length;
+    const entries: DisplayDomainChangeItem[] = [
+      ...described,
+      ...(missing
+        ? [
+            {
+              id: `${kind}-unavailable`,
+              kind: 'entry' as const,
+              label: `${missing}`,
+            },
+          ]
+        : []),
+    ];
+    return [
+      {
+        kind,
+        label,
+        entryCount: ids.length,
+        entries,
+        cards: entries.filter((item) => item.kind === 'card'),
+      },
+    ];
+  });
+}
+
+function describeDomainChangeItem(
+  id: string,
+  model: DomainModel,
+): DomainChangeItem | null {
+  const entity = model.entities.find((item) => item.id === id);
+  if (entity) return { id, kind: 'card', label: entity.name };
+  for (const owner of model.entities) {
+    const field = owner.fields.find((item) => item.id === id);
+    if (field)
+      return {
+        id,
+        kind: 'field',
+        label: `${owner.name} · ${field.name}`,
+      };
+  }
+  const relationship = model.relationships.find((item) => item.id === id);
+  if (relationship) {
+    const source = model.entities.find(
+      (item) => item.id === relationship.sourceEntityId,
+    )?.name;
+    const target = model.entities.find(
+      (item) => item.id === relationship.targetEntityId,
+    )?.name;
+    return {
+      id,
+      kind: 'relationship',
+      label: `${source} → ${target} · ${relationship.label}`,
+    };
+  }
+  const constraint = model.constraints.find((item) => item.id === id);
+  return constraint ? { id, kind: 'constraint', label: constraint.text } : null;
+}
+
+function changeKindLabel(kind: DisplayDomainChangeItem['kind']) {
+  if (kind === 'card') return 'Card';
+  if (kind === 'field') return 'Field';
+  if (kind === 'relationship') return 'Relationship';
+  if (kind === 'constraint') return 'Constraint';
+  return 'Model entry no longer present';
 }
 
 function DomainInspector({
@@ -634,7 +811,12 @@ function DomainInspector({
     <Sheet open={open} onOpenChange={(next) => !next && onClose()}>
       <SheetContent className="overflow-y-auto sm:max-w-lg">
         <SheetHeader>
-          <SheetTitle>{entity?.name ?? relationship?.label}</SheetTitle>
+          <SheetTitle>
+            {entity?.name ??
+              (relationship
+                ? `${entityName(relationship.sourceEntityId)} → ${entityName(relationship.targetEntityId)}`
+                : '')}
+          </SheetTitle>
           <SheetDescription>
             {entity?.meaning ?? relationship?.meaning}
           </SheetDescription>
@@ -684,16 +866,10 @@ function DomainInspector({
             </>
           ) : relationship ? (
             <InspectorSection title={t('Relationship')}>
-              <p className="text-sm">
-                {entityName(relationship.sourceEntityId)}{' '}
-                <strong>{relationship.label}</strong>{' '}
-                {entityName(relationship.targetEntityId)}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {relationship.sourceCardinality} →{' '}
-                {relationship.targetCardinality} ·{' '}
-                {t(relationship.semanticRole)} · {t(relationship.provenance)}
-              </p>
+              <p className="text-sm font-medium">{relationship.label}</p>
+              <span className="inline-flex rounded-full bg-secondary px-2 py-1 text-xs font-medium">
+                {t(relationshipCardinalityLabel(relationship))}
+              </span>
             </InspectorSection>
           ) : null}
           <InspectorSection title={t('Constraints')}>
@@ -710,9 +886,11 @@ function DomainInspector({
               <EmptyLine />
             )}
           </InspectorSection>
-          <p className="text-[10px] text-muted-foreground">
-            {t(entity?.provenance ?? relationship?.provenance ?? '')}
-          </p>
+          {entity ? (
+            <p className="text-[10px] text-muted-foreground">
+              {t(entity.provenance)}
+            </p>
+          ) : null}
           <Button
             variant="outline"
             onClick={() =>
@@ -778,6 +956,22 @@ function FieldRow({ field }: { field: DomainEntity['fields'][number] }) {
 function EmptyLine() {
   const { t } = useUiText();
   return <p className="text-xs text-muted-foreground">{t('None')}</p>;
+}
+
+function relationshipCardinalityLabel(
+  relationship: DomainRelationship | DerivedDomainRelationship,
+) {
+  const sourceMany = allowsMany(relationship.sourceCardinality);
+  const targetMany = allowsMany(relationship.targetCardinality);
+  if (sourceMany && targetMany) return 'Many to many';
+  if (sourceMany) return 'Many to one';
+  if (targetMany) return 'One to many';
+  return 'One to one';
+}
+
+function allowsMany(cardinality: string) {
+  const upper = cardinality.split('..').at(-1);
+  return upper === '*' || Number(upper) > 1;
 }
 
 function formatDuration(seconds: number) {
