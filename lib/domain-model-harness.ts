@@ -268,11 +268,11 @@ function applyFieldRemovals(
   }));
   const currentById = new Map(entities.map((entity) => [entity.id, entity]));
   for (const entity of upserts) {
+    if (entity.fields.some((field) => removedFields.has(field.id)))
+      throw new Error('A Field cannot be updated and removed together.');
     const existing = currentById.get(entity.id);
     if (!existing) continue;
     const incomingIds = new Set(entity.fields.map((field) => field.id));
-    if (entity.fields.some((field) => removedFields.has(field.id)))
-      throw new Error('A Field cannot be updated and removed together.');
     if (existing.fields.some((field) => !incomingIds.has(field.id)))
       throw new Error(
         'An Entity patch must preserve every Field not explicitly removed.',

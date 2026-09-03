@@ -320,6 +320,28 @@ void test('the Domain Model Harness composes one incremental patch', () => {
       parseDomainModelResult(
         JSON.stringify({
           ...output,
+          patch: {
+            ...output.patch,
+            upsertEntities: [
+              {
+                ...proposal.entities[1]!,
+                id: 'NEW_ENTITY_ARCHIVE',
+                name: 'Archive',
+                fields: [updatedItem.fields[1]!],
+              },
+            ],
+            removeFieldIds: [updatedItem.fields[1]!.id],
+          },
+        }),
+        request,
+      ),
+    /updated and removed together/,
+  );
+  assert.throws(
+    () =>
+      parseDomainModelResult(
+        JSON.stringify({
+          ...output,
           patch: undefined,
           model: {
             entities: [updatedItem],
