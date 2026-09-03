@@ -10,7 +10,7 @@ import {
 } from 'node:fs/promises';
 import path from 'node:path';
 import type { AgentProfile } from './agent-profile.ts';
-import { validateAgentProfile } from './agent-profile.ts';
+import { sameModelSelection, validateAgentProfile } from './agent-profile.ts';
 import { PublicApiError } from './api-errors.ts';
 import {
   resolveProductContextReferences,
@@ -29,6 +29,7 @@ import {
 import { readDomainModelInstructions } from './domain-model-context.ts';
 import {
   createDomainModelRequest,
+  domainModelHarnessVersion,
   domainModelPrompt,
   parseDomainModelResult,
   type DomainModelAgentResult,
@@ -147,6 +148,9 @@ export async function startDomainModelRun(
         409,
       );
     const previousSummary = await latestSummary(project);
+    const coordinatorRun = (await listLatestDomainModelRuns(project, 20)).find(
+      (run) => canContinueDomainModelSession(run, model, input.profile),
+    );
     const savedInstructions = await readDomainModelInstructions(project);
     const contextPath = path.join(await runPath(project, runId), 'context');
     try {
@@ -205,9 +209,12 @@ export async function startDomainModelRun(
       const agentRun = transport(input.profile.agent, {
         workingDirectory: project.rootPath,
         protectedPath: project.planningPath,
-        prompt: domainModelPrompt(request),
+        prompt: domainModelPrompt(request, {
+          continuesExistingSession: Boolean(coordinatorRun),
+        }),
         model: input.profile.model || undefined,
         effort: input.profile.effort || undefined,
+        resumeSessionId: coordinatorRun?.agentSessionId ?? undefined,
         access: 'read-only',
         disableDelegation: true,
         isolatedProcessGroup: true,
@@ -233,6 +240,24 @@ export async function startDomainModelRun(
     if (activeRuns.get(key) === active) activeRuns.delete(key);
     throw error;
   }
+}
+
+export function canContinueDomainModelSession(
+  run: DomainModelRunRecord,
+  model: Awaited<ReturnType<typeof readDomainModel>>,
+  profile: AgentProfile,
+) {
+  if (
+    run.status !== 'succeeded' ||
+    !run.agentSessionId ||
+    run.profile.agent !== profile.agent ||
+    !sameModelSelection(run.profile, profile) ||
+    run.result?.harnessVersion !== domainModelHarnessVersion
+  )
+    return false;
+  return run.result.outcome === 'applied'
+    ? model.lastRunId === run.id && model.stateVersion === run.baseVersion + 1
+    : model.stateVersion === run.baseVersion;
 }
 
 export async function cancelDomainModelRun(

@@ -24,11 +24,13 @@ import {
 } from '../lib/domain-model-view.ts';
 import {
   createDomainModelRequest,
+  domainModelPrompt,
   parseDomainModelResult,
   type DomainModelRequest,
 } from '../lib/domain-model-harness.ts';
 import {
   cancelDomainModelRun,
+  canContinueDomainModelSession,
   readDomainModelRun,
   startDomainModelRun,
 } from '../lib/domain-model-runs.ts';
@@ -204,6 +206,246 @@ void test('an applied model allocates stable identities and derives self-contain
       }),
     /standalone product noun phrase/,
   );
+});
+
+void test('the Domain Model Harness composes one incremental patch', () => {
+  const proposal = initialProposal();
+  const current = {
+    schemaVersion: 1 as const,
+    stateVersion: 4,
+    ...proposal,
+    entities: [
+      {
+        ...proposal.entities[0]!,
+        fields: [
+          ...proposal.entities[0]!.fields,
+          {
+            ...proposal.entities[0]!.fields[0]!,
+            id: 'NEW_FIELD_NOTE',
+            name: 'note',
+          },
+        ],
+      },
+      proposal.entities[1]!,
+    ],
+    lastRunId: 'RUN-current',
+    updatedAt: '2026-09-03T00:00:00.000Z',
+  };
+  const request = createDomainModelRequest({
+    requestId: 'RUN-22222222-2222-4222-8222-222222222222',
+    content: { input: null, references: [], external: [] },
+    selectedIds: [current.entities[0]!.id],
+    model: current,
+    previousSummary: 'Current model.',
+  });
+  const updatedItem = {
+    ...structuredClone(current.entities[0]!),
+    meaning: 'A physical thing with a durable identity.',
+  };
+  const output = {
+    harnessVersion: 2,
+    requestId: request.requestId,
+    baseVersion: request.baseVersion,
+    inputFingerprint: request.inputFingerprint,
+    outcome: 'applied',
+    summary: 'Clarified Item identity.',
+    patch: {
+      upsertEntities: [updatedItem],
+      removeEntityIds: [],
+      removeFieldIds: [],
+      upsertRelationships: [],
+      removeRelationshipIds: [],
+      upsertConstraints: [],
+      removeConstraintIds: [],
+    },
+  };
+
+  const result = parseDomainModelResult(JSON.stringify(output), request);
+
+  assert.equal(result.outcome, 'applied');
+  if (result.outcome === 'applied') {
+    assert.equal(result.model.entities.length, 2);
+    assert.equal(result.model.entities[0]!.meaning, updatedItem.meaning);
+    assert.equal(
+      result.model.entities[1]!.meaning,
+      current.entities[1]!.meaning,
+    );
+    assert.deepEqual(result.model.relationships, current.relationships);
+    assert.deepEqual(result.model.constraints, current.constraints);
+  }
+  assert.match(domainModelPrompt(request), /return only a patch/i);
+  assert.match(domainModelPrompt(request), /omit every unchanged Entity/i);
+  assert.throws(
+    () =>
+      parseDomainModelResult(
+        JSON.stringify({ ...output, model: initialProposal() }),
+        request,
+      ),
+    /exactly one model or patch/,
+  );
+  assert.throws(
+    () =>
+      parseDomainModelResult(
+        JSON.stringify({
+          ...output,
+          patch: {
+            ...output.patch,
+            upsertEntities: [
+              { ...updatedItem, fields: updatedItem.fields.slice(0, 1) },
+            ],
+          },
+        }),
+        request,
+      ),
+    /preserve every Field/,
+  );
+  const removedField = parseDomainModelResult(
+    JSON.stringify({
+      ...output,
+      patch: {
+        ...output.patch,
+        upsertEntities: [
+          { ...updatedItem, fields: updatedItem.fields.slice(0, 1) },
+        ],
+        removeFieldIds: [updatedItem.fields[1]!.id],
+      },
+    }),
+    request,
+  );
+  assert.equal(removedField.outcome, 'applied');
+  if (removedField.outcome === 'applied')
+    assert.equal(removedField.model.entities[0]!.fields.length, 1);
+  assert.throws(
+    () =>
+      parseDomainModelResult(
+        JSON.stringify({
+          ...output,
+          patch: {
+            ...output.patch,
+            upsertEntities: [
+              {
+                ...proposal.entities[1]!,
+                id: 'NEW_ENTITY_ARCHIVE',
+                name: 'Archive',
+                fields: [updatedItem.fields[1]!],
+              },
+            ],
+            removeFieldIds: [updatedItem.fields[1]!.id],
+          },
+        }),
+        request,
+      ),
+    /updated and removed together/,
+  );
+  assert.throws(
+    () =>
+      parseDomainModelResult(
+        JSON.stringify({
+          ...output,
+          patch: undefined,
+          model: {
+            entities: [updatedItem],
+            relationships: current.relationships,
+            constraints: current.constraints,
+          },
+        }),
+        request,
+      ),
+    /cannot omit an existing Entity/,
+  );
+});
+
+void test('Domain Model continuation uses the provider Session and a compact model index', async (t) => {
+  const project = await fixture(t);
+  const calls: Parameters<typeof startLocalAgentRun>[1][] = [];
+  const transport: typeof startLocalAgentRun = (_agent, options) => {
+    calls.push(options);
+    const request = JSON.parse(
+      options.prompt.split('\nREQUEST:\n')[1],
+    ) as DomainModelRequest;
+    return {
+      completion: Promise.resolve({
+        agentSessionId: `fixture-session-${calls.length}`,
+        usage: null,
+        finalOutput: JSON.stringify(
+          calls.length === 1
+            ? {
+                harnessVersion: 2,
+                requestId: request.requestId,
+                baseVersion: request.baseVersion,
+                inputFingerprint: request.inputFingerprint,
+                outcome: 'applied',
+                summary: 'Created Item and Container.',
+                model: initialProposal(),
+              }
+            : {
+                harnessVersion: 2,
+                requestId: request.requestId,
+                baseVersion: request.baseVersion,
+                inputFingerprint: request.inputFingerprint,
+                outcome: 'no-change',
+                summary: 'The model already contains this meaning.',
+                reason: 'No model change is required.',
+              },
+        ),
+      }),
+      cancel: () => {},
+    };
+  };
+  const profile = {
+    agent: 'codex' as const,
+    model: 'gpt-5.6-sol',
+    effort: 'high' as const,
+  };
+  const first = await startDomainModelRun(
+    project,
+    { instruction: 'Create the model.', selectedIds: [], profile },
+    transport,
+  );
+  let firstTerminal = await readDomainModelRun(project, first.id);
+  for (
+    let attempt = 0;
+    firstTerminal.status === 'running' && attempt < 30;
+    attempt += 1
+  ) {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    firstTerminal = await readDomainModelRun(project, first.id);
+  }
+  assert.equal(firstTerminal.status, 'succeeded');
+  const model = await readDomainModel(project);
+  assert.equal(
+    canContinueDomainModelSession(firstTerminal, model, profile),
+    true,
+  );
+  assert.equal(
+    canContinueDomainModelSession(firstTerminal, model, {
+      ...profile,
+      model: 'gpt-5.6-luna',
+    }),
+    false,
+  );
+
+  const second = await startDomainModelRun(
+    project,
+    { instruction: 'Keep the current meaning.', selectedIds: [], profile },
+    transport,
+  );
+
+  assert.equal(calls[1]!.resumeSessionId, 'fixture-session-1');
+  const continuedRequest = JSON.parse(
+    calls[1]!.prompt.split('\nREQUEST:\n')[1],
+  ) as DomainModelRequest;
+  assert.equal('meaning' in continuedRequest.model.entities[0]!, false);
+  let secondTerminal = await readDomainModelRun(project, second.id);
+  for (
+    let attempt = 0;
+    secondTerminal.status === 'running' && attempt < 30;
+    attempt += 1
+  ) {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    secondTerminal = await readDomainModelRun(project, second.id);
+  }
+  assert.equal(secondTerminal.status, 'succeeded');
 });
 
 void test('an empty applied result preserves the one available undo', async (t) => {
