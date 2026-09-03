@@ -256,6 +256,8 @@ export async function cancelDomainModelRun(
     'summary.md':
       '# Canceled\n\nThe Agent Run was canceled. The Domain Model was not changed.\n',
   });
+  if (activeRuns.get(project.planningPath) === active)
+    activeRuns.delete(project.planningPath);
   return canceled;
 }
 
@@ -272,6 +274,16 @@ export async function readDomainModelRun(
     ),
   ) as DomainModelRunRecord;
   const active = activeRuns.get(project.planningPath);
+  if (active?.runId === run.id && active.settling)
+    return {
+      ...run,
+      status: 'running' as const,
+      endedAt: null,
+      result: null,
+      change: null,
+      error: null,
+      activity: [...active.activity],
+    };
   if (active?.runId === run.id && active.terminal) return active.terminal;
   if (run.status === 'running' && active?.runId === run.id)
     return { ...run, activity: [...active.activity] };
