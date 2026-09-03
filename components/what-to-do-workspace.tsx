@@ -2,7 +2,7 @@
 
 import { Plus, Route, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AgentGraphComposerCard } from '@/components/agent-graph-composer-card';
 import { AgentGraphRunningCard } from '@/components/agent-graph-running-card';
 import { AgentRunControls } from '@/components/agent-run-controls';
@@ -31,6 +31,10 @@ import {
   type WhatToDoDeliveryMap,
 } from '@/lib/what-to-do-map';
 import type { WhatToDoRunRecord } from '@/lib/what-to-do-runs';
+import {
+  shouldRestoreWhatToDoDraft,
+  type WhatToDoDraft,
+} from '@/lib/what-to-do-draft';
 
 export function WhatToDoWorkspace({
   projectId,
@@ -83,6 +87,7 @@ export function WhatToDoWorkspace({
   const [error, setError] = useState('');
   const [focusedNodeId, setFocusedNodeId] = useState('');
   const [featurePickerOpen, setFeaturePickerOpen] = useState(false);
+  const restoredDraftRunId = useRef('');
   const [preview, setPreview] = useState<{
     title: string;
     path: string;
@@ -108,6 +113,50 @@ export function WhatToDoWorkspace({
   const selectedContracts = currentMap?.contracts.filter((contract) =>
     focusContractIds.includes(contract.id),
   );
+
+  useEffect(() => {
+    const run = latestTerminal;
+    if (
+      !run ||
+      !shouldRestoreWhatToDoDraft(run) ||
+      restoredDraftRunId.current === run.id
+    )
+      return;
+    restoredDraftRunId.current = run.id;
+    const restore = async () => {
+      try {
+        const response = await fetch(
+          `/api/projects/${projectId}/what-to-do-runs?runId=${encodeURIComponent(run.id)}&includeDraft=1`,
+          { cache: 'no-store' },
+        );
+        const data = (await response.json()) as {
+          draft?: WhatToDoDraft;
+          error?: string;
+        };
+        if (!response.ok || !data.draft)
+          throw new Error(data.error ?? t('Could not restore the failed Run.'));
+        setInstruction(data.draft.instruction);
+        setSourceUids(run.sourceUids);
+        setFocusContractIds(run.focusContractIds);
+        setContextRefs(run.contextRefs);
+        setProfile(run.profile);
+        setFiles(
+          data.draft.files.map(
+            (file) =>
+              new File([file.content], file.name, { type: file.mediaType }),
+          ),
+        );
+      } catch (cause) {
+        restoredDraftRunId.current = '';
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : t('Could not restore the failed Run.'),
+        );
+      }
+    };
+    void restore();
+  }, [latestTerminal, projectId, t]);
 
   async function refreshRuns() {
     const response = await fetch(`/api/projects/${projectId}/what-to-do-runs`, {

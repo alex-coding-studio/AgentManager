@@ -9,6 +9,7 @@ import {
   startWhatToDoRun,
 } from '@/lib/what-to-do-runs';
 import { readWhatToDoCurrentMap } from '@/lib/what-to-do-storage';
+import { readWhatToDoRunDraft } from '@/lib/what-to-do-run-draft';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -62,11 +63,20 @@ export async function GET(
     return Response.json({ error: 'Project not found.' }, { status: 404 });
   try {
     const runId = new URL(request.url).searchParams.get('runId');
-    if (runId)
+    if (runId) {
+      const run = await readWhatToDoRun(project, runId);
+      const includeDraft =
+        new URL(request.url).searchParams.get('includeDraft') === '1';
       return Response.json(
-        { run: await readWhatToDoRun(project, runId) },
+        {
+          run,
+          ...(includeDraft
+            ? { draft: await readWhatToDoRunDraft(project, run) }
+            : {}),
+        },
         { headers: { 'Cache-Control': 'no-store' } },
       );
+    }
     const [runs, currentMap] = await Promise.all([
       listLatestWhatToDoRuns(project),
       readWhatToDoCurrentMap(project),

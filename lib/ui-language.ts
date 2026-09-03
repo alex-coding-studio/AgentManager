@@ -1204,6 +1204,7 @@ export const chineseUi: Record<string, string> = {
     '当前交付地图 · {count} 个 Contract',
   'Focused Contracts': '重点 Contract',
   'Could not start the Agent Run.': '无法启动 Agent Run。',
+  'Could not restore the failed Run.': '无法恢复失败运行的输入。',
   'The What to Do Agent Run failed.': 'What to Do Agent Run 失败。',
   'The Agent Run was canceled. The Delivery Map was not changed.':
     'Agent Run 已取消，交付地图没有改变。',
