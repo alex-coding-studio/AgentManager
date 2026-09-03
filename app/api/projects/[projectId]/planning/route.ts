@@ -1,14 +1,14 @@
 import { getProject } from '@/lib/project-registry';
 import { apiErrorResponse } from '@/lib/api-errors';
 import { guardJsonRequest } from '@/lib/request-boundary';
-import { readContextBrowser } from '@/lib/product-context';
-import { executionService } from '@/lib/just-do-it-execution-service';
+import { readContextBrowser } from '@/lib/modules/product-context/catalog';
+import { executionService } from '@/lib/modules/implementation/execution-service';
 import {
   planningService,
   readPlanningInstructions,
   savePlanningInstructions,
   type StartPlanningInput,
-} from '@/lib/just-do-it-planning-service';
+} from '@/lib/modules/implementation/planning-service';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

@@ -1,7 +1,7 @@
-import type { WhatsNextRunRecord } from './whats-next-runs.ts';
-import type { DomainModelRunRecord } from './domain-model-runs.ts';
-import type { TaskDecompositionRunRecord } from './task-decomposition-runs.ts';
-import type { WhatToDoRunRecord } from './what-to-do-runs.ts';
+import type { WhatsNextRunRecord } from './modules/product-discovery/runs.ts';
+import type { DomainModelRunRecord } from './modules/domain-modeling/runs.ts';
+import type { TaskDecompositionRunRecord } from './modules/scope-decomposition/runs.ts';
+import type { WhatToDoRunRecord } from './modules/delivery-planning/runs.ts';
 
 export type LatestResponseTone = 'neutral' | 'attention' | 'warning' | 'error';
 

@@ -8,7 +8,7 @@ import {
   TASK_DECOMPOSITION_HARNESS_ID,
   TASK_DECOMPOSITION_HARNESS_REVISION,
   type HarnessCandidate,
-} from '../lib/task-decomposition-harness.ts';
+} from '../lib/modules/scope-decomposition/harness.ts';
 
 const realFs = await import('node:fs/promises');
 const { mkdir, mkdtemp, readdir, rm, writeFile } = realFs;
@@ -54,9 +54,9 @@ function fsError(code: string, target: string) {
   return error;
 }
 
-mock.module('../lib/local-agent-transport.ts', {
+mock.module('../lib/agents/transport.ts', {
   namedExports: {
-    ...(await import('../lib/local-agent-transport.ts')),
+    ...(await import('../lib/agents/transport.ts')),
     startLocalAgentRun: () => ({
       completion: new Promise(() => {}),
       cancel: () => {},
@@ -130,8 +130,8 @@ const {
   discardTaskDecompositionCandidate,
   readTaskDecompositionRun,
   startTaskDecompositionRun,
-} = await import('../lib/task-decomposition-runs.ts');
-const { listTaskGraphNodes } = await import('../lib/task-graph.ts');
+} = await import('../lib/modules/scope-decomposition/runs.ts');
+const { listTaskGraphNodes } = await import('../lib/graph/task/model.ts');
 const { PublicApiError } = await import('../lib/api-errors.ts');
 
 function revisionRequest(runId: string) {
@@ -456,7 +456,7 @@ void test('a concurrent accept and discard settle into one legal ordering', asyn
   try {
     await readTaskDecompositionRun(project, runId);
     const { discardTaskDecompositionCandidate } =
-      await import('../lib/task-decomposition-runs.ts');
+      await import('../lib/modules/scope-decomposition/runs.ts');
     const [accepted, discarded] = await Promise.allSettled([
       acceptTaskDecompositionCandidate(project, runId, CANDIDATE_A),
       discardTaskDecompositionCandidate(project, runId, CANDIDATE_A),

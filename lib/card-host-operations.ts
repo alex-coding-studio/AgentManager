@@ -14,7 +14,7 @@ import { promisify } from 'node:util';
 import {
   verifyCardWorkspace,
   type CardWorkspace,
-} from './just-do-it-worktree.ts';
+} from './modules/implementation/worktree.ts';
 
 const exec = promisify(execFile);
 

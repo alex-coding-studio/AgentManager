@@ -1,4 +1,4 @@
-import { getLocalModels } from '@/lib/local-agent-models';
+import { getLocalModels } from '@/lib/agents/models';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

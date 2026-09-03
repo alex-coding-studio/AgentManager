@@ -6,15 +6,15 @@ import path from 'node:path';
 import {
   readContextBrowser,
   readProductContext,
-} from '../lib/product-context.ts';
+} from '../lib/modules/product-context/catalog.ts';
 import {
   resolveProductContextResource,
   validateProductContextReferences,
-} from '../lib/product-context-resource.ts';
+} from '../lib/modules/product-context/resource.ts';
 import type { RegisteredProject } from '../lib/project-registry.ts';
-import { createStartNode } from '../lib/task-graph.ts';
-import { applyProposedDomainModel } from '../lib/domain-model.ts';
-import { appendCardWorkRecord } from '../lib/just-do-it-worklog.ts';
+import { createStartNode } from '../lib/graph/task/model.ts';
+import { applyProposedDomainModel } from '../lib/modules/domain-modeling/model.ts';
+import { appendCardWorkRecord } from '../lib/modules/implementation/worklog.ts';
 
 void test('Product Context indexes only formal module outputs and exposes their real paths', async (t) => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'product-context-'));

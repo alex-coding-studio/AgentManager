@@ -29,7 +29,7 @@ import { Textarea } from '@/components/ui/textarea';
 import type {
   TaskDecompositionAttachment,
   TaskDecompositionContext,
-} from '@/lib/task-decomposition-context';
+} from '@/lib/modules/scope-decomposition/context';
 import { cn } from '@/lib/utils';
 
 type AttachmentPreview = {

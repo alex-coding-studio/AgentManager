@@ -19,19 +19,19 @@ import {
   ensureCardWorkspace,
   verifyCardWorkspace,
   restartCardWorkspace,
-} from '../lib/just-do-it-worktree.ts';
-import { createExecutionService } from '../lib/just-do-it-execution-service.ts';
+} from '../lib/modules/implementation/worktree.ts';
+import { createExecutionService } from '../lib/modules/implementation/execution-service.ts';
 import {
   createPlanningService,
   type PlanningCard,
-} from '../lib/just-do-it-planning-service.ts';
-import { appendCardWorkRecord } from '../lib/just-do-it-worklog.ts';
+} from '../lib/modules/implementation/planning-service.ts';
+import { appendCardWorkRecord } from '../lib/modules/implementation/worklog.ts';
 import type { RegisteredProject } from '../lib/project-registry.ts';
 import type {
   LocalAgentResult,
   startLocalAgentRun,
-} from '../lib/local-agent-transport.ts';
-import type { CardHarnessRequest } from '../lib/just-do-it-harness.ts';
+} from '../lib/agents/transport.ts';
+import type { CardHarnessRequest } from '../lib/modules/implementation/harness.ts';
 import { PublicApiError } from '../lib/api-errors.ts';
 
 const exec = promisify(execFile);

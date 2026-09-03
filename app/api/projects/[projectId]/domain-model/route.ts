@@ -2,7 +2,7 @@ import { apiErrorResponse } from '@/lib/api-errors';
 import {
   readDomainModelView,
   undoLastDomainModelChange,
-} from '@/lib/domain-model';
+} from '@/lib/modules/domain-modeling/model';
 import { getProject } from '@/lib/project-registry';
 import { guardJsonRequest } from '@/lib/request-boundary';
 

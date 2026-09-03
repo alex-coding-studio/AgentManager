@@ -2,7 +2,7 @@
 
 import { useUiText } from '@/components/ui-language-provider';
 import { AgentProfileSelector } from '@/components/agent-profile-selector';
-import type { DemoProfile } from '@/lib/just-do-it-demo';
+import type { DemoProfile } from '@/lib/modules/implementation/demo';
 
 const demoAgents = ['codex', 'claude'] as const;
 

@@ -4,9 +4,9 @@ import {
   mergeLatestCandidatePreview,
   proposalFocusNodeIds,
   reconcileProposalRuns,
-} from '../lib/agent-graph-proposal.ts';
-import { titleFromAgentGraphIdea } from '../lib/agent-graph-source.ts';
-import { readAgentGraphInputPacket } from '../lib/agent-graph-input.ts';
+} from '../lib/graph/agent/proposal.ts';
+import { titleFromAgentGraphIdea } from '../lib/graph/agent/source.ts';
+import { readAgentGraphInputPacket } from '../lib/graph/agent/input.ts';
 
 void test('Agent Graph Sources derive a display title without losing the full idea', () => {
   const idea =

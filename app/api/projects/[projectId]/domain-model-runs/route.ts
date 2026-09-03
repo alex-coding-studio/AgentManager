@@ -1,11 +1,11 @@
 import { apiErrorResponse } from '@/lib/api-errors';
-import { readAgentGraphInputPacket } from '@/lib/agent-graph-input';
+import { readAgentGraphInputPacket } from '@/lib/graph/agent/input';
 import {
   cancelDomainModelRun,
   listLatestDomainModelRuns,
   readDomainModelRun,
   startDomainModelRun,
-} from '@/lib/domain-model-runs';
+} from '@/lib/modules/domain-modeling/runs';
 import { getProject } from '@/lib/project-registry';
 import { guardJsonRequest, guardRequest } from '@/lib/request-boundary';
 

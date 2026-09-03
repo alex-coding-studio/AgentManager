@@ -4,7 +4,7 @@ import {
   assessRequiredChecks,
   splitChecks,
   validateAcceptanceCriteria,
-} from '../lib/just-do-it-checklist.ts';
+} from '../lib/modules/implementation/checklist.ts';
 const checklist = {
   version: 'v1',
   items: [

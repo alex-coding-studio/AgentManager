@@ -2,7 +2,7 @@ import { apiErrorResponse } from '@/lib/api-errors';
 import {
   readDomainModelInstructions,
   saveDomainModelInstructions,
-} from '@/lib/domain-model-context';
+} from '@/lib/modules/domain-modeling/context';
 import { getProject } from '@/lib/project-registry';
 import { guardJsonRequest } from '@/lib/request-boundary';
 

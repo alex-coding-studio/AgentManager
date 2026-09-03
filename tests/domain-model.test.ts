@@ -17,29 +17,29 @@ import {
   readDomainModelView,
   undoLastDomainModelChange,
   type ProposedDomainModel,
-} from '../lib/domain-model.ts';
+} from '../lib/modules/domain-modeling/model.ts';
 import {
   deriveDomainRelationships,
   domainModelTopologyKey,
-} from '../lib/domain-model-view.ts';
+} from '../lib/modules/domain-modeling/view.ts';
 import {
   createDomainModelRequest,
   domainModelPrompt,
   parseDomainModelResult,
   type DomainModelRequest,
-} from '../lib/domain-model-harness.ts';
+} from '../lib/modules/domain-modeling/harness.ts';
 import {
   cancelDomainModelRun,
   canContinueDomainModelSession,
   readDomainModelRun,
   startDomainModelRun,
-} from '../lib/domain-model-runs.ts';
+} from '../lib/modules/domain-modeling/runs.ts';
 import type { RegisteredProject } from '../lib/project-registry.ts';
-import type { startLocalAgentRun } from '../lib/local-agent-transport.ts';
+import type { startLocalAgentRun } from '../lib/agents/transport.ts';
 import {
   readDomainModelInstructions,
   saveDomainModelInstructions,
-} from '../lib/domain-model-context.ts';
+} from '../lib/modules/domain-modeling/context.ts';
 
 async function fixture(t: { after: (fn: () => Promise<void>) => void }) {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'domain-model-'));

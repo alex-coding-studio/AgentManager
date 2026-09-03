@@ -103,7 +103,7 @@ mock.module('node:fs/promises', {
 });
 
 const { createStartNode, updateStartNode, listTaskGraphNodes } =
-  await import('../lib/task-graph.ts');
+  await import('../lib/graph/task/model.ts');
 const { PublicApiError } = await import('../lib/api-errors.ts');
 
 const managerHome = await mkdtemp(path.join(os.tmpdir(), 'am-tg-home-'));

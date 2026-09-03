@@ -3,16 +3,16 @@ import test from 'node:test';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { partitionNodeResources } from '../lib/task-graph-resources.ts';
+import { partitionNodeResources } from '../lib/graph/task/resources.ts';
 import {
   assertCanvasCanCreateStartNode,
   assertTaskGraphNodeCanBeDeleted,
   CanvasStartConflictError,
   getTaskGraphRelationships,
   NodeReferencedError,
-} from '../lib/task-graph-rules.ts';
-import { listTaskGraphNodes } from '../lib/task-graph.ts';
-import { toggleWhatsNextSelection } from '../lib/whats-next-selection.ts';
+} from '../lib/graph/task/rules.ts';
+import { listTaskGraphNodes } from '../lib/graph/task/model.ts';
+import { toggleWhatsNextSelection } from '../lib/modules/product-discovery/selection.ts';
 
 const relationshipNodes = [
   { id: 'NODE-00000001', role: 'start', derivedFrom: [], dependsOn: [] },

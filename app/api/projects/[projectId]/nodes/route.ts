@@ -6,8 +6,8 @@ import {
   createStartNode,
   deleteTaskGraphNode,
   updateStartNode,
-} from '@/lib/task-graph';
-import { NodeReferencedError } from '@/lib/task-graph-rules';
+} from '@/lib/graph/task/model';
+import { NodeReferencedError } from '@/lib/graph/task/rules';
 
 export const runtime = 'nodejs';
 

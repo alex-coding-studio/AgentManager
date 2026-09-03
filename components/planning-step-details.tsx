@@ -1,7 +1,7 @@
 'use client';
 
 import { CheckDetails } from '@/components/check-details';
-import type { ActionContract } from '@/lib/just-do-it-harness';
+import type { ActionContract } from '@/lib/modules/implementation/harness';
 import { useUiText } from '@/components/ui-language-provider';
 
 export function PlanningStepDetails({

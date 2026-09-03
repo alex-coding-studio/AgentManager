@@ -3,17 +3,17 @@ import { EventEmitter } from 'node:events';
 import { PassThrough, Writable } from 'node:stream';
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import test from 'node:test';
-import { readAgentProfile, sameModelSelection } from '../lib/agent-profile.ts';
+import { readAgentProfile, sameModelSelection } from '../lib/agents/profile.ts';
 import {
   createModelCatalogCache,
   parseModels,
   readLocalModels,
-} from '../lib/local-agent-models.ts';
-import { validatePlanningProfile } from '../lib/just-do-it-planning-service.ts';
+} from '../lib/agents/models.ts';
+import { validatePlanningProfile } from '../lib/modules/implementation/planning-service.ts';
 import {
   buildClaudeArguments,
   buildCodexArguments,
-} from '../lib/local-agent-transport.ts';
+} from '../lib/agents/transport.ts';
 
 type Message = {
   id?: number;

@@ -15,7 +15,7 @@ import {
   unmetDependencies,
   type DemoState,
   type DemoEvent,
-} from '../lib/just-do-it-demo.ts';
+} from '../lib/modules/implementation/demo.ts';
 
 void test('source links identify the right module and unique sample node without resolving deleted or foreign sources', () => {
   const goals = [...createDemoState().goals, createLibraryGoal()];

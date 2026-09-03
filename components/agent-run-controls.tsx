@@ -10,7 +10,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { useUiText } from '@/components/ui-language-provider';
-import type { AgentProfile } from '@/lib/agent-profile';
+import type { AgentProfile } from '@/lib/agents/profile';
 
 export function AgentRunControls({
   value,

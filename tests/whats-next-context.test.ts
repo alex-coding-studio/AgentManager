@@ -15,8 +15,8 @@ import {
   readWhatsNextInstructions,
   saveWhatsNextInstructions,
   readWhatsNextContext,
-} from '../lib/whats-next-context.ts';
-import { buildWhatsNextContinuationPrompt } from '../lib/whats-next-prompt.ts';
+} from '../lib/modules/product-discovery/context.ts';
+import { buildWhatsNextContinuationPrompt } from '../lib/modules/product-discovery/prompt.ts';
 import type { RegisteredProject } from '../lib/project-registry.ts';
 
 async function fixture(t: { after: (fn: () => Promise<void>) => void }) {

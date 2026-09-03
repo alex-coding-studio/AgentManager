@@ -5,7 +5,7 @@ import {
   successfulRecomposeSupersededCandidateIds,
   validateAgentGraphRecomposeDependencies,
   validateAgentGraphRecomposePlan,
-} from '../lib/agent-graph-recompose.ts';
+} from '../lib/graph/agent/recompose.ts';
 
 void test('accepts one complete N-to-M Recompose plan', () => {
   assert.doesNotThrow(() =>

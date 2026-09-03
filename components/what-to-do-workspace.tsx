@@ -24,22 +24,22 @@ import { TaskGraphCanvas } from '@/components/task-graph-canvas';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useUiText } from '@/components/ui-language-provider';
-import type { AgentProfile } from '@/lib/agent-profile';
+import type { AgentProfile } from '@/lib/agents/profile';
 import {
   latestWhatToDoResponse,
   renderLatestResponseActivityLog,
 } from '@/lib/latest-response';
-import type { ContextBrowserFolder } from '@/lib/product-context';
-import type { TaskGraphNode } from '@/lib/task-graph';
+import type { ContextBrowserFolder } from '@/lib/modules/product-context/catalog';
+import type { TaskGraphNode } from '@/lib/graph/task/model';
 import {
   renderWhatToDoContract,
   type WhatToDoDeliveryMap,
-} from '@/lib/what-to-do-map';
-import type { WhatToDoRunRecord } from '@/lib/what-to-do-runs';
+} from '@/lib/modules/delivery-planning/map';
+import type { WhatToDoRunRecord } from '@/lib/modules/delivery-planning/runs';
 import {
   shouldRestoreWhatToDoDraft,
   type WhatToDoDraft,
-} from '@/lib/what-to-do-draft';
+} from '@/lib/modules/delivery-planning/draft';
 
 export function WhatToDoWorkspace({
   projectId,

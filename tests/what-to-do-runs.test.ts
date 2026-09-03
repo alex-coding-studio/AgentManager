@@ -3,10 +3,10 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import type { LocalAgentRunInput } from '../lib/local-agent-transport.ts';
+import type { LocalAgentRunInput } from '../lib/agents/transport.ts';
 import type { RegisteredProject } from '../lib/project-registry.ts';
-import type { TaskGraphNode } from '../lib/task-graph.ts';
-import { WHAT_TO_DO_HARNESS_REVISION } from '../lib/what-to-do-harness.ts';
+import type { TaskGraphNode } from '../lib/graph/task/model.ts';
+import { WHAT_TO_DO_HARNESS_REVISION } from '../lib/modules/delivery-planning/harness.ts';
 import {
   cancelWhatToDoRun,
   listLatestWhatToDoRuns,
@@ -14,11 +14,11 @@ import {
   readWhatToDoRun,
   startWhatToDoRun,
   whatToDoAgentEnvironment,
-} from '../lib/what-to-do-runs.ts';
-import { readWhatToDoCurrentMap } from '../lib/what-to-do-storage.ts';
-import { readWhatToDoRunDraft } from '../lib/what-to-do-run-draft.ts';
-import { planningService } from '../lib/just-do-it-planning-service.ts';
-import { appendCardWorkRecord } from '../lib/just-do-it-worklog.ts';
+} from '../lib/modules/delivery-planning/runs.ts';
+import { readWhatToDoCurrentMap } from '../lib/modules/delivery-planning/storage.ts';
+import { readWhatToDoRunDraft } from '../lib/modules/delivery-planning/run-draft.ts';
+import { planningService } from '../lib/modules/implementation/planning-service.ts';
+import { appendCardWorkRecord } from '../lib/modules/implementation/worklog.ts';
 
 const featureUid = '00000000-0000-4000-8000-000000000002';
 

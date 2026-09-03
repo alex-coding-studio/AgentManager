@@ -14,24 +14,24 @@ import path from 'node:path';
 import os from 'node:os';
 
 const { createStartNode, listTaskGraphNodes } =
-  await import('../lib/task-graph.ts');
+  await import('../lib/graph/task/model.ts');
 const {
   startWhatsNextRun,
   readWhatsNextRun,
   listLatestWhatsNextRuns,
   acceptWhatsNextCandidate,
   cancelWhatsNextRun,
-} = await import('../lib/whats-next-runs.ts');
+} = await import('../lib/modules/product-discovery/runs.ts');
 const { redoProposalPlan, redoProposalContext } =
-  await import('../lib/whats-next-redo.ts');
+  await import('../lib/modules/product-discovery/redo.ts');
 const { saveWhatsNextInstructions } =
-  await import('../lib/whats-next-context.ts');
+  await import('../lib/modules/product-discovery/context.ts');
 const {
   startTaskDecompositionRun,
   readTaskDecompositionRun,
   acceptTaskDecompositionCandidate,
   discardTaskDecompositionCandidate,
-} = await import('../lib/task-decomposition-runs.ts');
+} = await import('../lib/modules/scope-decomposition/runs.ts');
 
 void test('continued Runs receive current Instructions, clearing is explicit, and running snapshots stay unchanged', async () =>
   fixture(async ({ project, input, original }) => {

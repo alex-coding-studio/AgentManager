@@ -3,8 +3,8 @@ import path from 'node:path';
 import os from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { readCodexSkills } from '../lib/local-agent-skills.ts';
-import { buildCodexArguments } from '../lib/local-agent-transport.ts';
+import { readCodexSkills } from '../lib/agents/skills.ts';
+import { buildCodexArguments } from '../lib/agents/transport.ts';
 
 const exec = promisify(execFile);
 const catalog = await readCodexSkills(process.cwd());

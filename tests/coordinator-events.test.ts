@@ -7,9 +7,9 @@ import {
   workerSettlementEvent,
   workerSettlementPrompt,
   type ExecutionReport,
-} from '../lib/coordinator-events.ts';
-import { createCardHarnessRequest } from '../lib/just-do-it-harness.ts';
-import { createCoordinationRequest } from '../lib/just-do-it-coordination.ts';
+} from '../lib/modules/implementation/coordinator-events.ts';
+import { createCardHarnessRequest } from '../lib/modules/implementation/harness.ts';
+import { createCoordinationRequest } from '../lib/modules/implementation/coordination.ts';
 
 const cardId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const actionId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';

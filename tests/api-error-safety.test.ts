@@ -387,17 +387,15 @@ void test('an internal failure never reaches the client, only the fallback and a
 });
 
 void test('internal failures are not thrown as PublicApiError anywhere in lib', async () => {
-  const directory = new URL('../lib/', import.meta.url);
-  const files = (await readdir(directory)).filter((name) =>
-    name.endsWith('.ts'),
-  );
+  const files = await libSourceFiles();
   const misclassified: string[] = [];
-  for (const name of files) {
-    const source = await readFile(new URL(name, directory), 'utf8');
+  for (const file of files) {
+    const source = await readFile(file, 'utf8');
     for (const message of INTERNAL_FAILURE_MESSAGES) {
       const escaped = message.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const pattern = new RegExp(`throw new PublicApiError\\(\\s*'${escaped}'`);
-      if (pattern.test(source)) misclassified.push(`${name}: ${message}`);
+      if (pattern.test(source))
+        misclassified.push(`${file.pathname}: ${message}`);
     }
   }
   assert.deepEqual(misclassified, []);
@@ -406,10 +404,10 @@ void test('internal failures are not thrown as PublicApiError anywhere in lib', 
 void test('deliberate request validation is still thrown as PublicApiError', async () => {
   const directory = new URL('../lib/', import.meta.url);
   const expected: Array<[string, string]> = [
-    ['task-graph.ts', 'A start-node title is required.'],
-    ['task-graph.ts', 'Upload no more than 20 Markdown files at once.'],
-    ['task-decomposition-runs.ts', 'A User Input is required.'],
-    ['whats-next-runs.ts', 'Select at least one origin Node.'],
+    ['graph/task/model.ts', 'A start-node title is required.'],
+    ['graph/task/model.ts', 'Upload no more than 20 Markdown files at once.'],
+    ['modules/scope-decomposition/runs.ts', 'A User Input is required.'],
+    ['modules/product-discovery/runs.ts', 'Select at least one origin Node.'],
     ['project-registry.ts', 'The project path must be an existing directory.'],
   ];
   for (const [name, message] of expected) {
@@ -500,6 +498,22 @@ async function apiRouteFiles(
       );
     else if (entry.name === 'route.ts')
       files.push(path.join(directory.pathname, entry.name));
+  }
+  return files;
+}
+
+async function libSourceFiles(
+  directory = new URL('../lib/', import.meta.url),
+): Promise<URL[]> {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const files: URL[] = [];
+  for (const entry of entries) {
+    const target = new URL(
+      entry.name + (entry.isDirectory() ? '/' : ''),
+      directory,
+    );
+    if (entry.isDirectory()) files.push(...(await libSourceFiles(target)));
+    else if (entry.name.endsWith('.ts')) files.push(target);
   }
   return files;
 }

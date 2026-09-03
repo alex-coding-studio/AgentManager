@@ -1,4 +1,4 @@
-import type { ActionRun } from './just-do-it-execution-types.ts';
+import type { ActionRun } from './modules/implementation/execution-types.ts';
 import type { GitHubPullRequest } from './github-delivery.ts';
 
 export function summarizeGitHub(runs: Pick<ActionRun, 'github'>[]) {

@@ -8,7 +8,7 @@ import { promisify } from 'node:util';
 import {
   createSystemValidationFixPacket,
   runSystemValidation,
-} from '../lib/system-validation-runner.ts';
+} from '../lib/modules/implementation/system-validation-runner.ts';
 
 const execute = promisify(execFile);
 

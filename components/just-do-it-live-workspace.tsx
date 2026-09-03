@@ -37,9 +37,9 @@ import type {
   PendingDependencyReview,
   PlanningCard,
   PlanningProfile,
-} from '@/lib/just-do-it-planning-service';
-import type { PlanningSource } from '@/lib/just-do-it-planning-sources';
-import type { ContextBrowserFolder } from '@/lib/product-context';
+} from '@/lib/modules/implementation/planning-service';
+import type { PlanningSource } from '@/lib/modules/implementation/planning-sources';
+import type { ContextBrowserFolder } from '@/lib/modules/product-context/catalog';
 
 type View = {
   cards: PlanningCard[];
@@ -96,6 +96,12 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
   const [instructions, setInstructions] = useState<string | null>(null);
   const [contextOpen, setContextOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [actionHeaderTarget, setActionHeaderTarget] =
+    useState<HTMLDivElement | null>(null);
+  const [actionHeaderStatusTarget, setActionHeaderStatusTarget] =
+    useState<HTMLDivElement | null>(null);
+  const [planHeaderStuck, setPlanHeaderStuck] = useState(false);
+  const planHeaderSentinel = useRef<HTMLDivElement | null>(null);
   const initialSourceHandled = useRef(false);
   const mounted = useRef(true);
   const refreshBusy = useRef(false);
@@ -174,8 +180,17 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
       clearInterval(timer);
     };
   }, [refresh]);
-
   const card = view?.cards.find((item) => item.id === selectedId);
+  useEffect(() => {
+    const sentinel = planHeaderSentinel.current;
+    if (!sentinel) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setPlanHeaderStuck(!entry?.isIntersecting),
+      { threshold: 1 },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [card?.id]);
   const draft = card ? (drafts[card.id] ?? initialDraft(card)) : null;
   const selectedStep = card?.plan?.steps.find((item) => item.id === stepId);
   const running = card?.run?.status === 'running';
@@ -654,11 +669,29 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
               </AgentGraphComposerCard>
             ) : (
               <section className="space-y-4">
-                <header className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-4">
+                <div
+                  ref={planHeaderSentinel}
+                  aria-hidden="true"
+                  className="h-px"
+                />
+                <header
+                  className={cn(
+                    'sticky top-0 z-30 flex flex-wrap items-center justify-between gap-3 border border-border bg-background/95 p-4 shadow-sm backdrop-blur transition-[border-radius] duration-150',
+                    planHeaderStuck ? 'rounded-b-xl border-t-0' : 'rounded-xl',
+                  )}
+                >
                   <div>
-                    <span className="text-sm font-medium">
-                      {t(finalized ? 'Plan finalized' : 'Plan preview')}
-                    </span>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-medium">
+                        {t(finalized ? 'Plan finalized' : 'Plan preview')}
+                      </span>
+                      {finalized ? (
+                        <div
+                          ref={setActionHeaderStatusTarget}
+                          className="flex items-center gap-2"
+                        />
+                      ) : null}
+                    </div>
                     <p className="mt-2 text-xs text-muted-foreground">
                       {t(
                         finalized
@@ -666,31 +699,30 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
                           : 'Review each step, then confirm the entire plan to create Actions.',
                       )}
                     </p>
-                    {Boolean(card.execution?.runs.length) && (
-                      <p className="mt-2 text-xs text-muted-foreground">
-                        {t(
-                          'Plan and acceptance criteria are locked after confirmation. User decisions remain separate.',
-                        )}
-                      </p>
-                    )}
                   </div>
                   <div className="flex flex-wrap items-center justify-end gap-3">
                     {finalized ? (
-                      <div className="flex items-center gap-2 rounded-xl border border-border bg-secondary/40 px-2 py-1.5">
-                        <span className="pl-1 text-xs font-medium">
-                          {t('Coordinator')}
-                        </span>
-                        <AgentProfileSelector
-                          value={draft!.coordinationProfile}
-                          onChange={(coordinationProfile) =>
-                            patchDraft(card.id, { coordinationProfile })
-                          }
-                          disabled={busy || executionRunning}
-                          label="Coordination profile"
-                          showStatus={false}
-                          agents={justDoItAgents}
+                      <>
+                        <div className="flex items-center gap-2 rounded-xl border border-border bg-secondary/40 px-2 py-1.5">
+                          <span className="pl-1 text-xs font-medium">
+                            {t('Coordinator')}
+                          </span>
+                          <AgentProfileSelector
+                            value={draft!.coordinationProfile}
+                            onChange={(coordinationProfile) =>
+                              patchDraft(card.id, { coordinationProfile })
+                            }
+                            disabled={busy || executionRunning}
+                            label="Coordination profile"
+                            showStatus={false}
+                            agents={justDoItAgents}
+                          />
+                        </div>
+                        <div
+                          ref={setActionHeaderTarget}
+                          className="flex items-center gap-2"
                         />
-                      </div>
+                      </>
                     ) : (
                       <>
                         <Button
@@ -824,6 +856,8 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
                               action={selectedStep}
                               coordinatorProfile={draft!.coordinationProfile}
                               folders={view.folders}
+                              headerActionsTarget={actionHeaderTarget}
+                              headerStatusTarget={actionHeaderStatusTarget}
                               onChange={(updated) =>
                                 setView((old) =>
                                   old

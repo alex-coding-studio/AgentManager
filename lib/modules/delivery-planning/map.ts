@@ -1,0 +1,248 @@
+import { randomUUID } from 'node:crypto';
+import type {
+  WhatToDoContractCandidate,
+  WhatToDoHarnessResult,
+  WhatToDoSourceClaim,
+} from './harness.ts';
+
+export type WhatToDoDeliveryContract = Omit<
+  WhatToDoContractCandidate,
+  'candidateId' | 'revision' | 'dependsOn'
+> & {
+  id: string;
+  uid: string;
+  relations: { derivedFrom: string[]; dependsOn: string[] };
+  dependsOn: string[];
+  outputPath: string;
+};
+
+export type WhatToDoMapSourceClaim = Omit<
+  WhatToDoSourceClaim,
+  'contractCandidateIds'
+> & { contractIds: string[] };
+
+export type WhatToDoMapSourceSnapshot = {
+  logicalPath: string;
+  sha256: string;
+  storedPath: string;
+};
+
+export type WhatToDoDeliveryMap = {
+  schemaVersion: 1;
+  runId: string;
+  updatedAt: string;
+  sourceUids: string[];
+  contracts: WhatToDoDeliveryContract[];
+  sourceClaims: WhatToDoMapSourceClaim[];
+  sourceSnapshots: WhatToDoMapSourceSnapshot[];
+};
+
+export function whatToDoContractCandidateId(
+  contract: WhatToDoDeliveryContract,
+) {
+  return `CANDIDATE-${contract.id.slice(5)}`;
+}
+
+export function whatToDoKnownCandidates(map: WhatToDoDeliveryMap) {
+  const candidateIdByContractId = new Map(
+    map.contracts.map((contract) => [
+      contract.id,
+      whatToDoContractCandidateId(contract),
+    ]),
+  );
+  return map.contracts.map((contract) => ({
+    candidateId: whatToDoContractCandidateId(contract),
+    dependsOn: contract.dependsOn.map((dependency) =>
+      candidateIdByContractId.get(dependency)!,
+    ),
+    sourceClaimIds: [...contract.sourceClaimIds],
+  }));
+}
+
+export function whatToDoKnownSourceClaims(
+  map: WhatToDoDeliveryMap,
+): WhatToDoSourceClaim[] {
+  const candidateIdByContractId = new Map(
+    map.contracts.map((contract) => [
+      contract.id,
+      whatToDoContractCandidateId(contract),
+    ]),
+  );
+  return map.sourceClaims.map((claim) => {
+    const { contractIds, ...content } = claim;
+    return {
+      ...content,
+      contractCandidateIds: contractIds.map((contractId) =>
+        candidateIdByContractId.get(contractId)!,
+      ),
+    };
+  });
+}
+
+export function whatToDoCurrentMapPromptView(map: WhatToDoDeliveryMap) {
+  const candidateIdByContractId = new Map(
+    map.contracts.map((contract) => [
+      contract.id,
+      whatToDoContractCandidateId(contract),
+    ]),
+  );
+  return {
+    contracts: map.contracts.map((contract) => {
+      const {
+        id: _id,
+        uid: _uid,
+        relations: _relations,
+        ...content
+      } = contract;
+      return {
+        ...content,
+        candidateId: whatToDoContractCandidateId(contract),
+        dependsOn: contract.dependsOn.map((dependency) =>
+          candidateIdByContractId.get(dependency)!,
+        ),
+      };
+    }),
+    sourceClaims: whatToDoKnownSourceClaims(map).map((claim) => ({
+      claimId: claim.claimId,
+      sourcePath: claim.sourcePath,
+      summary: claim.summary,
+      disposition: claim.disposition,
+      contractCandidateIds: claim.contractCandidateIds,
+      exclusionReason: claim.exclusionReason,
+    })),
+  };
+}
+
+export function materializeWhatToDoDeliveryMap(
+  input: {
+    runId: string;
+    updatedAt: string;
+    sourceUids: string[];
+    result: Extract<WhatToDoHarnessResult, { outcome: 'map-proposal' }>;
+    currentMap?: WhatToDoDeliveryMap | null;
+    sourceSnapshots: WhatToDoMapSourceSnapshot[];
+  },
+  createUid: () => string = randomUUID,
+): WhatToDoDeliveryMap {
+  const aliases = new Set(
+    (input.currentMap?.contracts ?? []).map((contract) => contract.id),
+  );
+  const retainedCandidateIds = new Set(
+    input.result.recomposition?.effects
+      .filter((effect) => effect.kind === 'retain')
+      .flatMap((effect) => effect.from) ?? [],
+  );
+  const identities = new Map([
+    ...(input.currentMap?.contracts ?? [])
+      .filter((contract) =>
+        retainedCandidateIds.has(whatToDoContractCandidateId(contract)),
+      )
+      .map(
+        (contract) =>
+          [
+            whatToDoContractCandidateId(contract),
+            { uid: contract.uid, id: contract.id },
+          ] as const,
+      ),
+    ...input.result.candidates.map((candidate) => {
+      const uid = createUid();
+      const compact = uid.replaceAll('-', '');
+      let id = '';
+      for (let length = 8; length <= compact.length; length += 4) {
+        const candidateId = `NODE-${compact.slice(-length)}`;
+        if (!aliases.has(candidateId)) {
+          id = candidateId;
+          aliases.add(candidateId);
+          break;
+        }
+      }
+      if (!id) throw new Error('Cannot allocate a Delivery Contract identity.');
+      return [candidate.candidateId, { uid, id }] as const;
+    }),
+  ]);
+  const retainedContracts = (input.currentMap?.contracts ?? [])
+    .filter((contract) =>
+      retainedCandidateIds.has(whatToDoContractCandidateId(contract)),
+    )
+    .map((contract) => {
+      const candidateId = whatToDoContractCandidateId(contract);
+      const update = input.result.contractDependencyUpdates?.find(
+        (item) => item.candidateId === candidateId,
+      );
+      if (!update) return contract;
+      const dependencyIdentities = update.dependsOn.map((dependency) =>
+        identities.get(dependency)!,
+      );
+      return {
+        ...contract,
+        relations: {
+          ...contract.relations,
+          dependsOn: dependencyIdentities.map((dependency) => dependency.uid),
+        },
+        dependsOn: dependencyIdentities.map((dependency) => dependency.id),
+        outputPath: `what-to-do/runs/${input.runId}/contracts/${contract.id}/output.md`,
+      };
+    });
+  const newContracts = input.result.candidates.map((candidate) => {
+    const identity = identities.get(candidate.candidateId)!;
+    const dependencyIdentities = candidate.dependsOn.map((dependency) =>
+      identities.get(dependency)!,
+    );
+    const {
+      candidateId: _candidateId,
+      revision: _revision,
+      dependsOn: _dependsOn,
+      ...content
+    } = candidate;
+    return {
+      ...content,
+      id: identity.id,
+      uid: identity.uid,
+      relations: {
+        derivedFrom: [],
+        dependsOn: dependencyIdentities.map((dependency) => dependency.uid),
+      },
+      dependsOn: dependencyIdentities.map((dependency) => dependency.id),
+      outputPath: `what-to-do/runs/${input.runId}/contracts/${identity.id}/output.md`,
+    };
+  });
+  const contracts = [...retainedContracts, ...newContracts];
+  const snapshotByPath = new Map(
+    [
+      ...(input.currentMap?.sourceSnapshots ?? []),
+      ...input.sourceSnapshots,
+    ].map((snapshot) => [snapshot.logicalPath, snapshot]),
+  );
+  const sourcePaths = new Set(
+    input.result.sourceClaims.map((claim) => claim.sourcePath),
+  );
+  const sourceSnapshots = [...sourcePaths].map((sourcePath) => {
+    const snapshot = snapshotByPath.get(sourcePath);
+    if (!snapshot)
+      throw new Error(`Source Snapshot is unavailable: ${sourcePath}`);
+    return structuredClone(snapshot);
+  });
+  return {
+    schemaVersion: 1,
+    runId: input.runId,
+    updatedAt: input.updatedAt,
+    sourceUids: [...new Set(input.sourceUids)],
+    contracts,
+    sourceClaims: input.result.sourceClaims.map((claim) => {
+      const { contractCandidateIds, ...content } = claim;
+      return {
+        ...content,
+        contractIds: contractCandidateIds.map(
+          (candidateId) => identities.get(candidateId)!.id,
+        ),
+      };
+    }),
+    sourceSnapshots,
+  };
+}
+
+export function renderWhatToDoContract(contract: WhatToDoDeliveryContract) {
+  const list = (items: string[]) =>
+    items.map((item) => `- ${item}`).join('\n') || '- None';
+  return `# ${contract.title}\n\n${contract.summary}\n\n## Outcome\n\n${contract.outcome}\n\n## Included scope\n\n${list(contract.includedScope)}\n\n## Excluded scope\n\n${list(contract.excludedScope)}\n\n## Product rules\n\n${list(contract.productRules)}\n\n## Domain impact\n\n- Kind: ${contract.domainImpact.kind}\n- Reason: ${contract.domainImpact.reason}\n- Evidence: ${contract.domainImpact.evidencePaths.join(', ') || 'None'}\n\n## Required experience states\n\n${list(contract.requiredExperienceStates)}\n\n## Repository constraints\n\n${list(contract.repositoryConstraints)}\n\n## Acceptance\n\n${contract.acceptanceCriteria.map((item) => `- **${item.id}** ${item.condition}\n  - Pass: ${item.passCondition}\n  - Evidence: ${item.evidence}`).join('\n')}\n\n## Validation expectations\n\n${list(contract.validationExpectations)}\n\n## Dependencies\n\n${list(contract.dependsOn)}\n\n## Source claims\n\n${list(contract.sourceClaimIds)}\n\n## Delivery strategy\n\n- Kind: ${contract.deliveryStrategy.kind}\n- Reason: ${contract.deliveryStrategy.reason}\n`;
+}

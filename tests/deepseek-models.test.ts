@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { deepseekEffort, deepseekModels } from '../lib/dsh/models.ts';
-import { readLocalModels } from '../lib/local-agent-models.ts';
+import {
+  deepseekEffort,
+  deepseekModels,
+} from '../lib/agents/deepseek/models.ts';
+import { readLocalModels } from '../lib/agents/models.ts';
 
 void test('DeepSeek model catalog is a standalone public list', () => {
   assert.deepEqual(

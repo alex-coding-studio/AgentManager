@@ -2,8 +2,11 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { CodexAppServerDriver } from '../lib/codex-app-server-driver.ts';
-import { HostJobBroker, type HostJobEvent } from '../lib/host-job-broker.ts';
+import { CodexAppServerDriver } from '../lib/agents/codex/app-server-driver.ts';
+import {
+  HostJobBroker,
+  type HostJobEvent,
+} from '../lib/agents/host-job-broker.ts';
 
 const model = process.argv[2];
 if (!model) throw new Error('Supply a Codex model ID explicitly.');

@@ -7,8 +7,8 @@ import { UiLanguageProvider } from '../components/ui-language-provider.tsx';
 import {
   CANVAS_NODE_CARD_MIN_HEIGHT,
   canvasNodeCardMinHeight,
-} from '../lib/canvas-node-card-metrics.ts';
-import { TASK_GRAPH_NODE_MIN_HEIGHT } from '../lib/graph-card-metrics.ts';
+} from '../lib/graph/canvas-node-card-metrics.ts';
+import { TASK_GRAPH_NODE_MIN_HEIGHT } from '../lib/graph/card-metrics.ts';
 
 const { CanvasNodeCardFrame } =
   await import('../components/canvas-node-card-frame.tsx');
@@ -604,7 +604,7 @@ void test('Domain Modeling, Delivery Planning and Just Do It share one running c
 
 void test('terminal What’s Next outcomes leave the Canvas and stay in Latest Response', async () => {
   const { whatsNextRunToPreviews } =
-    await import('../lib/whats-next-previews.ts');
+    await import('../lib/modules/product-discovery/previews.ts');
   for (const status of ['no-change', 'clarification', 'failed'] as const) {
     assert.deepEqual(
       whatsNextRunToPreviews({
@@ -940,6 +940,18 @@ void test('Just Do It separates the Task coordinator from the Action Composer', 
   assert.match(workspace, /params\.set\('card', cardId\)/);
   assert.match(workspace, /params\.set\('action', actionId\)/);
   assert.match(workspace, /router\.replace/);
+  assert.match(workspace, /sticky top-0 z-30/);
+  assert.match(workspace, /planHeaderStuck/);
+  assert.match(workspace, /rounded-b-xl border-t-0/);
+  assert.match(workspace, /rounded-xl/);
+  assert.match(workspace, /ref=\{setActionHeaderTarget\}/);
+  assert.match(workspace, /ref=\{setActionHeaderStatusTarget\}/);
+  assert.match(workspace, /headerActionsTarget=\{actionHeaderTarget\}/);
+  assert.match(workspace, /headerStatusTarget=\{actionHeaderStatusTarget\}/);
+  assert.doesNotMatch(
+    workspace,
+    /Plan and acceptance criteria are locked after confirmation/,
+  );
   assert.match(workspace, /folders=\{view\.folders\}/);
   assert.doesNotMatch(workspace, /Last run usage/);
 
@@ -957,6 +969,20 @@ void test('Just Do It separates the Task coordinator from the Action Composer', 
   assert.match(action, /label="Execution profile"/);
   assert.match(action, /<AgentGraphRunningCard/);
   assert.match(action, /coordination: \{ profile: coordinatorProfile \}/);
+  assert.match(action, /createPortal/);
+  assert.match(action, /\{t\('Redo'\)\}/);
+  assert.match(action, /\{t\('Pass'\)\}/);
+  assert.match(action, /headerStatusTarget/);
+  assert.match(action, /\{t\(currentStatus\)\}/);
+  const floatingComposer = action.slice(
+    action.indexOf('title={t(currentStatus)}'),
+    action.indexOf(
+      '</AgentGraphComposerCard>',
+      action.indexOf('title={t(currentStatus)}'),
+    ),
+  );
+  assert.doesNotMatch(floatingComposer, /Accept this output/);
+  assert.doesNotMatch(floatingComposer, /Required checks/);
   assert.doesNotMatch(action, /data-action-controls/);
   assert.doesNotMatch(action, /setCoordinatorProfile/);
 });

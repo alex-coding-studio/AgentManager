@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { FileText, Folder } from 'lucide-react';
 import { MarkdownReader } from '@/components/markdown-reader';
 import { useUiText } from '@/components/ui-language-provider';
-import type { ContextSection } from '@/lib/product-context';
+import type { ContextSection } from '@/lib/modules/product-context/catalog';
 import { cn } from '@/lib/utils';
 
 export function ProductContextWorkspace({

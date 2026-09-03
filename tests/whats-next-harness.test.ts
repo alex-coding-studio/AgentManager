@@ -11,8 +11,8 @@ import {
   validateWhatsNextHarnessResult,
   whatsNextHarnessPrompt,
   type WhatsNextCandidate,
-} from '../lib/whats-next-harness.ts';
-import { renderWhatsNextResponseMarkdown } from '../lib/whats-next-response.ts';
+} from '../lib/modules/product-discovery/harness.ts';
+import { renderWhatsNextResponseMarkdown } from '../lib/modules/product-discovery/response.ts';
 
 void test('ships the settled Reflection and Markdown Harness contract', () => {
   assert.match(WHATS_NEXT_HARNESS_PROMPT, /user-facing Reflection/);

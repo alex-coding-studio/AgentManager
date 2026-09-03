@@ -9,7 +9,7 @@ import {
   initialAgentGraphActivity,
   initializeAgentGraphActivity,
   writeAgentGraphRunEvidence,
-} from '../lib/agent-graph-run.ts';
+} from '../lib/graph/agent/run.ts';
 
 void test('shared Agent Graph errors are bounded and redacted', () => {
   const message = agentGraphErrorMessage(

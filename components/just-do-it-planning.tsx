@@ -21,7 +21,7 @@ import {
 import { useUiText } from '@/components/ui-language-provider';
 import { DemoAgentProfile } from '@/components/demo-agent-profile';
 import { ContextAttachmentPicker } from '@/components/context-attachment-picker';
-import type { ContextBrowserFolder } from '@/lib/product-context';
+import type { ContextBrowserFolder } from '@/lib/modules/product-context/catalog';
 import { cn } from '@/lib/utils';
 import {
   planningFor,
@@ -30,7 +30,7 @@ import {
   type DemoEvent,
   type DemoGoal,
   type DemoPlanStep,
-} from '@/lib/just-do-it-demo';
+} from '@/lib/modules/implementation/demo';
 
 type Props = { goal: DemoGoal; dispatch: Dispatch<DemoEvent> };
 
