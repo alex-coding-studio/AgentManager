@@ -163,6 +163,7 @@ void test('What to Do prepares one frozen standard Packet', async (t) => {
     ],
   );
   assert.ok(prepared.knownEvidencePaths.includes('repository/README.md'));
+  assert.ok(prepared.knownEvidencePaths.includes('.'));
   assert.ok(prepared.knownEvidencePaths.includes('repository/AGENTS.md'));
   assert.ok(prepared.knownEvidencePaths.includes('repository/src/index.ts'));
   assert.equal(prepared.knownEvidencePaths.includes('README.md'), false);

@@ -645,3 +645,19 @@ void test('normalizes packet workspace paths before validating evidence', () => 
     assert.equal(validated.sourceClaims[0]!.sourcePath, sourcePath);
   }
 });
+
+void test('accepts the bounded Context root as reviewed evidence', () => {
+  const result = proposal();
+  result.reviewedEvidence.push({
+    path: '.',
+    reason: 'Inspected the bounded Context root during project onboarding.',
+  });
+
+  assert.equal(
+    validateWhatToDoHarnessResult(
+      result,
+      context({ knownEvidencePaths: [sourcePath, evidencePath, '.'] }),
+    ).outcome,
+    'map-proposal',
+  );
+});

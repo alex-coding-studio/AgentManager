@@ -415,6 +415,7 @@ function knownEvidencePaths(
 ) {
   return [
     ...new Set([
+      '.',
       ...manifest.primary.map((entry) => entry.logicalPath),
       ...manifest.related.map((entry) => entry.logicalPath),
     ]),
