@@ -1,7 +1,7 @@
 import type { AgentProfile } from './agent-profile.ts';
 import type { LocalAgentUsage } from './local-agent-transport.ts';
 
-export type AgentRuntimeProvider = 'codex' | 'claude';
+export type AgentRuntimeProvider = 'codex' | 'claude' | 'deepseek';
 export type AgentRuntimeCapabilities = {
   persistentThreads: boolean;
   pushToolResults: boolean;

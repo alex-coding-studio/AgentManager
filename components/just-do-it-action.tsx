@@ -44,6 +44,8 @@ import type { AgentProfile } from '@/lib/agent-profile';
 import type { GitHubPullRequest } from '@/lib/github-delivery';
 import type { ContextBrowserFolder } from '@/lib/product-context';
 
+const justDoItAgents = ['codex', 'claude'] as const;
+
 export function JustDoItAction({
   projectId,
   card,
@@ -934,6 +936,7 @@ export function JustDoItAction({
                 }
                 running={pending}
                 label="Execution profile"
+                agents={justDoItAgents}
                 actionLabel={
                   history.length ? 'Continue this Action' : 'Start this Action'
                 }

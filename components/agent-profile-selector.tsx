@@ -16,6 +16,17 @@ import { cn } from '@/lib/utils';
 
 const catalogPromises = new Map<AgentProfile['agent'], Promise<ModelCatalog>>();
 const catalogValues = new Map<AgentProfile['agent'], ModelCatalog>();
+const allAgents: readonly AgentProfile['agent'][] = [
+  'codex',
+  'claude',
+  'deepseek',
+];
+
+function agentLabel(agent: AgentProfile['agent']) {
+  if (agent === 'codex') return 'Codex';
+  if (agent === 'deepseek') return 'DeepSeek';
+  return 'Claude';
+}
 
 function loadCatalog(agent: AgentProfile['agent']) {
   const existing = catalogPromises.get(agent);
@@ -56,6 +67,7 @@ export function AgentProfileSelector({
   mode = 'live',
   label = 'Agent configuration',
   showStatus = true,
+  agents = allAgents,
 }: {
   value: AgentProfile;
   onChange: (profile: AgentProfile) => void;
@@ -63,6 +75,7 @@ export function AgentProfileSelector({
   mode?: 'live' | 'demo';
   label?: string;
   showStatus?: boolean;
+  agents?: readonly AgentProfile['agent'][];
 }) {
   const { t } = useUiText();
   const [catalog, setCatalog] = useState<ModelCatalog | null>(null);
@@ -112,13 +125,13 @@ export function AgentProfileSelector({
         setLoading(false);
       });
     if (mode === 'live')
-      for (const agent of ['codex', 'claude'] as const)
+      for (const agent of agents)
         if (agent !== value.agent)
           void loadCatalog(agent).catch(() => undefined);
     return () => {
       current = false;
     };
-  }, [value, retry, mode, manual, onChange]);
+  }, [value, retry, mode, manual, onChange, agents]);
   const demoModels: LocalModel[] = [
     {
       id: 'reasoning-demo',
@@ -155,7 +168,7 @@ export function AgentProfileSelector({
   ];
   const selectedEffort = value.effort || preferredEffort(selected);
   const effortIndex = Math.max(0, effortOptions.indexOf(selectedEffort));
-  const agentLabel = value.agent === 'codex' ? 'Codex' : 'Claude';
+  const selectedAgentLabel = agentLabel(value.agent);
   const modelLabel =
     selected?.name ??
     (value.model ||
@@ -175,7 +188,7 @@ export function AgentProfileSelector({
         className="group flex h-8 min-w-0 max-w-64 items-center gap-2 rounded-lg px-2 text-left outline-none transition hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
       >
         <span className="min-w-0 flex-1 truncate text-[10px] leading-4 text-muted-foreground">
-          {agentLabel} · {modelLabel}
+          {selectedAgentLabel} · {modelLabel}
           {effortLabel ? ` · ${effortLabel}` : ''}
         </span>
         <ChevronDown className="size-3.5 shrink-0 text-muted-foreground transition-transform group-data-popup-open:rotate-180" />
@@ -187,7 +200,7 @@ export function AgentProfileSelector({
               {t('Provider')}
             </p>
             <div className="space-y-0.5">
-              {(['codex', 'claude'] as const).map((agent) => (
+              {agents.map((agent) => (
                 <button
                   key={agent}
                   type="button"
@@ -206,7 +219,7 @@ export function AgentProfileSelector({
                   }}
                 >
                   <span className="min-w-0 flex-1 truncate">
-                    {agent === 'codex' ? 'Codex' : 'Claude'}
+                    {agentLabel(agent)}
                   </span>
                   {value.agent === agent ? (
                     <Check className="size-3.5" />

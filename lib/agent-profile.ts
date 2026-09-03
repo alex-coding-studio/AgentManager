@@ -6,7 +6,7 @@ import {
 } from './local-agent-model-types.ts';
 
 export type AgentProfile = {
-  agent: 'codex' | 'claude';
+  agent: 'codex' | 'claude' | 'deepseek';
   model: string;
   effort: '' | ReasoningEffort;
 };
@@ -14,7 +14,7 @@ export type AgentProfile = {
 export function validateAgentProfile(profile: AgentProfile) {
   if (
     !profile ||
-    !['codex', 'claude'].includes(profile.agent) ||
+    !['codex', 'claude', 'deepseek'].includes(profile.agent) ||
     typeof profile.model !== 'string' ||
     (profile.model && !isModelId(profile.model)) ||
     !['', ...reasoningEfforts].includes(profile.effort)
@@ -30,6 +30,17 @@ export function readAgentProfile(form: FormData): AgentProfile {
   } as AgentProfile;
   validateAgentProfile(profile);
   return profile;
+}
+
+export function assertExecutionWorkerAgent(
+  agent: AgentProfile['agent'],
+): 'codex' | 'claude' {
+  if (agent === 'deepseek')
+    throw new PublicApiError(
+      'DeepSeek is not available as an execution worker.',
+      400,
+    );
+  return agent;
 }
 
 export function sameModelSelection(

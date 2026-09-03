@@ -48,6 +48,7 @@ type View = {
   folders: ContextBrowserFolder[];
   dependencyReviews: Record<string, PendingDependencyReview[]>;
 };
+const justDoItAgents = ['codex', 'claude'] as const;
 type Draft = {
   requirements: string;
   feedback: string;
@@ -646,6 +647,7 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
                     onChange={(profile) => patchDraft(card.id, { profile })}
                     disabled={busy || dependencyReview.length > 0}
                     actionLabel="Start planning"
+                    agents={justDoItAgents}
                     onRun={() => void generate(null)}
                   />
                 </div>
@@ -686,6 +688,7 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
                           disabled={busy || executionRunning}
                           label="Coordination profile"
                           showStatus={false}
+                          agents={justDoItAgents}
                         />
                       </div>
                     ) : (

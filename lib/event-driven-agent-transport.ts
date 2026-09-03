@@ -57,7 +57,7 @@ export function startEventDrivenWorkerRun(
   agent: LocalAgentKind,
   input: LocalAgentRunInput,
 ): LocalAgentRun {
-  if (input.access !== 'workspace-write')
+  if (input.access !== 'workspace-write' || agent === 'deepseek')
     return startLocalAgentRun(agent, input);
   if (agent === 'claude') return startClaudeWorkerRun(input);
   let canceled = false;

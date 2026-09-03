@@ -121,11 +121,13 @@ type DecompositionRequestPreview = TaskGraphPreview & {
 const AGENT_LABELS: Record<LocalAgentKind, string> = {
   codex: 'Codex',
   claude: 'Claude',
+  deepseek: 'DeepSeek',
 };
 
 const TRANSPORT_LABELS: Record<TaskDecompositionRunTransport, string> = {
   'codex-cli': 'Codex',
   'claude-cli': 'Claude',
+  'deepseek-cli': 'DeepSeek',
 };
 
 type RunSnapshot = {

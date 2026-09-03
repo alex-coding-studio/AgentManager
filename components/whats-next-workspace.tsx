@@ -103,6 +103,7 @@ import {
 const AGENT_LABELS: Record<LocalAgentKind, string> = {
   codex: 'Codex',
   claude: 'Claude',
+  deepseek: 'DeepSeek',
 };
 
 type RunSnapshot = {
@@ -400,7 +401,11 @@ function WhatsNextCanvas({
           run.harness.revision === WHATS_NEXT_HARNESS_REVISION &&
           sameModelSelection(run.profile, agentProfile) &&
           run.transport ===
-            (selectedAgent === 'codex' ? 'codex-cli' : 'claude-cli') &&
+            (selectedAgent === 'codex'
+              ? 'codex-cli'
+              : selectedAgent === 'deepseek'
+                ? 'deepseek-cli'
+                : 'claude-cli') &&
           run.sourceNodeIds.length === 1 &&
           run.sourceNodeIds[0] === growSource.id,
       )
@@ -2382,7 +2387,9 @@ function withoutFirstHeading(markdown: string) {
 }
 
 function agentForRun(run: WhatsNextRunRecord | undefined): LocalAgentKind {
-  return run?.transport === 'codex-cli' ? 'codex' : 'claude';
+  if (run?.transport === 'codex-cli') return 'codex';
+  if (run?.transport === 'deepseek-cli') return 'deepseek';
+  return 'claude';
 }
 
 function mergePreviews(
