@@ -41,6 +41,26 @@ void test('DeepSeek patches pin read-only sandboxing and disable tools', () => {
     assert.ok(disabled.has(id), `${id} should be disabled`);
 });
 
+void test('DeepSeek write patches keep file and shell tools and drop delegation', () => {
+  const patches = buildDeepseekPatches(
+    [{ id: 'kept', config: {} }],
+    '/tmp/project',
+    'workspace-write',
+  ) as Patch[];
+  const sandbox = patches.find((patch) => patch.id === 'sandbox-policy');
+  assert.deepEqual(sandbox, {
+    id: 'sandbox-policy',
+    config: { mode: 'workspace-write', workspaceRoot: '/tmp/project' },
+  });
+  const disabled = new Set(
+    patches.filter((patch) => patch.disabled).map((patch) => patch.id),
+  );
+  for (const id of ['tool-bash', 'tool-fs', 'tool-fs-search'])
+    assert.ok(!disabled.has(id), `${id} should stay enabled for writes`);
+  for (const id of ['tool-subagent', 'tool-subagent-fork', 'tool-ralph'])
+    assert.ok(disabled.has(id), `${id} should be disabled`);
+});
+
 void test('DeepSeek receives only regular files from the frozen Context index', async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'praxis-dsh-context-'));
   t.after(() => rm(root, { recursive: true, force: true }));

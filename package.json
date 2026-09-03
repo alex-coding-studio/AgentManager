@@ -35,7 +35,7 @@
     "test:ci": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run build",
     "test:implementation-demo": "node --experimental-strip-types --test tests/just-do-it-demo.test.ts",
     "test:implementation-harness": "node --experimental-strip-types --test tests/just-do-it-harness.test.ts",
-    "test:implementation-planning": "node --experimental-strip-types --test tests/just-do-it-planning.test.ts tests/local-agent-models.test.ts tests/deepseek-models.test.ts tests/dsh-runtime.test.ts",
+    "test:implementation-planning": "node --experimental-strip-types --test tests/just-do-it-planning.test.ts tests/local-agent-models.test.ts tests/deepseek-models.test.ts tests/dsh-runtime.test.ts tests/deepseek-session-driver.test.ts",
     "test:implementation-execution": "node --experimental-strip-types --test tests/just-do-it-coordination.test.ts tests/coordinator-events.test.ts tests/just-do-it-checklist.test.ts tests/just-do-it-execution.test.ts tests/github-delivery.test.ts tests/just-do-it-worktree.test.ts",
     "test:coordination-smoke": "node --experimental-strip-types scripts/smoke-coordination.ts",
     "test:simulator-access": "node --experimental-strip-types scripts/smoke-codex-simulator.ts",
