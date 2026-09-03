@@ -10,8 +10,8 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { useUiText } from '@/components/ui-language-provider';
-import type { AgentProfile } from '@/lib/agent-profile';
-import type { LocalModel, ModelCatalog } from '@/lib/local-agent-model-types';
+import type { AgentProfile } from '@/lib/agents/profile';
+import type { LocalModel, ModelCatalog } from '@/lib/agents/model-types';
 import { cn } from '@/lib/utils';
 
 const catalogPromises = new Map<AgentProfile['agent'], Promise<ModelCatalog>>();

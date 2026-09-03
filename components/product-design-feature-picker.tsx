@@ -25,7 +25,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useUiText } from '@/components/ui-language-provider';
-import type { TaskGraphNode } from '@/lib/task-graph';
+import type { TaskGraphNode } from '@/lib/graph/task/model';
 import { cn } from '@/lib/utils';
 
 const width = 216;

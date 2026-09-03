@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { useUiText } from '@/components/ui-language-provider';
 import Link from 'next/link';
-import { graphCardLabel } from '@/lib/graph-identity';
+import { graphCardLabel } from '@/lib/graph/identity';
 import { cn } from '@/lib/utils';
 import {
   goalComplete,
@@ -18,7 +18,7 @@ import {
   demoSourceHref,
   type DemoGoal,
   type DemoState,
-} from '@/lib/just-do-it-demo';
+} from '@/lib/modules/implementation/demo';
 
 export function DemoStatus({ label }: { label: string }) {
   const { t } = useUiText();

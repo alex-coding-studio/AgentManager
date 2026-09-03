@@ -17,25 +17,25 @@ import {
   savePlanningInstructions,
   type PlanningCard,
   type StartPlanningInput,
-} from '../lib/just-do-it-planning-service.ts';
-import { unmetPlanningSourceDependencies } from '../lib/planning-source-dependencies.ts';
+} from '../lib/modules/implementation/planning-service.ts';
+import { unmetPlanningSourceDependencies } from '../lib/modules/implementation/source-dependencies.ts';
 import {
   readCardWorklog,
   readCardWorkDocument,
   appendCardWorkRecord,
-} from '../lib/just-do-it-worklog.ts';
+} from '../lib/modules/implementation/worklog.ts';
 import {
   listPlanningSources,
   readPlanningFile,
-} from '../lib/just-do-it-planning-sources.ts';
+} from '../lib/modules/implementation/planning-sources.ts';
 import {
   buildCodexArguments,
   buildClaudeArguments,
   type LocalAgentResult,
-} from '../lib/local-agent-transport.ts';
+} from '../lib/agents/transport.ts';
 import type { RegisteredProject } from '../lib/project-registry.ts';
-import type { CardHarnessRequest } from '../lib/just-do-it-harness.ts';
-import { JUST_DO_IT_BUILT_IN_INSTRUCTIONS } from '../lib/just-do-it-harness.ts';
+import type { CardHarnessRequest } from '../lib/modules/implementation/harness.ts';
+import { JUST_DO_IT_BUILT_IN_INSTRUCTIONS } from '../lib/modules/implementation/harness.ts';
 
 const uid = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const step1 = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';

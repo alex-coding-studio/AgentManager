@@ -8,7 +8,7 @@ import {
   HarnessResultValidationError,
   parseTaskDecompositionHarnessResult,
   validateTaskDecompositionHarnessResult,
-} from '../lib/task-decomposition-harness.ts';
+} from '../lib/modules/scope-decomposition/harness.ts';
 
 const request = {
   sessionId: 'SESSION-0001',

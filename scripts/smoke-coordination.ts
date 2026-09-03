@@ -6,12 +6,12 @@ import assert from 'node:assert/strict';
 import {
   buildCardHarnessPrompt,
   createCardHarnessRequest,
-} from '../lib/just-do-it-harness.ts';
+} from '../lib/modules/implementation/harness.ts';
 import {
   startCoordinatedExecution,
   CoordinationRunError,
-} from '../lib/just-do-it-coordination-runner.ts';
-import type { CoordinatedResult } from '../lib/just-do-it-coordination-runner.ts';
+} from '../lib/modules/implementation/coordination-runner.ts';
+import type { CoordinatedResult } from '../lib/modules/implementation/coordination-runner.ts';
 const coordinatorModel = process.argv[2];
 const workerModel = process.argv[3];
 if (!coordinatorModel || !workerModel)

@@ -1,14 +1,14 @@
 import { notFound } from 'next/navigation';
 import { ProjectShell } from '@/components/project-shell';
 import { WhatsNextWorkspace } from '@/components/whats-next-workspace';
-import { readContextBrowser } from '@/lib/product-context';
+import { readContextBrowser } from '@/lib/modules/product-context/catalog';
 import {
   getGitHubRepositoryUrl,
   getProject,
   listProjects,
 } from '@/lib/project-registry';
-import { listTaskGraphNodes } from '@/lib/task-graph';
-import { findDemoSource } from '@/lib/just-do-it-demo';
+import { listTaskGraphNodes } from '@/lib/graph/task/model';
+import { findDemoSource } from '@/lib/modules/implementation/demo';
 import { JustDoItSourcePreview } from '@/components/just-do-it-source-preview';
 import {
   createWhatsNextAttentionPreview,
@@ -16,7 +16,7 @@ import {
   createWhatsNextRefiningPreview,
   createWhatsNextReviewPreview,
   createWhatsNextRedoPreview,
-} from '@/lib/whats-next-preview';
+} from '@/lib/modules/product-discovery/preview-fixtures';
 
 export const dynamic = 'force-dynamic';
 

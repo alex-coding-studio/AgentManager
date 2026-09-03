@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { runSystemValidationFixAgent } from '../lib/system-validation-fix-agent.ts';
-import type { startLocalAgentRun } from '../lib/local-agent-transport.ts';
+import { runSystemValidationFixAgent } from '../lib/modules/implementation/system-validation-fix-agent.ts';
+import type { startLocalAgentRun } from '../lib/agents/transport.ts';
 
 void test('Optional UI Fix Agent receives one bounded failure packet', async () => {
   let prompt = '';

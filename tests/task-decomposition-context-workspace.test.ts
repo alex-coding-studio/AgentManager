@@ -10,7 +10,7 @@ import {
   relatedContextNodeIds,
   userInputWorkspaceInput,
   writeAgentGraphContextWorkspace,
-} from '../lib/agent-graph-context-workspace.ts';
+} from '../lib/graph/agent/context-workspace.ts';
 
 void test('promotes a Source input when a Run has no separate User Input', () => {
   const packaged = assembleAgentGraphWorkspaceInputs(null, [

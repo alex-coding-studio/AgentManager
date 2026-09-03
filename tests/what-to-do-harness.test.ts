@@ -11,7 +11,7 @@ import {
   type WhatToDoHarnessResult,
   type WhatToDoSourceClaim,
   type WhatToDoValidationContext,
-} from '../lib/what-to-do-harness.ts';
+} from '../lib/modules/delivery-planning/harness.ts';
 
 const request = {
   sessionId: 'SESSION-1',

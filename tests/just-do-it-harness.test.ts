@@ -19,11 +19,11 @@ import {
   type CardHarnessContext,
   type CardHarnessRequest,
   type ExecutionStage,
-} from '../lib/just-do-it-harness.ts';
+} from '../lib/modules/implementation/harness.ts';
 import {
   appendCardWorkRecord,
   readCardWorklog,
-} from '../lib/just-do-it-worklog.ts';
+} from '../lib/modules/implementation/worklog.ts';
 
 const cardId = '11111111-1111-4111-8111-111111111111';
 const first = '22222222-2222-4222-8222-222222222222';

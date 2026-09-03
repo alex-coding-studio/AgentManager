@@ -3,7 +3,7 @@ import { useUiText } from '@/components/ui-language-provider';
 import { cn } from '@/lib/utils';
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { graphFocus, directDependencyCount } from '@/lib/task-graph-focus';
+import { graphFocus, directDependencyCount } from '@/lib/graph/task/focus';
 import {
   Background,
   BackgroundVariant,
@@ -26,13 +26,13 @@ import {
   GraphNodeCard,
   type GraphNodeCardData,
 } from '@/components/graph-node-card';
-import { cardResourceCounts } from '@/lib/task-graph-resources';
-import type { TaskGraphNode } from '@/lib/task-graph';
+import { cardResourceCounts } from '@/lib/graph/task/resources';
+import type { TaskGraphNode } from '@/lib/graph/task/model';
 import {
   buildTaskGraphLayout,
   TASK_GRAPH_NODE_MIN_HEIGHT,
   type TaskGraphPreview,
-} from '@/lib/task-graph-layout';
+} from '@/lib/graph/task/layout';
 
 type TaskFlowNode = Node<GraphNodeCardData, 'task'>;
 

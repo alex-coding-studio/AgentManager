@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8,7 +8,7 @@ import {
   analyzeRuntimeDependencies,
   stronglyConnectedComponents,
   type DependencyGraph,
-} from '../lib/runtime-dependency-graph.ts';
+} from '../lib/graph/runtime-dependencies.ts';
 import {
   AUDIT_EXCLUSIONS,
   AUDIT_SOURCE_ROOTS,
@@ -272,15 +272,15 @@ void test('the real audit runs offline and is deterministic', () => {
 void test('the earlier reported modules form no runtime component but do form type-only ones', () => {
   const graph = runAudit(PROJECT_ROOT);
   const reported = [
-    'lib/just-do-it-execution-types.ts',
-    'lib/just-do-it-coordination-runner.ts',
-    'lib/event-driven-agent-transport.ts',
-    'lib/codex-app-server-driver.ts',
+    'lib/modules/implementation/execution-types.ts',
+    'lib/modules/implementation/coordination-runner.ts',
+    'lib/agents/event-driven-transport.ts',
+    'lib/agents/codex/app-server-driver.ts',
     'lib/card-host-operations.ts',
-    'lib/just-do-it-worktree.ts',
-    'lib/just-do-it-planning-service.ts',
-    'lib/whats-next-redo.ts',
-    'lib/whats-next-runs.ts',
+    'lib/modules/implementation/worktree.ts',
+    'lib/modules/implementation/planning-service.ts',
+    'lib/modules/product-discovery/redo.ts',
+    'lib/modules/product-discovery/runs.ts',
   ];
   for (const reportedModule of reported)
     assert.ok(
@@ -305,6 +305,51 @@ void test('the earlier reported modules form no runtime component but do form ty
       covered.has(reportedModule),
       `${reportedModule} should appear once type-only edges are included`,
     );
+});
+
+void test('lib keeps provider and business code inside module directories', async () => {
+  const libEntries = await readdir(path.join(PROJECT_ROOT, 'lib'), {
+    withFileTypes: true,
+  });
+  const rootFiles = libEntries
+    .filter((entry) => entry.isFile())
+    .map((entry) => entry.name);
+  const legacyPrefixes = [
+    'agent-graph-',
+    'domain-model-',
+    'just-do-it-',
+    'task-decomposition-',
+    'task-graph-',
+    'what-to-do-',
+    'whats-next-',
+  ];
+  assert.deepEqual(
+    rootFiles.filter((name) =>
+      legacyPrefixes.some((prefix) => name.startsWith(prefix)),
+    ),
+    [],
+  );
+
+  for (const provider of ['claude', 'codex', 'deepseek']) {
+    const entries = await readdir(
+      path.join(PROJECT_ROOT, 'lib/agents', provider),
+    );
+    assert.ok(entries.length > 0, `${provider} must own its provider files`);
+  }
+
+  for (const moduleName of [
+    'delivery-planning',
+    'domain-modeling',
+    'implementation',
+    'product-context',
+    'product-discovery',
+    'scope-decomposition',
+  ]) {
+    const entries = await readdir(
+      path.join(PROJECT_ROOT, 'lib/modules', moduleName),
+    );
+    assert.ok(entries.length > 0, `${moduleName} must own its module files`);
+  }
 });
 
 void test('an excluded internal module on a back edge is never reported as acyclic', () => {

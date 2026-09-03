@@ -1,9 +1,9 @@
 import { notFound } from 'next/navigation';
 import { DomainModelWorkspace } from '@/components/domain-model-workspace';
 import { ProjectShell } from '@/components/project-shell';
-import { readDomainModelView } from '@/lib/domain-model';
-import { listLatestDomainModelRuns } from '@/lib/domain-model-runs';
-import { readContextBrowser } from '@/lib/product-context';
+import { readDomainModelView } from '@/lib/modules/domain-modeling/model';
+import { listLatestDomainModelRuns } from '@/lib/modules/domain-modeling/runs';
+import { readContextBrowser } from '@/lib/modules/product-context/catalog';
 import {
   getGitHubRepositoryUrl,
   getProject,

@@ -16,18 +16,18 @@ import {
   instructionFromWhatToDoMarkdown,
   shouldRestoreWhatToDoDraft,
   whatToDoRunContextResourcePath,
-} from '../lib/what-to-do-draft.ts';
+} from '../lib/modules/delivery-planning/draft.ts';
 import {
   prepareWhatToDoContext,
   renderDomainModelSummary,
-} from '../lib/what-to-do-context.ts';
+} from '../lib/modules/delivery-planning/context.ts';
 import type { RegisteredProject } from '../lib/project-registry.ts';
-import type { TaskGraphNode } from '../lib/task-graph.ts';
-import { saveWhatToDoInstructions } from '../lib/what-to-do-instructions.ts';
+import type { TaskGraphNode } from '../lib/graph/task/model.ts';
+import { saveWhatToDoInstructions } from '../lib/modules/delivery-planning/instructions.ts';
 import {
   whatToDoRunDirectory,
   writeWhatToDoRepositorySummary,
-} from '../lib/what-to-do-storage.ts';
+} from '../lib/modules/delivery-planning/storage.ts';
 
 const runId = 'RUN-00000000-0000-4000-8000-000000000001';
 const featureUid = '00000000-0000-4000-8000-000000000002';

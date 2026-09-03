@@ -7,8 +7,8 @@ import { UiLanguageProvider } from '../components/ui-language-provider.tsx';
 import {
   CANVAS_NODE_CARD_MIN_HEIGHT,
   canvasNodeCardMinHeight,
-} from '../lib/canvas-node-card-metrics.ts';
-import { TASK_GRAPH_NODE_MIN_HEIGHT } from '../lib/graph-card-metrics.ts';
+} from '../lib/graph/canvas-node-card-metrics.ts';
+import { TASK_GRAPH_NODE_MIN_HEIGHT } from '../lib/graph/card-metrics.ts';
 
 const { CanvasNodeCardFrame } =
   await import('../components/canvas-node-card-frame.tsx');
@@ -604,7 +604,7 @@ void test('Domain Modeling, Delivery Planning and Just Do It share one running c
 
 void test('terminal What’s Next outcomes leave the Canvas and stay in Latest Response', async () => {
   const { whatsNextRunToPreviews } =
-    await import('../lib/whats-next-previews.ts');
+    await import('../lib/modules/product-discovery/previews.ts');
   for (const status of ['no-change', 'clarification', 'failed'] as const) {
     assert.deepEqual(
       whatsNextRunToPreviews({

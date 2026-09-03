@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useUiText } from '@/components/ui-language-provider';
-import type { ActionRun } from '@/lib/just-do-it-execution-types';
+import type { ActionRun } from '@/lib/modules/implementation/execution-types';
 function duration(ms: number) {
   const seconds = Math.max(0, Math.floor(ms / 1000));
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;

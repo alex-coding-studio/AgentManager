@@ -29,7 +29,7 @@ import {
   organizeDemoFollowUp,
   type DemoEvent,
   type DemoGoal,
-} from '@/lib/just-do-it-demo';
+} from '@/lib/modules/implementation/demo';
 
 export function DemoIssueDraft({
   goal,

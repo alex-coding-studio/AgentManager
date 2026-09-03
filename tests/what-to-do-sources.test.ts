@@ -8,12 +8,12 @@ import {
   deleteTaskGraphNode,
   readTaskGraphNodesSnapshot,
   type TaskGraphNode,
-} from '../lib/task-graph.ts';
+} from '../lib/graph/task/model.ts';
 import {
   listWhatToDoFeatureSources,
   selectWhatToDoFeatureSources,
   whatToDoFeatureWorkspaceInputs,
-} from '../lib/what-to-do-sources.ts';
+} from '../lib/modules/delivery-planning/sources.ts';
 
 async function fixture(t: test.TestContext) {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'what-to-do-'));

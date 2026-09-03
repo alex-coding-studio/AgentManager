@@ -1,7 +1,7 @@
 import { getProject } from '@/lib/project-registry';
 import { apiErrorResponse } from '@/lib/api-errors';
 import { guardJsonRequest, guardRequest } from '@/lib/request-boundary';
-import { readAgentGraphInputPacket } from '@/lib/agent-graph-input';
+import { readAgentGraphInputPacket } from '@/lib/graph/agent/input';
 import {
   acceptWhatsNextCandidate,
   cancelWhatsNextRun,
@@ -10,7 +10,7 @@ import {
   readWhatsNextRun,
   startWhatsNextRun,
   type WhatsNextFeedbackAnchor,
-} from '@/lib/whats-next-runs';
+} from '@/lib/modules/product-discovery/runs';
 
 export const runtime = 'nodejs';
 

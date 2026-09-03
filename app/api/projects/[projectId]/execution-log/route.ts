@@ -2,8 +2,8 @@ import { readFile, realpath, stat } from 'node:fs/promises';
 import { apiErrorResponse } from '@/lib/api-errors';
 import path from 'node:path';
 import { getProject } from '@/lib/project-registry';
-import { planningService } from '@/lib/just-do-it-planning-service';
-import { assertCardUuid } from '@/lib/just-do-it-harness';
+import { planningService } from '@/lib/modules/implementation/planning-service';
+import { assertCardUuid } from '@/lib/modules/implementation/harness';
 export const runtime = 'nodejs';
 export async function GET(
   request: Request,

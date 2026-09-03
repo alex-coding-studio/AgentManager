@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { cardResourceCounts } from '../lib/task-graph-resources.ts';
-import { graphFocus, directDependencyCount } from '../lib/task-graph-focus.ts';
-import type { TaskGraphNode } from '../lib/task-graph.ts';
+import { cardResourceCounts } from '../lib/graph/task/resources.ts';
+import { graphFocus, directDependencyCount } from '../lib/graph/task/focus.ts';
+import type { TaskGraphNode } from '../lib/graph/task/model.ts';
 import type {
   TaskGraphPreview,
   TaskGraphLayoutEdge,
-} from '../lib/task-graph-layout.ts';
+} from '../lib/graph/task/layout.ts';
 
 void test('formal cards distinguish upstream input documents from their own output', () => {
   const node = {

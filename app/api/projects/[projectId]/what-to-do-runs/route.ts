@@ -1,4 +1,4 @@
-import { readAgentGraphInputPacket } from '@/lib/agent-graph-input';
+import { readAgentGraphInputPacket } from '@/lib/graph/agent/input';
 import { apiErrorResponse } from '@/lib/api-errors';
 import { getProject } from '@/lib/project-registry';
 import { guardJsonRequest, guardRequest } from '@/lib/request-boundary';
@@ -7,9 +7,9 @@ import {
   listLatestWhatToDoRuns,
   readWhatToDoRun,
   startWhatToDoRun,
-} from '@/lib/what-to-do-runs';
-import { readWhatToDoCurrentMap } from '@/lib/what-to-do-storage';
-import { readWhatToDoRunDraft } from '@/lib/what-to-do-run-draft';
+} from '@/lib/modules/delivery-planning/runs';
+import { readWhatToDoCurrentMap } from '@/lib/modules/delivery-planning/storage';
+import { readWhatToDoRunDraft } from '@/lib/modules/delivery-planning/run-draft';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

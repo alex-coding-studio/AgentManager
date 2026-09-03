@@ -37,9 +37,9 @@ import type {
   PendingDependencyReview,
   PlanningCard,
   PlanningProfile,
-} from '@/lib/just-do-it-planning-service';
-import type { PlanningSource } from '@/lib/just-do-it-planning-sources';
-import type { ContextBrowserFolder } from '@/lib/product-context';
+} from '@/lib/modules/implementation/planning-service';
+import type { PlanningSource } from '@/lib/modules/implementation/planning-sources';
+import type { ContextBrowserFolder } from '@/lib/modules/product-context/catalog';
 
 type View = {
   cards: PlanningCard[];

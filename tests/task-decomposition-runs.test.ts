@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { replaceRunWithPreviewsInPlace } from '../lib/task-graph-preview-state.ts';
+import { replaceRunWithPreviewsInPlace } from '../lib/graph/task/preview-state.ts';
 import {
   buildTaskDecompositionContinuationPrompt,
   buildTaskDecompositionPrompt,
-} from '../lib/task-decomposition-prompt.ts';
+} from '../lib/modules/scope-decomposition/prompt.ts';
 
 void test('builds a bounded prompt with the Harness contract and request packet', () => {
   const prompt = buildTaskDecompositionPrompt({

@@ -1,9 +1,9 @@
 import { getProject } from '@/lib/project-registry';
 import { apiErrorResponse } from '@/lib/api-errors';
 import { guardJsonRequest, guardRequest } from '@/lib/request-boundary';
-import { readAgentGraphInputPacket } from '@/lib/agent-graph-input';
-import type { TaskDecompositionIntention } from '@/lib/task-decomposition-intention';
-import type { TaskDecompositionMotion } from '@/lib/task-decomposition-motion';
+import { readAgentGraphInputPacket } from '@/lib/graph/agent/input';
+import type { TaskDecompositionIntention } from '@/lib/modules/scope-decomposition/intention';
+import type { TaskDecompositionMotion } from '@/lib/modules/scope-decomposition/motion';
 import {
   acceptTaskDecompositionCandidate,
   cancelTaskDecompositionRun,
@@ -11,7 +11,7 @@ import {
   listLatestTaskDecompositionRuns,
   readTaskDecompositionRun,
   startTaskDecompositionRun,
-} from '@/lib/task-decomposition-runs';
+} from '@/lib/modules/scope-decomposition/runs';
 
 export const runtime = 'nodejs';
 

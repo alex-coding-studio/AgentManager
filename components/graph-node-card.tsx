@@ -13,8 +13,8 @@ import {
 import { useUiText } from '@/components/ui-language-provider';
 import { CanvasNodeCardFrame } from '@/components/canvas-node-card-frame';
 import { cn } from '@/lib/utils';
-import { graphCardLabel } from '@/lib/graph-identity';
-import type { TaskGraphPreview } from '@/lib/task-graph-layout';
+import { graphCardLabel } from '@/lib/graph/identity';
+import type { TaskGraphPreview } from '@/lib/graph/task/layout';
 
 export type GraphNodeCardData = Record<string, unknown> & {
   readOnly?: boolean;

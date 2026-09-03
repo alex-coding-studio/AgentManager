@@ -6,7 +6,7 @@ import {
   getProject,
   listProjects,
 } from '@/lib/project-registry';
-import { readProductContext } from '@/lib/product-context';
+import { readProductContext } from '@/lib/modules/product-context/catalog';
 
 export const dynamic = 'force-dynamic';
 

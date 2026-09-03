@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import type { TaskGraphNode } from '../lib/task-graph.ts';
-import { buildTaskGraphLayout } from '../lib/task-graph-layout.ts';
+import type { TaskGraphNode } from '../lib/graph/task/model.ts';
+import { buildTaskGraphLayout } from '../lib/graph/task/layout.ts';
 
 function node(id: string, derivedFrom: string[] = []): TaskGraphNode {
   return {

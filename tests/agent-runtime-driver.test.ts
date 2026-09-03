@@ -3,10 +3,10 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { HostJobBroker } from '../lib/host-job-broker.ts';
-import { CodexAppServerDriver } from '../lib/codex-app-server-driver.ts';
-import { LegacyAgentSessionDriver } from '../lib/legacy-agent-session-driver.ts';
-import type { startLocalAgentRun } from '../lib/local-agent-transport.ts';
+import { HostJobBroker } from '../lib/agents/host-job-broker.ts';
+import { CodexAppServerDriver } from '../lib/agents/codex/app-server-driver.ts';
+import { LegacyAgentSessionDriver } from '../lib/agents/legacy-session-driver.ts';
+import type { startLocalAgentRun } from '../lib/agents/transport.ts';
 
 void test('Host job completion is pushed once with durable log and status', async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'agent-job-'));

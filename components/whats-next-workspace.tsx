@@ -22,7 +22,7 @@ import { AgentRunControls } from '@/components/agent-run-controls';
 import { AgentGraphComposerCard } from '@/components/agent-graph-composer-card';
 import { AgentGraphIntentionSelect } from '@/components/agent-graph-intention-select';
 import { AgentGraphMotionSelect } from '@/components/agent-graph-motion-select';
-import { sameModelSelection, type AgentProfile } from '@/lib/agent-profile';
+import { sameModelSelection, type AgentProfile } from '@/lib/agents/profile';
 import {
   ContextAttachmentPicker,
   contextAttachmentTitle,
@@ -51,35 +51,35 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
-import type { ContextBrowserFolder } from '@/lib/product-context';
-import type { TaskGraphNode } from '@/lib/task-graph';
-import type { TaskGraphPreview } from '@/lib/task-graph-layout';
-import { replaceRunWithPreviewsInPlace } from '@/lib/task-graph-preview-state';
-import { getTaskGraphRelationships } from '@/lib/task-graph-rules';
-import type { LocalAgentKind } from '@/lib/local-agent-transport';
-import { WHATS_NEXT_HARNESS_REVISION } from '@/lib/whats-next-harness';
-import { renderWhatsNextResponseMarkdown } from '@/lib/whats-next-response';
+import type { ContextBrowserFolder } from '@/lib/modules/product-context/catalog';
+import type { TaskGraphNode } from '@/lib/graph/task/model';
+import type { TaskGraphPreview } from '@/lib/graph/task/layout';
+import { replaceRunWithPreviewsInPlace } from '@/lib/graph/task/preview-state';
+import { getTaskGraphRelationships } from '@/lib/graph/task/rules';
+import type { LocalAgentKind } from '@/lib/agents/transport';
+import { WHATS_NEXT_HARNESS_REVISION } from '@/lib/modules/product-discovery/harness';
+import { renderWhatsNextResponseMarkdown } from '@/lib/modules/product-discovery/response';
 import type {
   WhatsNextFeedbackAnchor,
   WhatsNextRunRecord,
-} from '@/lib/whats-next-runs';
+} from '@/lib/modules/product-discovery/runs';
 import { cn } from '@/lib/utils';
 import {
   redoProposalPlan,
   redoProposalContext,
   redoProposalInputRun,
-} from '@/lib/whats-next-redo';
+} from '@/lib/modules/product-discovery/redo';
 import type {
   WhatsNextIntention,
   WhatsNextLayer,
   WhatsNextMotion,
-} from '@/lib/whats-next-intention';
+} from '@/lib/modules/product-discovery/intention';
 import {
   intentionDestination,
   whatsNextIntentionRegistry,
   whatsNextMotionRegistry,
-} from '@/lib/whats-next-intention';
-import { toggleWhatsNextSelection } from '@/lib/whats-next-selection';
+} from '@/lib/modules/product-discovery/intention';
+import { toggleWhatsNextSelection } from '@/lib/modules/product-discovery/selection';
 import {
   LatestResponse,
   LatestResponseActions,
@@ -91,9 +91,9 @@ import {
 import {
   proposalFocusNodeIds,
   reconcileProposalRuns,
-} from '@/lib/agent-graph-proposal';
-import { titleFromAgentGraphIdea } from '@/lib/agent-graph-source';
-import { whatsNextRunToPreviews } from '@/lib/whats-next-previews';
+} from '@/lib/graph/agent/proposal';
+import { titleFromAgentGraphIdea } from '@/lib/graph/agent/source';
+import { whatsNextRunToPreviews } from '@/lib/modules/product-discovery/previews';
 import {
   CandidateMetadataSections,
   CandidateResourceList,

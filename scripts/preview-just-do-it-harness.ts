@@ -6,11 +6,11 @@ import {
   createCardHarnessRequest,
   parseCardHarnessResult,
   type CardHarnessContext,
-} from '../lib/just-do-it-harness.ts';
+} from '../lib/modules/implementation/harness.ts';
 import {
   appendCardWorkRecord,
   readCardWorklog,
-} from '../lib/just-do-it-worklog.ts';
+} from '../lib/modules/implementation/worklog.ts';
 
 const root = await mkdtemp(
   path.join(os.tmpdir(), 'just-do-it-harness-preview-'),

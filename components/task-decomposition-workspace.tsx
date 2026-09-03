@@ -42,7 +42,7 @@ import {
   CandidateResourceList,
   ProposalWorkspaceStatus,
 } from '@/components/agent-graph-proposal-workspace';
-import type { AgentProfile } from '@/lib/agent-profile';
+import type { AgentProfile } from '@/lib/agents/profile';
 import { MarkdownReaderDialog } from '@/components/markdown-reader-dialog';
 import { ProjectModuleHeader } from '@/components/project-module-header';
 import {
@@ -74,16 +74,16 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
-import type { ContextBrowserFolder } from '@/lib/product-context';
-import type { TaskGraphNode } from '@/lib/task-graph';
-import type { TaskGraphPreview } from '@/lib/task-graph-layout';
-import { getTaskGraphRelationships } from '@/lib/task-graph-rules';
-import type { LocalAgentKind } from '@/lib/local-agent-transport';
+import type { ContextBrowserFolder } from '@/lib/modules/product-context/catalog';
+import type { TaskGraphNode } from '@/lib/graph/task/model';
+import type { TaskGraphPreview } from '@/lib/graph/task/layout';
+import { getTaskGraphRelationships } from '@/lib/graph/task/rules';
+import type { LocalAgentKind } from '@/lib/agents/transport';
 import type {
   TaskDecompositionRunRecord,
   TaskDecompositionRunTransport,
-} from '@/lib/task-decomposition-runs';
-import { replaceRunWithPreviewsInPlace } from '@/lib/task-graph-preview-state';
+} from '@/lib/modules/scope-decomposition/runs';
+import { replaceRunWithPreviewsInPlace } from '@/lib/graph/task/preview-state';
 import {
   latestTaskDecompositionResponse,
   latestTerminalTaskDecompositionRun,
@@ -94,21 +94,21 @@ import {
   mergeLatestCandidatePreview,
   proposalFocusNodeIds,
   reconcileProposalRuns,
-} from '@/lib/agent-graph-proposal';
-import { titleFromAgentGraphIdea } from '@/lib/agent-graph-source';
+} from '@/lib/graph/agent/proposal';
+import { titleFromAgentGraphIdea } from '@/lib/graph/agent/source';
 import {
   taskDecompositionIntentionRegistry,
   type TaskDecompositionIntention,
-} from '@/lib/task-decomposition-intention';
-import { unresolvedCandidateDependencies } from '@/lib/task-decomposition-dependencies';
+} from '@/lib/modules/scope-decomposition/intention';
+import { unresolvedCandidateDependencies } from '@/lib/modules/scope-decomposition/dependencies';
 import {
   taskDecompositionMotionRegistry,
   type TaskDecompositionMotion,
-} from '@/lib/task-decomposition-motion';
+} from '@/lib/modules/scope-decomposition/motion';
 import {
   successfulRecomposeOutputCandidateIds,
   successfulRecomposeSupersededCandidateIds,
-} from '@/lib/agent-graph-recompose';
+} from '@/lib/graph/agent/recompose';
 
 type DecompositionRequestPreview = TaskGraphPreview & {
   contextRefs: string[];

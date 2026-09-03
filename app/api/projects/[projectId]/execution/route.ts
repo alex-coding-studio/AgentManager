@@ -1,7 +1,7 @@
 import { getProject } from '@/lib/project-registry';
 import { apiErrorResponse } from '@/lib/api-errors';
 import { guardJsonRequest } from '@/lib/request-boundary';
-import { executionService } from '@/lib/just-do-it-execution-service';
+import { executionService } from '@/lib/modules/implementation/execution-service';
 
 export const runtime = 'nodejs';
 

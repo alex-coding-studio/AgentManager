@@ -32,10 +32,10 @@ import {
   GOAL_PICKER_HEIGHT,
   GOAL_PICKER_WIDTH,
   type GoalPickerEntry,
-} from '@/lib/goal-picker-graph';
-import type { PlanningCard } from '@/lib/just-do-it-planning-service';
-import { unmetPlanningSourceDependencies } from '@/lib/planning-source-dependencies';
-import type { PlanningSource } from '@/lib/just-do-it-planning-sources';
+} from '@/lib/graph/goal-picker';
+import type { PlanningCard } from '@/lib/modules/implementation/planning-service';
+import { unmetPlanningSourceDependencies } from '@/lib/modules/implementation/source-dependencies';
+import type { PlanningSource } from '@/lib/modules/implementation/planning-sources';
 
 type CompactNode = Node<
   {

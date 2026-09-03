@@ -7,7 +7,7 @@ import {
   readTaskDecompositionAttachment,
   saveTaskDecompositionInstructions,
   TaskDecompositionAttachmentConflictError,
-} from '@/lib/task-decomposition-context';
+} from '@/lib/modules/scope-decomposition/context';
 
 export const runtime = 'nodejs';
 

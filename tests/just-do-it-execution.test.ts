@@ -19,29 +19,29 @@ import {
   checkpointWorkspace,
   includeInGitHistory,
   readCheckpointDiff,
-} from '../lib/just-do-it-git.ts';
-import { createExecutionService } from '../lib/just-do-it-execution-service.ts';
+} from '../lib/modules/implementation/git.ts';
+import { createExecutionService } from '../lib/modules/implementation/execution-service.ts';
 import {
   createPlanningService,
   savePlanningInstructions,
   type PlanningCard,
-} from '../lib/just-do-it-planning-service.ts';
-import { appendCardWorkRecord } from '../lib/just-do-it-worklog.ts';
+} from '../lib/modules/implementation/planning-service.ts';
+import { appendCardWorkRecord } from '../lib/modules/implementation/worklog.ts';
 import {
   captureLocalAcceptanceArtifacts,
   observedChanges,
   snapshotWorkspace,
-} from '../lib/just-do-it-artifacts.ts';
+} from '../lib/modules/implementation/artifacts.ts';
 import {
   buildCodexArguments,
   buildClaudeArguments,
   type LocalAgentRun,
   type LocalAgentResult,
   type startLocalAgentRun,
-} from '../lib/local-agent-transport.ts';
+} from '../lib/agents/transport.ts';
 import type { RegisteredProject } from '../lib/project-registry.ts';
-import type { CardHarnessRequest } from '../lib/just-do-it-harness.ts';
-import { CoordinationRunError } from '../lib/just-do-it-coordination-runner.ts';
+import type { CardHarnessRequest } from '../lib/modules/implementation/harness.ts';
+import { CoordinationRunError } from '../lib/modules/implementation/coordination-runner.ts';
 
 const id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const one = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -1611,7 +1611,7 @@ void test('new executions always coordinate, persist role traces, and carry cont
   const f = await fixture(t);
   const calls: Array<{ access: unknown; model: unknown }> = [];
   const requests: Array<
-    import('../lib/just-do-it-coordination.ts').CoordinationRequest
+    import('../lib/modules/implementation/coordination.ts').CoordinationRequest
   > = [];
   let current!: CardHarnessRequest;
   const transport: typeof startLocalAgentRun = (_agent, options) => {
