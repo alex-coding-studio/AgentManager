@@ -220,9 +220,6 @@ export const chineseUi: Record<string, string> = {
     '此操作不会回退 main、GitHub 仓库、PR 或已安装应用。',
   'Back up and restart Card workspace': '备份并重建 Card 工作区',
   'Working…': '处理中…',
-  'This empty project needs a local Git baseline. Confirm creating an empty commit on local main; no files are committed and nothing is pushed to GitHub.':
-    '这个空项目需要本地 Git 起点。请确认在本地 main 创建一个空提交：不提交任何文件，也不会推送到 GitHub。',
-  'Create empty local main baseline and start': '创建本地空 main 基线并开始',
   'Execution permissions': '执行权限',
   'full-access': '完全访问',
   'workspace-write': '工作区写入',

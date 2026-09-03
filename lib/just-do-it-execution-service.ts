@@ -649,11 +649,7 @@ export function createExecutionService(
           'Implement the selected Action and return its output for user validation.',
         input.actionId,
       );
-      const workspace = await provisionWorkspace(
-        project,
-        card,
-        input.initializeRepository === true,
-      );
+      const workspace = await provisionWorkspace(project, card, true);
       const workingProject = workspaceProject(project, workspace);
       const environment = workspace
         ? await prepareCardEnvironment({

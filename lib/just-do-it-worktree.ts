@@ -237,7 +237,8 @@ export async function ensureCardWorkspace(
       throw new Error(
         'Initialize the existing project repository before starting Card execution. No existing files were changed.',
       );
-    if (!initializeRepository) throw new Error(bootstrapRequired);
+    if (!initializeRepository)
+      throw new PublicApiError(bootstrapRequired, 409, bootstrapRequired);
     await git(repository, 'init', '--initial-branch=main');
     await git(
       repository,
