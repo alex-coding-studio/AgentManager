@@ -444,6 +444,17 @@ void test('Domain Modeling separates the current answer, compact summary and cha
   assert.doesNotMatch(relationshipInspector, /provenance/);
 });
 
+void test('Product Design picker Cards keep rendered content inside their layout height', async () => {
+  const source = await readFile(
+    new URL('../components/product-design-feature-picker.tsx', import.meta.url),
+    'utf8',
+  );
+  assert.match(source, /const height = 112/);
+  assert.match(source, /flex min-h-0 flex-1 items-start gap-2 overflow-hidden/);
+  assert.match(source, /max-h-8 overflow-hidden/);
+  assert.match(source, /flex h-full w-full flex-col overflow-hidden/);
+});
+
 void test('terminal What’s Next outcomes leave the Canvas and stay in Latest Response', async () => {
   const { whatsNextRunToPreviews } =
     await import('../lib/whats-next-previews.ts');
