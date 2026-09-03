@@ -32,12 +32,11 @@ export function AgentGraphRunningCard({
   return (
     <AgentGraphComposerCard
       className={className}
+      collapsedIcon={<RunningIndicator />}
+      collapsedLabel={t('Expand Agent Run')}
       title={
         <span className="flex items-center gap-3 text-sm">
-          <span className="relative flex size-2.5">
-            <span className="absolute inline-flex size-full animate-ping rounded-full bg-sky-400 opacity-60" />
-            <span className="relative inline-flex size-2.5 rounded-full bg-sky-500" />
-          </span>
+          <RunningIndicator />
           {t('{agent} is running', {
             agent: agent === 'codex' ? 'Codex' : 'Claude',
           })}{' '}
@@ -45,12 +44,22 @@ export function AgentGraphRunningCard({
         </span>
       }
       description={t(latestReadableAgentActivity(activity, fallback))}
+      descriptionClassName="max-h-20 overflow-y-auto pr-1 break-words"
       action={
         <Button variant="outline" size="sm" onClick={onCancel}>
           <Square className="size-3.5" /> {t('Cancel')}
         </Button>
       }
     />
+  );
+}
+
+function RunningIndicator() {
+  return (
+    <span className="relative flex size-2.5">
+      <span className="absolute inline-flex size-full animate-ping rounded-full bg-sky-400 opacity-60" />
+      <span className="relative inline-flex size-2.5 rounded-full bg-sky-500" />
+    </span>
   );
 }
 
