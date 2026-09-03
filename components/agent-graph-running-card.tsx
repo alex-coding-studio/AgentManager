@@ -44,7 +44,7 @@ export function AgentGraphRunningCard({
         </span>
       }
       description={t(latestReadableAgentActivity(activity, fallback))}
-      descriptionClassName="max-h-20 overflow-y-auto pr-1 break-words"
+      descriptionClassName="line-clamp-4 overflow-hidden break-words"
       action={
         <Button variant="outline" size="sm" onClick={onCancel}>
           <Square className="size-3.5" /> {t('Cancel')}
