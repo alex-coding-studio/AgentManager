@@ -76,14 +76,14 @@ machine. It does not include a hosted Agent service or its own account system.
 npm install
 npm run build
 npm link
-praxis
+praxis start
 ```
 
 Open [http://localhost:3000](http://localhost:3000). Pass normal Next.js options
 through the command when needed:
 
 ```bash
-praxis --port 3100
+praxis start --port 3100
 ```
 
 For development with live reload:
@@ -92,6 +92,30 @@ For development with live reload:
 praxis dev
 praxis dev --port 3100
 ```
+
+`start` runs in the foreground. Pass `-d` to run in the background and
+manage it with the lifecycle commands:
+
+```bash
+praxis start -d --port 3100
+praxis status --port 3100
+praxis logs --port 3100 -n 100
+praxis restart --port 3100
+praxis stop --port 3100
+```
+
+Use `--lan` to listen on the local network. It is shorthand for
+`--hostname 0.0.0.0` and works with both foreground and detached servers:
+
+```bash
+praxis start --lan --port 3100
+praxis start -d --lan --port 3100
+```
+
+Lifecycle commands manage only processes started with `--detach`. Foreground
+servers remain attached to their terminal. `restart` reuses the stored launch
+configuration exactly; `--port` only selects an instance. Runtime state and
+logs live under `PRAXIS_HOME/run` (`~/.praxis/run` by default).
 
 Run `praxis --help` to see the supported command forms.
 
