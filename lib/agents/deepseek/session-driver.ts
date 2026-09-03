@@ -391,15 +391,20 @@ export class DeepseekSessionDriver implements AgentSessionDriver {
     return this.runPhysicalTurn(state, result.prompt);
   }
 
+  private requireSuspensionSlot(): TurnState {
+    const turn = this.activeTurn;
+    if (!turn) throw new Error('No active DeepSeek turn.');
+    if (turn.pendingSuspension)
+      throw new Error('A Host operation is already pending.');
+    return turn;
+  }
+
   private armSuspension(suspension: {
     tool: string;
     acknowledgement: string;
     completion: Promise<HostToolContinuation & { jobResult?: HostJobEvent }>;
   }): string {
-    const turn = this.activeTurn;
-    if (!turn) throw new Error('No active DeepSeek turn.');
-    if (turn.pendingSuspension)
-      throw new Error('A Host operation is already pending.');
+    const turn = this.requireSuspensionSlot();
     turn.pendingSuspension = {
       tool: suspension.tool,
       completion: suspension.completion,
@@ -427,6 +432,7 @@ export class DeepseekSessionDriver implements AgentSessionDriver {
         args: Record<string, unknown>,
         exec: { concludeTurn: () => void },
       ) => {
+        this.requireSuspensionSlot();
         const result = await tool.call(args);
         if (isHostToolSuspension(result)) {
           const message = this.armSuspension({
@@ -474,8 +480,7 @@ export class DeepseekSessionDriver implements AgentSessionDriver {
         args: Partial<HostJobRequest> & { workingDirectory?: string },
         exec: { concludeTurn: () => void },
       ) => {
-        const turn = this.activeTurn;
-        if (!turn) throw new Error('No active DeepSeek turn.');
+        const turn = this.requireSuspensionSlot();
         const state = this.threads.get(turn.threadId);
         if (!state) throw new Error('Unknown DeepSeek session.');
         const job = await state.broker.run({

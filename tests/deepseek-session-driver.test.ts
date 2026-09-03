@@ -41,11 +41,15 @@ function makeFakeModules(hangTurn: boolean) {
     cancel: () => resolveTurn?.(),
   };
   const handle = { agent, dispose: async () => {} };
+  let runCalls = 0;
   const broker = {
-    run: async (request: { label: string }) => ({
-      id: `job-${request.label}`,
-      completion: new Promise<never>(() => {}),
-    }),
+    run: async (request: { label: string }) => {
+      runCalls += 1;
+      return {
+        id: `job-${request.label}`,
+        completion: new Promise<never>(() => {}),
+      };
+    },
     cancelAll: () => {},
   } as unknown as HostJobBroker;
   const ctx = {
@@ -77,6 +81,7 @@ function makeFakeModules(hangTurn: boolean) {
     broker,
     registered,
     releaseTurn: () => resolveTurn?.(),
+    runCalls: () => runCalls,
   };
 }
 
@@ -131,6 +136,7 @@ void test('a second Host operation is rejected while one is pending', async () =
     ),
     /pending/,
   );
+  assert.equal(fake.runCalls(), 1);
   turn.completion.catch(() => {});
   await driver.close();
 });
