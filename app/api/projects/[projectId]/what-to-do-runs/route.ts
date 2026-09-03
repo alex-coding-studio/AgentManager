@@ -35,10 +35,15 @@ export async function POST(
     const focusContractIds = formData
       .getAll('focusContractIds')
       .filter((entry): entry is string => typeof entry === 'string');
+    const clarificationRunId = formData.get('clarificationRunId');
     return Response.json(
       {
         run: await startWhatToDoRun(project, {
           instruction: input.instruction,
+          clarificationRunId:
+            typeof clarificationRunId === 'string' && clarificationRunId
+              ? clarificationRunId
+              : undefined,
           sourceUids,
           profile: input.profile,
           contextRefs: input.contextRefs,

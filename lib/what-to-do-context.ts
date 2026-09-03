@@ -34,6 +34,7 @@ import {
 
 export type WhatToDoRunInput = {
   instruction: string;
+  clarificationRunId?: string;
   sourceUids: string[];
   profile: AgentProfile;
   contextRefs?: string[];

@@ -204,6 +204,43 @@ function result(run: Awaited<ReturnType<typeof startWhatToDoRun>>) {
   };
 }
 
+function clarificationResult(
+  run: Awaited<ReturnType<typeof startWhatToDoRun>>,
+) {
+  const factsPath = 'what-to-do/repository-context/facts.json';
+  return {
+    schemaVersion: 1,
+    harness: run.request.harness,
+    request: run.request.request,
+    responseMarkdown: 'One delivery decision needs clarification.',
+    repositorySummary: {
+      markdown: '# Repository Summary\n\nA small fixture repository.',
+      evidencePaths: [factsPath],
+    },
+    reviewedEvidence: [
+      { path: factsPath, reason: 'Read the frozen repository facts.' },
+    ],
+    outcome: 'clarification',
+    clarification: {
+      question: 'Which deployment target should govern delivery?',
+      options: [
+        {
+          id: 'ios-26',
+          label: 'Use iOS 26',
+          effect: 'Use the current platform APIs.',
+          recommended: true,
+        },
+        {
+          id: 'ios-16',
+          label: 'Use iOS 16',
+          effect: 'Plan a compatibility path.',
+          recommended: false,
+        },
+      ],
+    },
+  } as const;
+}
+
 function retainedResult(
   run: Awaited<ReturnType<typeof startWhatToDoRun>>,
   map: NonNullable<Awaited<ReturnType<typeof readWhatToDoCurrentMap>>>,
@@ -330,6 +367,75 @@ void test('a real What to Do Run persists the frozen request and Agent result', 
     'utf8',
   );
   assert.match(currentSummary, new RegExp(run.request.repository.fingerprint));
+});
+
+void test('a Clarification Answer amends the frozen request and resumes its Session', async (t) => {
+  const { project, planningPath } = await fixture(t);
+  const control = controlled();
+  const firstInput = {
+    ...input(),
+    instruction:
+      'Create delivery boundaries and later build Design Tokens from the supplied Design.',
+    files: [new File(['# Original design note\n'], 'original.md')],
+  };
+  const first = await startWhatToDoRun(project, firstInput, control.transport);
+  control.calls[0]!.resolve({
+    agentSessionId: 'clarification-session',
+    finalOutput: JSON.stringify(clarificationResult(first)),
+    usage: null,
+  });
+  const clarification = await settled(project, first.id);
+  assert.equal(clarification.result?.outcome, 'clarification');
+
+  const second = await startWhatToDoRun(
+    project,
+    {
+      ...input(),
+      instruction: 'Use iOS 26.',
+      clarificationRunId: first.id,
+      sourceUids: [],
+      files: [new File(['# New evidence\n'], 'new.md')],
+    },
+    control.transport,
+  );
+
+  assert.equal(second.clarificationRunId, first.id);
+  assert.equal(
+    second.request.request.sessionId,
+    first.request.request.sessionId,
+  );
+  assert.equal(
+    control.calls[1]!.input.resumeSessionId,
+    'clarification-session',
+  );
+  assert.deepEqual(second.sourceUids, [featureUid]);
+  assert.deepEqual(second.attachmentNames, ['original.md', 'new.md']);
+  const inputEntry = second.request.content.input!;
+  const amendedInput = await readFile(
+    path.join(
+      planningPath,
+      'what-to-do/runs',
+      second.id,
+      'context',
+      inputEntry.workspacePath,
+    ),
+    'utf8',
+  );
+  assert.match(amendedInput, /later build Design Tokens/);
+  assert.match(amendedInput, /Which deployment target/);
+  assert.match(amendedInput, /Use iOS 26\./);
+  assert.ok(
+    amendedInput.indexOf('later build Design Tokens') <
+      amendedInput.indexOf('Use iOS 26.'),
+  );
+  assert.deepEqual(
+    (await readWhatToDoRunDraft(project, second)).files.map(
+      (file) => file.name,
+    ),
+    ['original.md', 'new.md'],
+  );
+  await cancelWhatToDoRun(project, second.id);
+  control.calls[1]!.reject(new Error('canceled'));
 });
 
 void test('the current formal Map is default Context and focus is optional emphasis', async (t) => {
