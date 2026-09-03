@@ -420,6 +420,30 @@ void test('Latest Response exposes the standard Response, Summary and Log action
   }
 });
 
+void test('Domain Modeling separates the current answer, compact summary and change log', async () => {
+  const source = await readFile(
+    new URL('../components/domain-model-workspace.tsx', import.meta.url),
+    'utf8',
+  );
+  assert.match(source, /renderDomainModelResponse\(run, model, t\)/);
+  assert.match(source, /renderDomainModelSummary\(run, model, t\)/);
+  assert.match(source, /renderDomainModelLog\(run, model, t\)/);
+  const relationshipInspector = source.slice(
+    source.indexOf(') : relationship ? ('),
+    source.indexOf(
+      '</InspectorSection>',
+      source.indexOf(') : relationship ? ('),
+    ),
+  );
+  assert.match(
+    relationshipInspector,
+    /relationshipCardinalityLabel\(relationship\)/,
+  );
+  assert.doesNotMatch(relationshipInspector, /sourceCardinality\} →/);
+  assert.doesNotMatch(relationshipInspector, /semanticRole/);
+  assert.doesNotMatch(relationshipInspector, /provenance/);
+});
+
 void test('terminal What’s Next outcomes leave the Canvas and stay in Latest Response', async () => {
   const { whatsNextRunToPreviews } =
     await import('../lib/whats-next-previews.ts');
