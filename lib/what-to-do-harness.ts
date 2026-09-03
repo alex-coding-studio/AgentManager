@@ -481,6 +481,25 @@ export function validateWhatToDoHarnessResult(
 
   if (context.operation === 'create-map' && result.candidates.length === 0)
     fail('A new Delivery Map requires at least one Contract Candidate.');
+  if (context.operation === 'adjust-map' && result.recomposition) {
+    const retainedIds = new Set(
+      result.recomposition.effects
+        .filter((effect) => effect.kind === 'retain')
+        .flatMap((effect) =>
+          effect.from.filter((candidateId) => effect.to.includes(candidateId)),
+        ),
+    );
+    const knownIds = new Set(
+      (context.knownCandidates ?? []).map((candidate) => candidate.candidateId),
+    );
+    result.candidates = result.candidates.filter(
+      (candidate) =>
+        !(
+          retainedIds.has(candidate.candidateId) &&
+          knownIds.has(candidate.candidateId)
+        ),
+    );
+  }
   validateCandidates(result.candidates, context, knownEvidence);
   if (context.operation === 'create-map' && result.recomposition) {
     const candidateIds = new Set(
