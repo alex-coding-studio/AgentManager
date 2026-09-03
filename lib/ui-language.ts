@@ -858,6 +858,7 @@ export const chineseUi: Record<string, string> = {
   'Graph details': '图关系详情',
   'Grew from': '来源节点',
   'Harness boundary': 'Harness 边界',
+  'Hard dependencies': '硬依赖',
   'Import Markdown': '导入 Markdown',
   'Included automatically': '自动带入',
   'Inherited Resources': '继承的资料',

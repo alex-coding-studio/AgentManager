@@ -271,6 +271,8 @@ export function WhatToDoWorkspace({
           readOnly
           selectionEnabled={Boolean(currentMap) && !running}
           avoidBottomRightPanel
+          showAllDependencies
+          showLineageLegend={false}
           showCandidateLegend={false}
           onToggleSelection={(nodeId) =>
             setFocusContractIds((current) =>
