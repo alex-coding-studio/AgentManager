@@ -29,7 +29,7 @@ import type { TaskGraphNode } from '@/lib/task-graph';
 import { cn } from '@/lib/utils';
 
 const width = 216;
-const height = 94;
+const height = 112;
 const nodeTypes = { productDesign: ProductDesignPickerCard };
 const fitOptions = { padding: 0.2, minZoom: 0.3, maxZoom: 1 };
 
@@ -180,7 +180,7 @@ function ProductDesignPickerCard({ data }: NodeProps<PickerNode>) {
   const added = data.state === 'added';
   const content = (
     <>
-      <span className="flex items-start gap-2">
+      <span className="flex min-h-0 flex-1 items-start gap-2 overflow-hidden">
         {data.state !== 'source' ? (
           <span
             className={cn(
@@ -193,16 +193,16 @@ function ProductDesignPickerCard({ data }: NodeProps<PickerNode>) {
             {selected || added ? <Check className="size-2.5" /> : null}
           </span>
         ) : null}
-        <span className="min-w-0">
-          <span className="line-clamp-2 block text-[13px] font-medium leading-[18px]">
+        <span className="min-w-0 overflow-hidden">
+          <span className="block max-h-[18px] overflow-hidden text-[13px] font-medium leading-[18px]">
             {data.node.title}
           </span>
-          <span className="mt-1 line-clamp-2 block text-[10px] leading-4 text-muted-foreground">
+          <span className="mt-1 line-clamp-2 block max-h-8 overflow-hidden text-[10px] leading-4 text-muted-foreground">
             {data.node.summary}
           </span>
         </span>
       </span>
-      <span className="mt-2 flex items-center justify-between text-[9px] text-muted-foreground">
+      <span className="mt-1.5 flex shrink-0 items-center justify-between text-[9px] text-muted-foreground">
         <span>
           {t(
             data.state === 'source'
@@ -234,7 +234,7 @@ function ProductDesignPickerCard({ data }: NodeProps<PickerNode>) {
           aria-pressed={selected}
           aria-label={`${t(selected ? 'Remove' : data.state === 'added' ? 'Already added' : 'Add')} ${data.node.title}`}
           className={cn(
-            'nodrag nopan pointer-events-auto flex h-full w-full flex-col justify-between rounded-xl border bg-card px-3 py-3 text-left shadow-sm transition enabled:hover:border-foreground/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed',
+            'nodrag nopan pointer-events-auto flex h-full w-full flex-col overflow-hidden rounded-xl border bg-card px-3 py-2.5 text-left shadow-sm transition enabled:hover:border-foreground/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed',
             selected && 'border-foreground ring-1 ring-foreground/20',
             added && 'border-border bg-muted/60 text-foreground',
           )}
@@ -243,7 +243,7 @@ function ProductDesignPickerCard({ data }: NodeProps<PickerNode>) {
           {content}
         </button>
       ) : (
-        <div className="flex h-full w-full flex-col justify-between rounded-xl border border-border bg-secondary/50 px-3 py-3 text-left shadow-sm">
+        <div className="flex h-full w-full flex-col overflow-hidden rounded-xl border border-border bg-secondary/50 px-3 py-2.5 text-left shadow-sm">
           {content}
         </div>
       )}
