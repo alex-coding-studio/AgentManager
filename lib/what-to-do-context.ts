@@ -5,6 +5,7 @@ import {
   agentGraphContentPacket,
   userInputWorkspaceInput,
   writeAgentGraphContextWorkspace,
+  type AgentGraphContentPacket,
   type ContextWorkspaceInput,
 } from './agent-graph-context-workspace.ts';
 import { PublicApiError } from './api-errors.ts';
@@ -34,6 +35,8 @@ import {
 
 export type WhatToDoRunInput = {
   instruction: string;
+  clarificationRunId?: string;
+  clarificationContent?: AgentGraphContentPacket;
   sourceUids: string[];
   profile: AgentProfile;
   contextRefs?: string[];
@@ -140,6 +143,7 @@ export async function prepareWhatToDoContext(
   if (!userInput) throw new Error('What to Do User Input was lost.');
   const staging = await stageWhatToDoRunDirectory(project, runId);
   let workspace: Awaited<ReturnType<typeof writeAgentGraphContextWorkspace>>;
+  let packet: AgentGraphContentPacket;
   try {
     const staged = await writeAgentGraphContextWorkspace(staging.stagingPath, [
       userInput,
@@ -192,6 +196,9 @@ export async function prepareWhatToDoContext(
       },
       ...extraInputs,
     ]);
+    packet = agentGraphContentPacket(staged.manifest);
+    if (input.clarificationContent)
+      assertClarificationContextPreserved(input.clarificationContent, packet);
     const publishedRoot = await staging.publish();
     workspace = {
       ...staged,
@@ -202,7 +209,6 @@ export async function prepareWhatToDoContext(
     await staging.cleanup();
     throw error;
   }
-  const packet = agentGraphContentPacket(workspace.manifest);
   const inputEntry = workspace.manifest.primary.find(
     (entry) => entry.kind === 'user-input',
   );
@@ -254,6 +260,38 @@ export async function prepareWhatToDoContext(
       manifestEntries.map((entry) => [entry.workspacePath, entry.logicalPath]),
     ),
   };
+}
+
+function assertClarificationContextPreserved(
+  previous: AgentGraphContentPacket,
+  next: AgentGraphContentPacket,
+) {
+  for (const entry of previous.references) {
+    const current = next.references.find(
+      (candidate) =>
+        candidate.kind === entry.kind &&
+        candidate.logicalPath === entry.logicalPath,
+    );
+    if (!current || current.sha256 !== entry.sha256)
+      throw new PublicApiError(
+        'The frozen Clarification Context changed. Start a new Delivery Planning request.',
+        409,
+      );
+  }
+  for (const entry of previous.external) {
+    const current = next.external.find(
+      (candidate) =>
+        candidate.sha256 === entry.sha256 &&
+        candidate.attachment?.originalName === entry.attachment?.originalName &&
+        candidate.attachment?.mediaType === entry.attachment?.mediaType &&
+        candidate.attachment?.byteSize === entry.attachment?.byteSize,
+    );
+    if (!current)
+      throw new PublicApiError(
+        'The frozen Clarification attachments changed. Start a new Delivery Planning request.',
+        409,
+      );
+  }
 }
 
 async function contextInputs(

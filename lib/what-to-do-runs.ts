@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   lstat,
   mkdir,
@@ -48,7 +48,9 @@ import {
   whatToDoKnownCandidates,
   whatToDoKnownSourceClaims,
   type WhatToDoDeliveryMap,
+  whatToDoCurrentMapPromptView,
 } from './what-to-do-map.ts';
+import { readWhatToDoRunDraft } from './what-to-do-run-draft.ts';
 import {
   atomicWhatToDoText,
   readWhatToDoCurrentMap,
@@ -72,6 +74,7 @@ export type WhatToDoRunRecord = {
   contextRefs: string[];
   repositoryEvidencePaths: string[];
   focusContractIds: string[];
+  clarificationRunId: string | null;
   attachmentNames: string[];
   profile: AgentProfile;
   startedAt: string;
@@ -131,8 +134,22 @@ export async function startWhatToDoRun(
   let preparedRun = false;
   try {
     const currentMap = await readWhatToDoCurrentMap(project);
+    const clarificationRun = await resolveClarificationRun(
+      project,
+      input.clarificationRunId,
+      currentMap,
+    );
+    const effectiveInput = clarificationRun
+      ? await amendClarificationInput(project, clarificationRun, input)
+      : input;
     let coordinatorRun: WhatToDoRunRecord | null = null;
-    if (currentMap) {
+    if (
+      clarificationRun?.agentSessionId &&
+      clarificationRun.profile.agent === effectiveInput.profile.agent &&
+      sameModelSelection(clarificationRun.profile, effectiveInput.profile)
+    ) {
+      coordinatorRun = clarificationRun;
+    } else if (currentMap) {
       const currentMapRun = await readWhatToDoRun(project, currentMap.runId);
       if (
         currentMapRun.status !== 'succeeded' ||
@@ -141,14 +158,14 @@ export async function startWhatToDoRun(
         throw new Error('The current What to Do Map has no committed Run.');
       if (
         currentMapRun.agentSessionId &&
-        currentMapRun.profile.agent === input.profile.agent &&
-        sameModelSelection(currentMapRun.profile, input.profile) &&
+        currentMapRun.profile.agent === effectiveInput.profile.agent &&
+        sameModelSelection(currentMapRun.profile, effectiveInput.profile) &&
         currentMapRun.request.harness.revision === WHAT_TO_DO_HARNESS_REVISION
       )
         coordinatorRun = currentMapRun;
     }
     const prepared = await prepareWhatToDoContext(project, runId, {
-      ...input,
+      ...effectiveInput,
       currentMap,
     });
     preparedRun = true;
@@ -158,14 +175,16 @@ export async function startWhatToDoRun(
     );
     const request = createWhatToDoHarnessRequest({
       sessionId:
-        coordinatorRun?.request.request.sessionId ?? `SESSION-${randomUUID()}`,
+        clarificationRun?.request.request.sessionId ??
+        coordinatorRun?.request.request.sessionId ??
+        `SESSION-${randomUUID()}`,
       requestId: runId,
       contextRoot,
       content: prepared.packet,
       operation: currentMap ? 'adjust-map' : 'create-map',
       currentMapPath: currentMap ? 'what-to-do/current-map.json' : null,
       focusCandidateIds: currentMap
-        ? (input.focusContractIds ?? []).map((contractId) =>
+        ? (effectiveInput.focusContractIds ?? []).map((contractId) =>
             whatToDoContractCandidateId(
               currentMap.contracts.find(
                 (contract) => contract.id === contractId,
@@ -194,14 +213,15 @@ export async function startWhatToDoRun(
       schemaVersion: 1,
       id: runId,
       status: 'running' as const,
-      sourceUids: [...new Set(input.sourceUids)],
-      contextRefs: [...new Set(input.contextRefs ?? [])],
+      sourceUids: [...new Set(effectiveInput.sourceUids)],
+      contextRefs: [...new Set(effectiveInput.contextRefs ?? [])],
       repositoryEvidencePaths: [
-        ...new Set(input.repositoryEvidencePaths ?? []),
+        ...new Set(effectiveInput.repositoryEvidencePaths ?? []),
       ],
-      focusContractIds: [...new Set(input.focusContractIds ?? [])],
-      attachmentNames: (input.files ?? []).map((file) => file.name),
-      profile: structuredClone(input.profile),
+      focusContractIds: [...new Set(effectiveInput.focusContractIds ?? [])],
+      clarificationRunId: clarificationRun?.id ?? null,
+      attachmentNames: (effectiveInput.files ?? []).map((file) => file.name),
+      profile: structuredClone(effectiveInput.profile),
       startedAt,
       endedAt: null,
       agentSessionId: null,
@@ -220,13 +240,13 @@ export async function startWhatToDoRun(
       path.join(runPath, 'request.json'),
       `${JSON.stringify(request, null, 2)}\n`,
     );
-    const agentRun = transport(input.profile.agent, {
+    const agentRun = transport(effectiveInput.profile.agent, {
       workingDirectory: project.codePath ?? project.rootPath,
       protectedPath: project.planningPath,
       environment: whatToDoAgentEnvironment(),
       prompt: whatToDoHarnessPrompt(request),
-      model: input.profile.model || undefined,
-      effort: input.profile.effort || undefined,
+      model: effectiveInput.profile.model || undefined,
+      effort: effectiveInput.profile.effort || undefined,
       resumeSessionId: coordinatorRun?.agentSessionId ?? undefined,
       access: 'read-only',
       disableDelegation: true,
@@ -245,6 +265,95 @@ export async function startWhatToDoRun(
     if (activeRuns.get(key) === active) activeRuns.delete(key);
     throw error;
   }
+}
+
+async function resolveClarificationRun(
+  project: RegisteredProject,
+  clarificationRunId: string | undefined,
+  currentMap: WhatToDoDeliveryMap | null,
+) {
+  if (!clarificationRunId) return null;
+  if (!/^RUN-[0-9a-f-]{36}$/.test(clarificationRunId))
+    throw new PublicApiError('The Clarification Run is invalid.', 400);
+  const latest = (await listLatestWhatToDoRuns(project, 1))[0];
+  if (
+    !latest ||
+    latest.id !== clarificationRunId ||
+    latest.status !== 'succeeded' ||
+    latest.result?.outcome !== 'clarification' ||
+    latest.request.harness.revision !== WHAT_TO_DO_HARNESS_REVISION
+  )
+    throw new PublicApiError(
+      'The Clarification is no longer the current What to Do request.',
+      409,
+    );
+  if ((latest.request.operation === 'adjust-map') !== Boolean(currentMap))
+    throw new PublicApiError(
+      'The Delivery Map changed after this Clarification.',
+      409,
+    );
+  if (currentMap) {
+    const mapEntry = latest.request.content.references.find(
+      (entry) => entry.kind === 'delivery-map',
+    );
+    const currentMapHash = createHash('sha256')
+      .update(
+        `${JSON.stringify(whatToDoCurrentMapPromptView(currentMap), null, 2)}\n`,
+      )
+      .digest('hex');
+    if (!mapEntry || mapEntry.sha256 !== currentMapHash)
+      throw new PublicApiError(
+        'The Delivery Map changed after this Clarification.',
+        409,
+      );
+  }
+  return latest;
+}
+
+async function amendClarificationInput(
+  project: RegisteredProject,
+  clarificationRun: WhatToDoRunRecord,
+  input: WhatToDoRunInput,
+): Promise<WhatToDoRunInput> {
+  const answer = input.instruction.trim();
+  if (!answer)
+    throw new PublicApiError('A Clarification Answer is required.', 400);
+  if (clarificationRun.result?.outcome !== 'clarification')
+    throw new Error('The What to Do clarification result was lost.');
+  const draft = await readWhatToDoRunDraft(project, clarificationRun);
+  const files = [
+    ...draft.files.map(
+      (file) => new File([file.content], file.name, { type: file.mediaType }),
+    ),
+    ...(input.files ?? []),
+  ];
+  return {
+    ...input,
+    instruction: `${draft.instruction.trim()}\n\n## Clarification\n\n${clarificationRun.result.clarification.question.trim()}\n\n## Clarification Answer\n\n${answer}`,
+    sourceUids: [
+      ...new Set([...clarificationRun.sourceUids, ...input.sourceUids]),
+    ],
+    contextRefs: [
+      ...new Set([
+        ...clarificationRun.contextRefs,
+        ...(input.contextRefs ?? []),
+      ]),
+    ],
+    repositoryEvidencePaths: [
+      ...new Set([
+        ...clarificationRun.repositoryEvidencePaths,
+        ...(input.repositoryEvidencePaths ?? []),
+      ]),
+    ],
+    focusContractIds: [
+      ...new Set([
+        ...clarificationRun.focusContractIds,
+        ...(input.focusContractIds ?? []),
+      ]),
+    ],
+    files,
+    clarificationContent: clarificationRun.request.content,
+  };
 }
 
 function settleLater(
@@ -491,6 +600,7 @@ export async function readWhatToDoRun(
     focusContractIds: Array.isArray(stored.focusContractIds)
       ? stored.focusContractIds
       : [],
+    clarificationRunId: stored.clarificationRunId ?? null,
     map: stored.map ?? null,
   } as WhatToDoRunRecord;
   if (

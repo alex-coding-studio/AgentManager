@@ -196,6 +196,8 @@ export function WhatToDoWorkspace({
       body.set('agent', profile.agent);
       body.set('model', profile.model);
       body.set('effort', profile.effort);
+      if (latestTerminal?.result?.outcome === 'clarification')
+        body.set('clarificationRunId', latestTerminal.id);
       for (const uid of sourceUids) body.append('sourceUids', uid);
       for (const id of focusContractIds) body.append('focusContractIds', id);
       for (const ref of contextRefs) body.append('contextRefs', ref);

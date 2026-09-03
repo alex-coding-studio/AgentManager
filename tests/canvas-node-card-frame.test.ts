@@ -476,6 +476,7 @@ void test('Delivery Planning restores clarification Context independently of opt
   assert.match(source, /initialClarification\?\.sourceUids/);
   assert.match(source, /setSourceUids\(nextTerminal\.sourceUids\)/);
   assert.match(source, /setProfile\(nextTerminal\.profile\)/);
+  assert.match(source, /body\.set\('clarificationRunId', latestTerminal\.id\)/);
   assert.match(
     source,
     /Choose an option or write your own answer in the Composer/,
