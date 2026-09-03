@@ -12,12 +12,11 @@ import {
   LatestResponseActions,
   LatestResponseOptions,
 } from '@/components/latest-response';
-import { MarkdownReader } from '@/components/markdown-reader';
+import { MarkdownReaderDialog } from '@/components/markdown-reader-dialog';
 import { ProjectModuleHeader } from '@/components/project-module-header';
 import { ProductDesignFeaturePicker } from '@/components/product-design-feature-picker';
 import { TaskGraphCanvas } from '@/components/task-graph-canvas';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { useUiText } from '@/components/ui-language-provider';
 import type { AgentProfile } from '@/lib/agent-profile';
@@ -538,35 +537,20 @@ export function WhatToDoWorkspace({
           setSourceUids((current) => [...new Set([...current, ...uids])])
         }
       />
-      <Dialog
-        open={preview !== null}
-        onOpenChange={(open) => !open && setPreview(null)}
-      >
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
-          {preview ? (
-            <div className="space-y-3">
-              <MarkdownReader
-                title={preview.title}
-                filePath={preview.path}
-                markdown={preview.markdown}
-                onClose={() => setPreview(null)}
-              />
-              {preview.contractUid ? (
-                <Button
-                  className="w-full"
-                  onClick={() =>
-                    router.push(
-                      `/projects/${projectId}/implementation?source=${encodeURIComponent(preview.contractUid!)}`,
-                    )
-                  }
-                >
-                  {t('Open in Implementation')}
-                </Button>
-              ) : null}
-            </div>
-          ) : null}
-        </DialogContent>
-      </Dialog>
+      <MarkdownReaderDialog preview={preview} onClose={() => setPreview(null)}>
+        {preview?.contractUid ? (
+          <Button
+            className="w-full"
+            onClick={() =>
+              router.push(
+                `/projects/${projectId}/implementation?source=${encodeURIComponent(preview.contractUid!)}`,
+              )
+            }
+          >
+            {t('Open in Implementation')}
+          </Button>
+        ) : null}
+      </MarkdownReaderDialog>
     </div>
   );
 }

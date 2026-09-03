@@ -720,3 +720,48 @@ void test('every Agent Graph module adopts the standard Composer and attachment 
     /setActiveLayer\(intentionDestination\(intention\)\.layer\)/,
   );
 });
+
+void test('the standard Agent Composer owns one collapsible panel control', async () => {
+  const { AgentGraphComposerCard } =
+    await import('../components/agent-graph-composer-card.tsx');
+  const html = renderToStaticMarkup(
+    createElement(
+      AgentGraphComposerCard,
+      { title: 'Prepare a Delivery Map', description: 'Describe the update.' },
+      createElement('textarea', { defaultValue: 'Keep this input.' }),
+    ),
+  );
+  assert.match(html, /aria-label="Collapse input panel"/);
+  assert.match(html, /aria-expanded="true"/);
+  assert.match(html, /Keep this input/);
+  const source = await readFile(
+    new URL('../components/agent-graph-composer-card.tsx', import.meta.url),
+    'utf8',
+  );
+  assert.match(source, /aria-label=\{t\('Expand input panel'\)\}/);
+  assert.match(source, /<Sparkles/);
+  assert.match(source, /setCollapsed\(false\)/);
+});
+
+void test('Latest Response Markdown uses one standard reader shell and close control', async () => {
+  const dialog = await readFile(
+    new URL('../components/markdown-reader-dialog.tsx', import.meta.url),
+    'utf8',
+  );
+  assert.match(dialog, /showCloseButton=\{false\}/);
+  assert.match(dialog, /bg-transparent p-0 ring-0/);
+  assert.match(dialog, /<MarkdownReader/);
+  assert.match(dialog, /onClose=\{onClose\}/);
+  for (const file of [
+    'whats-next-workspace.tsx',
+    'task-decomposition-workspace.tsx',
+    'domain-model-workspace.tsx',
+    'what-to-do-workspace.tsx',
+  ]) {
+    const source = await readFile(
+      new URL(`../components/${file}`, import.meta.url),
+      'utf8',
+    );
+    assert.match(source, /<MarkdownReaderDialog/, file);
+  }
+});

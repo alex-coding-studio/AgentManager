@@ -799,6 +799,7 @@ export const chineseUi: Record<string, string> = {
   'Break one scope into coherent, human-manageable nodes.':
     '把一个范围分解成连贯、便于理解的节点。',
   Cancel: '取消',
+  'Collapse input panel': '折叠输入面板',
   'Cancel Agent Run': '取消 Agent 运行',
   Candidate: '候选',
   'Candidate · revision': '候选 · 版本',
@@ -849,6 +850,7 @@ export const chineseUi: Record<string, string> = {
   'Every changed line is shown before this revision is accepted.':
     '接受此版本前，可以查看每一处行级变化。',
   'Explore more': '继续探索',
+  'Expand input panel': '展开输入面板',
   'Feedback for this Refine': '本次细化的反馈',
   Folder: '文件夹',
   'Folder name': '文件夹名称',

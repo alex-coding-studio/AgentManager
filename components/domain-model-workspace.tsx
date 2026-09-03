@@ -11,11 +11,10 @@ import {
   LatestResponse,
   LatestResponseActions,
 } from '@/components/latest-response';
-import { MarkdownReader } from '@/components/markdown-reader';
+import { MarkdownReaderDialog } from '@/components/markdown-reader-dialog';
 import { ModuleInstructionsDialog } from '@/components/module-instructions-dialog';
 import { ProjectModuleHeader } from '@/components/project-module-header';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
 import {
   Sheet,
   SheetContent,
@@ -426,27 +425,10 @@ export function DomainModelWorkspace({
           setTimeout(() => textarea.current?.focus(), 0);
         }}
       />
-      <Dialog
-        open={responsePreview !== null}
-        onOpenChange={(open) => {
-          if (!open) setResponsePreview(null);
-        }}
-      >
-        <DialogContent
-          showCloseButton={false}
-          className="max-h-[92vh] overflow-hidden bg-transparent p-0 ring-0 sm:max-w-[min(92vw,1100px)]"
-        >
-          {responsePreview ? (
-            <MarkdownReader
-              title={responsePreview.title}
-              filePath={responsePreview.path}
-              markdown={responsePreview.markdown}
-              onClose={() => setResponsePreview(null)}
-              className="max-h-[92vh] overflow-y-auto"
-            />
-          ) : null}
-        </DialogContent>
-      </Dialog>
+      <MarkdownReaderDialog
+        preview={responsePreview}
+        onClose={() => setResponsePreview(null)}
+      />
     </div>
   );
 }

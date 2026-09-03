@@ -26,6 +26,7 @@ import {
   MarkdownReader,
   type MarkdownFeedbackSelection,
 } from '@/components/markdown-reader';
+import { MarkdownReaderDialog } from '@/components/markdown-reader-dialog';
 import {
   NodeProvenanceFacts,
   NodeResourceSections,
@@ -2013,27 +2014,10 @@ function WhatsNextCanvas({
         </SheetContent>
       </Sheet>
 
-      <Dialog
-        open={preview !== null}
-        onOpenChange={(open) => {
-          if (!open) setPreview(null);
-        }}
-      >
-        <DialogContent
-          showCloseButton={false}
-          className="max-h-[92vh] overflow-hidden bg-transparent p-0 ring-0 sm:max-w-[min(92vw,1100px)]"
-        >
-          {preview ? (
-            <MarkdownReader
-              title={preview.title}
-              filePath={preview.path}
-              markdown={preview.markdown}
-              onClose={() => setPreview(null)}
-              className="max-h-[92vh] overflow-y-auto"
-            />
-          ) : null}
-        </DialogContent>
-      </Dialog>
+      <MarkdownReaderDialog
+        preview={preview}
+        onClose={() => setPreview(null)}
+      />
 
       <Dialog
         open={comparison !== null}
