@@ -1,9 +1,10 @@
 'use client';
 
-import { RotateCcw, Square, X } from 'lucide-react';
+import { RotateCcw, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AgentRunControls } from '@/components/agent-run-controls';
 import { AgentGraphComposerCard } from '@/components/agent-graph-composer-card';
+import { AgentGraphRunningCard } from '@/components/agent-graph-running-card';
 import { ContextAttachmentPicker } from '@/components/context-attachment-picker';
 import { DomainModelCanvas } from '@/components/domain-model-canvas';
 import {
@@ -83,7 +84,6 @@ export function DomainModelWorkspace({
     path: string;
     markdown: string;
   } | null>(null);
-  const [now, setNow] = useState(0);
   const textarea = useRef<HTMLTextAreaElement | null>(null);
   const submittingRef = useRef(false);
   const latest = runs[0] ?? null;
@@ -114,7 +114,6 @@ export function DomainModelWorkspace({
   useEffect(() => {
     if (!running) return;
     const interval = setInterval(async () => {
-      setNow(Date.now());
       try {
         const response = await fetch(
           `/api/projects/${projectId}/domain-model-runs?runId=${running.id}`,
@@ -184,7 +183,6 @@ export function DomainModelWorkspace({
       setRuns((current) => [data.run!, ...current]);
       setContextRefs([]);
       setContextFiles([]);
-      setNow(Date.now());
     } catch {
       setError('Could not start the Domain Model Agent.');
     } finally {
@@ -251,11 +249,6 @@ export function DomainModelWorkspace({
     setInspectedRelationshipId(id);
   }
 
-  const elapsed = running
-    ? Math.max(0, Math.floor((now - Date.parse(running.startedAt)) / 1000))
-    : 0;
-  const lastActivity =
-    running?.activity.at(-1)?.summary ?? 'Preparing the Agent request.';
   const latestRunAt = latest
     ? Date.parse(latest.endedAt ?? latest.startedAt)
     : Number.NEGATIVE_INFINITY;
@@ -312,26 +305,13 @@ export function DomainModelWorkspace({
         ) : null}
 
         {running ? (
-          <AgentGraphComposerCard
+          <AgentGraphRunningCard
             className="z-20"
-            title={
-              <span className="flex items-center gap-3 text-sm">
-                <span className="relative flex size-2.5">
-                  <span className="absolute inline-flex size-full animate-ping rounded-full bg-sky-400 opacity-60" />
-                  <span className="relative inline-flex size-2.5 rounded-full bg-sky-500" />
-                </span>
-                {t('{agent} is running', {
-                  agent: profile.agent === 'codex' ? 'Codex' : 'Claude',
-                })}{' '}
-                · {formatDuration(elapsed)}
-              </span>
-            }
-            description={t(lastActivity)}
-            action={
-              <Button variant="outline" size="sm" onClick={cancelRun}>
-                <Square className="size-3.5" /> {t('Cancel')}
-              </Button>
-            }
+            agent={running.profile.agent}
+            startedAt={running.startedAt}
+            activity={running.activity}
+            fallback="Preparing the Agent request."
+            onCancel={() => void cancelRun()}
           />
         ) : (
           <AgentGraphComposerCard
@@ -972,9 +952,4 @@ function relationshipCardinalityLabel(
 function allowsMany(cardinality: string) {
   const upper = cardinality.split('..').at(-1);
   return upper === '*' || Number(upper) > 1;
-}
-
-function formatDuration(seconds: number) {
-  const minutes = Math.floor(seconds / 60);
-  return `${minutes}:${String(seconds % 60).padStart(2, '0')}`;
 }
