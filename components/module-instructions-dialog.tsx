@@ -1,6 +1,6 @@
 'use client';
 
-import { LoaderCircle, SlidersHorizontal } from 'lucide-react';
+import { LoaderCircle } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
@@ -12,18 +12,17 @@ import {
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { useUiText } from '@/components/ui-language-provider';
+import { ModuleContextTrigger } from '@/components/module-context-trigger';
 
 export function ModuleInstructionsDialog({
   endpoint,
   title,
   description,
-  triggerLabel = 'Context',
   disabled = false,
 }: {
   endpoint: string;
   title: string;
   description: string;
-  triggerLabel?: string;
   disabled?: boolean;
 }) {
   const { t } = useUiText();
@@ -96,15 +95,10 @@ export function ModuleInstructionsDialog({
 
   return (
     <>
-      <Button
-        variant="outline"
-        size="sm"
+      <ModuleContextTrigger
         disabled={disabled}
         onClick={() => changeOpen(true)}
-      >
-        <SlidersHorizontal />
-        {t(triggerLabel)}
-      </Button>
+      />
       <Dialog open={open} onOpenChange={changeOpen}>
         <DialogContent className="max-h-[85dvh] overflow-auto sm:max-w-2xl">
           <DialogHeader>

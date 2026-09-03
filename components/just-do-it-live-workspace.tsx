@@ -10,14 +10,15 @@ import {
   LoaderCircle,
   Pencil,
   Plus,
-  SlidersHorizontal,
   Sparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { AgentGraphComposerCard } from '@/components/agent-graph-composer-card';
 import { AgentGraphRunningCard } from '@/components/agent-graph-running-card';
+import { AgentProfileSelector } from '@/components/agent-profile-selector';
 import { AgentRunControls } from '@/components/agent-run-controls';
+import { ModuleContextTrigger } from '@/components/module-context-trigger';
 import { JustDoItAction } from '@/components/just-do-it-action';
 import {
   Dialog,
@@ -51,6 +52,7 @@ type Draft = {
   requirements: string;
   feedback: string;
   profile: PlanningProfile;
+  coordinationProfile: PlanningProfile;
   files: Array<{ name: string; content: string }>;
   retainRefs: string[];
   contextRefs: string[];
@@ -61,6 +63,8 @@ function initialDraft(card: PlanningCard): Draft {
     requirements: card.requirements,
     feedback: '',
     profile: card.run?.profile ?? { agent: 'codex', model: '', effort: '' },
+    coordinationProfile: card.execution?.coordinationSettings?.profile ??
+      card.run?.profile ?? { agent: 'codex', model: '', effort: '' },
     files: [],
     retainRefs: card.resources.map((item) => item.ref),
     contextRefs: [],
@@ -158,6 +162,7 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
       )?.id
     : undefined;
   const scopedBusy = running && Boolean(card?.run?.targetId);
+  const executionRunning = card?.execution?.runs.at(-1)?.status === 'running';
   const dependencyReview = card
     ? (view?.dependencyReviews?.[card.id] ?? [])
     : [];
@@ -359,15 +364,10 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
           'Plan together, execute one Action, then verify the output.',
         )}
         actions={
-          <Button
-            variant="outline"
-            size="sm"
+          <ModuleContextTrigger
             disabled={!view}
             onClick={() => setContextOpen(true)}
-          >
-            <SlidersHorizontal />
-            {t('Working instructions')}
-          </Button>
+          />
         }
       />
       <div
@@ -635,11 +635,22 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
                       </p>
                     )}
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap items-center justify-end gap-3">
                     {finalized ? (
-                      <span className="text-xs text-muted-foreground">
-                        {t('Confirmed checklist locked')}
-                      </span>
+                      <div className="flex items-center gap-2 rounded-xl border border-border bg-secondary/40 px-2 py-1.5">
+                        <span className="pl-1 text-xs font-medium">
+                          {t('Coordinator')}
+                        </span>
+                        <AgentProfileSelector
+                          value={draft!.coordinationProfile}
+                          onChange={(coordinationProfile) =>
+                            patchDraft(card.id, { coordinationProfile })
+                          }
+                          disabled={busy || executionRunning}
+                          label="Coordination profile"
+                          showStatus={false}
+                        />
+                      </div>
                     ) : (
                       <>
                         <Button
@@ -771,6 +782,8 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
                               projectId={projectId}
                               card={card}
                               action={selectedStep}
+                              coordinatorProfile={draft!.coordinationProfile}
+                              folders={view.folders}
                               onChange={(updated) =>
                                 setView((old) =>
                                   old
@@ -836,13 +849,6 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
                   </Button>
                 )}
               </section>
-            )}
-            {card.run?.usage && (
-              <p className="text-xs text-muted-foreground">
-                {t('Last run usage')}: {card.run.usage.inputTokens} input ·{' '}
-                {card.run.usage.cachedInputTokens} cached ·{' '}
-                {card.run.usage.outputTokens} output
-              </p>
             )}
           </>
         )}

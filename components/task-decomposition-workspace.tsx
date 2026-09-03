@@ -1,7 +1,6 @@
 'use client';
 import { useUiText } from '@/components/ui-language-provider';
 
-import Link from 'next/link';
 import {
   useEffect,
   useEffectEvent,
@@ -16,7 +15,6 @@ import {
   Folder,
   Pencil,
   Plus,
-  SlidersHorizontal,
   Sparkles,
   Trash2,
   Upload,
@@ -27,6 +25,7 @@ import {
   AgentComposerShell,
 } from '@/components/agent-composer-shell';
 import { AgentRunControls } from '@/components/agent-run-controls';
+import { ModuleContextTrigger } from '@/components/module-context-trigger';
 import { AgentGraphComposerCard } from '@/components/agent-graph-composer-card';
 import { AgentGraphIntentionSelect } from '@/components/agent-graph-intention-select';
 import { AgentGraphMotionSelect } from '@/components/agent-graph-motion-select';
@@ -62,7 +61,7 @@ import {
   AlertDialogMedia,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -601,7 +600,7 @@ export function TaskDecompositionWorkspace({
       /\.(md|markdown)$/i.test(file.name),
     );
     if (markdownFiles.length !== candidates.length) {
-      setRequestError('Only Markdown Resources can be added right now.');
+      setRequestError(t('Only Markdown Resources can be added right now.'));
     } else {
       setRequestError('');
     }
@@ -1227,12 +1226,9 @@ export function TaskDecompositionWorkspace({
           'Break one scope into coherent, human-manageable nodes.',
         )}
         actions={
-          <Link
+          <ModuleContextTrigger
             href={`/projects/${projectId}/decomposition/context`}
-            className={buttonVariants({ variant: 'outline', size: 'sm' })}
-          >
-            <SlidersHorizontal /> {t('Context')}
-          </Link>
+          />
         }
       />
 
@@ -1251,15 +1247,14 @@ export function TaskDecompositionWorkspace({
                   'Describe the scope in your own words. It becomes the Canvas Start and the first Agent instruction.',
                 )}
               >
-                <div className="mt-4">
+                <div className="mt-4 grid grid-cols-2 gap-2">
                   <AgentGraphIntentionSelect
                     profiles={taskDecompositionIntentionRegistry.profiles}
                     value={intention}
                     onChange={setIntention}
                     label="Decomposition purpose"
+                    showDescription={false}
                   />
-                </div>
-                <div className="mt-4">
                   <AgentGraphMotionSelect
                     profiles={taskDecompositionMotionRegistry.profiles}
                     value={motion}
@@ -1713,21 +1708,24 @@ export function TaskDecompositionWorkspace({
             }
           >
             <form onSubmit={previewDecomposition} className="space-y-6">
-              <AgentGraphIntentionSelect
-                profiles={taskDecompositionIntentionRegistry.profiles}
-                value={intention}
-                onChange={setIntention}
-                label="Decomposition purpose"
-                disabled={Boolean(revisionTarget)}
-              />
+              <div className="grid grid-cols-2 gap-2">
+                <AgentGraphIntentionSelect
+                  profiles={taskDecompositionIntentionRegistry.profiles}
+                  value={intention}
+                  onChange={setIntention}
+                  label="Decomposition purpose"
+                  disabled={Boolean(revisionTarget)}
+                  showDescription={false}
+                />
 
-              <AgentGraphMotionSelect
-                profiles={taskDecompositionMotionRegistry.profiles}
-                value={motion}
-                onChange={setMotion}
-                label="Adjustment"
-                disabled={Boolean(revisionTarget)}
-              />
+                <AgentGraphMotionSelect
+                  profiles={taskDecompositionMotionRegistry.profiles}
+                  value={motion}
+                  onChange={setMotion}
+                  label="Adjustment"
+                  disabled={Boolean(revisionTarget)}
+                />
+              </div>
 
               <AgentComposerAttachments
                 label={t('Optional sources')}

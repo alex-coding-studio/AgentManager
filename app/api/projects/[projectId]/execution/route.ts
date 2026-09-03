@@ -16,7 +16,7 @@ export async function POST(
     return Response.json({ error: 'Project not found.' }, { status: 404 });
   try {
     const text = await request.text();
-    if (Buffer.byteLength(text) > 40000)
+    if (Buffer.byteLength(text) > 1_100_000)
       throw new Error('Execution request is too large.');
     const input = JSON.parse(text);
     if (input.action === 'preview-reset' || input.action === 'reset') {

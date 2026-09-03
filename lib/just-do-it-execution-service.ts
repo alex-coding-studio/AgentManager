@@ -78,6 +78,7 @@ import type {
   ExecuteActionInput,
 } from './just-do-it-execution-types.ts';
 import { prepareCardEnvironment } from './card-host-operations.ts';
+import { resolveProductContextReferences } from './product-context-resource.ts';
 
 type Active = {
   id: string;
@@ -98,6 +99,29 @@ const root = (project: Parameters<typeof planningService.read>[0]) =>
 type Project = Parameters<typeof planningService.read>[0];
 const reference = (card: PlanningCard, file: string) =>
   `implementation/cards/${card.id}/${String(card.revision + 1).padStart(8, '0')}/${file}`;
+
+function supplementalExecutionInput(input: ExecuteActionInput) {
+  const contextRefs = input.contextRefs ?? [];
+  const files = input.files ?? [];
+  if (
+    !Array.isArray(contextRefs) ||
+    !Array.isArray(files) ||
+    contextRefs.length > 50 ||
+    contextRefs.some((ref) => typeof ref !== 'string' || !ref) ||
+    files.length > 20 ||
+    files.some(
+      (file) =>
+        typeof file?.name !== 'string' ||
+        !/\.(md|markdown)$/i.test(file.name) ||
+        typeof file.content !== 'string' ||
+        Buffer.byteLength(file.content) > 1_000_000,
+    ) ||
+    files.reduce((size, file) => size + Buffer.byteLength(file.content), 0) >
+      1_000_000
+  )
+    throw new PublicApiError('Invalid execution resources.', 400);
+  return { contextRefs: [...new Set(contextRefs)], files };
+}
 
 export function createExecutionService(
   store = planningService,
@@ -429,6 +453,7 @@ export function createExecutionService(
     assertCardUuid(input.cardId);
     assertCardUuid(input.actionId);
     validateAgentProfile(input.profile);
+    const supplemental = supplementalExecutionInput(input);
     if (input.coordination) {
       validateAgentProfile(input.coordination.profile);
     }
@@ -523,6 +548,24 @@ export function createExecutionService(
         }
       }
       card = await ensureAcceptedOutputRefs(project, card);
+      const productContext = await resolveProductContextReferences(
+        project,
+        supplemental.contextRefs,
+        ['task-execution'],
+      );
+      const uploadedDocuments = Object.fromEntries(
+        supplemental.files.map((file, index) => [
+          `input-resource-${index + 1}.md`,
+          file.content,
+        ]),
+      );
+      const uploadedResources = supplemental.files.map((file, index) => {
+        const ref = reference(card, `input-resource-${index + 1}.md`);
+        return {
+          ref: path.join(project.planningPath, ref),
+          description: `Supplemental Markdown: ${file.name}`,
+        };
+      });
       const log = await readCardWorklog(root(project), card.id);
       const previous = card.execution?.runs.findLast(
         (run) => run.actionId === input.actionId && run.result,
@@ -565,6 +608,11 @@ export function createExecutionService(
               ]
             : [];
         }),
+        ...productContext.map((resource) => ({
+          ref: path.join(project.planningPath, resource.path),
+          description: `Supplemental Product Context: ${resource.fileName}`,
+        })),
+        ...uploadedResources,
         ...dependencyResources,
       ];
       const request = createCardHarnessRequest(
@@ -684,6 +732,7 @@ export function createExecutionService(
           text: input.instruction || 'User started this Action.',
         },
         {
+          ...uploadedDocuments,
           'request.json': JSON.stringify(request),
           'baseline.json': JSON.stringify(baseline),
           'prompt.txt': prompt,

@@ -10,7 +10,7 @@ export function ProjectModuleHeader({
   actions?: ReactNode;
 }) {
   return (
-    <header className="flex min-h-16 shrink-0 items-center justify-between gap-4 border-b border-border px-5 py-2.5 lg:px-8">
+    <header className="flex min-h-16 w-full shrink-0 items-center gap-4 border-b border-border px-5 py-2.5 lg:pr-5 lg:pl-8">
       <div className="min-w-0">
         <h1 className="truncate text-base font-semibold tracking-[-0.02em]">
           {title}
@@ -22,7 +22,9 @@ export function ProjectModuleHeader({
         ) : null}
       </div>
       {actions ? (
-        <div className="flex shrink-0 items-center gap-2">{actions}</div>
+        <div className="ml-auto flex shrink-0 items-center justify-end gap-2">
+          {actions}
+        </div>
       ) : null}
     </header>
   );

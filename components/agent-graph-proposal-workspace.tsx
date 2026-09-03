@@ -19,14 +19,14 @@ export function ProposalWorkspaceStatus({
   const { t } = useUiText();
   return (
     <section
-      className={`flex items-center gap-2 rounded-xl border border-border bg-background/95 p-1.5 text-[10px] text-muted-foreground shadow-sm backdrop-blur ${className}`}
+      className={`flex items-center gap-1 rounded-xl border border-border bg-background/95 p-1 text-[10px] text-muted-foreground shadow-sm backdrop-blur ${className}`}
       aria-label={t('Proposal workspace status')}
     >
-      <span className="rounded-lg bg-secondary px-2 py-1">
+      <span className="rounded-lg bg-secondary px-1.5 py-0.5">
         <strong className="font-semibold text-foreground">{formalCount}</strong>{' '}
         {t('Formal Nodes')}
       </span>
-      <span className="rounded-lg bg-secondary px-2 py-1">
+      <span className="rounded-lg bg-secondary px-1.5 py-0.5">
         <strong className="font-semibold text-foreground">
           {candidateCount}
         </strong>{' '}
@@ -34,7 +34,7 @@ export function ProposalWorkspaceStatus({
       </span>
       <button
         type="button"
-        className="grid size-7 place-items-center rounded-lg text-muted-foreground transition hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30 disabled:pointer-events-none disabled:opacity-35"
+        className="grid size-6 place-items-center rounded-lg text-muted-foreground transition hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30 disabled:pointer-events-none disabled:opacity-35"
         disabled={activeProposalCount === 0}
         aria-label={t('Focus current proposal')}
         title={

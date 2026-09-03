@@ -23,6 +23,7 @@ import {
 } from '../lib/what-to-do-context.ts';
 import type { RegisteredProject } from '../lib/project-registry.ts';
 import type { TaskGraphNode } from '../lib/task-graph.ts';
+import { saveWhatToDoInstructions } from '../lib/what-to-do-instructions.ts';
 import {
   whatToDoRunDirectory,
   writeWhatToDoRepositorySummary,
@@ -90,6 +91,10 @@ async function fixture(t: test.TestContext) {
 
 void test('What to Do prepares one frozen standard Packet', async (t) => {
   const { project, planningPath, rootPath } = await fixture(t);
+  await saveWhatToDoInstructions(
+    project,
+    'Prefer independently testable delivery boundaries.',
+  );
   await mkdir(path.join(rootPath, 'src'));
   await writeFile(
     path.join(rootPath, 'src/index.ts'),
@@ -147,6 +152,14 @@ void test('What to Do prepares one frozen standard Packet', async (t) => {
       (entry) => entry.kind === 'domain-model-summary',
     ),
   );
+  const instructions = prepared.packet.references.find(
+    (entry) => entry.kind === 'module-instructions',
+  );
+  assert.equal(instructions?.logicalPath, 'what-to-do/instructions.md');
+  assert.match(
+    prepared.knownSources['what-to-do/instructions.md']?.content ?? '',
+    /independently testable/,
+  );
   assert.ok(
     prepared.packet.references.some((entry) => entry.kind === 'domain-model'),
   );
@@ -188,7 +201,7 @@ void test('What to Do prepares one frozen standard Packet', async (t) => {
   );
   assert.equal(index.schemaVersion, 1);
   assert.equal(index.primary.length, 4);
-  assert.equal(index.related.length, 6);
+  assert.equal(index.related.length, 7);
 });
 
 void test('failed What to Do Runs retain a replayable frozen draft', () => {

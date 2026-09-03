@@ -14,6 +14,7 @@ import {
   type ResolvedProductContextResource,
 } from './product-context-resource.ts';
 import { readDomainModel, type DomainModel } from './domain-model.ts';
+import { readWhatToDoInstructions } from './what-to-do-instructions.ts';
 import type { RegisteredProject } from './project-registry.ts';
 import {
   whatToDoCurrentMapPromptView,
@@ -97,15 +98,21 @@ export async function prepareWhatToDoContext(
     ['delivery-contract'],
   );
 
-  const [sources, repositoryFacts, repositorySummary, domainModel] =
-    await Promise.all([
-      input.sourceUids.length
-        ? selectWhatToDoFeatureSources(project, input.sourceUids)
-        : Promise.resolve([]),
-      collectWhatToDoRepositoryFacts(project),
-      readWhatToDoRepositorySummary(project),
-      readDomainModel(project),
-    ]);
+  const [
+    sources,
+    repositoryFacts,
+    repositorySummary,
+    domainModel,
+    instructions,
+  ] = await Promise.all([
+    input.sourceUids.length
+      ? selectWhatToDoFeatureSources(project, input.sourceUids)
+      : Promise.resolve([]),
+    collectWhatToDoRepositoryFacts(project),
+    readWhatToDoRepositorySummary(project),
+    readDomainModel(project),
+    readWhatToDoInstructions(project),
+  ]);
   const featureInputs = await whatToDoFeatureWorkspaceInputs(project, sources);
   const sourceInputs = featureInputs;
   let repositoryEvidence: Array<{ path: string; content: string }>;
@@ -147,6 +154,16 @@ export async function prepareWhatToDoContext(
   try {
     const staged = await writeAgentGraphContextWorkspace(staging.stagingPath, [
       userInput,
+      ...(instructions.trim()
+        ? [
+            {
+              role: 'related' as const,
+              kind: 'module-instructions',
+              logicalPath: 'what-to-do/instructions.md',
+              content: `# Delivery Planning Instructions\n\n${instructions.trim()}\n`,
+            },
+          ]
+        : []),
       ...sourceInputs,
       ...(currentMap
         ? [
