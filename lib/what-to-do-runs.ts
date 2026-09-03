@@ -146,6 +146,8 @@ export async function startWhatToDoRun(
     let coordinatorRun: WhatToDoRunRecord | null = null;
     if (
       clarificationRun?.agentSessionId &&
+      clarificationRun.request.harness.revision ===
+        WHAT_TO_DO_HARNESS_REVISION &&
       clarificationRun.profile.agent === effectiveInput.profile.agent &&
       sameModelSelection(clarificationRun.profile, effectiveInput.profile)
     ) {
@@ -285,7 +287,7 @@ async function resolveClarificationRun(
     latest.id !== clarificationRunId ||
     latest.status !== 'succeeded' ||
     latest.result?.outcome !== 'clarification' ||
-    latest.request.harness.revision !== WHAT_TO_DO_HARNESS_REVISION
+    ![1, WHAT_TO_DO_HARNESS_REVISION].includes(latest.request.harness.revision)
   )
     throw new PublicApiError(
       'The Clarification is no longer the current What to Do request.',
@@ -749,8 +751,10 @@ async function reconcileTerminalRunRecord(
 }
 
 function renderRunSummary(result: WhatToDoHarnessResult) {
-  if (result.outcome === 'map-proposal')
-    return `# Delivery Map\n\nApplied ${result.candidates.length} Contract boundaries.\n`;
+  if (result.outcome === 'map-proposal') {
+    const dependencyUpdates = result.contractDependencyUpdates?.length ?? 0;
+    return `# Delivery Map\n\nApplied ${result.candidates.length + dependencyUpdates} Contract changes: ${result.candidates.length} new or replacement boundaries and ${dependencyUpdates} dependency-only updates.\n`;
+  }
   if (result.outcome === 'clarification')
     return `# Clarification\n\n${result.clarification.question}\n`;
   if (result.outcome === 'insufficient-evidence')
