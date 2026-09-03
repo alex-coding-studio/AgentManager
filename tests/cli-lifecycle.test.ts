@@ -212,6 +212,13 @@ void test('--lan forwards an all-interfaces hostname without ambiguity', async (
     const conflicting = run(['start', '--lan', '--hostname', '127.0.0.1'], env);
     assert.equal(conflicting.status, 1);
     assert.match(conflicting.stderr, /either '--lan' or '--hostname'/);
+
+    const forwardedConflict = run(
+      ['start', '--lan', '--', '--hostname', '127.0.0.1'],
+      env,
+    );
+    assert.equal(forwardedConflict.status, 1);
+    assert.match(forwardedConflict.stderr, /either '--lan' or '--hostname'/);
   } finally {
     run(['stop', '--port', port], env);
   }

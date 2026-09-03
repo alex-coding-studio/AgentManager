@@ -91,7 +91,14 @@ function parseArgs(argv) {
     const arg = argv[index];
     if (arg === '--') {
       if (!forwardsArgs && index + 1 < argv.length) unexpected.push('--');
-      else result.nextArgs.push(...argv.slice(index + 1));
+      else {
+        const forwarded = argv.slice(index + 1);
+        if (result.lan && forwarded.some(isHostnameArgument))
+          fail("Use either '--lan' or '--hostname', not both.");
+        if (forwarded.includes('--lan'))
+          fail("Place '--lan' before the '--' separator.");
+        result.nextArgs.push(...forwarded);
+      }
       break;
     }
     if (arg === '-d' || arg === '--detach') {
@@ -119,10 +126,7 @@ function parseArgs(argv) {
       arg === '--hostname' ||
       arg.startsWith('--hostname=')
     ) {
-      if (
-        result.lan &&
-        (arg === '-H' || arg === '--hostname' || arg.startsWith('--hostname='))
-      )
+      if (result.lan && isHostnameArgument(arg))
         fail("Use either '--lan' or '--hostname', not both.");
       index = consumeAddress(arg, argv, index, result, forwardsArgs);
     } else if (forwardsArgs) {
@@ -159,6 +163,10 @@ function parseArgs(argv) {
   )
     fail("Unexpected argument for 'logs'.");
   return result;
+}
+
+function isHostnameArgument(arg) {
+  return arg === '-H' || arg === '--hostname' || arg.startsWith('--hostname=');
 }
 
 function consumeAddress(arg, argv, index, result, forward) {
