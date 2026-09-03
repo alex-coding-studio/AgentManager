@@ -16,7 +16,12 @@ export function whatsNextRunToPreviews(
     derivedFrom: run.sourceNodeIds,
     layer: intentionDestination(run.intention).layer,
   };
-  const agentLabel = run.transport === 'claude-cli' ? 'Claude' : 'Codex';
+  const agentLabel =
+    run.transport === 'claude-cli'
+      ? 'Claude'
+      : run.transport === 'deepseek-cli'
+        ? 'DeepSeek'
+        : 'Codex';
 
   if (['running', 'validating'].includes(run.status)) {
     return [

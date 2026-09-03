@@ -109,11 +109,15 @@ export type TaskDecompositionRunStatus =
   | 'failed'
   | 'canceled';
 
-export type TaskDecompositionRunTransport = 'codex-cli' | 'claude-cli';
+export type TaskDecompositionRunTransport =
+  | 'codex-cli'
+  | 'claude-cli'
+  | 'deepseek-cli';
 
 const RUN_TRANSPORTS: Record<LocalAgentKind, TaskDecompositionRunTransport> = {
   codex: 'codex-cli',
   claude: 'claude-cli',
+  deepseek: 'deepseek-cli',
 };
 
 export type TaskDecompositionRunRecord = {

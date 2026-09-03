@@ -40,7 +40,12 @@ export function AgentGraphRunningCard({
         <span className="flex items-center gap-3 text-sm">
           <RunningIndicator />
           {t('{agent} is running', {
-            agent: agent === 'codex' ? 'Codex' : 'Claude',
+            agent:
+              agent === 'codex'
+                ? 'Codex'
+                : agent === 'deepseek'
+                  ? 'DeepSeek'
+                  : 'Claude',
           })}{' '}
           · {formatDuration(elapsed)}
         </span>

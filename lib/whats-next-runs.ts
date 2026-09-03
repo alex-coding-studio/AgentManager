@@ -109,11 +109,12 @@ export type WhatsNextRunStatus =
   | 'failed'
   | 'canceled';
 
-export type WhatsNextRunTransport = 'codex-cli' | 'claude-cli';
+export type WhatsNextRunTransport = 'codex-cli' | 'claude-cli' | 'deepseek-cli';
 
 const RUN_TRANSPORTS: Record<LocalAgentKind, WhatsNextRunTransport> = {
   codex: 'codex-cli',
   claude: 'claude-cli',
+  deepseek: 'deepseek-cli',
 };
 
 export type WhatsNextRunRecord = {

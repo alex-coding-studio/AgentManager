@@ -12,8 +12,9 @@ import {
 } from './local-agent-skills.ts';
 import type { ReasoningEffort } from './local-agent-model-types.ts';
 import type { CardEnvironmentManifest } from './card-host-operations.ts';
+import { bootRuntime, renderDeepseekContext } from './dsh/runtime.ts';
 
-export type LocalAgentKind = 'codex' | 'claude';
+export type LocalAgentKind = 'codex' | 'claude' | 'deepseek';
 
 export type LocalAgentUsage = {
   inputTokens: number;
@@ -99,7 +100,48 @@ export function startLocalAgentRun(
   agent: LocalAgentKind,
   input: LocalAgentRunInput,
 ): LocalAgentRun {
-  return agent === 'claude' ? startClaudeRun(input) : startCodexRun(input);
+  if (agent === 'claude') return startClaudeRun(input);
+  if (agent === 'deepseek') return startDeepseekRun(input);
+  return startCodexRun(input);
+}
+
+export function startDeepseekRun(input: LocalAgentRunInput): LocalAgentRun {
+  if (input.access === 'workspace-write') {
+    return {
+      completion: Promise.reject(
+        new Error('DeepSeek supports read-only runs only.'),
+      ),
+      cancel: () => {},
+    };
+  }
+  const controller = new AbortController();
+  const completion = (async () => {
+    const context = await renderDeepseekContext(input.workingDirectory);
+    const runtime = await bootRuntime(input.workingDirectory);
+    try {
+      const result = await runtime.runTurn(
+        {
+          prompt: input.prompt + context,
+          model: input.model,
+          effort: input.effort,
+          resumeSessionId: input.resumeSessionId,
+          workingDirectory: input.workingDirectory,
+        },
+        controller.signal,
+      );
+      return {
+        agentSessionId: result.sessionId,
+        finalOutput: result.finalOutput,
+        usage: null,
+      };
+    } finally {
+      await runtime.close();
+    }
+  })();
+  return {
+    completion,
+    cancel: () => controller.abort(),
+  };
 }
 
 export function parseLocalAgentEvent(line: string): unknown {

@@ -16,7 +16,7 @@ export type LocalModel = {
   efforts: ReasoningEffort[];
 };
 export type ModelCatalog = {
-  agent: 'codex' | 'claude';
+  agent: 'codex' | 'claude' | 'deepseek';
   models: LocalModel[];
 };
 

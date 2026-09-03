@@ -13,6 +13,13 @@ const allowedDevOrigins = [
 
 const nextConfig: NextConfig = {
   allowedDevOrigins,
+  serverExternalPackages: [
+    '@deepseek-ai/dsh-app-boot',
+    '@deepseek-ai/dsh-session',
+    '@deepseek-ai/dsh-llm',
+    '@deepseek-ai/dsh-agent',
+    '@deepseek-ai/dsh-base',
+  ],
 };
 
 export default nextConfig;

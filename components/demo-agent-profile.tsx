@@ -4,6 +4,8 @@ import { useUiText } from '@/components/ui-language-provider';
 import { AgentProfileSelector } from '@/components/agent-profile-selector';
 import type { DemoProfile } from '@/lib/just-do-it-demo';
 
+const demoAgents = ['codex', 'claude'] as const;
+
 export function DemoAgentProfile({
   value,
   onChange,
@@ -26,6 +28,7 @@ export function DemoAgentProfile({
         mode="demo"
         label={label}
         disabled={disabled}
+        agents={demoAgents}
         value={{
           agent: value.agent === 'Claude' ? 'claude' : 'codex',
           model: value.model === 'default' ? '' : value.model,

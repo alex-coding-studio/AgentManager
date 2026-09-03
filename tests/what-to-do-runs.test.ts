@@ -85,7 +85,10 @@ function controlled() {
     reject: (error: Error) => void;
     canceled: boolean;
   }> = [];
-  const transport = (agent: 'codex' | 'claude', input: LocalAgentRunInput) => {
+  const transport = (
+    agent: 'codex' | 'claude' | 'deepseek',
+    input: LocalAgentRunInput,
+  ) => {
     let resolve!: (value: {
       agentSessionId: string | null;
       finalOutput: string;

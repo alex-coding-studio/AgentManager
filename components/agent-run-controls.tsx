@@ -25,6 +25,7 @@ export function AgentRunControls({
   extraInfo,
   extraInfoCount = 0,
   extraInfoLabel = 'Extra info',
+  agents,
 }: {
   value: AgentProfile;
   onChange: (profile: AgentProfile) => void;
@@ -38,6 +39,7 @@ export function AgentRunControls({
   extraInfo?: ReactNode;
   extraInfoCount?: number;
   extraInfoLabel?: string;
+  agents?: readonly AgentProfile['agent'][];
 }) {
   const { t } = useUiText();
   return (
@@ -71,6 +73,7 @@ export function AgentRunControls({
           mode={mode}
           label={label}
           showStatus={false}
+          agents={agents}
         />
         <Button
           type={actionType}

@@ -6,6 +6,7 @@ import {
   type LocalModel,
   type ModelCatalog,
 } from './local-agent-model-types.ts';
+import { deepseekModels } from './dsh/models.ts';
 
 type Agent = ModelCatalog['agent'];
 type Launch = (agent: Agent, args: string[]) => ChildProcessWithoutNullStreams;
@@ -52,6 +53,8 @@ export function readLocalModels(
   start: Launch = launch,
   timeoutMs = 12000,
 ): Promise<ModelCatalog> {
+  if (agent === 'deepseek')
+    return Promise.resolve({ agent, models: deepseekModels });
   return new Promise((resolve, reject) => {
     const args =
       agent === 'codex'
