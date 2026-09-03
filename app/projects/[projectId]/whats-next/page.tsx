@@ -46,7 +46,7 @@ export default async function WhatsNextPage({
   }
   const [projects, folders, nodes] = await Promise.all([
     listProjects(),
-    readContextBrowser(project),
+    readContextBrowser(project, ['mvp-prototype', 'product-design']),
     listTaskGraphNodes(project, 'whats-next'),
   ]);
   const reviewPreview =

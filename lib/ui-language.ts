@@ -700,6 +700,27 @@ export const chineseUi: Record<string, string> = {
   'Product Context is empty': '产品上下文暂时为空',
   'Formal documents will appear here as you use Product Discovery & Design, Scope Decomposition, Domain Modeling, Delivery Planning, and Implementation.':
     '使用产品探索与设计、范围分解、领域建模、交付规划和开发执行时，正式文档会自动出现在这里。',
+  'Praxis collects accepted outputs here. Select a category and document to read the current formal context.':
+    'Praxis 会自动汇总已接受的正式产物。选择分类和文档即可阅读当前上下文。',
+  'Read {title} context': '阅读 {title} 上下文',
+  'MVP Prototype': 'MVP 原型',
+  'Product Design': '产品设计',
+  'Domain Model': '领域模型',
+  'Task Breakdown': '任务分解',
+  'Task Execution': '任务执行',
+  'Accepted discovery outputs that define an early product slice.':
+    '定义早期产品范围的已接受探索产物。',
+  'Accepted product behavior and experience Features.':
+    '已接受的产品行为与体验 Feature。',
+  'The latest applied entities, fields, relationships, and rules.':
+    '当前已应用的实体、字段、关系和规则。',
+  'Accepted decomposition outputs with stable scope boundaries.':
+    '具有稳定范围边界的已接受分解产物。',
+  'Current formal delivery boundaries and their dependencies.':
+    '当前正式交付边界及其依赖关系。',
+  'Confirmed implementation plans and accepted Action outputs.':
+    '已确认的实施计划和已接受的 Action 产物。',
+  'Manually managed project resources.': '用户或 Agent 直接维护的项目资料。',
   "What's next": '下一步',
   Decomposition: '任务分解',
   'Break It Down': '拆开看',

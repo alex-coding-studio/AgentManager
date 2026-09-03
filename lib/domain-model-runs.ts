@@ -13,6 +13,10 @@ import type { AgentProfile } from './agent-profile.ts';
 import { validateAgentProfile } from './agent-profile.ts';
 import { PublicApiError } from './api-errors.ts';
 import {
+  resolveProductContextReferences,
+  type ResolvedProductContextResource,
+} from './product-context-resource.ts';
+import {
   applyProposedDomainModel,
   readDomainModelCommitReceipt,
   readDomainModel,
@@ -40,7 +44,6 @@ import {
   type LocalAgentActivity,
 } from './local-agent-activity.ts';
 import type { RegisteredProject } from './project-registry.ts';
-import { readTaskGraphMarkdownResource } from './task-graph.ts';
 import {
   agentGraphContentPacket,
   userInputWorkspaceInput,
@@ -105,6 +108,11 @@ export async function startDomainModelRun(
     throw new PublicApiError('Select no more than 50 Context documents.', 400);
   if (files.length > 20)
     throw new PublicApiError('Attach no more than 20 Markdown files.', 400);
+  const contextResources = await resolveProductContextReferences(
+    project,
+    contextRefs,
+    ['domain-model'],
+  );
   const key = project.planningPath;
   if (activeRuns.has(key))
     throw new PublicApiError(
@@ -160,12 +168,7 @@ export async function startDomainModelRun(
         [
           ...(userInput ? [userInput] : []),
           ...(moduleInstructions ? [moduleInstructions] : []),
-          ...(await domainModelContextInputs(
-            project,
-            runId,
-            contextRefs,
-            files,
-          )),
+          ...(await domainModelContextInputs(runId, contextResources, files)),
         ],
       );
       const content = agentGraphContentPacket(workspace.manifest);
@@ -428,25 +431,16 @@ async function fail(
 }
 
 async function domainModelContextInputs(
-  project: RegisteredProject,
   runId: string,
-  contextRefs: string[],
+  contextResources: ResolvedProductContextResource[],
   files: File[],
 ): Promise<ContextWorkspaceInput[]> {
-  const references = await Promise.all(
-    contextRefs.map(async (resourcePath) => {
-      const resource = await readTaskGraphMarkdownResource(
-        project,
-        resourcePath,
-      );
-      return {
-        role: 'primary' as const,
-        kind: 'context',
-        logicalPath: resource.path,
-        content: resource.markdown,
-      };
-    }),
-  );
+  const references = contextResources.map((resource) => ({
+    role: 'primary' as const,
+    kind: 'context',
+    logicalPath: resource.path,
+    content: resource.markdown,
+  }));
   const uploads = await Promise.all(
     files.map(async (file, index) => {
       if (!/\.(md|markdown)$/i.test(file.name))

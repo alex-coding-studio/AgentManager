@@ -25,7 +25,7 @@ export async function GET(
       planningService.list(project),
       planningService.sources(project),
       readPlanningInstructions(project),
-      readContextBrowser(project),
+      readContextBrowser(project, ['task-execution']),
     ]);
     const refreshedCards = await Promise.all(
       cards.map((card) => executionService.refresh(project, card)),

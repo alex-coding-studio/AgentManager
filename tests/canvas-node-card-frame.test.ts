@@ -497,24 +497,17 @@ void test('every primary module uses one compact Project Header structure', asyn
   assert.doesNotMatch(justDoIt, /Open preview/);
 });
 
-void test('Product Context starts empty without manual structure initialization', async () => {
+void test('Product Context is a system-managed read-only catalog', async () => {
   const workspace = await readFile(
     new URL('../components/product-context-workspace.tsx', import.meta.url),
-    'utf8',
-  );
-  const route = await readFile(
-    new URL(
-      '../app/api/projects/[projectId]/context/initialize/route.ts',
-      import.meta.url,
-    ),
     'utf8',
   );
   assert.match(workspace, /Product Context is empty/);
   assert.doesNotMatch(workspace, /context\/initialize/);
   assert.doesNotMatch(workspace, /Create context structure/);
-  assert.match(route, /system-managed/);
-  assert.match(route, /status: 410/);
-  assert.doesNotMatch(route, /initializeProductContext/);
+  assert.doesNotMatch(workspace, /context\/documents/);
+  assert.doesNotMatch(workspace, /context\/sections/);
+  assert.doesNotMatch(workspace, /Import Markdown/);
 });
 
 void test('every Agent Graph module adopts the standard Composer and attachment input', async () => {

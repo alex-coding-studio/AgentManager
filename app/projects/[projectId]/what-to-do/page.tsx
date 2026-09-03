@@ -25,7 +25,7 @@ export default async function WhatToDoPage({
   if (!project) notFound();
   const [projects, folders, nodes, runs, currentMap] = await Promise.all([
     listProjects(),
-    readContextBrowser(project),
+    readContextBrowser(project, ['delivery-contract']),
     listTaskGraphNodes(project, 'whats-next'),
     listLatestWhatToDoRuns(project),
     readWhatToDoCurrentMap(project),

@@ -12,8 +12,11 @@ an existing repository or from a product idea that has no code yet.
 
 ## Workspaces
 
-- **Product Context** is the project-owned library for Markdown product,
-  design, engineering, milestone, reference, and other source material.
+- **Product Context** is the system-managed index of accepted module outputs.
+  It groups MVP prototypes, product design, domain models, task breakdowns,
+  delivery contracts, and task execution artifacts without copying them. It
+  also discovers Markdown that a person or Agent maintains directly under
+  `.praxis/context/`.
 - **Product Discovery & Design** explores supported product directions. It separates Discovery
   from Product Design, applies module-specific Intention and Motion profiles,
   and keeps generated Candidates temporary until the user accepts them as
@@ -52,8 +55,7 @@ inline prompt.
 Each Agent workspace provides persistent module instructions for later
 requests. Changing them does not rewrite an active Run. The graph Composers
 currently accept Markdown uploads; Implementation also accepts plain-text files.
-Product Context imports Markdown, while Scope Decomposition's persistent context area
-accepts Markdown or JSON.
+Scope Decomposition's persistent context area accepts Markdown or JSON.
 
 ## Requirements
 

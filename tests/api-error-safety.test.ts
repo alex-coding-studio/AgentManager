@@ -411,7 +411,6 @@ void test('deliberate request validation is still thrown as PublicApiError', asy
     ['task-decomposition-runs.ts', 'A User Input is required.'],
     ['whats-next-runs.ts', 'Select at least one origin Node.'],
     ['project-registry.ts', 'The project path must be an existing directory.'],
-    ['product-context.ts', 'Only Markdown files can be imported right now.'],
   ];
   for (const [name, message] of expected) {
     const source = await readFile(new URL(name, directory), 'utf8');

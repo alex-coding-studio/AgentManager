@@ -105,20 +105,10 @@ Planned layout:
 ```text
 .praxis/
 ├── project.json
-├── context/
-│   ├── README.md
-│   ├── product/
-│   │   └── README.md
-│   ├── design/
-│   │   └── README.md
-│   ├── engineering/
-│   │   └── README.md
-│   ├── milestones/
-│   │   └── README.md
-│   ├── references/
-│   │   └── README.md
-│   └── other/
-│       └── README.md
+├── whats-next/
+│   └── nodes/
+├── domain-model/
+│   └── runs/
 ├── task-decomposition/
 │   ├── settings.json
 │   ├── instructions.md
@@ -142,13 +132,20 @@ validation, and migrations deterministic. Because Praxis is open source,
 specialized installations can change the implementation instead of adding a
 configuration system to the core product.
 
-Product Context uses the filesystem as its canonical index. Each section is a
-folder, and an optional `README.md` can define the section's purpose, content
-boundary, and Agent loading guidance. Praxis discovers sections by
-scanning the directory. It does not duplicate the context tree in SQLite or a
-manifest. Context source selection uses a recursive folder browser so nested
-folders remain navigable while only concrete Markdown files can become
-Resources.
+Product Context is a derived read-only index over canonical module artifacts.
+It exposes accepted Product Discovery and Product Design outputs, the current
+Domain Model summary, accepted Scope Decomposition outputs, current Delivery
+Contracts, finalized implementation Plans, and accepted Action outputs. It does
+not copy those files or create a second lifecycle. Candidates, raw Agent
+responses, Run logs, and temporary Packet resources stay in their source
+modules. Context selection passes the canonical artifact path through the same
+planning-root path boundary used by graph Resources.
+
+People and Agents may also maintain Markdown directly under
+`.praxis/context/<section>/`. Praxis discovers these files recursively and
+shows them beside generated categories without providing browser mutation APIs.
+Every submitted Context reference must either be one of these existing files or
+a currently formal generated artifact; filename shape alone is insufficient.
 
 Decomposition Context is user-owned feature context. Its Markdown
 instructions and Markdown or JSON attachments apply to future decomposition

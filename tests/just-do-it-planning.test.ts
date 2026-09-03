@@ -652,6 +652,7 @@ void test('resources and instruction snapshots are persisted before a provider c
   await service.start(project, {
     ...input(card),
     files: [{ name: 'requirements.md', content: 'Do not add accounts.' }],
+    contextRefs: ['whats-next/nodes/NODE-aaaaaaaa/output.md'],
   });
   const request = calls[0].request;
   assert.match(request.context.moduleInstructions, /local rules/);
@@ -659,6 +660,10 @@ void test('resources and instruction snapshots are persisted before a provider c
     (item) => item.description === 'requirements.md',
   )!;
   assert.equal(await readFile(resource.ref, 'utf8'), 'Do not add accounts.');
+  const productResource = request.context.resources.find(
+    (item) => item.description === 'output.md',
+  )!;
+  assert.match(await readFile(productResource.ref, 'utf8'), /本地网站骨架/);
   await savePlanningInstructions(project, 'New rule');
   assert.match(request.context.moduleInstructions, /local rules/);
   calls[0].resolve(result(request));
@@ -674,7 +679,7 @@ void test('resources and instruction snapshots are persisted before a provider c
         entry.record.text.includes('resourceNames'),
     ),
   );
-  assert.equal(done.resources.length, 1);
+  assert.equal(done.resources.length, 2);
   assert.equal(await readPlanningInstructions(project), 'New rule');
 });
 

@@ -55,6 +55,7 @@ const MARKDOWN_FILE = String.raw`[a-zA-Z0-9][a-zA-Z0-9._-]*\.(?:md|markdown)`;
 const NODE_ID = String.raw`NODE-[0-9a-f]{8,32}`;
 const RUN_ID = String.raw`RUN-[0-9a-f-]{36}`;
 const CANDIDATE_ID = String.raw`CANDIDATE-(?:[0-9]{4,}|[0-9a-f]{8,32})`;
+const CARD_ID = String.raw`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`;
 const CONTEXT_SEGMENTS = String.raw`(?:\/[a-z0-9][a-z0-9-]*)+`;
 
 export const CONTEXT_LIBRARY_MARKDOWN: PlanningPathShape = {
@@ -65,19 +66,44 @@ export const CONTEXT_LIBRARY_MARKDOWN: PlanningPathShape = {
   ),
 };
 
-export const TASK_GRAPH_MARKDOWN_SHAPES: readonly PlanningPathShape[] = [
+export const PRODUCT_CONTEXT_DOCUMENT_SHAPES: readonly PlanningPathShape[] = [
   CONTEXT_LIBRARY_MARKDOWN,
   {
-    name: 'Task Graph or What’s Next node resource',
+    name: 'Accepted Task Graph or Product Design output',
     pattern: new RegExp(
-      String.raw`^(?:task-graph|whats-next)\/nodes\/${NODE_ID}\/resources\/${MARKDOWN_FILE}$`,
+      String.raw`^(?:task-graph|whats-next)\/nodes\/${NODE_ID}\/output\.md$`,
       'i',
     ),
   },
   {
-    name: 'Task Graph or What’s Next node output',
+    name: 'Applied Domain Model summary',
     pattern: new RegExp(
-      String.raw`^(?:task-graph|whats-next)\/nodes\/${NODE_ID}\/output\.md$`,
+      String.raw`^domain-model\/runs\/${RUN_ID}\/summary\.md$`,
+      'i',
+    ),
+  },
+  {
+    name: 'Current Delivery Contract output',
+    pattern: new RegExp(
+      String.raw`^what-to-do\/runs\/${RUN_ID}\/contracts\/${NODE_ID}\/output\.md$`,
+      'i',
+    ),
+  },
+  {
+    name: 'Implementation Plan or accepted Action output',
+    pattern: new RegExp(
+      String.raw`^implementation\/cards\/${CARD_ID}\/[0-9]{8}\/(?:plan|output)\.md$`,
+      'i',
+    ),
+  },
+];
+
+export const TASK_GRAPH_MARKDOWN_SHAPES: readonly PlanningPathShape[] = [
+  ...PRODUCT_CONTEXT_DOCUMENT_SHAPES,
+  {
+    name: 'Task Graph or What’s Next node resource',
+    pattern: new RegExp(
+      String.raw`^(?:task-graph|whats-next)\/nodes\/${NODE_ID}\/resources\/${MARKDOWN_FILE}$`,
       'i',
     ),
   },
@@ -117,13 +143,6 @@ export const TASK_GRAPH_MARKDOWN_SHAPES: readonly PlanningPathShape[] = [
     ),
   },
   {
-    name: 'Domain Model Run summary',
-    pattern: new RegExp(
-      String.raw`^domain-model\/runs\/${RUN_ID}\/summary\.md$`,
-      'i',
-    ),
-  },
-  {
     name: 'What’s Next Run resource',
     pattern: new RegExp(
       String.raw`^whats-next\/runs\/${RUN_ID}\/resources\/${MARKDOWN_FILE}$`,
@@ -141,13 +160,6 @@ export const TASK_GRAPH_MARKDOWN_SHAPES: readonly PlanningPathShape[] = [
     name: 'What to Do Run response or summary',
     pattern: new RegExp(
       String.raw`^what-to-do\/runs\/${RUN_ID}\/(?:response|summary)\.md$`,
-      'i',
-    ),
-  },
-  {
-    name: 'What to Do Delivery Contract output',
-    pattern: new RegExp(
-      String.raw`^what-to-do\/runs\/${RUN_ID}\/contracts\/${NODE_ID}\/output\.md$`,
       'i',
     ),
   },

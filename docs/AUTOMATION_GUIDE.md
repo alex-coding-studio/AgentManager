@@ -144,8 +144,8 @@ Inspect:
 - project-directory validation and registry writes;
 - fixed planning-store initialization;
 - Git exclusion setup;
-- Context folder and document creation;
-- import, reveal, rename and deletion boundaries;
+- formal artifact indexing and category exclusion;
+- canonical Context reference boundaries;
 - repeated filesystem path validation;
 - project capability and repository fact discovery.
 
