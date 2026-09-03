@@ -50,19 +50,35 @@ export function WhatToDoWorkspace({
 }) {
   const { t } = useUiText();
   const router = useRouter();
+  const initialTerminal = initialRuns.find((run) => run.status !== 'running');
+  const initialClarification =
+    initialTerminal?.result?.outcome === 'clarification'
+      ? initialTerminal
+      : null;
   const [runs, setRuns] = useState(initialRuns);
   const [currentMap, setCurrentMap] = useState(initialMap);
-  const [sourceUids, setSourceUids] = useState(initialSourceUids);
-  const [focusContractIds, setFocusContractIds] = useState<string[]>([]);
+  const [sourceUids, setSourceUids] = useState([
+    ...new Set([
+      ...initialSourceUids,
+      ...(initialClarification?.sourceUids ?? []),
+    ]),
+  ]);
+  const [focusContractIds, setFocusContractIds] = useState<string[]>(
+    initialClarification?.focusContractIds ?? [],
+  );
   const [instruction, setInstruction] = useState('');
   const [clarificationOptionId, setClarificationOptionId] = useState('');
-  const [profile, setProfile] = useState<AgentProfile>({
-    agent: 'codex',
-    model: '',
-    effort: '',
-  });
+  const [profile, setProfile] = useState<AgentProfile>(
+    initialClarification?.profile ?? {
+      agent: 'codex',
+      model: '',
+      effort: '',
+    },
+  );
   const [folderPath, setFolderPath] = useState(folders[0]?.path ?? '');
-  const [contextRefs, setContextRefs] = useState<string[]>([]);
+  const [contextRefs, setContextRefs] = useState<string[]>(
+    initialClarification?.contextRefs ?? [],
+  );
   const [files, setFiles] = useState<File[]>([]);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState('');
@@ -107,6 +123,16 @@ export function WhatToDoWorkspace({
       runs: WhatToDoRunRecord[];
       currentMap: WhatToDoDeliveryMap | null;
     };
+    const nextTerminal = data.runs.find((run) => run.status !== 'running');
+    if (
+      nextTerminal?.result?.outcome === 'clarification' &&
+      nextTerminal.id !== latestTerminal?.id
+    ) {
+      setSourceUids(nextTerminal.sourceUids);
+      setFocusContractIds(nextTerminal.focusContractIds);
+      setContextRefs(nextTerminal.contextRefs);
+      setProfile(nextTerminal.profile);
+    }
     setRuns(data.runs);
     setCurrentMap(data.currentMap);
   }
@@ -226,10 +252,6 @@ export function WhatToDoWorkspace({
         ? `${answer}\n\n${supplementalInput.trim()}`
         : answer,
     );
-    setSourceUids(latestTerminal.sourceUids);
-    setFocusContractIds(latestTerminal.focusContractIds);
-    setContextRefs(latestTerminal.contextRefs);
-    setProfile(latestTerminal.profile);
   }
 
   const presentation = latestTerminal
@@ -285,6 +307,13 @@ export function WhatToDoWorkspace({
                   selectedId={clarificationOptionId}
                   onSelect={selectClarificationOption}
                 />
+              ) : null}
+              {latestTerminal.result?.outcome === 'clarification' ? (
+                <p className="text-[10px] leading-4 text-muted-foreground">
+                  {t(
+                    'Choose an option or write your own answer in the Composer.',
+                  )}
+                </p>
               ) : null}
               <LatestResponseActions
                 responseLabel={t('Response')}
