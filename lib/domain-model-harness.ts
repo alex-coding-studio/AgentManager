@@ -52,6 +52,7 @@ export type DomainModelAgentResult =
 export type DomainModelPatch = {
   upsertEntities: DomainEntity[];
   removeEntityIds: string[];
+  removeFieldIds: string[];
   upsertRelationships: DomainRelationship[];
   removeRelationshipIds: string[];
   upsertConstraints: DomainConstraint[];
@@ -103,7 +104,7 @@ Rules:
 - When REQUEST.model is a compact identifier index, this request continues the same provider Session; use the full model already present in Session Context and the index only to bind current stable IDs. A cold-start request contains the complete model.
 - Preserve every existing stable ENTITY-, FIELD-, RELATIONSHIP- and CONSTRAINT- identifier for meaning that remains the same.
 - For new objects use response-local references NEW_ENTITY_*, NEW_FIELD_*, NEW_RELATIONSHIP_* and NEW_CONSTRAINT_* only. The Host assigns permanent UUIDs.
-- For an applied result, return only a patch. Re-emit a whole Entity when any of its fields change, but omit every unchanged Entity, Relationship and Constraint. Remove existing objects only through the matching removeIds array. The Host composes the patch with the current model and validates the complete next state atomically.
+- For an applied result, return only a patch. Re-emit a whole Entity when its own meaning or any of its fields change, and include every retained Field of that Entity. Omit every unchanged Entity, Relationship and Constraint. Remove an Entity, Field, Relationship or Constraint only through its matching removeIds array. The Host composes the patch with the current model and validates the complete next state atomically.
 - Separate explicit user meaning from necessary inference. Use provenance explicit or inferred. Never return derived objects; the Host computes derived visualization.
 - Create an Entity only when it has independent identity, lifecycle, behavior or relationships. Do not turn every noun or field into an Entity.
 - Fields use display primary, secondary or system. Do not add generic IDs, timestamps, audit or soft-delete fields without a concrete current need.
@@ -116,7 +117,7 @@ Rules:
 - Do not edit files, run commands, inspect unrelated project code, start subagents or explain private reasoning.
 
 Return JSON only. Applied shape:
-{"harnessVersion":2,"requestId":"...","baseVersion":0,"inputFingerprint":"...","outcome":"applied","summary":"...","patch":{"upsertEntities":[{"id":"NEW_ENTITY_ITEM","name":"Item","meaning":"...","provenance":"explicit","fields":[{"id":"NEW_FIELD_TITLE","name":"title","meaning":"...","valueType":"text","required":true,"multiple":false,"display":"primary","provenance":"explicit"}]}],"removeEntityIds":[],"upsertRelationships":[],"removeRelationshipIds":[],"upsertConstraints":[],"removeConstraintIds":[]}}
+{"harnessVersion":2,"requestId":"...","baseVersion":0,"inputFingerprint":"...","outcome":"applied","summary":"...","patch":{"upsertEntities":[{"id":"NEW_ENTITY_ITEM","name":"Item","meaning":"...","provenance":"explicit","fields":[{"id":"NEW_FIELD_TITLE","name":"title","meaning":"...","valueType":"text","required":true,"multiple":false,"display":"primary","provenance":"explicit"}]}],"removeEntityIds":[],"removeFieldIds":[],"upsertRelationships":[],"removeRelationshipIds":[],"upsertConstraints":[],"removeConstraintIds":[]}}
 Clarification shape:
 {"harnessVersion":2,"requestId":"...","baseVersion":0,"inputFingerprint":"...","outcome":"clarification","summary":"...","question":"..."}
 No-change shape:
@@ -184,6 +185,7 @@ export function parseDomainModelResult(
         model: applyDomainModelPatch(request.model, value.patch),
       } as DomainModelAgentResult;
     }
+    assertLegacyModelCoverage(request.model, value.model!);
   }
   if (
     value.outcome === 'clarification' &&
@@ -206,15 +208,22 @@ export function applyDomainModelPatch(
     !patch ||
     !Array.isArray(patch.upsertEntities) ||
     !Array.isArray(patch.removeEntityIds) ||
+    !Array.isArray(patch.removeFieldIds) ||
     !Array.isArray(patch.upsertRelationships) ||
     !Array.isArray(patch.removeRelationshipIds) ||
     !Array.isArray(patch.upsertConstraints) ||
     !Array.isArray(patch.removeConstraintIds)
   )
     throw new Error('The Domain Model patch is invalid.');
+  const entitiesWithFieldRemovals = applyFieldRemovals(
+    current.entities,
+    patch.upsertEntities,
+    patch.removeEntityIds,
+    patch.removeFieldIds,
+  );
   return {
     entities: patchCollection(
-      current.entities,
+      entitiesWithFieldRemovals,
       patch.upsertEntities,
       patch.removeEntityIds,
       'Entity',
@@ -232,6 +241,81 @@ export function applyDomainModelPatch(
       'Constraint',
     ),
   };
+}
+
+function applyFieldRemovals(
+  current: DomainEntity[],
+  upserts: DomainEntity[],
+  removeEntityIds: string[],
+  removeFieldIds: string[],
+) {
+  if (new Set(removeFieldIds).size !== removeFieldIds.length)
+    throw new Error('Field removal identifiers must be unique.');
+  const fieldOwners = new Map(
+    current.flatMap((entity) =>
+      entity.fields.map((field) => [field.id, entity.id] as const),
+    ),
+  );
+  if (removeFieldIds.some((id) => !fieldOwners.has(id)))
+    throw new Error('Field patch removes an unknown identifier.');
+  const removedEntities = new Set(removeEntityIds);
+  if (removeFieldIds.some((id) => removedEntities.has(fieldOwners.get(id)!)))
+    throw new Error('A removed Entity cannot also remove one of its Fields.');
+  const removedFields = new Set(removeFieldIds);
+  const entities = current.map((entity) => ({
+    ...entity,
+    fields: entity.fields.filter((field) => !removedFields.has(field.id)),
+  }));
+  const currentById = new Map(entities.map((entity) => [entity.id, entity]));
+  for (const entity of upserts) {
+    const existing = currentById.get(entity.id);
+    if (!existing) continue;
+    const incomingIds = new Set(entity.fields.map((field) => field.id));
+    if (entity.fields.some((field) => removedFields.has(field.id)))
+      throw new Error('A Field cannot be updated and removed together.');
+    if (existing.fields.some((field) => !incomingIds.has(field.id)))
+      throw new Error(
+        'An Entity patch must preserve every Field not explicitly removed.',
+      );
+  }
+  return entities;
+}
+
+function assertLegacyModelCoverage(
+  current: DomainModel,
+  proposed: ProposedDomainModel,
+) {
+  assertIdentifiersCovered(current.entities, proposed.entities, 'Entity');
+  const proposedEntities = new Map(
+    proposed.entities.map((entity) => [entity.id, entity]),
+  );
+  for (const entity of current.entities) {
+    const proposedEntity = proposedEntities.get(entity.id);
+    if (proposedEntity)
+      assertIdentifiersCovered(entity.fields, proposedEntity.fields, 'Field');
+  }
+  assertIdentifiersCovered(
+    current.relationships,
+    proposed.relationships,
+    'Relationship',
+  );
+  assertIdentifiersCovered(
+    current.constraints,
+    proposed.constraints,
+    'Constraint',
+  );
+}
+
+function assertIdentifiersCovered<T extends { id: string }>(
+  current: T[],
+  proposed: T[],
+  label: string,
+) {
+  const proposedIds = new Set(proposed.map((item) => item.id));
+  if (current.some((item) => !proposedIds.has(item.id)))
+    throw new Error(
+      `A legacy full-model response cannot omit an existing ${label}.`,
+    );
 }
 
 function patchCollection<T extends { id: string }>(

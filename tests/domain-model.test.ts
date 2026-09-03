@@ -209,10 +209,25 @@ void test('an applied model allocates stable identities and derives self-contain
 });
 
 void test('the Domain Model Harness composes one incremental patch', () => {
+  const proposal = initialProposal();
   const current = {
     schemaVersion: 1 as const,
     stateVersion: 4,
-    ...initialProposal(),
+    ...proposal,
+    entities: [
+      {
+        ...proposal.entities[0]!,
+        fields: [
+          ...proposal.entities[0]!.fields,
+          {
+            ...proposal.entities[0]!.fields[0]!,
+            id: 'NEW_FIELD_NOTE',
+            name: 'note',
+          },
+        ],
+      },
+      proposal.entities[1]!,
+    ],
     lastRunId: 'RUN-current',
     updatedAt: '2026-09-03T00:00:00.000Z',
   };
@@ -237,6 +252,7 @@ void test('the Domain Model Harness composes one incremental patch', () => {
     patch: {
       upsertEntities: [updatedItem],
       removeEntityIds: [],
+      removeFieldIds: [],
       upsertRelationships: [],
       removeRelationshipIds: [],
       upsertConstraints: [],
@@ -258,7 +274,7 @@ void test('the Domain Model Harness composes one incremental patch', () => {
     assert.deepEqual(result.model.constraints, current.constraints);
   }
   assert.match(domainModelPrompt(request), /return only a patch/i);
-  assert.match(domainModelPrompt(request), /omit every unchanged Entity/);
+  assert.match(domainModelPrompt(request), /omit every unchanged Entity/i);
   assert.throws(
     () =>
       parseDomainModelResult(
@@ -266,6 +282,54 @@ void test('the Domain Model Harness composes one incremental patch', () => {
         request,
       ),
     /exactly one model or patch/,
+  );
+  assert.throws(
+    () =>
+      parseDomainModelResult(
+        JSON.stringify({
+          ...output,
+          patch: {
+            ...output.patch,
+            upsertEntities: [
+              { ...updatedItem, fields: updatedItem.fields.slice(0, 1) },
+            ],
+          },
+        }),
+        request,
+      ),
+    /preserve every Field/,
+  );
+  const removedField = parseDomainModelResult(
+    JSON.stringify({
+      ...output,
+      patch: {
+        ...output.patch,
+        upsertEntities: [
+          { ...updatedItem, fields: updatedItem.fields.slice(0, 1) },
+        ],
+        removeFieldIds: [updatedItem.fields[1]!.id],
+      },
+    }),
+    request,
+  );
+  assert.equal(removedField.outcome, 'applied');
+  if (removedField.outcome === 'applied')
+    assert.equal(removedField.model.entities[0]!.fields.length, 1);
+  assert.throws(
+    () =>
+      parseDomainModelResult(
+        JSON.stringify({
+          ...output,
+          patch: undefined,
+          model: {
+            entities: [updatedItem],
+            relationships: current.relationships,
+            constraints: current.constraints,
+          },
+        }),
+        request,
+      ),
+    /cannot omit an existing Entity/,
   );
 });
 
