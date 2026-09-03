@@ -37,7 +37,7 @@ import {
   ProposalWorkspaceStatus,
 } from '@/components/agent-graph-proposal-workspace';
 import type { AgentProfile } from '@/lib/agent-profile';
-import { MarkdownReader } from '@/components/markdown-reader';
+import { MarkdownReaderDialog } from '@/components/markdown-reader-dialog';
 import { ProjectModuleHeader } from '@/components/project-module-header';
 import {
   NodeProvenanceFacts,
@@ -2175,28 +2175,12 @@ export function TaskDecompositionWorkspace({
         </AlertDialogContent>
       </AlertDialog>
 
-      <Dialog
-        open={preview !== null}
-        onOpenChange={(open) => {
-          if (!open) setPreview(null);
-        }}
-      >
-        <DialogContent
-          showCloseButton={false}
-          className="max-h-[88vh] overflow-y-auto p-0 sm:max-w-5xl"
-        >
-          {preview ? (
-            <MarkdownReader
-              title={preview.title}
-              filePath={preview.path}
-              markdown={preview.markdown}
-              onClose={() => setPreview(null)}
-              showFocusButton={false}
-              className="min-h-[70vh] border-0 shadow-none"
-            />
-          ) : null}
-        </DialogContent>
-      </Dialog>
+      <MarkdownReaderDialog
+        preview={preview}
+        onClose={() => setPreview(null)}
+        showFocusButton={false}
+        readerClassName="min-h-[70vh]"
+      />
     </div>
   );
 }

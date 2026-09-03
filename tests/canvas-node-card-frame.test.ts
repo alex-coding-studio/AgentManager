@@ -742,3 +742,26 @@ void test('the standard Agent Composer owns one collapsible panel control', asyn
   assert.match(source, /<Sparkles/);
   assert.match(source, /setCollapsed\(false\)/);
 });
+
+void test('Latest Response Markdown uses one standard reader shell and close control', async () => {
+  const dialog = await readFile(
+    new URL('../components/markdown-reader-dialog.tsx', import.meta.url),
+    'utf8',
+  );
+  assert.match(dialog, /showCloseButton=\{false\}/);
+  assert.match(dialog, /bg-transparent p-0 ring-0/);
+  assert.match(dialog, /<MarkdownReader/);
+  assert.match(dialog, /onClose=\{onClose\}/);
+  for (const file of [
+    'whats-next-workspace.tsx',
+    'task-decomposition-workspace.tsx',
+    'domain-model-workspace.tsx',
+    'what-to-do-workspace.tsx',
+  ]) {
+    const source = await readFile(
+      new URL(`../components/${file}`, import.meta.url),
+      'utf8',
+    );
+    assert.match(source, /<MarkdownReaderDialog/, file);
+  }
+});
