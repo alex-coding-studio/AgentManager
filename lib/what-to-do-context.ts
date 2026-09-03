@@ -235,6 +235,25 @@ export async function prepareWhatToDoContext(
     (entry) => entry.kind === 'user-input',
   );
   if (!inputEntry) throw new Error('What to Do Packet has no User Input.');
+  const manifestEntries = [
+    ...workspace.manifest.primary,
+    ...workspace.manifest.related,
+  ];
+  const sourceContents = await Promise.all(
+    manifestEntries.map(
+      async (entry) =>
+        [
+          entry.logicalPath,
+          {
+            sha256: entry.sha256,
+            content: await readFile(
+              path.join(workspace.root, entry.workspacePath),
+              'utf8',
+            ),
+          },
+        ] as const,
+    ),
+  );
   return {
     workspace,
     packet,
@@ -246,27 +265,12 @@ export async function prepareWhatToDoContext(
       sha256: inputEntry.sha256,
       content: userInput.content,
     },
-    knownSources: Object.fromEntries(
-      sourceInputs.map((entry) => [
-        entry.logicalPath,
-        {
-          sha256: createHash('sha256').update(entry.content).digest('hex'),
-          content: entry.content,
-        },
-      ]),
-    ),
-    sourceSnapshots: [
-      ...workspace.manifest.primary,
-      ...workspace.manifest.related,
-    ]
-      .filter((entry) =>
-        sourceInputs.some((source) => source.logicalPath === entry.logicalPath),
-      )
-      .map((entry) => ({
-        logicalPath: entry.logicalPath,
-        sha256: entry.sha256,
-        storedPath: `what-to-do/runs/${runId}/context/${entry.workspacePath}`,
-      })),
+    knownSources: Object.fromEntries(sourceContents),
+    sourceSnapshots: manifestEntries.map((entry) => ({
+      logicalPath: entry.logicalPath,
+      sha256: entry.sha256,
+      storedPath: `what-to-do/runs/${runId}/context/${entry.workspacePath}`,
+    })),
     requiredSourcePaths: [
       ...new Set([
         ...sources.map((source) => source.outputPath),
@@ -274,6 +278,9 @@ export async function prepareWhatToDoContext(
       ]),
     ],
     knownEvidencePaths: knownEvidencePaths(workspace.manifest),
+    evidencePathAliases: Object.fromEntries(
+      manifestEntries.map((entry) => [entry.workspacePath, entry.logicalPath]),
+    ),
   };
 }
 

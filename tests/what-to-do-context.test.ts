@@ -101,9 +101,21 @@ void test('What to Do prepares one frozen standard Packet', async (t) => {
 
   assert.equal(prepared.packet.input?.kind, 'user-input');
   assert.match(prepared.userInput.content, /delivery boundaries/);
-  assert.deepEqual(Object.keys(prepared.knownSources), [
-    'whats-next/nodes/NODE-00000001/output.md',
-  ]);
+  assert.ok(
+    Object.keys(prepared.knownSources).includes(
+      'whats-next/nodes/NODE-00000001/output.md',
+    ),
+  );
+  assert.ok(
+    Object.keys(prepared.knownSources).includes(
+      `what-to-do/runs/${runId}/context/input/user-input.md`,
+    ),
+  );
+  assert.ok(
+    Object.keys(prepared.knownSources).includes(
+      'domain-model/domain-model.json',
+    ),
+  );
   assert.match(
     prepared.knownSources['whats-next/nodes/NODE-00000001/output.md']
       ?.content ?? '',
@@ -154,6 +166,13 @@ void test('What to Do prepares one frozen standard Packet', async (t) => {
   assert.ok(prepared.knownEvidencePaths.includes('repository/AGENTS.md'));
   assert.ok(prepared.knownEvidencePaths.includes('repository/src/index.ts'));
   assert.equal(prepared.knownEvidencePaths.includes('README.md'), false);
+  const featureEntry = prepared.packet.references.find(
+    (entry) => entry.kind === 'product-design-feature',
+  );
+  assert.equal(
+    prepared.evidencePathAliases[featureEntry!.workspacePath],
+    'whats-next/nodes/NODE-00000001/output.md',
+  );
 
   const index = JSON.parse(
     await readFile(

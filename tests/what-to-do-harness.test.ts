@@ -260,20 +260,12 @@ void test('binds results, evidence and claims to the frozen request', () => {
   );
 });
 
-void test('rejects missing, one-way and unauthorized source coverage', () => {
+void test('rejects missing and unauthorized source coverage', () => {
   const missing = proposal();
   if (missing.outcome === 'map-proposal') missing.sourceClaims = [];
   assert.throws(
     () => validateWhatToDoHarnessResult(missing, context()),
     WhatToDoResultValidationError,
-  );
-
-  const oneWay = proposal();
-  if (oneWay.outcome === 'map-proposal')
-    oneWay.sourceClaims[0]!.contractCandidateIds = [];
-  assert.throws(
-    () => validateWhatToDoHarnessResult(oneWay, context()),
-    /bidirectional/,
   );
 
   const excluded = proposal(
@@ -309,6 +301,19 @@ void test('rejects missing, one-way and unauthorized source coverage', () => {
     validateWhatToDoHarnessResult(excluded, context()).outcome,
     'map-proposal',
   );
+});
+
+void test('normalizes a valid one-sided Source Claim assignment', () => {
+  const result = proposal();
+  result.sourceClaims[0]!.contractCandidateIds = [];
+
+  const validated = validateWhatToDoHarnessResult(result, context());
+
+  assert.equal(validated.outcome, 'map-proposal');
+  if (validated.outcome === 'map-proposal')
+    assert.deepEqual(validated.sourceClaims[0]!.contractCandidateIds, [
+      'CANDIDATE-0001',
+    ]);
 });
 
 void test('rejects fabricated dependencies and cycles', () => {
@@ -405,7 +410,13 @@ void test('adjustment covers the complete existing Map while focus stays advisor
 void test('new Maps reject Recompose and adjusted Maps require it', () => {
   const withEffects = proposal(undefined, {
     recomposition: {
-      effects: [{ kind: 'add', from: [], to: ['CANDIDATE-0001'] }],
+      effects: [
+        {
+          kind: 'replace',
+          from: ['CANDIDATE-0002'],
+          to: ['CANDIDATE-0001'],
+        },
+      ],
     },
   });
   assert.throws(
@@ -423,6 +434,26 @@ void test('new Maps reject Recompose and adjusted Maps require it', () => {
       ),
     /requires Recompose/,
   );
+});
+
+void test('new Maps discard a redundant add-only Recompose envelope', () => {
+  const result = proposal(undefined, {
+    recomposition: {
+      effects: [
+        {
+          kind: 'add',
+          from: [],
+          to: ['CANDIDATE-0001'],
+        },
+      ],
+    },
+  });
+
+  const validated = validateWhatToDoHarnessResult(result, context());
+
+  assert.equal(validated.outcome, 'map-proposal');
+  if (validated.outcome === 'map-proposal')
+    assert.equal(validated.recomposition, undefined);
 });
 
 void test('adjustment preserves prior claims and reserves old identity for retain only', () => {
@@ -577,4 +608,40 @@ void test('clarification recommends one option and parsing rejects prose', () =>
     () => parseWhatToDoHarnessResult('Here is the map', context()),
     /valid JSON/,
   );
+});
+
+void test('normalizes packet workspace paths before validating evidence', () => {
+  const result = proposal();
+  result.repositorySummary.evidencePaths = ['related/resources/facts.json'];
+  result.reviewedEvidence = [
+    { path: 'primary/002-output.md', reason: 'Reviewed the selected Feature.' },
+  ];
+  if (result.outcome === 'map-proposal') {
+    result.candidates[0]!.domainImpact.evidencePaths = [
+      'related/resources/facts.json',
+    ];
+    result.sourceClaims[0]!.sourcePath = 'primary/002-output.md';
+  }
+
+  const validated = validateWhatToDoHarnessResult(
+    result,
+    context({
+      evidencePathAliases: {
+        'primary/002-output.md': sourcePath,
+        'related/resources/facts.json': evidencePath,
+      },
+    }),
+  );
+
+  assert.deepEqual(validated.repositorySummary.evidencePaths, [evidencePath]);
+  assert.deepEqual(
+    validated.reviewedEvidence.map((entry) => entry.path),
+    [sourcePath],
+  );
+  if (validated.outcome === 'map-proposal') {
+    assert.deepEqual(validated.candidates[0]!.domainImpact.evidencePaths, [
+      evidencePath,
+    ]);
+    assert.equal(validated.sourceClaims[0]!.sourcePath, sourcePath);
+  }
 });
