@@ -6,7 +6,7 @@
     "praxis": "./bin/praxis.mjs"
   },
   "engines": {
-    "node": ">=22.13.0"
+    "node": ">=26 <27"
   },
   "scripts": {
     "dev": "next dev",

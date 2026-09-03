@@ -59,7 +59,7 @@ Scope Decomposition's persistent context area accepts Markdown or JSON.
 
 ## Requirements
 
-- Node.js 22.13 or later
+- Node.js 26
 - npm
 - A locally installed and authenticated Codex CLI or Claude CLI for Agent
   operations across Product Discovery & Design, Scope Decomposition, Domain Modeling,
