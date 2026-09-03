@@ -35,7 +35,10 @@ function freePort(): Promise<number> {
   });
 }
 
-const READY_STUB = 'console.log("READY");\nsetInterval(() => {}, 1000);\n';
+const READY_STUB = `import net from 'node:net';
+const server = net.createServer();
+server.listen(Number(process.env.PRAXIS_RUNTIME_PORT), '127.0.0.1', () => console.log('READY'));
+`;
 const QUIET_STUB = 'setInterval(() => {}, 1000);\n';
 
 function isolatedEnv(
@@ -122,7 +125,10 @@ void test('an unknown command fails with usage', () => {
 void test('stop without a managed server fails', () => {
   const result = run(['stop', '--port', '34501'], isolatedEnv());
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /No managed Praxis server on port 34501/);
+  assert.match(
+    result.stderr,
+    /No managed background Praxis server on port 34501/,
+  );
 });
 
 void test('start without a build fails before launching', async () => {
@@ -156,6 +162,13 @@ void test('start, status, logs, restart and stop manage one detached server', as
     assert.equal(logs.status, 0);
     assert.match(logs.stdout, /READY/);
 
+    const unsupported = run(
+      ['restart', '--port', port, '--hostname', '0.0.0.0'],
+      env,
+    );
+    assert.equal(unsupported.status, 1);
+    assert.match(unsupported.stderr, /Unexpected argument for 'restart'/);
+
     const restarted = run(['restart', '--port', port], env);
     assert.equal(restarted.status, 0, restarted.stderr);
 
@@ -165,7 +178,7 @@ void test('start, status, logs, restart and stop manage one detached server', as
 
     const after = run(['status', '--port', port], env);
     assert.equal(after.status, 1);
-    assert.match(after.stdout, /No managed Praxis server/);
+    assert.match(after.stdout, /No managed background Praxis server/);
   } finally {
     stop();
   }
@@ -189,6 +202,10 @@ void test('the bare command shows help instead of starting', () => {
   const result = run([]);
   assert.equal(result.status, 0);
   assert.match(result.stdout, /praxis start \[options\]/);
+
+  const implicit = run(['--port', '3100']);
+  assert.equal(implicit.status, 1);
+  assert.match(implicit.stderr, /Unknown command: --port/);
 });
 
 void test('stop never signals an unrelated live process', async () => {
@@ -227,7 +244,7 @@ void test('stop never signals an unrelated live process', async () => {
   }
 });
 
-void test('stop ends a foreground server by its own pid', async () => {
+void test('foreground servers stay attached to their terminal and unmanaged', async () => {
   const env = isolatedEnv();
   const port = String(await freePort());
   const wrapper = spawn(process.execPath, [cli, 'start', '--port', port], {
@@ -238,33 +255,16 @@ void test('stop ends a foreground server by its own pid', async () => {
   wrapper.stdout?.resume();
   wrapper.stderr?.resume();
   try {
-    const appeared = await waitFor(() => existsSync(stateFile(env, port)));
-    assert.ok(appeared, 'the foreground server should record its state');
-    const serverPid = readStatePid(env, port);
-    assert.notEqual(serverPid, wrapper.pid);
-    assert.ok(alive(serverPid));
-    const stopped = run(['stop', '--port', port], env);
-    assert.equal(stopped.status, 0, stopped.stderr);
-    assert.ok(
-      await waitFor(() => !alive(serverPid)),
-      'the server child must be gone',
-    );
-    const wrapperExit = await new Promise((resolve) => {
-      const timer = setTimeout(() => resolve('timeout'), 10_000);
-      wrapper.on('exit', () => {
-        clearTimeout(timer);
-        resolve('exited');
-      });
-    });
-    assert.equal(wrapperExit, 'exited', 'the wrapper must exit with its child');
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    assert.ok(!existsSync(stateFile(env, port)));
+    const status = run(['status', '--port', port], env);
+    assert.equal(status.status, 1);
+    assert.match(status.stdout, /No managed background Praxis server/);
   } finally {
-    try {
-      if (existsSync(stateFile(env, port))) {
-        run(['stop', '--port', port], env);
-      }
-    } finally {
-      if (wrapper.exitCode === null) wrapper.kill('SIGKILL');
-    }
+    if (wrapper.exitCode === null) wrapper.kill('SIGTERM');
+    await waitFor(
+      () => wrapper.exitCode !== null || wrapper.signalCode !== null,
+    );
   }
 });
 
@@ -289,4 +289,25 @@ void test('stale log output cannot fake readiness', async () => {
     !existsSync(stateFile(env, port)),
     'failed launches must not keep state',
   );
+});
+
+void test('stop reports a timeout without escalating to SIGKILL', async () => {
+  const stubbornStub = `import net from 'node:net';
+process.on('SIGTERM', () => {});
+net.createServer().listen(Number(process.env.PRAXIS_RUNTIME_PORT), '127.0.0.1');
+`;
+  const env = isolatedEnv(stubbornStub, { PRAXIS_STOP_GRACE_MS: '300' });
+  const port = String(await freePort());
+  const started = run(['start', '-d', '--port', port], env);
+  assert.equal(started.status, 0, started.stderr);
+  const pid = readStatePid(env, port);
+  try {
+    const stopped = run(['stop', '--port', port], env);
+    assert.equal(stopped.status, 1);
+    assert.match(stopped.stderr, /did not stop within 300ms/);
+    assert.ok(alive(pid));
+    assert.ok(existsSync(stateFile(env, port)));
+  } finally {
+    process.kill(pid, 'SIGKILL');
+  }
 });

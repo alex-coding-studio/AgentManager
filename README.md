@@ -104,8 +104,10 @@ praxis restart --port 3100
 praxis stop --port 3100
 ```
 
-Only processes started by `praxis start` (or `dev`) are managed. Runtime
-state and logs live under `PRAXIS_HOME/run` (`~/.praxis/run` by default).
+Lifecycle commands manage only processes started with `--detach`. Foreground
+servers remain attached to their terminal. `restart` reuses the stored launch
+configuration exactly; `--port` only selects an instance. Runtime state and
+logs live under `PRAXIS_HOME/run` (`~/.praxis/run` by default).
 
 Run `praxis --help` to see the supported command forms.
 

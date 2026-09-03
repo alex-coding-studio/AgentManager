@@ -13,6 +13,7 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
+import net from 'node:net';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -22,7 +23,6 @@ const packageRoot = path.resolve(
   '..',
 );
 const DEFAULT_PORT = 3000;
-const READY_PATTERN = /ready/i;
 const DEFAULT_READY_TIMEOUT_MS = 10_000;
 const STOP_GRACE_MS = 5_000;
 const LOG_TAIL_BYTES = 256 * 1024;
@@ -65,8 +65,14 @@ async function main(rawArgs) {
 }
 
 function parseArgs(argv) {
-  const command =
-    argv[0]?.startsWith('-') || argv[0] === '--' ? 'start' : argv.shift();
+  const command = argv.shift();
+  if (
+    !['start', 'dev', 'stop', 'restart', 'status', 'logs'].includes(command)
+  ) {
+    console.error(`Unknown command: ${command}`);
+    printHelp();
+    process.exit(1);
+  }
   const result = {
     command,
     detach: false,
@@ -75,6 +81,7 @@ function parseArgs(argv) {
     portGiven: false,
     hostname: null,
     lines: 50,
+    linesGiven: false,
     nextArgs: [],
   };
   const forwardsArgs = result.command === 'start' || result.command === 'dev';
@@ -93,8 +100,10 @@ function parseArgs(argv) {
     } else if (arg === '-n' || arg === '--lines') {
       index += 1;
       result.lines = readCount(argv[index]);
+      result.linesGiven = true;
     } else if (arg.startsWith('--lines=')) {
       result.lines = readCount(arg.slice('--lines='.length));
+      result.linesGiven = true;
     } else if (
       arg === '-p' ||
       arg === '--port' ||
@@ -115,15 +124,28 @@ function parseArgs(argv) {
       `Unexpected argument for '${result.command}': ${unexpected.join(' ')}`,
     );
   }
-  if (result.command === 'restart' && result.follow) {
-    fail("'restart' does not accept --follow.");
-  }
   if (
-    (result.command === 'stop' || result.command === 'status') &&
-    (result.detach || result.follow || result.nextArgs.length > 0)
+    (result.command === 'stop' ||
+      result.command === 'status' ||
+      result.command === 'restart') &&
+    (result.detach ||
+      result.follow ||
+      result.linesGiven ||
+      result.hostname !== null ||
+      result.nextArgs.length > 0)
   ) {
     fail(`Unexpected argument for '${result.command}'.`);
   }
+  if (
+    (result.command === 'start' || result.command === 'dev') &&
+    (result.follow || result.linesGiven)
+  )
+    fail(`Unexpected argument for '${result.command}'.`);
+  if (
+    result.command === 'logs' &&
+    (result.detach || result.hostname !== null || result.nextArgs.length > 0)
+  )
+    fail("Unexpected argument for 'logs'.");
   return result;
 }
 
@@ -198,7 +220,19 @@ function readState(port) {
   const file = statePath(port);
   if (!existsSync(file)) return null;
   try {
-    return JSON.parse(readFileSync(file, 'utf8'));
+    const state = JSON.parse(readFileSync(file, 'utf8'));
+    if (
+      state?.schemaVersion !== 1 ||
+      state.detached !== true ||
+      !Number.isInteger(state.pid) ||
+      !Number.isInteger(state.port) ||
+      typeof state.startMarker !== 'string' ||
+      !['start', 'dev'].includes(state.mode) ||
+      !Array.isArray(state.nextArgs) ||
+      !state.nextArgs.every((arg) => typeof arg === 'string')
+    )
+      return null;
+    return state;
   } catch {
     return null;
   }
@@ -232,6 +266,14 @@ function readyTimeoutMs() {
   return value;
 }
 
+function stopGraceMs() {
+  const raw = process.env.PRAXIS_STOP_GRACE_MS;
+  if (raw === undefined || raw === '') return STOP_GRACE_MS;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value <= 0) return STOP_GRACE_MS;
+  return value;
+}
+
 function processStartMarker(pid) {
   if (!Number.isInteger(pid)) return null;
   try {
@@ -254,20 +296,14 @@ function verifyState(state) {
   return marker === state.startMarker ? 'live' : 'mismatch';
 }
 
-async function killTree(pid) {
-  if (!isAlive(pid)) return;
+async function terminateProcess(pid) {
+  if (!isAlive(pid)) return true;
   try {
     process.kill(pid, 'SIGTERM');
   } catch {
-    return;
+    return !isAlive(pid);
   }
-  if (await waitForGone(pid, STOP_GRACE_MS)) return;
-  try {
-    process.kill(pid, 'SIGKILL');
-  } catch {
-    return;
-  }
-  await waitForGone(pid, STOP_GRACE_MS);
+  return waitForGone(pid, stopGraceMs());
 }
 
 async function waitForGone(pid, timeoutMs) {
@@ -311,7 +347,7 @@ async function startServer(parsed, stored) {
 
   let server;
   if (stub) {
-    server = { command: process.execPath, args: [stub] };
+    server = { command: process.execPath, args: [stub, ...nextArgs] };
   } else {
     if (
       mode === 'start' &&
@@ -342,15 +378,15 @@ async function startServer(parsed, stored) {
     };
   }
 
-  mkdirSync(runDir(), { recursive: true });
-  const logOffset = existsSync(logPath(port))
-    ? statSync(logPath(port)).size
-    : 0;
   if (detach) {
+    mkdirSync(runDir(), { recursive: true });
+    const logOffset = existsSync(logPath(port))
+      ? statSync(logPath(port)).size
+      : 0;
     const logFd = openSync(logPath(port), 'a');
     const child = spawn(server.command, server.args, {
       cwd: packageRoot,
-      env: process.env,
+      env: serverEnvironment(port, hostname),
       detached: true,
       stdio: ['ignore', logFd, logFd],
     });
@@ -359,7 +395,7 @@ async function startServer(parsed, stored) {
       fail('Could not start Praxis: detached process has no pid.');
     const startMarker = processStartMarker(child.pid);
     if (startMarker === null) {
-      await killTree(child.pid);
+      await terminateProcess(child.pid);
       fail(
         `Could not verify the identity of the started process (pid ${child.pid}); stopped it.`,
       );
@@ -380,15 +416,17 @@ async function startServer(parsed, stored) {
       startedAt: new Date().toISOString(),
     };
     writeFileSync(statePath(port), `${JSON.stringify(state, null, 2)}\n`);
-    const outcome = await waitForReady(child.pid, port, logOffset);
+    const outcome = await waitForReady(child.pid, port, hostname);
     if (outcome !== 'ready') {
-      await killTree(child.pid);
-      rmSync(statePath(port), { force: true });
+      const stopped = await terminateProcess(child.pid);
+      if (stopped) rmSync(statePath(port), { force: true });
       const reason =
         outcome === 'dead'
           ? `Praxis on ${describeTarget(port)} (pid ${child.pid}) exited during startup.`
-          : `Praxis on ${describeTarget(port)} (pid ${child.pid}) did not become ready within ${readyTimeoutMs()}ms; stopped it.`;
-      console.error(reason);
+          : `Praxis on ${describeTarget(port)} (pid ${child.pid}) did not become ready within ${readyTimeoutMs()}ms.`;
+      console.error(
+        `${reason}${stopped ? ' Stopped it.' : ' It did not stop; managed state was retained.'}`,
+      );
       console.error(`New log output from ${logPath(port)}:`);
       for (const line of readNewLines(logPath(port), logOffset, 20))
         console.error(`  ${line}`);
@@ -401,78 +439,22 @@ async function startServer(parsed, stored) {
     return;
   }
 
-  let managedPid = process.pid;
-  const release = () => {
-    const current = readState(port);
-    if (current && current.pid === managedPid)
-      rmSync(statePath(port), { force: true });
-  };
   const child = spawn(server.command, server.args, {
     cwd: packageRoot,
-    env: process.env,
+    env: serverEnvironment(port, hostname),
     stdio: 'inherit',
   });
-  child.on('error', (error) => {
-    release();
-    fail(`Could not start Praxis: ${error.message}`);
-  });
-  if (child.pid) {
-    const startMarker = processStartMarker(child.pid);
-    if (startMarker === null) {
-      try {
-        child.kill('SIGKILL');
-      } catch {
-        /* already gone */
-      }
-      release();
-      fail(
-        `Could not verify the identity of the started process (pid ${child.pid}); stopped it.`,
-      );
-    }
-    managedPid = child.pid;
-    writeFileSync(
-      statePath(port),
-      `${JSON.stringify(
-        {
-          schemaVersion: 1,
-          pid: child.pid,
-          startMarker,
-          port,
-          hostname,
-          mode,
-          detached: false,
-          nextArgs,
-          startedAt: new Date().toISOString(),
-        },
-        null,
-        2,
-      )}\n`,
-    );
-    const forward = (signal) => {
-      try {
-        child.kill(signal);
-      } catch {
-        /* child already gone; its exit handler ends the wrapper */
-      }
-    };
-    const onSigint = () => forward('SIGINT');
-    const onSigterm = () => forward('SIGTERM');
-    process.on('SIGINT', onSigint);
-    process.on('SIGTERM', onSigterm);
-    child.on('exit', (code, signal) => {
-      release();
-      process.removeListener('SIGINT', onSigint);
-      process.removeListener('SIGTERM', onSigterm);
-      if (signal) {
-        process.kill(process.pid, signal);
-        return;
-      }
-      process.exit(code ?? 0);
-    });
-    return;
-  }
+  child.on('error', (error) =>
+    fail(`Could not start Praxis: ${error.message}`),
+  );
+  const forward = (signal) => child.kill(signal);
+  const onSigint = () => forward('SIGINT');
+  const onSigterm = () => forward('SIGTERM');
+  process.on('SIGINT', onSigint);
+  process.on('SIGTERM', onSigterm);
   child.on('exit', (code, signal) => {
-    release();
+    process.removeListener('SIGINT', onSigint);
+    process.removeListener('SIGTERM', onSigterm);
     if (signal) {
       process.kill(process.pid, signal);
       return;
@@ -484,7 +466,7 @@ async function startServer(parsed, stored) {
 async function stopServer(port) {
   const state = readState(port);
   if (!state) {
-    fail(`No managed Praxis server on ${describeTarget(port)}.`);
+    fail(`No managed background Praxis server on ${describeTarget(port)}.`);
   }
   const verdict = verifyState(state);
   if (verdict === 'dead') {
@@ -504,15 +486,16 @@ async function stopServer(port) {
         `Inspect it manually, or remove ${statePath(port)} once you are sure it is not Praxis.`,
     );
   }
-  await killTree(state.pid);
-  if (!isAlive(state.pid)) {
+  if (await terminateProcess(state.pid)) {
     rmSync(statePath(port), { force: true });
     console.log(
       `Stopped Praxis on ${describeTarget(port)} (pid ${state.pid}).`,
     );
     return;
   }
-  fail(`Could not stop pid ${state.pid}; it is still running.`);
+  fail(
+    `Praxis on ${describeTarget(port)} did not stop within ${stopGraceMs()}ms; managed state was retained.`,
+  );
 }
 
 async function restartServer(parsed) {
@@ -521,23 +504,32 @@ async function restartServer(parsed) {
     states = states.filter((state) => state.port === parsed.port);
     if (states.length === 0) {
       fail(
-        `No managed Praxis server on ${describeTarget(parsed.port)}. Run 'praxis start' first.`,
+        `No managed background Praxis server on ${describeTarget(parsed.port)}. Run 'praxis start --detach' first.`,
       );
     }
   }
   if (states.length === 0) {
-    fail("No managed Praxis server to restart. Run 'praxis start' first.");
+    fail(
+      "No managed background Praxis server to restart. Run 'praxis start --detach' first.",
+    );
   }
   if (states.length > 1) {
     const ports = states.map((state) => state.port).join(', ');
     fail(
-      `Several servers are running (ports ${ports}). Run 'praxis restart --port <n>'.`,
+      `Several background servers are running (ports ${ports}). Run 'praxis restart --port <n>'.`,
     );
   }
   const previous = states[0];
   await stopServer(previous.port);
   await startServer(
-    { ...parsed, command: previous.mode, port: previous.port },
+    {
+      ...parsed,
+      command: previous.mode,
+      detach: true,
+      port: previous.port,
+      hostname: previous.hostname,
+      nextArgs: [...previous.nextArgs],
+    },
     previous,
   );
 }
@@ -561,18 +553,20 @@ function printStatus(onlyPort) {
     }
     running += 1;
     console.log(
-      `${describeTarget(state.port)}: running (${state.mode}${state.detached ? ', detached' : ''})`,
+      `${describeTarget(state.port)}: running (${state.mode}, detached)`,
     );
     console.log(`  URL: ${serverUrl(state.port, state.hostname)}`);
     console.log(`  PID: ${state.pid} (uptime ${uptime(state.startedAt)})`);
     console.log(`  Log: ${logPath(state.port)}`);
   }
   if (onlyPort !== undefined && running === 0) {
-    console.log(`No managed Praxis server on ${describeTarget(onlyPort)}.`);
+    console.log(
+      `No managed background Praxis server on ${describeTarget(onlyPort)}.`,
+    );
     process.exit(1);
   }
   if (onlyPort === undefined && running === 0) {
-    console.log('No managed Praxis server is running.');
+    console.log('No managed background Praxis server is running.');
     process.exit(1);
   }
 }
@@ -619,6 +613,14 @@ function serverUrl(port, hostname) {
   return `http://${hostname ?? 'localhost'}:${port}`;
 }
 
+function serverEnvironment(port, hostname) {
+  return {
+    ...process.env,
+    PRAXIS_RUNTIME_PORT: String(port),
+    PRAXIS_RUNTIME_HOSTNAME: hostname ?? '',
+  };
+}
+
 function uptime(startedAt) {
   const seconds = Math.max(
     0,
@@ -632,19 +634,36 @@ function uptime(startedAt) {
   return `${Math.floor(hours / 24)}d`;
 }
 
-async function waitForReady(pid, port, fromOffset) {
+async function waitForReady(pid, port, hostname) {
   const deadline = Date.now() + readyTimeoutMs();
   while (Date.now() < deadline) {
     if (!isAlive(pid)) return 'dead';
-    if (
-      existsSync(logPath(port)) &&
-      READY_PATTERN.test(readNewOutput(logPath(port), fromOffset))
-    ) {
-      return isAlive(pid) ? 'ready' : 'dead';
-    }
+    if (await canConnect(port, hostname)) return 'ready';
     await sleep(100);
   }
   return isAlive(pid) ? 'timeout' : 'dead';
+}
+
+function canConnect(port, hostname) {
+  const host =
+    hostname === null || hostname === '0.0.0.0'
+      ? '127.0.0.1'
+      : hostname === '::' || hostname === '[::]'
+        ? '::1'
+        : hostname;
+  return new Promise((resolve) => {
+    const socket = net.createConnection({ host, port });
+    let settled = false;
+    const finish = (ready) => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      resolve(ready);
+    };
+    socket.setTimeout(300, () => finish(false));
+    socket.once('connect', () => finish(true));
+    socket.once('error', () => finish(false));
+  });
 }
 
 function readBytes(file, start, length) {
@@ -712,18 +731,19 @@ Usage:
   praxis start [options] [Next.js options]
   praxis dev [options] [Next.js options]
   praxis stop [--port <n>]
-  praxis restart [options] [Next.js options]
+  praxis restart [--port <n>]
   praxis status [--port <n>]
   praxis logs [--port <n>] [-n <lines>] [-f]
 
 Lifecycle options:
-  -d, --detach      Run in the background (start, dev, restart)
+  -d, --detach      Run start or dev in the background
   -p, --port <n>    Server port (default ${DEFAULT_PORT})
   -H, --hostname    Hostname to advertise (passed to Next.js)
   -n, --lines <n>   Log lines to show (default 50)
   -f, --follow      Follow the log output
 
-Only processes started by 'praxis start' (or 'dev') are managed.
+Lifecycle commands manage only processes started with --detach.
+Restart reuses the stored mode, hostname, port and Next.js arguments exactly.
 Runtime state and logs live under PRAXIS_HOME/run (default ~/.praxis/run).
 
 Examples:
