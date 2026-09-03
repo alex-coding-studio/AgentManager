@@ -403,18 +403,9 @@ void test('an unavailable remote keeps local-first Card creation on the current 
   );
 });
 
-void test('empty bootstrap needs explicit confirmation and Actions reuse one isolated Card worktree', async (t) => {
+void test('empty bootstrap initializes locally and Actions reuse one isolated Card worktree', async (t) => {
   const f = await fixture(t);
-  await assert.rejects(
-    () => f.service.start(f.project, f.input),
-    /EMPTY_REPOSITORY_CONFIRMATION_REQUIRED/,
-  );
-  await assert.rejects(
-    () => readFile(path.join(f.project.rootPath, '.git/HEAD')),
-    /ENOENT/,
-  );
-  assert.equal(f.calls.length, 0);
-  await f.service.start(f.project, { ...f.input, initializeRepository: true });
+  await f.service.start(f.project, f.input);
   const directory = f.calls[0].options.workingDirectory;
   assert.notEqual(directory, f.project.rootPath);
   const common = await realpath(path.join(f.project.rootPath, '.git'));

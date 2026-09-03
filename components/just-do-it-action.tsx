@@ -110,7 +110,6 @@ export function JustDoItAction({
       | 'override-check'
       | 'open-workspace',
     outputId = latest?.id,
-    initializeRepository = false,
     criterionId?: string,
     decisionNote = instruction,
   ) {
@@ -141,14 +140,13 @@ export function JustDoItAction({
           profile,
           coordination: { profile: coordinatorProfile },
           outputId,
-          initializeRepository,
           criterionId,
           note: decisionNote,
           ...supplementalInput,
         }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error);
+      if (!response.ok) throw new Error(data.code ?? data.error);
       onChange(data.card);
       if (operation === 'start') {
         setInstruction('');
@@ -197,7 +195,7 @@ export function JustDoItAction({
         }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error);
+      if (!response.ok) throw new Error(data.code ?? data.error);
       if (data.preview) setResetPreview(data.preview);
       if (data.card) {
         onChange(data.card);
@@ -538,7 +536,6 @@ export function JustDoItAction({
                                 void send(
                                   'override-check',
                                   run.id,
-                                  false,
                                   item.criterion.id,
                                   `User confirmed the coordinator interpretation for ${item.criterion.id}. Source input: ${run.input}. Interpretation: ${item.observed?.summary ?? ''}`,
                                 )
@@ -559,7 +556,6 @@ export function JustDoItAction({
                                 void send(
                                   'override-check',
                                   run.id,
-                                  false,
                                   item.criterion.id,
                                 )
                               }
@@ -1225,22 +1221,7 @@ export function JustDoItAction({
           </Button>
         </DialogContent>
       </Dialog>
-      {error === 'EMPTY_REPOSITORY_CONFIRMATION_REQUIRED' && (
-        <div className="space-y-2 rounded-lg border border-border p-3 text-sm">
-          <p>
-            {t(
-              'This empty project needs a local Git baseline. Confirm creating an empty commit on local main; no files are committed and nothing is pushed to GitHub.',
-            )}
-          </p>
-          <Button
-            disabled={pending}
-            onClick={() => void send('start', latest?.id, true)}
-          >
-            {t('Create empty local main baseline and start')}
-          </Button>
-        </div>
-      )}
-      {error && error !== 'EMPTY_REPOSITORY_CONFIRMATION_REQUIRED' && (
+      {error && (
         <p role="alert" className="text-sm text-destructive">
           {error}
         </p>

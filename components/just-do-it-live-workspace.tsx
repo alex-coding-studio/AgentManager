@@ -372,7 +372,7 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
       />
       <div
         className={cn(
-          'w-full space-y-5 px-5 py-6 lg:px-8',
+          'w-full space-y-5 px-5 py-6 lg:pr-5 lg:pl-8',
           card && 'mx-auto max-w-[1440px]',
         )}
       >
