@@ -455,6 +455,22 @@ void test('Product Design picker Cards keep rendered content inside their layout
   assert.match(source, /flex h-full w-full flex-col overflow-hidden/);
 });
 
+void test('Delivery Planning replaces the full Composer while its Agent is running', async () => {
+  const source = await readFile(
+    new URL('../components/what-to-do-workspace.tsx', import.meta.url),
+    'utf8',
+  );
+  const transition = source.slice(
+    source.indexOf('{running ? ('),
+    source.indexOf('<ProductDesignFeaturePicker'),
+  );
+  assert.match(transition, /title=\{t\('Preparing Delivery Map'\)\}/);
+  assert.match(transition, /running\.activity\.at\(-1\)/);
+  assert.match(transition, /<Square/);
+  assert.match(transition, /\) : \(\s*<AgentGraphComposerCard/);
+  assert.match(transition, /<Textarea/);
+});
+
 void test('terminal What’s Next outcomes leave the Canvas and stay in Latest Response', async () => {
   const { whatsNextRunToPreviews } =
     await import('../lib/whats-next-previews.ts');

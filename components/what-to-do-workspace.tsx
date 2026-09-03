@@ -1,6 +1,6 @@
 'use client';
 
-import { Plus, Route, X } from 'lucide-react';
+import { Plus, Route, Square, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { AgentGraphComposerCard } from '@/components/agent-graph-composer-card';
@@ -264,109 +264,71 @@ export function WhatToDoWorkspace({
             />
           </LatestResponse>
         ) : null}
-        <AgentGraphComposerCard
-          title={
-            <span className="flex items-center gap-2">
-              <Route className="size-4 text-muted-foreground" />
-              {t('Prepare a Delivery Map')}
-            </span>
-          }
-          description={t(
-            currentMap
-              ? 'Describe the update. Add Features or focus Contracts when useful.'
-              : 'Choose accepted Product Design, then describe what should be delivered.',
-          )}
-        >
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-[11px] font-medium">{t('Main Context')}</p>
+        {running ? (
+          <AgentGraphComposerCard
+            title={t('Preparing Delivery Map')}
+            description={t(
+              running.activity.at(-1)?.summary ??
+                'Reading the frozen Packet and coordinating Contracts.',
+            )}
+            action={
               <Button
                 variant="outline"
-                size="xs"
-                disabled={Boolean(running) || featureNodes.length === 0}
-                onClick={() => setFeaturePickerOpen(true)}
+                size="sm"
+                onClick={() => void cancelRun()}
               >
-                <Plus className="size-3" />
-                {t('Add Feature')}
+                <Square className="size-3.5" /> {t('Cancel')}
               </Button>
-            </div>
-            {selectedFeatureNodes.length ? (
-              <div className="space-y-1.5">
-                {selectedFeatureNodes.map((node) => (
-                  <div
-                    key={node.id}
-                    className="flex items-start gap-2 rounded-lg border border-border bg-secondary/25 px-2.5 py-2 text-xs"
-                  >
-                    <span className="min-w-0 flex-1">
-                      <span className="block font-medium">{node.title}</span>
-                      <span className="mt-0.5 line-clamp-2 block text-[10px] leading-4 text-muted-foreground">
-                        {node.summary}
-                      </span>
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="icon-xs"
-                      disabled={Boolean(running)}
-                      aria-label={t('Remove {title}', { title: node.title })}
-                      onClick={() =>
-                        setSourceUids((current) =>
-                          current.filter((uid) => uid !== node.uid),
-                        )
-                      }
-                    >
-                      <X className="size-3" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            ) : featureNodes.length && !currentMap ? (
-              <p className="rounded-lg border border-dashed border-border p-3 text-[11px] text-muted-foreground">
-                {t('Add at least one accepted Feature as Main Context.')}
-              </p>
-            ) : currentMap ? (
-              <p className="rounded-lg border border-dashed border-border p-3 text-[11px] text-muted-foreground">
-                {t(
-                  'Add a Feature only when this update needs new Product Design context.',
-                )}
-              </p>
-            ) : (
-              <p className="rounded-lg border border-dashed border-border p-3 text-[11px] text-muted-foreground">
-                {t(
-                  'Accept a Product Design Feature in What’s Next before creating a Delivery Map.',
-                )}
-              </p>
+            }
+          />
+        ) : (
+          <AgentGraphComposerCard
+            title={
+              <span className="flex items-center gap-2">
+                <Route className="size-4 text-muted-foreground" />
+                {t('Prepare a Delivery Map')}
+              </span>
+            }
+            description={t(
+              currentMap
+                ? 'Describe the update. Add Features or focus Contracts when useful.'
+                : 'Choose accepted Product Design, then describe what should be delivered.',
             )}
-          </div>
-          {currentMap ? (
-            <div className="mt-3 space-y-1.5">
-              <p className="text-[11px] font-medium">{t('Default Context')}</p>
-              <p className="rounded-lg border border-border bg-secondary/25 px-2.5 py-2 text-[11px] text-muted-foreground">
-                {t('Current Delivery Map · {count} Contracts', {
-                  count: currentMap.contracts.length,
-                })}
-              </p>
-              {selectedContracts?.length ? (
+          >
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[11px] font-medium">{t('Main Context')}</p>
+                <Button
+                  variant="outline"
+                  size="xs"
+                  disabled={Boolean(running) || featureNodes.length === 0}
+                  onClick={() => setFeaturePickerOpen(true)}
+                >
+                  <Plus className="size-3" />
+                  {t('Add Feature')}
+                </Button>
+              </div>
+              {selectedFeatureNodes.length ? (
                 <div className="space-y-1.5">
-                  <p className="text-[10px] text-muted-foreground">
-                    {t('Focused Contracts')}
-                  </p>
-                  {selectedContracts.map((contract) => (
+                  {selectedFeatureNodes.map((node) => (
                     <div
-                      key={contract.id}
-                      className="flex items-center gap-2 rounded-lg border border-border px-2.5 py-2 text-xs"
+                      key={node.id}
+                      className="flex items-start gap-2 rounded-lg border border-border bg-secondary/25 px-2.5 py-2 text-xs"
                     >
-                      <span className="min-w-0 flex-1 truncate font-medium">
-                        {contract.title}
+                      <span className="min-w-0 flex-1">
+                        <span className="block font-medium">{node.title}</span>
+                        <span className="mt-0.5 line-clamp-2 block text-[10px] leading-4 text-muted-foreground">
+                          {node.summary}
+                        </span>
                       </span>
                       <Button
                         variant="ghost"
                         size="icon-xs"
-                        aria-label={t('Remove {title}', {
-                          title: contract.title,
-                        })}
+                        disabled={Boolean(running)}
+                        aria-label={t('Remove {title}', { title: node.title })}
                         onClick={() =>
-                          setFocusContractIds((current) =>
-                            current.filter((id) => id !== contract.id),
+                          setSourceUids((current) =>
+                            current.filter((uid) => uid !== node.uid),
                           )
                         }
                       >
@@ -375,76 +337,125 @@ export function WhatToDoWorkspace({
                     </div>
                   ))}
                 </div>
-              ) : null}
+              ) : featureNodes.length && !currentMap ? (
+                <p className="rounded-lg border border-dashed border-border p-3 text-[11px] text-muted-foreground">
+                  {t('Add at least one accepted Feature as Main Context.')}
+                </p>
+              ) : currentMap ? (
+                <p className="rounded-lg border border-dashed border-border p-3 text-[11px] text-muted-foreground">
+                  {t(
+                    'Add a Feature only when this update needs new Product Design context.',
+                  )}
+                </p>
+              ) : (
+                <p className="rounded-lg border border-dashed border-border p-3 text-[11px] text-muted-foreground">
+                  {t(
+                    'Accept a Product Design Feature in What’s Next before creating a Delivery Map.',
+                  )}
+                </p>
+              )}
             </div>
-          ) : null}
-          <Textarea
-            className="mt-3 resize-none text-sm"
-            rows={4}
-            value={instruction}
-            disabled={Boolean(running)}
-            placeholder={t(
-              'Describe the delivery outcome, constraints or priorities…',
-            )}
-            onChange={(event) => setInstruction(event.target.value)}
-          />
-          <div className="mt-3">
-            <ContextAttachmentPicker
-              folders={folders}
-              folderPath={folderPath}
-              onFolderPath={setFolderPath}
-              refs={contextRefs}
-              onToggleRef={(ref) =>
-                setContextRefs((current) =>
-                  current.includes(ref)
-                    ? current.filter((item) => item !== ref)
-                    : [...current, ref],
-                )
-              }
-              files={files}
-              onAddFiles={(added) =>
-                setFiles((current) => [...current, ...added])
-              }
-              onRemoveFile={(index) =>
-                setFiles((current) =>
-                  current.filter((_, item) => item !== index),
-                )
-              }
-              label={t('Extra info')}
+            {currentMap ? (
+              <div className="mt-3 space-y-1.5">
+                <p className="text-[11px] font-medium">
+                  {t('Default Context')}
+                </p>
+                <p className="rounded-lg border border-border bg-secondary/25 px-2.5 py-2 text-[11px] text-muted-foreground">
+                  {t('Current Delivery Map · {count} Contracts', {
+                    count: currentMap.contracts.length,
+                  })}
+                </p>
+                {selectedContracts?.length ? (
+                  <div className="space-y-1.5">
+                    <p className="text-[10px] text-muted-foreground">
+                      {t('Focused Contracts')}
+                    </p>
+                    {selectedContracts.map((contract) => (
+                      <div
+                        key={contract.id}
+                        className="flex items-center gap-2 rounded-lg border border-border px-2.5 py-2 text-xs"
+                      >
+                        <span className="min-w-0 flex-1 truncate font-medium">
+                          {contract.title}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="icon-xs"
+                          aria-label={t('Remove {title}', {
+                            title: contract.title,
+                          })}
+                          onClick={() =>
+                            setFocusContractIds((current) =>
+                              current.filter((id) => id !== contract.id),
+                            )
+                          }
+                        >
+                          <X className="size-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+            <Textarea
+              className="mt-3 resize-none text-sm"
+              rows={4}
+              value={instruction}
               disabled={Boolean(running)}
+              placeholder={t(
+                'Describe the delivery outcome, constraints or priorities…',
+              )}
+              onChange={(event) => setInstruction(event.target.value)}
             />
-          </div>
-          <div className="mt-3">
-            <AgentRunControls
-              value={profile}
-              onChange={setProfile}
-              disabled={
-                !instruction.trim() ||
-                (!currentMap && sourceUids.length === 0) ||
-                starting ||
-                Boolean(running)
-              }
-              running={starting || Boolean(running)}
-              actionLabel={
-                currentMap ? 'Update Delivery Map' : 'Create Delivery Map'
-              }
-              onRun={() => void startRun()}
-            />
-          </div>
-          {running ? (
-            <Button
-              className="mt-2 w-full"
-              variant="outline"
-              size="sm"
-              onClick={() => void cancelRun()}
-            >
-              {t('Cancel')}
-            </Button>
-          ) : null}
-          {error ? (
-            <p className="mt-2 text-xs text-destructive">{error}</p>
-          ) : null}
-        </AgentGraphComposerCard>
+            <div className="mt-3">
+              <ContextAttachmentPicker
+                folders={folders}
+                folderPath={folderPath}
+                onFolderPath={setFolderPath}
+                refs={contextRefs}
+                onToggleRef={(ref) =>
+                  setContextRefs((current) =>
+                    current.includes(ref)
+                      ? current.filter((item) => item !== ref)
+                      : [...current, ref],
+                  )
+                }
+                files={files}
+                onAddFiles={(added) =>
+                  setFiles((current) => [...current, ...added])
+                }
+                onRemoveFile={(index) =>
+                  setFiles((current) =>
+                    current.filter((_, item) => item !== index),
+                  )
+                }
+                label={t('Extra info')}
+                disabled={Boolean(running)}
+              />
+            </div>
+            <div className="mt-3">
+              <AgentRunControls
+                value={profile}
+                onChange={setProfile}
+                disabled={
+                  !instruction.trim() ||
+                  (!currentMap && sourceUids.length === 0) ||
+                  starting ||
+                  Boolean(running)
+                }
+                running={starting || Boolean(running)}
+                actionLabel={
+                  currentMap ? 'Update Delivery Map' : 'Create Delivery Map'
+                }
+                onRun={() => void startRun()}
+              />
+            </div>
+            {error ? (
+              <p className="mt-2 text-xs text-destructive">{error}</p>
+            ) : null}
+          </AgentGraphComposerCard>
+        )}
       </section>
       <ProductDesignFeaturePicker
         open={featurePickerOpen}
