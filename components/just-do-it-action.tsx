@@ -49,7 +49,7 @@ import type { AgentProfile } from '@/lib/agents/profile';
 import type { GitHubPullRequest } from '@/lib/github-delivery';
 import type { ContextBrowserFolder } from '@/lib/modules/product-context/catalog';
 
-const justDoItAgents = ['codex', 'claude'] as const;
+const justDoItAgents = ['codex', 'claude', 'deepseek'] as const;
 
 function actionStatusPillTone(status: string) {
   if (status === 'Verified')
