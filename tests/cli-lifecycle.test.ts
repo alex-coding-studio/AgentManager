@@ -108,6 +108,7 @@ void test('help lists the lifecycle commands', () => {
     'praxis status',
     'praxis logs',
     '--detach',
+    '--lan',
   ]) {
     assert.ok(
       result.stdout.includes(fragment),
@@ -193,6 +194,24 @@ void test('dev mode is recorded on the managed server', async () => {
     const status = run(['status', '--port', port], env);
     assert.equal(status.status, 0);
     assert.match(status.stdout, /running \(dev, detached\)/);
+  } finally {
+    run(['stop', '--port', port], env);
+  }
+});
+
+void test('--lan forwards an all-interfaces hostname without ambiguity', async () => {
+  const env = isolatedEnv();
+  const port = String(await freePort());
+  try {
+    const started = run(['start', '-d', '--lan', '--port', port], env);
+    assert.equal(started.status, 0, started.stderr);
+    const state = JSON.parse(readFileSync(stateFile(env, port), 'utf8'));
+    assert.equal(state.hostname, '0.0.0.0');
+    assert.deepEqual(state.nextArgs, ['--hostname', '0.0.0.0', '--port', port]);
+
+    const conflicting = run(['start', '--lan', '--hostname', '127.0.0.1'], env);
+    assert.equal(conflicting.status, 1);
+    assert.match(conflicting.stderr, /either '--lan' or '--hostname'/);
   } finally {
     run(['stop', '--port', port], env);
   }

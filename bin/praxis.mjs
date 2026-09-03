@@ -80,6 +80,7 @@ function parseArgs(argv) {
     port: DEFAULT_PORT,
     portGiven: false,
     hostname: null,
+    lan: false,
     lines: 50,
     linesGiven: false,
     nextArgs: [],
@@ -95,6 +96,12 @@ function parseArgs(argv) {
     }
     if (arg === '-d' || arg === '--detach') {
       result.detach = true;
+    } else if (arg === '--lan') {
+      if (result.hostname !== null)
+        fail("Use either '--lan' or '--hostname', not both.");
+      result.lan = true;
+      result.hostname = '0.0.0.0';
+      if (forwardsArgs) result.nextArgs.push('--hostname', '0.0.0.0');
     } else if (arg === '-f' || arg === '--follow') {
       result.follow = true;
     } else if (arg === '-n' || arg === '--lines') {
@@ -112,6 +119,11 @@ function parseArgs(argv) {
       arg === '--hostname' ||
       arg.startsWith('--hostname=')
     ) {
+      if (
+        result.lan &&
+        (arg === '-H' || arg === '--hostname' || arg.startsWith('--hostname='))
+      )
+        fail("Use either '--lan' or '--hostname', not both.");
       index = consumeAddress(arg, argv, index, result, forwardsArgs);
     } else if (forwardsArgs) {
       result.nextArgs.push(arg);
@@ -743,6 +755,7 @@ Usage:
 
 Lifecycle options:
   -d, --detach      Run start or dev in the background
+      --lan         Listen on the local network (0.0.0.0)
   -p, --port <n>    Server port (default ${DEFAULT_PORT})
   -H, --hostname    Hostname to advertise (passed to Next.js)
   -n, --lines <n>   Log lines to show (default 50)
@@ -754,6 +767,7 @@ Runtime state and logs live under PRAXIS_HOME/run (default ~/.praxis/run).
 
 Examples:
   praxis start
+  praxis start --lan
   praxis start --port 3100
   praxis start -d --port 3100
   praxis status

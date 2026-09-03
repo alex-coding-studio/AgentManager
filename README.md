@@ -104,6 +104,14 @@ praxis restart --port 3100
 praxis stop --port 3100
 ```
 
+Use `--lan` to listen on the local network. It is shorthand for
+`--hostname 0.0.0.0` and works with both foreground and detached servers:
+
+```bash
+praxis start --lan --port 3100
+praxis start -d --lan --port 3100
+```
+
 Lifecycle commands manage only processes started with `--detach`. Foreground
 servers remain attached to their terminal. `restart` reuses the stored launch
 configuration exactly; `--port` only selects an instance. Runtime state and
