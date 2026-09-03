@@ -75,7 +75,6 @@ export function GraphNodeCard({
       appearance={preview ? 'provisional' : 'default'}
       accentColor={data.color}
       busy={running}
-      bodyInset={data.selectionEnabled}
       focused={selected}
       selected={data.selectedForRun}
       selectionControl={
