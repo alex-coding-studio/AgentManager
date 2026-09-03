@@ -1046,6 +1046,53 @@ export const chineseUi: Record<string, string> = {
     '将从此项目的任务分解上下文文件夹中删除。',
   'Revision {revision} · {count} Resources': '版本 {revision} · {count} 份资料',
   'Open details for {title}': '打开详情：{title}',
+  'What to Do': '做什么',
+  'Turn accepted Product Design into deliverable Contracts.':
+    '把已接受的产品设计整理成可交付的 Contract。',
+  'Prepare a Delivery Map': '规划交付地图',
+  'Choose accepted Product Design, then describe what should be delivered.':
+    '选择已接受的产品设计，再描述本次希望交付的结果。',
+  'Describe the update. Add Features or focus Contracts when useful.':
+    '描述这次希望怎样更新；需要时可以添加 Feature 或选择重点 Contract。',
+  'Product Design Features': '产品设计 Feature',
+  'Main Context': '主要上下文',
+  'Add Feature': '添加 Feature',
+  'Remove {title}': '移除「{title}」',
+  'Add Product Design Feature': '添加产品设计 Feature',
+  'Choose accepted Product Design Features as the Main Context for this Delivery Map.':
+    '选择已接受的产品设计 Feature，作为本轮交付地图的主要上下文。',
+  'Add at least one accepted Feature as Main Context.':
+    '请添加至少一个已接受的 Feature 作为主要上下文。',
+  'Add a Feature only when this update needs new Product Design context.':
+    '只有这次更新需要新的产品设计上下文时，才需要添加 Feature。',
+  'Product Design Feature': '产品设计 Feature',
+  'Product Source': '产品源',
+  'Add selected Features': '添加所选 Feature',
+  'Accept a Product Design Feature in What’s Next before creating a Delivery Map.':
+    '请先在下一步中接受至少一个产品设计 Feature，再创建交付地图。',
+  'Describe the delivery outcome, constraints or priorities…':
+    '描述交付结果、限制条件或优先级…',
+  'Extra info': '补充资料',
+  'Create Delivery Map': '创建交付地图',
+  'Update Delivery Map': '更新交付地图',
+  'Default Context': '默认上下文',
+  'Current Delivery Map · {count} Contracts':
+    '当前交付地图 · {count} 个 Contract',
+  'Focused Contracts': '重点 Contract',
+  'Could not start the Agent Run.': '无法启动 Agent Run。',
+  'The What to Do Agent Run failed.': 'What to Do Agent Run 失败。',
+  'The Agent Run was canceled. The Delivery Map was not changed.':
+    'Agent Run 已取消，交付地图没有改变。',
+  'Proposed {count} Delivery Contracts for review.':
+    '已生成 {count} 个 Delivery Contract，等待查看。',
+  'The Delivery Map is ready for review.': '交付地图已经生成，可以查看。',
+  'The Delivery Map was updated.': '交付地图已更新。',
+  Applied: '已应用',
+  'Delivery Contract': '交付 Contract',
+  'Preparing Delivery Map': '正在规划交付地图',
+  'Agent Run': 'Agent Run',
+  'Reading the frozen Packet and coordinating Contracts.':
+    '正在读取冻结的 Packet，并协调各个 Contract。',
   "Ask what's next": '探索下一步',
   '{action} from {title}': '从「{title}」{action}',
   'Add feedback for lines {start} to {end}': '为第 {start} 至 {end} 行添加反馈',

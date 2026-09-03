@@ -29,6 +29,7 @@ export const CANDIDATE_ALIAS_PATTERN = `^CANDIDATE-(?:[0-9]{4,}|${GRAPH_ALIAS_SU
 export function graphCardLabel(alias: string) {
   if (alias.startsWith('NODE-')) return `Node-${alias.slice(5)}`;
   if (alias.startsWith('CANDIDATE-')) return `Candidate-${alias.slice(10)}`;
+  if (alias.startsWith('CONTRACT-')) return `Contract-${alias.slice(9)}`;
   if (alias.startsWith('RUN-')) return `Run-${alias.slice(-8)}`;
   if (alias.startsWith('REQUEST-PREVIEW-'))
     return `Preview-${alias.split('-').at(-1)}`;

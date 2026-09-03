@@ -10,6 +10,7 @@ import { PublicApiError } from './api-errors.ts';
 import { readDomainModel, type DomainModel } from './domain-model.ts';
 import type { RegisteredProject } from './project-registry.ts';
 import { readTaskGraphMarkdownResource } from './task-graph.ts';
+import type { WhatToDoDeliveryMap } from './what-to-do-map.ts';
 import {
   collectWhatToDoRepositoryFacts,
   readWhatToDoRepositoryEvidence,
@@ -31,6 +32,8 @@ export type WhatToDoRunInput = {
   contextRefs?: string[];
   files?: File[];
   repositoryEvidencePaths?: string[];
+  focusContractIds?: string[];
+  currentMap?: WhatToDoDeliveryMap | null;
 };
 
 export async function prepareWhatToDoContext(
@@ -46,6 +49,29 @@ export async function prepareWhatToDoContext(
   const repositoryEvidencePaths = [
     ...new Set(input.repositoryEvidencePaths ?? []),
   ];
+  const focusContractIds = [...new Set(input.focusContractIds ?? [])];
+  const currentMap = input.currentMap ?? null;
+  if (!currentMap && input.sourceUids.length === 0)
+    throw new PublicApiError(
+      'Select at least one accepted Product Design Feature.',
+      400,
+    );
+  const currentContracts = new Map(
+    (currentMap?.contracts ?? []).map((contract) => [contract.id, contract]),
+  );
+  if (
+    currentMap &&
+    input.sourceUids.some((uid) => currentMap.sourceUids.includes(uid))
+  )
+    throw new PublicApiError(
+      'A selected Product Design Feature is already part of the current Delivery Map.',
+      409,
+    );
+  if (focusContractIds.some((id) => !currentContracts.has(id)))
+    throw new PublicApiError(
+      'A selected Delivery Contract is no longer available.',
+      409,
+    );
   if (contextRefs.length > 50)
     throw new PublicApiError('Select no more than 50 Context documents.', 400);
   if (files.length > 20)
@@ -58,12 +84,31 @@ export async function prepareWhatToDoContext(
 
   const [sources, repositoryFacts, repositorySummary, domainModel] =
     await Promise.all([
-      selectWhatToDoFeatureSources(project, input.sourceUids),
+      input.sourceUids.length
+        ? selectWhatToDoFeatureSources(project, input.sourceUids)
+        : Promise.resolve([]),
       collectWhatToDoRepositoryFacts(project),
       readWhatToDoRepositorySummary(project),
       readDomainModel(project),
     ]);
   const featureInputs = await whatToDoFeatureWorkspaceInputs(project, sources);
+  const mapInputs = await Promise.all(
+    (currentMap?.contracts ?? []).map(async (contract) => {
+      const resource = await readTaskGraphMarkdownResource(
+        project,
+        contract.outputPath,
+      );
+      return {
+        role: 'related' as const,
+        kind: focusContractIds.includes(contract.id)
+          ? 'focused-delivery-contract'
+          : 'delivery-contract',
+        logicalPath: resource.path,
+        content: resource.markdown,
+        nodeId: contract.id,
+      };
+    }),
+  );
   let repositoryEvidence: Array<{ path: string; content: string }>;
   try {
     const [automatic, targeted] = await Promise.all([
@@ -103,6 +148,7 @@ export async function prepareWhatToDoContext(
     const staged = await writeAgentGraphContextWorkspace(staging.stagingPath, [
       userInput,
       ...featureInputs,
+      ...mapInputs,
       {
         role: 'related',
         kind: 'repository-facts',
@@ -167,15 +213,30 @@ export async function prepareWhatToDoContext(
       sha256: inputEntry.sha256,
       content: userInput.content,
     },
-    knownSources: Object.fromEntries(
-      sources.map((source) => [
-        source.outputPath,
-        {
-          sha256: source.outputSha256,
-          content: featureInputContent(featureInputs, source.outputPath),
-        },
-      ]),
-    ),
+    knownSources: Object.fromEntries([
+      ...sources.map(
+        (source) =>
+          [
+            source.outputPath,
+            {
+              sha256: source.outputSha256,
+              content: featureInputContent(featureInputs, source.outputPath),
+            },
+          ] as const,
+      ),
+      ...mapInputs.map(
+        (entry) =>
+          [
+            entry.logicalPath,
+            {
+              sha256: workspace.manifest.related.find(
+                (item) => item.logicalPath === entry.logicalPath,
+              )!.sha256,
+              content: entry.content,
+            },
+          ] as const,
+      ),
+    ]),
     knownEvidencePaths: knownEvidencePaths(workspace.manifest),
   };
 }

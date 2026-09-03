@@ -14,6 +14,7 @@ import {
   Play,
   LayoutDashboard,
   Network,
+  Route,
   Settings,
   Sparkles,
 } from 'lucide-react';
@@ -48,6 +49,12 @@ const navigation = [
     label: "What's That?",
     icon: Network,
     path: '/domain-model',
+    available: true,
+  },
+  {
+    label: 'What to Do',
+    icon: Route,
+    path: '/what-to-do',
     available: true,
   },
   {

@@ -19,6 +19,22 @@ void test('formal cards distinguish upstream input documents from their own outp
   assert.deepEqual(cardResourceCounts(node), { inputCount: 1, outputCount: 1 });
 });
 
+void test('formal Delivery Contracts recognize their own output Markdown', () => {
+  const node = {
+    id: 'NODE-abcdef12',
+    resources: [
+      {
+        kind: 'output',
+        path: 'what-to-do/runs/RUN-11111111-2222-4333-8444-555555555555/contracts/NODE-abcdef12/output.md',
+      },
+    ],
+  } as TaskGraphNode;
+  assert.deepEqual(cardResourceCounts(node), {
+    inputCount: 0,
+    outputCount: 1,
+  });
+});
+
 void test('Candidate and refining cards count unique inputs plus the existing generated output', () => {
   const preview = {
     kind: 'candidate',

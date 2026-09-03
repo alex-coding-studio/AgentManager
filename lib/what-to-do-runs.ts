@@ -1,5 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import { lstat, readFile, readdir, realpath, rm } from 'node:fs/promises';
+import {
+  lstat,
+  mkdir,
+  readFile,
+  readdir,
+  realpath,
+  rm,
+} from 'node:fs/promises';
 import path from 'node:path';
 import { validateAgentProfile, type AgentProfile } from './agent-profile.ts';
 import {
@@ -29,6 +36,11 @@ import {
   type WhatToDoHarnessResult,
 } from './what-to-do-harness.ts';
 import {
+  materializeWhatToDoDeliveryMap,
+  renderWhatToDoContract,
+  type WhatToDoDeliveryMap,
+} from './what-to-do-map.ts';
+import {
   atomicWhatToDoText,
   whatToDoDirectory,
   whatToDoRunDirectory,
@@ -42,6 +54,7 @@ export type WhatToDoRunRecord = {
   sourceUids: string[];
   contextRefs: string[];
   repositoryEvidencePaths: string[];
+  focusContractIds: string[];
   attachmentNames: string[];
   profile: AgentProfile;
   startedAt: string;
@@ -51,6 +64,7 @@ export type WhatToDoRunRecord = {
   activity: AgentGraphActivity[];
   request: WhatToDoHarnessRequest;
   result: WhatToDoHarnessResult | null;
+  map: WhatToDoDeliveryMap | null;
   error: string | null;
 };
 
@@ -98,7 +112,14 @@ export async function startWhatToDoRun(
   activeRuns.set(key, active);
   let preparedRun = false;
   try {
-    const prepared = await prepareWhatToDoContext(project, runId, input);
+    const currentMap =
+      (await listLatestWhatToDoRuns(project)).find(
+        (candidate) => candidate.status === 'succeeded' && candidate.map,
+      )?.map ?? null;
+    const prepared = await prepareWhatToDoContext(project, runId, {
+      ...input,
+      currentMap,
+    });
     preparedRun = true;
     const contextRoot = await relativeContextRoot(
       project,
@@ -135,6 +156,7 @@ export async function startWhatToDoRun(
       repositoryEvidencePaths: [
         ...new Set(input.repositoryEvidencePaths ?? []),
       ],
+      focusContractIds: [...new Set(input.focusContractIds ?? [])],
       attachmentNames: (input.files ?? []).map((file) => file.name),
       profile: structuredClone(input.profile),
       startedAt,
@@ -144,6 +166,7 @@ export async function startWhatToDoRun(
       activity,
       request,
       result: null,
+      map: null,
       error: null,
     };
     const runPath = await whatToDoRunDirectory(project, runId);
@@ -167,7 +190,7 @@ export async function startWhatToDoRun(
       onActivity: active.recorder.onActivity,
     });
     active.cancel = agentRun.cancel;
-    settleLater(project, run, active, agentRun, prepared);
+    settleLater(project, run, active, agentRun, prepared, currentMap);
     return run;
   } catch (error) {
     if (preparedRun)
@@ -186,6 +209,7 @@ function settleLater(
   active: ActiveRun,
   agentRun: LocalAgentRun,
   prepared: Awaited<ReturnType<typeof prepareWhatToDoContext>>,
+  currentMap: WhatToDoDeliveryMap | null,
 ) {
   void agentRun.completion
     .then(async (agent) => {
@@ -199,14 +223,28 @@ function settleLater(
         userInput: prepared.userInput,
         knownEvidencePaths: prepared.knownEvidencePaths,
       });
+      const endedAt = new Date().toISOString();
+      const map =
+        result.outcome === 'map-proposal'
+          ? materializeWhatToDoDeliveryMap({
+              runId: run.id,
+              updatedAt: endedAt,
+              sourceUids: [
+                ...(currentMap?.sourceUids ?? []),
+                ...run.sourceUids,
+              ],
+              result,
+            })
+          : null;
       const terminal: WhatToDoRunRecord = {
         ...run,
         status: 'succeeded',
-        endedAt: new Date().toISOString(),
+        endedAt,
         agentSessionId: agent.agentSessionId,
         usage: agent.usage,
         activity: [...active.activity],
         result,
+        map,
         error: null,
       };
       const runPath = await whatToDoRunDirectory(project, run.id);
@@ -217,6 +255,17 @@ function settleLater(
         summary: renderRunSummary(result),
         response: result.responseMarkdown,
       });
+      if (map)
+        await Promise.all(
+          map.contracts.map(async (contract) => {
+            const directory = path.join(runPath, 'contracts', contract.id);
+            await mkdir(directory, { recursive: true });
+            await atomicWhatToDoText(
+              path.join(directory, 'output.md'),
+              renderWhatToDoContract(contract),
+            );
+          }),
+        );
       await writeRunRecord(project, terminal);
       active.terminal = terminal;
       await writeWhatToDoRepositorySummary(
@@ -234,6 +283,7 @@ function settleLater(
         endedAt: new Date().toISOString(),
         activity: [...active.activity],
         result: null,
+        map: null,
         error: 'The What to Do Agent did not complete.',
       };
       const runPath = await whatToDoRunDirectory(project, run.id);
@@ -293,9 +343,18 @@ export async function readWhatToDoRun(
     'run.json',
   );
   const info = await lstat(file);
-  if (!info.isFile() || info.isSymbolicLink() || info.size > 2 * 1024 * 1024)
+  if (!info.isFile() || info.isSymbolicLink() || info.size > 4 * 1024 * 1024)
     throw new Error('Invalid What to Do Run record.');
-  const run = JSON.parse(await readFile(file, 'utf8')) as WhatToDoRunRecord;
+  const stored = JSON.parse(
+    await readFile(file, 'utf8'),
+  ) as Partial<WhatToDoRunRecord>;
+  const run = {
+    ...stored,
+    focusContractIds: Array.isArray(stored.focusContractIds)
+      ? stored.focusContractIds
+      : [],
+    map: stored.map ?? null,
+  } as WhatToDoRunRecord;
   if (
     run.schemaVersion !== 1 ||
     run.id !== runId ||
@@ -378,7 +437,7 @@ async function writeRunRecord(
 
 function renderRunSummary(result: WhatToDoHarnessResult) {
   if (result.outcome === 'map-proposal')
-    return `# Delivery Map\n\nProposed ${result.candidates.length} Contract boundaries.\n`;
+    return `# Delivery Map\n\nApplied ${result.candidates.length} Contract boundaries.\n`;
   if (result.outcome === 'clarification')
     return `# Clarification\n\n${result.clarification.question}\n`;
   if (result.outcome === 'insufficient-evidence')

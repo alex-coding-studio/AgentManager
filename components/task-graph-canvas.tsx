@@ -59,6 +59,7 @@ export function TaskGraphCanvas({
   plusLabel,
   edgeAlignedOverlays = false,
   avoidBottomRightPanel = false,
+  showCandidateLegend = true,
   projectedRootId,
   readOnly = false,
   selectionEnabled = false,
@@ -80,6 +81,7 @@ export function TaskGraphCanvas({
   plusLabel?: string;
   edgeAlignedOverlays?: boolean;
   avoidBottomRightPanel?: boolean;
+  showCandidateLegend?: boolean;
   projectedRootId?: string;
   readOnly?: boolean;
   selectionEnabled?: boolean;
@@ -272,10 +274,12 @@ export function TaskGraphCanvas({
           <span className="w-5 border-t border-dashed border-amber-600" />
           {t('Selected dependencies')}
         </span>
-        <span className="flex items-center gap-1.5">
-          <span className="w-5 border-t-2 border-dashed border-violet-500" />
-          {t('Candidate')}
-        </span>
+        {showCandidateLegend ? (
+          <span className="flex items-center gap-1.5">
+            <span className="w-5 border-t-2 border-dashed border-violet-500" />
+            {t('Candidate')}
+          </span>
+        ) : null}
       </Panel>
       <Controls
         showInteractive={false}
@@ -326,14 +330,24 @@ function TaskCard({ data, selected }: NodeProps<TaskFlowNode>) {
         type="target"
         position={Position.Left}
         id="lineage-target"
-        className="!size-2.5 !border-2 !border-background !bg-muted-foreground"
+        className={cn(
+          '!size-2.5 !border-2 !border-background',
+          data.hasIncomingConnection
+            ? '!bg-muted-foreground'
+            : '!bg-transparent !opacity-0',
+        )}
       />
       <GraphNodeCard data={data} selected={selected} />
       <Handle
         type="source"
         position={Position.Right}
         id="lineage-source"
-        className="!size-2.5 !border-2 !border-background !bg-foreground"
+        className={cn(
+          '!size-2.5 !border-2 !border-background',
+          data.hasOutgoingConnection
+            ? '!bg-foreground'
+            : '!bg-transparent !opacity-0',
+        )}
       />
     </div>
   );
@@ -371,6 +385,14 @@ function buildFlowGraph(
   const uidById = new Map(layout.nodes.map((node) => [node.id, node.uid]));
   const focus = graphFocus(layout.edges, focusedNodeId, dependenciesOnly);
   const relatedIds = focus.nodeIds;
+  const visibleEdges = layout.edges.filter(
+    (edge) =>
+      edge.relation !== 'dependency' ||
+      (focusedNodeId &&
+        (edge.source === focusedNodeId || edge.target === focusedNodeId)),
+  );
+  const incomingNodeIds = new Set(visibleEdges.map((edge) => edge.target));
+  const outgoingNodeIds = new Set(visibleEdges.map((edge) => edge.source));
   const flowNodes: TaskFlowNode[] = layout.nodes.map((layoutNode) => {
     const node = nodeById.get(layoutNode.id);
     const preview = previewById.get(layoutNode.id);
@@ -404,6 +426,8 @@ function buildFlowGraph(
         type: node?.type ?? preview?.type ?? 'Preview',
         ...cardResourceCounts(node, preview),
         relationshipCount: directDependencyCount(layout.edges, layoutNode.id),
+        hasIncomingConnection: incomingNodeIds.has(layoutNode.id),
+        hasOutgoingConnection: outgoingNodeIds.has(layoutNode.id),
         dependenciesFocused:
           dependenciesOnly && layoutNode.id === focusedNodeId,
         onFocusDependencies,
@@ -434,12 +458,6 @@ function buildFlowGraph(
       },
     };
   });
-  const visibleEdges = layout.edges.filter(
-    (edge) =>
-      edge.relation !== 'dependency' ||
-      (focusedNodeId &&
-        (edge.source === focusedNodeId || edge.target === focusedNodeId)),
-  );
   const edges: Edge[] = visibleEdges.map((edge) => {
     const related = !focusedNodeId || focus.edgeIds.has(edge.id);
     return {

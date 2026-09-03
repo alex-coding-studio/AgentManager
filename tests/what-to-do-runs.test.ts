@@ -235,6 +235,9 @@ void test('a real What to Do Run persists the frozen request and Agent result', 
   const completed = await settled(project, run.id);
   assert.equal(completed.status, 'succeeded');
   assert.equal(completed.result?.outcome, 'map-proposal');
+  assert.equal(completed.map?.contracts.length, 1);
+  assert.match(completed.map?.contracts[0]?.id ?? '', /^NODE-[0-9a-f]{8,32}$/);
+  assert.equal('candidateId' in completed.map!.contracts[0]!, false);
   assert.equal(completed.agentSessionId, 'agent-session-1');
   const runPath = path.join(planningPath, 'what-to-do/runs', run.id);
   assert.match(
@@ -245,6 +248,13 @@ void test('a real What to Do Run persists the frozen request and Agent result', 
     await readFile(path.join(runPath, 'response.md'), 'utf8'),
     /ready for review/,
   );
+  assert.match(
+    await readFile(
+      path.join(planningPath, completed.map!.contracts[0]!.outputPath),
+      'utf8',
+    ),
+    /Deliver accepted behavior/,
+  );
   assert.deepEqual(
     (await listLatestWhatToDoRuns(project)).map((item) => item.id),
     [run.id],
@@ -254,6 +264,42 @@ void test('a real What to Do Run persists the frozen request and Agent result', 
     'utf8',
   );
   assert.match(currentSummary, new RegExp(run.request.repository.fingerprint));
+});
+
+void test('the current formal Map is default Context and focus is optional emphasis', async (t) => {
+  const { project } = await fixture(t);
+  const control = controlled();
+  const first = await startWhatToDoRun(project, input(), control.transport);
+  control.calls[0]!.resolve({
+    agentSessionId: 'agent-session-1',
+    finalOutput: JSON.stringify(result(first)),
+    usage: null,
+  });
+  const completed = await settled(project, first.id);
+  const contract = completed.map!.contracts[0]!;
+  const second = await startWhatToDoRun(
+    project,
+    {
+      ...input(),
+      sourceUids: [],
+      focusContractIds: [contract.id],
+    },
+    control.transport,
+  );
+  assert.deepEqual(second.request.sourceFeatures, []);
+  assert.ok(
+    second.request.content.references.some(
+      (entry) =>
+        entry.kind === 'focused-delivery-contract' &&
+        entry.logicalPath === contract.outputPath,
+    ),
+  );
+  await cancelWhatToDoRun(project, second.id);
+  control.calls[1]!.reject(new Error('canceled'));
+  await assert.rejects(
+    startWhatToDoRun(project, input(), control.transport),
+    /already part of the current Delivery Map/,
+  );
 });
 
 void test('invalid Agent output fails while preserving the raw response', async (t) => {

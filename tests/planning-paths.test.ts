@@ -50,6 +50,11 @@ const SUPPORTED_SHAPES: Array<[string, string]> = [
   ],
   ['What’s Next reflection', `whats-next/runs/${RUN}/reflection.md`],
   ['What’s Next response', `whats-next/runs/${RUN}/response.md`],
+  ['What to Do response', `what-to-do/runs/${RUN}/response.md`],
+  [
+    'What to Do Delivery Contract output',
+    `what-to-do/runs/${RUN}/contracts/${NODE}/output.md`,
+  ],
   ['What’s Next Run resource', `whats-next/runs/${RUN}/resources/a.md`],
   [
     'What’s Next Run User Input',

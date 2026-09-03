@@ -30,6 +30,9 @@ export async function POST(
     const repositoryEvidencePaths = formData
       .getAll('repositoryEvidencePaths')
       .filter((entry): entry is string => typeof entry === 'string');
+    const focusContractIds = formData
+      .getAll('focusContractIds')
+      .filter((entry): entry is string => typeof entry === 'string');
     return Response.json(
       {
         run: await startWhatToDoRun(project, {
@@ -39,6 +42,7 @@ export async function POST(
           contextRefs: input.contextRefs,
           files: input.files,
           repositoryEvidencePaths,
+          focusContractIds,
         }),
       },
       { status: 202 },

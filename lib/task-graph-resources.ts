@@ -33,7 +33,9 @@ export function partitionNodeResources(
 ) {
   const outputs = resources.filter(
     (resource) =>
-      resource.kind === 'output' && resource.path.includes(`/nodes/${nodeId}/`),
+      resource.kind === 'output' &&
+      (resource.path.includes(`/nodes/${nodeId}/`) ||
+        resource.path.includes(`/contracts/${nodeId}/`)),
   );
   const outputPaths = new Set(outputs.map((resource) => resource.path));
   return {

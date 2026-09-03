@@ -34,6 +34,8 @@ export type GraphNodeCardData = Record<string, unknown> & {
   startedAt?: string;
   updatedAt?: string;
   relationshipCount: number;
+  hasIncomingConnection?: boolean;
+  hasOutgoingConnection?: boolean;
   dependenciesFocused?: boolean;
   onFocusDependencies: (nodeId: string) => void;
   selectedForRun?: boolean;
