@@ -13,6 +13,7 @@ export function AgentGraphRunningCard({
   activity,
   fallback,
   onCancel,
+  cancelDisabled = false,
   className,
 }: {
   agent: AgentProfile['agent'];
@@ -20,6 +21,7 @@ export function AgentGraphRunningCard({
   activity: Array<{ summary: string }>;
   fallback: string;
   onCancel: () => void;
+  cancelDisabled?: boolean;
   className?: string;
 }) {
   const { t } = useUiText();
@@ -46,7 +48,12 @@ export function AgentGraphRunningCard({
       description={t(latestReadableAgentActivity(activity, fallback))}
       descriptionClassName="line-clamp-4 overflow-hidden break-words"
       action={
-        <Button variant="outline" size="sm" onClick={onCancel}>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={cancelDisabled}
+          onClick={onCancel}
+        >
           <Square className="size-3.5" /> {t('Cancel')}
         </Button>
       }

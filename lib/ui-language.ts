@@ -356,6 +356,15 @@ export const chineseUi: Record<string, string> = {
   'Models reported by your local Agent. Availability is checked when running.':
     '模型列表来自本地 Agent，实际可用性以运行结果为准。',
   'Agent default': 'Agent 默认',
+  Default: '默认',
+  'Could not load models. Use Default or enter a custom model.':
+    '未能读取模型。可以使用默认模型，或手动填写。',
+  'No models returned. Use Default or enter a custom model.':
+    '本地 Agent 未返回模型。可以使用默认模型，或手动填写。',
+  'Could not load models. Retry or enter a custom model.':
+    '未能读取模型。请重试或手动填写模型。',
+  'No models returned. Enter a custom model.':
+    '本地 Agent 未返回模型，请手动填写。',
   'Uses your local Agent login. Unsupported model settings return an error, without silently changing models.':
     '使用本地 Agent 登录。模型配置不受支持时会报错，不会悄悄换模型。',
   'Actions are ready. Execution is not connected yet.':
@@ -460,6 +469,8 @@ export const chineseUi: Record<string, string> = {
   'Reasoning model · demo': '推理模型 · 演示',
   'Lightweight model · demo': '轻量模型 · 演示',
   'Reasoning effort': '推理强度',
+  Provider: '模型提供方',
+  'Reset reasoning effort': '重置推理强度',
   none: '无',
   minimal: '最低',
   low: '低',

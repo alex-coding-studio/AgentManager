@@ -22,11 +22,18 @@ import {
   Upload,
   X,
 } from 'lucide-react';
+import {
+  AgentComposerAttachments,
+  AgentComposerShell,
+} from '@/components/agent-composer-shell';
 import { AgentRunControls } from '@/components/agent-run-controls';
 import { AgentGraphComposerCard } from '@/components/agent-graph-composer-card';
 import { AgentGraphIntentionSelect } from '@/components/agent-graph-intention-select';
 import { AgentGraphMotionSelect } from '@/components/agent-graph-motion-select';
-import { ContextAttachmentPicker } from '@/components/context-attachment-picker';
+import {
+  ContextAttachmentPicker,
+  contextAttachmentTitle,
+} from '@/components/context-attachment-picker';
 import {
   LatestResponse,
   LatestResponseActions,
@@ -1244,16 +1251,6 @@ export function TaskDecompositionWorkspace({
                   'Describe the scope in your own words. It becomes the Canvas Start and the first Agent instruction.',
                 )}
               >
-                <Textarea
-                  value={startIdea}
-                  onChange={(event) => setStartIdea(event.target.value)}
-                  rows={4}
-                  placeholder={t(
-                    'A product, feature or technical scope that should become coherent boundaries…',
-                  )}
-                  className="resize-none text-sm"
-                  aria-label={t('Decomposition scope')}
-                />
                 <div className="mt-4">
                   <AgentGraphIntentionSelect
                     profiles={taskDecompositionIntentionRegistry.profiles}
@@ -1270,38 +1267,76 @@ export function TaskDecompositionWorkspace({
                     label="Adjustment"
                   />
                 </div>
-                <div className="mt-4">
-                  <ContextAttachmentPicker
-                    folders={folders}
-                    folderPath={selectedFolderPath}
-                    onFolderPath={setSelectedFolderPath}
-                    refs={selectedRefs}
-                    onToggleRef={(ref) =>
-                      toggleSource(ref, !selectedRefs.includes(ref))
-                    }
-                    files={files}
-                    onAddFiles={addFiles}
-                    onRemoveFile={(index) =>
-                      setFiles((current) =>
-                        current.filter((_, itemIndex) => itemIndex !== index),
-                      )
-                    }
-                    label={t('Optional sources')}
+                <AgentComposerAttachments
+                  className="mt-4"
+                  label={t('Optional sources')}
+                  items={[
+                    ...selectedRefs.map((ref) => ({
+                      id: ref,
+                      label: contextAttachmentTitle(folders, ref),
+                      onRemove: () => toggleSource(ref, false),
+                    })),
+                    ...files.map((file, index) => ({
+                      id: `${file.name}:${index}`,
+                      label: file.name,
+                      onRemove: () =>
+                        setFiles((current) =>
+                          current.filter((_, itemIndex) => itemIndex !== index),
+                        ),
+                    })),
+                  ]}
+                />
+                <AgentComposerShell
+                  className="mt-4"
+                  controls={
+                    <AgentRunControls
+                      extraInfo={
+                        <ContextAttachmentPicker
+                          embedded
+                          folders={folders}
+                          folderPath={selectedFolderPath}
+                          onFolderPath={setSelectedFolderPath}
+                          refs={selectedRefs}
+                          onToggleRef={(ref) =>
+                            toggleSource(ref, !selectedRefs.includes(ref))
+                          }
+                          files={files}
+                          onAddFiles={addFiles}
+                          onRemoveFile={(index) =>
+                            setFiles((current) =>
+                              current.filter(
+                                (_, itemIndex) => itemIndex !== index,
+                              ),
+                            )
+                          }
+                          label={t('Optional sources')}
+                        />
+                      }
+                      extraInfoCount={selectedRefs.length + files.length}
+                      extraInfoLabel="Optional sources"
+                      value={agentProfile}
+                      onChange={setAgentProfile}
+                      mode={developmentPreview ? 'demo' : 'live'}
+                      disabled={
+                        !startIdea.trim() || creating || developmentPreview
+                      }
+                      running={creating}
+                      actionLabel="Start and decompose"
+                      onRun={() => void beginFromIdea()}
+                    />
+                  }
+                >
+                  <Textarea
+                    value={startIdea}
+                    onChange={(event) => setStartIdea(event.target.value)}
+                    rows={4}
+                    placeholder={t(
+                      'A product, feature or technical scope that should become coherent boundaries…',
+                    )}
+                    className="resize-none text-sm"
+                    aria-label={t('Decomposition scope')}
                   />
-                </div>
-                <div className="mt-4">
-                  <AgentRunControls
-                    value={agentProfile}
-                    onChange={setAgentProfile}
-                    mode={developmentPreview ? 'demo' : 'live'}
-                    disabled={
-                      !startIdea.trim() || creating || developmentPreview
-                    }
-                    running={creating}
-                    actionLabel="Start and decompose"
-                    onRun={() => void beginFromIdea()}
-                  />
-                </div>
+                </AgentComposerShell>
                 {error ? (
                   <p className="mt-4 text-xs text-destructive">{error}</p>
                 ) : null}
@@ -1678,34 +1713,6 @@ export function TaskDecompositionWorkspace({
             }
           >
             <form onSubmit={previewDecomposition} className="space-y-6">
-              <div className="space-y-2">
-                <label
-                  htmlFor="decomposition-goal"
-                  className="text-xs font-medium"
-                >
-                  {t('User Input')}
-                </label>
-                <Textarea
-                  id="decomposition-goal"
-                  value={decompositionGoal}
-                  placeholder={
-                    revisionTarget
-                      ? t('Describe how this Candidate itself should change.')
-                      : runOperation === 'append-candidates'
-                        ? t(
-                            'Describe the new evidence or boundary that may require additional siblings.',
-                          )
-                        : runOperation === 'recompose-candidates'
-                          ? t(
-                              'Describe how these Candidates should be retained, replaced, split, merged, added or removed.',
-                            )
-                          : 'Generate several candidate modules from this product definition.'
-                  }
-                  className="min-h-28"
-                  onChange={(event) => setDecompositionGoal(event.target.value)}
-                />
-              </div>
-
               <AgentGraphIntentionSelect
                 profiles={taskDecompositionIntentionRegistry.profiles}
                 value={intention}
@@ -1722,22 +1729,23 @@ export function TaskDecompositionWorkspace({
                 disabled={Boolean(revisionTarget)}
               />
 
-              <ContextAttachmentPicker
-                folders={folders}
-                folderPath={requestFolderPath}
-                onFolderPath={setRequestFolderPath}
-                refs={requestSelectedRefs}
-                onToggleRef={(ref) =>
-                  toggleRequestSource(ref, !requestSelectedRefs.includes(ref))
-                }
-                files={requestFiles}
-                onAddFiles={addRequestFiles}
-                onRemoveFile={(index) =>
-                  setRequestFiles((current) =>
-                    current.filter((_, itemIndex) => itemIndex !== index),
-                  )
-                }
+              <AgentComposerAttachments
                 label={t('Optional sources')}
+                items={[
+                  ...requestSelectedRefs.map((ref) => ({
+                    id: ref,
+                    label: contextAttachmentTitle(folders, ref),
+                    onRemove: () => toggleRequestSource(ref, false),
+                  })),
+                  ...requestFiles.map((file, index) => ({
+                    id: `${file.name}:${index}`,
+                    label: file.name,
+                    onRemove: () =>
+                      setRequestFiles((current) =>
+                        current.filter((_, itemIndex) => itemIndex !== index),
+                      ),
+                  })),
+                ]}
               />
 
               {requestError ? (
@@ -1746,30 +1754,81 @@ export function TaskDecompositionWorkspace({
                 </p>
               ) : null}
 
-              <div className="border-t border-border pt-5">
-                <AgentRunControls
-                  value={agentProfile}
-                  onChange={setAgentProfile}
-                  mode={developmentPreview ? 'demo' : 'live'}
-                  actionType="submit"
-                  disabled={!decompositionGoal.trim()}
-                  actionLabel={
-                    developmentPreview
-                      ? t('Create fixture request')
-                      : revisionTarget
-                        ? t('Send revision to {agent}', {
-                            agent: AGENT_LABELS[selectedAgent],
-                          })
-                        : runOperation === 'append-candidates'
-                          ? t('Find additional nodes')
-                          : runOperation === 'recompose-candidates'
-                            ? t('Recompose working set')
-                            : t('Send to {agent}', {
-                                agent: AGENT_LABELS[selectedAgent],
-                              })
+              <AgentComposerShell
+                controls={
+                  <AgentRunControls
+                    extraInfo={
+                      <ContextAttachmentPicker
+                        embedded
+                        folders={folders}
+                        folderPath={requestFolderPath}
+                        onFolderPath={setRequestFolderPath}
+                        refs={requestSelectedRefs}
+                        onToggleRef={(ref) =>
+                          toggleRequestSource(
+                            ref,
+                            !requestSelectedRefs.includes(ref),
+                          )
+                        }
+                        files={requestFiles}
+                        onAddFiles={addRequestFiles}
+                        onRemoveFile={(index) =>
+                          setRequestFiles((current) =>
+                            current.filter(
+                              (_, itemIndex) => itemIndex !== index,
+                            ),
+                          )
+                        }
+                        label={t('Optional sources')}
+                      />
+                    }
+                    extraInfoCount={
+                      requestSelectedRefs.length + requestFiles.length
+                    }
+                    extraInfoLabel="Optional sources"
+                    value={agentProfile}
+                    onChange={setAgentProfile}
+                    mode={developmentPreview ? 'demo' : 'live'}
+                    actionType="submit"
+                    disabled={!decompositionGoal.trim()}
+                    actionLabel={
+                      developmentPreview
+                        ? t('Create fixture request')
+                        : revisionTarget
+                          ? t('Send revision to {agent}', {
+                              agent: AGENT_LABELS[selectedAgent],
+                            })
+                          : runOperation === 'append-candidates'
+                            ? t('Find additional nodes')
+                            : runOperation === 'recompose-candidates'
+                              ? t('Recompose working set')
+                              : t('Send to {agent}', {
+                                  agent: AGENT_LABELS[selectedAgent],
+                                })
+                    }
+                  />
+                }
+              >
+                <Textarea
+                  id="decomposition-goal"
+                  value={decompositionGoal}
+                  placeholder={
+                    revisionTarget
+                      ? t('Describe how this Candidate itself should change.')
+                      : runOperation === 'append-candidates'
+                        ? t(
+                            'Describe the new evidence or boundary that may require additional siblings.',
+                          )
+                        : runOperation === 'recompose-candidates'
+                          ? t(
+                              'Describe how these Candidates should be retained, replaced, split, merged, added or removed.',
+                            )
+                          : 'Generate several candidate modules from this product definition.'
                   }
+                  className="min-h-28 resize-none text-sm"
+                  onChange={(event) => setDecompositionGoal(event.target.value)}
                 />
-              </div>
+              </AgentComposerShell>
             </form>
           </AgentGraphComposerCard>
         ) : null}

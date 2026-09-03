@@ -16,6 +16,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { AgentGraphComposerCard } from '@/components/agent-graph-composer-card';
+import { AgentGraphRunningCard } from '@/components/agent-graph-running-card';
 import { AgentRunControls } from '@/components/agent-run-controls';
 import { JustDoItAction } from '@/components/just-do-it-action';
 import {
@@ -580,24 +581,14 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
               </p>
             )}
             {running && !scopedBusy ? (
-              <AgentGraphComposerCard
-                title={
-                  <span className="flex items-center gap-2">
-                    <LoaderCircle className="size-4 animate-spin text-blue-500" />
-                    {t('Preparing your plan…')}
-                  </span>
-                }
-                description={`${card.run?.profile.agent === 'codex' ? 'Codex' : 'Claude'} · ${t('Agent running')}`}
-              >
-                <Button
-                  className="w-full"
-                  variant="outline"
-                  disabled={pending}
-                  onClick={() => command('cancel')}
-                >
-                  {t('Cancel')}
-                </Button>
-              </AgentGraphComposerCard>
+              <AgentGraphRunningCard
+                agent={card.run?.profile.agent ?? 'codex'}
+                startedAt={card.run?.startedAt ?? new Date().toISOString()}
+                activity={[]}
+                fallback="Preparing your plan…"
+                cancelDisabled={pending}
+                onCancel={() => command('cancel')}
+              />
             ) : !card.plan ? (
               <AgentGraphComposerCard
                 title={
