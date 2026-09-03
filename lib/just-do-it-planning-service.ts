@@ -42,6 +42,7 @@ import {
   type PlanningSource,
 } from './just-do-it-planning-sources.ts';
 import { unmetPlanningSourceDependencies } from './planning-source-dependencies.ts';
+import { withDeliveryState } from './delivery-state-lock.ts';
 
 export type PlanningProfile = AgentProfile;
 export type PlanningResource = { name: string; ref: string };
@@ -421,7 +422,7 @@ export function createPlanningService(
     return { deleted: true as const, cardId };
   }
 
-  async function importSource(
+  async function importSourceUnlocked(
     project: RegisteredProject,
     module: string,
     uid: string,
@@ -431,12 +432,23 @@ export function createPlanningService(
     assertCardUuid(uid);
     await checkStorageRoot(project);
     const existing = await readCardWorklog(root(project), uid);
-    if (existing.revision) return read(project, uid);
-    const { source, markdown } = await snapshotPlanningSource(
-      project,
-      module,
-      uid,
-    );
+    if (existing.revision) {
+      const card = await read(project, uid);
+      await assertCurrentPlanningCardSource(project, card);
+      return card;
+    }
+    let snapshot: Awaited<ReturnType<typeof snapshotPlanningSource>>;
+    try {
+      snapshot = await snapshotPlanningSource(project, module, uid);
+    } catch (error) {
+      if (/Formal source Node not found/.test(String(error)))
+        throw new PublicApiError(
+          'This source is not available in Just Do It.',
+          409,
+        );
+      throw error;
+    }
+    const { source, markdown } = snapshot;
     const [cards, sources] = await Promise.all([
       list(project),
       listPlanningSources(project),
@@ -483,7 +495,7 @@ export function createPlanningService(
     }
   }
 
-  async function finish(
+  async function finishUnlocked(
     project: RegisteredProject,
     request: CardHarnessRequest,
     outcome: Awaited<LocalAgentRun['completion']> | Error,
@@ -583,7 +595,20 @@ export function createPlanningService(
     }
   }
 
-  async function start(project: RegisteredProject, input: StartPlanningInput) {
+  async function finish(
+    project: RegisteredProject,
+    request: CardHarnessRequest,
+    outcome: Awaited<LocalAgentRun['completion']> | Error,
+  ) {
+    return withDeliveryState(project, () =>
+      finishUnlocked(project, request, outcome),
+    );
+  }
+
+  async function startUnlocked(
+    project: RegisteredProject,
+    input: StartPlanningInput,
+  ) {
     assertCardUuid(input.cardId);
     assertRevision(input.expectedRevision);
     validatePlanningProfile(input.profile);
@@ -599,6 +624,7 @@ export function createPlanningService(
     )
       throw new PublicApiError('Invalid planning input.', 400);
     const card = await read(project, input.cardId);
+    await assertCurrentPlanningCardSource(project, card);
     if (card.revision !== input.expectedRevision)
       throw new PublicApiError(
         'Card changed. Reload before trying again.',
@@ -827,7 +853,7 @@ export function createPlanningService(
     return saved;
   }
 
-  async function update(
+  async function updateUnlocked(
     project: RegisteredProject,
     cardId: string,
     expectedRevision: number,
@@ -930,6 +956,31 @@ export function createPlanningService(
       },
     );
   }
+
+  async function importSource(
+    project: RegisteredProject,
+    module: string,
+    uid: string,
+  ) {
+    return withDeliveryState(project, () =>
+      importSourceUnlocked(project, module, uid),
+    );
+  }
+
+  async function start(project: RegisteredProject, input: StartPlanningInput) {
+    return withDeliveryState(project, () => startUnlocked(project, input));
+  }
+
+  async function update(
+    project: RegisteredProject,
+    cardId: string,
+    expectedRevision: number,
+    action: 'finalize' | 'reopen' | 'cancel',
+  ) {
+    return withDeliveryState(project, () =>
+      updateUnlocked(project, cardId, expectedRevision, action),
+    );
+  }
   return {
     list,
     read,
@@ -945,6 +996,27 @@ export function createPlanningService(
 }
 
 export const planningService = createPlanningService();
+
+export async function assertCurrentPlanningCardSource(
+  project: RegisteredProject,
+  card: PlanningCard,
+) {
+  if (card.source.module !== 'what-to-do') return;
+  const current = (await listPlanningSources(project)).find(
+    (source) =>
+      source.module === 'what-to-do' && source.uid === card.source.uid,
+  );
+  if (
+    !current ||
+    !card.source.version ||
+    current.version !== card.source.version ||
+    current.id !== card.source.id
+  )
+    throw new PublicApiError(
+      'This Delivery Contract is no longer current. Return to What to Do before continuing.',
+      409,
+    );
+}
 
 function sourceDelivered(cards: PlanningCard[], source: PlanningSource) {
   const card = cards.find(

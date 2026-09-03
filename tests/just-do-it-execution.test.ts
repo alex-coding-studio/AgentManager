@@ -223,6 +223,41 @@ async function settled(
   throw new Error('Fixture did not settle.');
 }
 
+void test('execution cannot start from a Delivery Contract that is no longer current', async (t) => {
+  const { project, card, service, calls, input } = await fixture(t);
+  const staleCard: PlanningCard = {
+    ...card,
+    revision: card.revision + 1,
+    source: {
+      ...card.source,
+      module: 'what-to-do',
+      version: '0'.repeat(64),
+    },
+  };
+  await appendCardWorkRecord(
+    path.join(project.planningPath, 'implementation/cards'),
+    card.id,
+    card.revision,
+    {
+      kind: 'system-event',
+      stage: 'planning',
+      actionId: null,
+      event: 'plan-finalized',
+      text: 'Fixture now represents a Delivery Contract.',
+      refs: [],
+    },
+    { 'planning-state.json': JSON.stringify(staleCard) },
+  );
+  await assert.rejects(
+    service.start(project, {
+      ...input,
+      expectedRevision: staleCard.revision,
+    }),
+    /no longer current/,
+  );
+  assert.equal(calls.length, 0);
+});
+
 void test('coding output persists, feedback creates another round, and only user acceptance unlocks the next Action', async (t) => {
   const { project, store, service, calls, input } = await fixture(t);
   await savePlanningInstructions(project, 'Use local development rules.');

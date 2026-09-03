@@ -43,6 +43,7 @@ const step2 = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const originUid = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 const foundationUid = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
 const deliveryUid = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+const productDesignUid = '99999999-9999-4999-8999-999999999999';
 
 async function fixture(t: { after: (fn: () => Promise<void>) => void }) {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'jdi-planning-test-'));
@@ -121,6 +122,39 @@ async function addUnfinishedLineage(project: RegisteredProject) {
   const source = JSON.parse(await readFile(sourceFile, 'utf8'));
   source.relations = { derivedFrom: [originUid], dependsOn: [] };
   await writeFile(sourceFile, JSON.stringify(source));
+}
+
+async function addProductDesignFeature(project: RegisteredProject) {
+  const directory = path.join(
+    project.planningPath,
+    'whats-next/nodes/NODE-99999999',
+  );
+  await mkdir(directory, { recursive: true });
+  await writeFile(
+    path.join(directory, 'node.json'),
+    JSON.stringify({
+      schemaVersion: 1,
+      id: 'NODE-99999999',
+      uid: productDesignUid,
+      role: 'node',
+      status: 'accepted',
+      layer: 'product-design',
+      artifactKind: 'feature',
+      title: 'Product Design Feature',
+      summary: 'Must pass through What to Do.',
+      relations: { derivedFrom: [], dependsOn: [] },
+      resources: [
+        {
+          kind: 'output',
+          path: 'whats-next/nodes/NODE-99999999/output.md',
+        },
+      ],
+    }),
+  );
+  await writeFile(
+    path.join(directory, 'output.md'),
+    '# Product Design Feature',
+  );
 }
 
 async function addDeliveryMap(project: RegisteredProject) {
@@ -334,6 +368,19 @@ void test('imports accepted formal Nodes idempotently and never imports Candidat
   );
 });
 
+void test('Product Design Features cannot bypass What to Do', async (t) => {
+  const project = await fixture(t);
+  await addProductDesignFeature(project);
+  const { service } = controlled();
+  const sources = await listPlanningSources(project);
+  assert.ok(sources.some((source) => source.uid === uid));
+  assert.ok(!sources.some((source) => source.uid === productDesignUid));
+  await assert.rejects(
+    service.importSource(project, 'whats-next', productDesignUid),
+    /not available in Just Do It/,
+  );
+});
+
 void test('imports only available Delivery Contracts and preserves hard dependencies', async (t) => {
   const project = await fixture(t);
   await addDeliveryMap(project);
@@ -352,6 +399,7 @@ void test('imports only available Delivery Contracts and preserves hard dependen
     'what-to-do',
     foundationUid,
   );
+  assert.match(foundationCard.source.version ?? '', /^[0-9a-f]{64}$/);
   assert.match(
     await readCardWorkDocument(
       path.join(project.planningPath, 'implementation/cards'),
@@ -378,6 +426,26 @@ void test('imports only available Delivery Contracts and preserves hard dependen
     unmetPlanningSourceDependencies(delivery, [deliveredFoundation], sources),
     [],
   );
+});
+
+void test('a changed Delivery Contract cannot reuse or plan from a stale Card', async (t) => {
+  const project = await fixture(t);
+  await addDeliveryMap(project);
+  const { service, calls } = controlled();
+  const card = await service.importSource(project, 'what-to-do', foundationUid);
+  const file = path.join(project.planningPath, 'what-to-do/current-map.json');
+  const map = JSON.parse(await readFile(file, 'utf8'));
+  map.contracts[0].summary = 'A changed contract boundary.';
+  await writeFile(file, `${JSON.stringify(map)}\n`);
+  await assert.rejects(
+    service.importSource(project, 'what-to-do', foundationUid),
+    /no longer current/,
+  );
+  await assert.rejects(
+    service.start(project, input(card)),
+    /no longer current/,
+  );
+  assert.equal(calls.length, 0);
 });
 
 void test('unfinished lineage requires an explicit dependency decision before planning', async (t) => {

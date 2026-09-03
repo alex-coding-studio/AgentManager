@@ -14,6 +14,8 @@ import {
   whatToDoAgentEnvironment,
 } from '../lib/what-to-do-runs.ts';
 import { readWhatToDoCurrentMap } from '../lib/what-to-do-storage.ts';
+import { planningService } from '../lib/just-do-it-planning-service.ts';
+import { appendCardWorkRecord } from '../lib/just-do-it-worklog.ts';
 
 const featureUid = '00000000-0000-4000-8000-000000000002';
 
@@ -230,6 +232,37 @@ function retainedResult(
   };
 }
 
+function replacementResult(
+  run: Awaited<ReturnType<typeof startWhatToDoRun>>,
+  map: NonNullable<Awaited<ReturnType<typeof readWhatToDoCurrentMap>>>,
+  original: ReturnType<typeof result>,
+) {
+  const priorContract = map.contracts[0]!;
+  const priorCandidateId = `CANDIDATE-${priorContract.id.slice(5)}`;
+  const candidateId = 'CANDIDATE-0002';
+  const { contractIds: _contractIds, ...claim } = map.sourceClaims[0]!;
+  return {
+    ...original,
+    harness: run.request.harness,
+    request: run.request.request,
+    responseMarkdown: '# Delivery Map\n\nThe Contract was replaced.',
+    candidates: [
+      {
+        ...original.candidates[0]!,
+        candidateId,
+        title: 'Replacement delivery boundary',
+        summary: 'A newly coordinated delivery boundary.',
+      },
+    ],
+    sourceClaims: [{ ...claim, contractCandidateIds: [candidateId] }],
+    recomposition: {
+      effects: [
+        { kind: 'replace', from: [priorCandidateId], to: [candidateId] },
+      ],
+    },
+  };
+}
+
 async function settled(project: RegisteredProject, runId: string) {
   for (let index = 0; index < 100; index += 1) {
     const run = await readWhatToDoRun(project, runId);
@@ -347,6 +380,106 @@ void test('the current formal Map is default Context and focus is optional empha
   await assert.rejects(
     startWhatToDoRun(project, input(), control.transport),
     /already part of the current Delivery Map/,
+  );
+});
+
+void test('Map replacement and Contract import leave no deletable stale Card', async (t) => {
+  const { project } = await fixture(t);
+  const control = controlled();
+  const first = await startWhatToDoRun(project, input(), control.transport);
+  const firstResult = result(first);
+  control.calls[0]!.resolve({
+    agentSessionId: 'agent-session-1',
+    finalOutput: JSON.stringify(firstResult),
+    usage: null,
+  });
+  const completed = await settled(project, first.id);
+  const contract = completed.map!.contracts[0]!;
+  await planningService.importSource(project, 'what-to-do', contract.uid);
+  const second = await startWhatToDoRun(
+    project,
+    { ...input(), sourceUids: [], focusContractIds: [contract.id] },
+    control.transport,
+  );
+  control.calls[1]!.resolve({
+    agentSessionId: 'agent-session-2',
+    finalOutput: JSON.stringify(
+      replacementResult(second, completed.map!, firstResult),
+    ),
+    usage: null,
+  });
+  const repeatedImport = planningService
+    .importSource(project, 'what-to-do', contract.uid)
+    .then(
+      () => 'imported',
+      () => 'rejected',
+    );
+  const adjusted = await settled(project, second.id);
+  await repeatedImport;
+  assert.equal(adjusted.status, 'succeeded');
+  assert.notEqual(adjusted.map?.contracts[0]?.uid, contract.uid);
+  await assert.rejects(
+    planningService.read(project, contract.uid),
+    /not found/,
+  );
+});
+
+void test('Map replacement is blocked by a Contract Card with a confirmed Plan', async (t) => {
+  const { project, planningPath } = await fixture(t);
+  const control = controlled();
+  const first = await startWhatToDoRun(project, input(), control.transport);
+  const firstResult = result(first);
+  control.calls[0]!.resolve({
+    agentSessionId: 'agent-session-1',
+    finalOutput: JSON.stringify(firstResult),
+    usage: null,
+  });
+  const completed = await settled(project, first.id);
+  const contract = completed.map!.contracts[0]!;
+  const card = await planningService.importSource(
+    project,
+    'what-to-do',
+    contract.uid,
+  );
+  const protectedCard = {
+    ...card,
+    revision: card.revision + 1,
+    plan: { status: 'finalized' as const, overview: 'Confirmed.', steps: [] },
+    finalizedAt: '2026-09-02T01:00:00.000Z',
+  };
+  await appendCardWorkRecord(
+    path.join(planningPath, 'implementation/cards'),
+    card.id,
+    card.revision,
+    {
+      kind: 'system-event',
+      stage: 'planning',
+      actionId: null,
+      event: 'plan-finalized',
+      text: 'The Plan was confirmed for this test.',
+      refs: [],
+    },
+    { 'planning-state.json': JSON.stringify(protectedCard) },
+  );
+  const second = await startWhatToDoRun(
+    project,
+    { ...input(), sourceUids: [], focusContractIds: [contract.id] },
+    control.transport,
+  );
+  control.calls[1]!.resolve({
+    agentSessionId: 'agent-session-2',
+    finalOutput: JSON.stringify(
+      replacementResult(second, completed.map!, firstResult),
+    ),
+    usage: null,
+  });
+  const adjusted = await settled(project, second.id);
+  assert.equal(adjusted.status, 'failed');
+  assert.match(adjusted.error ?? '', /already in progress/);
+  assert.equal((await readWhatToDoCurrentMap(project))?.runId, first.id);
+  assert.equal(
+    (await planningService.read(project, contract.uid)).plan?.status,
+    'finalized',
   );
 });
 
