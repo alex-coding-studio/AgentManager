@@ -130,6 +130,20 @@ export const TASK_GRAPH_MARKDOWN_SHAPES: readonly PlanningPathShape[] = [
       'i',
     ),
   },
+  {
+    name: 'What to Do Run response or summary',
+    pattern: new RegExp(
+      String.raw`^what-to-do\/runs\/${RUN_ID}\/(?:response|summary)\.md$`,
+      'i',
+    ),
+  },
+  {
+    name: 'What to Do Delivery Contract output',
+    pattern: new RegExp(
+      String.raw`^what-to-do\/runs\/${RUN_ID}\/contracts\/${NODE_ID}\/output\.md$`,
+      'i',
+    ),
+  },
 ];
 
 export const ANY_PLANNING_RELATIVE_PATH: PlanningPathShape = {

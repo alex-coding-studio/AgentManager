@@ -10,6 +10,7 @@ import {
 } from 'node:fs/promises';
 import path from 'node:path';
 import type { RegisteredProject } from './project-registry.ts';
+import type { WhatToDoDeliveryMap } from './what-to-do-map.ts';
 
 const runIdPattern = /^RUN-[0-9a-f-]{36}$/;
 
@@ -119,6 +120,42 @@ export async function writeWhatToDoRepositorySummary(
   await atomicText(
     path.join(directory, 'summary.md'),
     `---\nrepositoryFingerprint: ${repositoryFingerprint}\nmarkdownSha256: ${markdownSha256}\n---\n\n${markdown}`,
+  );
+}
+
+export async function readWhatToDoCurrentMap(
+  project: RegisteredProject,
+): Promise<WhatToDoDeliveryMap | null> {
+  const directory = await whatToDoDirectory(project);
+  const file = path.join(directory, 'current-map.json');
+  try {
+    const info = await lstat(file);
+    if (!info.isFile() || info.isSymbolicLink() || info.size > 2 * 1024 * 1024)
+      throw new Error('Invalid What to Do current Map.');
+    const map = JSON.parse(await readFile(file, 'utf8')) as WhatToDoDeliveryMap;
+    if (
+      map.schemaVersion !== 1 ||
+      !/^RUN-[0-9a-f-]{36}$/.test(map.runId) ||
+      !Array.isArray(map.contracts) ||
+      !Array.isArray(map.sourceClaims) ||
+      !Array.isArray(map.sourceSnapshots)
+    )
+      throw new Error('Invalid What to Do current Map.');
+    return map;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
+export async function writeWhatToDoCurrentMap(
+  project: RegisteredProject,
+  map: WhatToDoDeliveryMap,
+) {
+  const directory = await whatToDoDirectory(project, [], true);
+  await atomicText(
+    path.join(directory, 'current-map.json'),
+    `${JSON.stringify(map, null, 2)}\n`,
   );
 }
 

@@ -1,5 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import { lstat, readFile, readdir, realpath, rm } from 'node:fs/promises';
+import {
+  lstat,
+  mkdir,
+  readFile,
+  readdir,
+  realpath,
+  rename,
+  rm,
+} from 'node:fs/promises';
 import path from 'node:path';
 import { validateAgentProfile, type AgentProfile } from './agent-profile.ts';
 import {
@@ -29,9 +37,19 @@ import {
   type WhatToDoHarnessResult,
 } from './what-to-do-harness.ts';
 import {
+  materializeWhatToDoDeliveryMap,
+  renderWhatToDoContract,
+  whatToDoContractCandidateId,
+  whatToDoKnownCandidates,
+  whatToDoKnownSourceClaims,
+  type WhatToDoDeliveryMap,
+} from './what-to-do-map.ts';
+import {
   atomicWhatToDoText,
+  readWhatToDoCurrentMap,
   whatToDoDirectory,
   whatToDoRunDirectory,
+  writeWhatToDoCurrentMap,
   writeWhatToDoRepositorySummary,
 } from './what-to-do-storage.ts';
 
@@ -42,6 +60,7 @@ export type WhatToDoRunRecord = {
   sourceUids: string[];
   contextRefs: string[];
   repositoryEvidencePaths: string[];
+  focusContractIds: string[];
   attachmentNames: string[];
   profile: AgentProfile;
   startedAt: string;
@@ -51,6 +70,7 @@ export type WhatToDoRunRecord = {
   activity: AgentGraphActivity[];
   request: WhatToDoHarnessRequest;
   result: WhatToDoHarnessResult | null;
+  map: WhatToDoDeliveryMap | null;
   error: string | null;
 };
 
@@ -98,7 +118,19 @@ export async function startWhatToDoRun(
   activeRuns.set(key, active);
   let preparedRun = false;
   try {
-    const prepared = await prepareWhatToDoContext(project, runId, input);
+    const currentMap = await readWhatToDoCurrentMap(project);
+    if (currentMap) {
+      const currentMapRun = await readWhatToDoRun(project, currentMap.runId);
+      if (
+        currentMapRun.status !== 'succeeded' ||
+        currentMapRun.map?.runId !== currentMap.runId
+      )
+        throw new Error('The current What to Do Map has no committed Run.');
+    }
+    const prepared = await prepareWhatToDoContext(project, runId, {
+      ...input,
+      currentMap,
+    });
     preparedRun = true;
     const contextRoot = await relativeContextRoot(
       project,
@@ -109,6 +141,17 @@ export async function startWhatToDoRun(
       requestId: runId,
       contextRoot,
       content: prepared.packet,
+      operation: currentMap ? 'adjust-map' : 'create-map',
+      currentMapPath: currentMap ? 'what-to-do/current-map.json' : null,
+      focusCandidateIds: currentMap
+        ? (input.focusContractIds ?? []).map((contractId) =>
+            whatToDoContractCandidateId(
+              currentMap.contracts.find(
+                (contract) => contract.id === contractId,
+              )!,
+            ),
+          )
+        : [],
       sourceFeatures: prepared.sources,
       repository: {
         factsPath: 'what-to-do/repository-context/facts.json',
@@ -129,12 +172,13 @@ export async function startWhatToDoRun(
     const run: WhatToDoRunRecord = {
       schemaVersion: 1,
       id: runId,
-      status: 'running',
+      status: 'running' as const,
       sourceUids: [...new Set(input.sourceUids)],
       contextRefs: [...new Set(input.contextRefs ?? [])],
       repositoryEvidencePaths: [
         ...new Set(input.repositoryEvidencePaths ?? []),
       ],
+      focusContractIds: [...new Set(input.focusContractIds ?? [])],
       attachmentNames: (input.files ?? []).map((file) => file.name),
       profile: structuredClone(input.profile),
       startedAt,
@@ -144,6 +188,7 @@ export async function startWhatToDoRun(
       activity,
       request,
       result: null,
+      map: null,
       error: null,
     };
     const runPath = await whatToDoRunDirectory(project, runId);
@@ -167,7 +212,7 @@ export async function startWhatToDoRun(
       onActivity: active.recorder.onActivity,
     });
     active.cancel = agentRun.cancel;
-    settleLater(project, run, active, agentRun, prepared);
+    settleLater(project, run, active, agentRun, prepared, currentMap);
     return run;
   } catch (error) {
     if (preparedRun)
@@ -186,6 +231,7 @@ function settleLater(
   active: ActiveRun,
   agentRun: LocalAgentRun,
   prepared: Awaited<ReturnType<typeof prepareWhatToDoContext>>,
+  currentMap: WhatToDoDeliveryMap | null,
 ) {
   void agentRun.completion
     .then(async (agent) => {
@@ -194,19 +240,43 @@ function settleLater(
       active.agentOutput = agent.finalOutput;
       const result = parseWhatToDoHarnessResult(agent.finalOutput, {
         request: run.request.request,
-        operation: 'create-map',
+        operation: run.request.operation,
         knownSources: prepared.knownSources,
+        requiredSourcePaths: prepared.requiredSourcePaths,
         userInput: prepared.userInput,
         knownEvidencePaths: prepared.knownEvidencePaths,
+        ...(currentMap
+          ? {
+              knownCandidates: whatToDoKnownCandidates(currentMap),
+              knownSourceClaims: whatToDoKnownSourceClaims(currentMap),
+              focusCandidateIds: run.request.focusCandidateIds,
+            }
+          : {}),
       });
+      const endedAt = new Date().toISOString();
+      const map =
+        result.outcome === 'map-proposal'
+          ? materializeWhatToDoDeliveryMap({
+              runId: run.id,
+              updatedAt: endedAt,
+              sourceUids: [
+                ...(currentMap?.sourceUids ?? []),
+                ...run.sourceUids,
+              ],
+              result,
+              currentMap,
+              sourceSnapshots: prepared.sourceSnapshots,
+            })
+          : null;
       const terminal: WhatToDoRunRecord = {
         ...run,
         status: 'succeeded',
-        endedAt: new Date().toISOString(),
+        endedAt,
         agentSessionId: agent.agentSessionId,
         usage: agent.usage,
         activity: [...active.activity],
         result,
+        map,
         error: null,
       };
       const runPath = await whatToDoRunDirectory(project, run.id);
@@ -217,7 +287,30 @@ function settleLater(
         summary: renderRunSummary(result),
         response: result.responseMarkdown,
       });
-      await writeRunRecord(project, terminal);
+      if (map)
+        await Promise.all(
+          map.contracts
+            .filter((contract) =>
+              contract.outputPath.startsWith(
+                `what-to-do/runs/${run.id}/contracts/`,
+              ),
+            )
+            .map(async (contract) => {
+              const directory = path.join(runPath, 'contracts', contract.id);
+              await mkdir(directory, { recursive: true });
+              await atomicWhatToDoText(
+                path.join(directory, 'output.md'),
+                renderWhatToDoContract(contract),
+              );
+            }),
+        );
+      if (map) {
+        await stageTerminalRunRecord(project, terminal);
+        await writeWhatToDoCurrentMap(project, map);
+        await publishTerminalRunRecord(project, run.id).catch(() => undefined);
+      } else {
+        await writeRunRecord(project, terminal);
+      }
       active.terminal = terminal;
       await writeWhatToDoRepositorySummary(
         project,
@@ -234,9 +327,13 @@ function settleLater(
         endedAt: new Date().toISOString(),
         activity: [...active.activity],
         result: null,
+        map: null,
         error: 'The What to Do Agent did not complete.',
       };
       const runPath = await whatToDoRunDirectory(project, run.id);
+      await rm(path.join(runPath, 'terminal.json'), { force: true }).catch(
+        () => undefined,
+      );
       await active.recorder?.flush().catch(() => undefined);
       await writeAgentGraphRunEvidence(runPath, {
         activity: terminal.activity,
@@ -277,6 +374,7 @@ export async function cancelWhatToDoRun(
   await writeAgentGraphRunEvidence(await whatToDoRunDirectory(project, runId), {
     activity: canceled.activity,
     summary: '# Canceled\n\nThe What to Do Agent Run was canceled.\n',
+    response: '# Canceled\n\nThe What to Do Agent Run was canceled.\n',
   });
   await writeRunRecord(project, canceled);
   if (activeRuns.get(project.planningPath) === active)
@@ -288,22 +386,42 @@ export async function readWhatToDoRun(
   project: RegisteredProject,
   runId: string,
 ) {
+  const currentActive = activeRuns.get(project.planningPath);
+  if (!currentActive || currentActive.runId !== runId)
+    await reconcileTerminalRunRecord(project, runId);
   const file = path.join(
     await whatToDoRunDirectory(project, runId),
     'run.json',
   );
   const info = await lstat(file);
-  if (!info.isFile() || info.isSymbolicLink() || info.size > 2 * 1024 * 1024)
+  if (!info.isFile() || info.isSymbolicLink() || info.size > 4 * 1024 * 1024)
     throw new Error('Invalid What to Do Run record.');
-  const run = JSON.parse(await readFile(file, 'utf8')) as WhatToDoRunRecord;
+  const stored = JSON.parse(
+    await readFile(file, 'utf8'),
+  ) as Partial<WhatToDoRunRecord>;
+  const run = {
+    ...stored,
+    focusContractIds: Array.isArray(stored.focusContractIds)
+      ? stored.focusContractIds
+      : [],
+    map: stored.map ?? null,
+  } as WhatToDoRunRecord;
   if (
     run.schemaVersion !== 1 ||
     run.id !== runId ||
     !['running', 'succeeded', 'failed', 'canceled'].includes(run.status)
   )
     throw new Error('Invalid What to Do Run record.');
-  const active = activeRuns.get(project.planningPath);
+  const active = currentActive;
   if (active?.runId === run.id && active.terminal) return active.terminal;
+  if (active?.runId === run.id && active.settling)
+    return {
+      ...run,
+      status: 'running' as const,
+      endedAt: null,
+      result: null,
+      map: null,
+    };
   if (run.status === 'running' && active?.runId === run.id)
     return { ...run, activity: [...active.activity] };
   if (run.status === 'running') {
@@ -376,9 +494,61 @@ async function writeRunRecord(
   );
 }
 
+async function stageTerminalRunRecord(
+  project: RegisteredProject,
+  run: WhatToDoRunRecord,
+) {
+  await atomicWhatToDoText(
+    path.join(await whatToDoRunDirectory(project, run.id), 'terminal.json'),
+    `${JSON.stringify(run, null, 2)}\n`,
+  );
+}
+
+async function publishTerminalRunRecord(
+  project: RegisteredProject,
+  runId: string,
+) {
+  const directory = await whatToDoRunDirectory(project, runId);
+  await rename(
+    path.join(directory, 'terminal.json'),
+    path.join(directory, 'run.json'),
+  );
+}
+
+async function reconcileTerminalRunRecord(
+  project: RegisteredProject,
+  runId: string,
+) {
+  const directory = await whatToDoRunDirectory(project, runId);
+  const terminalFile = path.join(directory, 'terminal.json');
+  try {
+    const info = await lstat(terminalFile);
+    if (!info.isFile() || info.isSymbolicLink() || info.size > 4 * 1024 * 1024)
+      throw new Error('Invalid What to Do terminal Run record.');
+    const terminal = JSON.parse(
+      await readFile(terminalFile, 'utf8'),
+    ) as WhatToDoRunRecord;
+    const currentMap = await readWhatToDoCurrentMap(project);
+    if (
+      terminal.schemaVersion === 1 &&
+      terminal.id === runId &&
+      terminal.status === 'succeeded' &&
+      terminal.map?.runId === runId &&
+      currentMap?.runId === runId
+    ) {
+      await publishTerminalRunRecord(project, runId);
+      return;
+    }
+    await rm(terminalFile, { force: true });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+    throw error;
+  }
+}
+
 function renderRunSummary(result: WhatToDoHarnessResult) {
   if (result.outcome === 'map-proposal')
-    return `# Delivery Map\n\nProposed ${result.candidates.length} Contract boundaries.\n`;
+    return `# Delivery Map\n\nApplied ${result.candidates.length} Contract boundaries.\n`;
   if (result.outcome === 'clarification')
     return `# Clarification\n\n${result.clarification.question}\n`;
   if (result.outcome === 'insufficient-evidence')

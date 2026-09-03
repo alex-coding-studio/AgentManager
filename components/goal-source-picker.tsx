@@ -40,6 +40,8 @@ type CompactNode = Node<
   {
     entry: GoalPickerEntry;
     disabled: boolean;
+    hasIncomingConnection: boolean;
+    hasOutgoingConnection: boolean;
     onChoose: (source: PlanningSource) => void;
   },
   'compactGoal'
@@ -86,7 +88,12 @@ function CompactGoalCard({ data }: NodeProps<CompactNode>) {
         type="target"
         position={Position.Left}
         isConnectable={false}
-        className="!size-1.5 !border-0 !bg-muted-foreground"
+        className={cn(
+          '!size-1.5 !border-0',
+          data.hasIncomingConnection
+            ? '!bg-muted-foreground'
+            : '!bg-transparent !opacity-0',
+        )}
       />
       <button
         type="button"
@@ -117,7 +124,12 @@ function CompactGoalCard({ data }: NodeProps<CompactNode>) {
         type="source"
         position={Position.Right}
         isConnectable={false}
-        className="!size-1.5 !border-0 !bg-muted-foreground"
+        className={cn(
+          '!size-1.5 !border-0',
+          data.hasOutgoingConnection
+            ? '!bg-muted-foreground'
+            : '!bg-transparent !opacity-0',
+        )}
       />
     </>
   );
@@ -139,6 +151,8 @@ export function GoalSourceGraph({
     () => buildGoalPickerGraph(entries, moduleName),
     [entries, moduleName],
   );
+  const incomingNodeIds = new Set(graph.edges.map((edge) => edge.target));
+  const outgoingNodeIds = new Set(graph.edges.map((edge) => edge.source));
   const nodes: CompactNode[] = graph.nodes.map(({ entry, x, y }) => ({
     id: entry.uid,
     type: 'compactGoal',
@@ -146,7 +160,13 @@ export function GoalSourceGraph({
     width: GOAL_PICKER_WIDTH,
     height: GOAL_PICKER_HEIGHT,
     style: { width: GOAL_PICKER_WIDTH, height: GOAL_PICKER_HEIGHT },
-    data: { entry, disabled, onChoose },
+    data: {
+      entry,
+      disabled,
+      hasIncomingConnection: incomingNodeIds.has(entry.uid),
+      hasOutgoingConnection: outgoingNodeIds.has(entry.uid),
+      onChoose,
+    },
   }));
   const edges = graph.edges.map((edge) => {
     const lane = goalPickerEdgeLane(graph.nodes, edge);

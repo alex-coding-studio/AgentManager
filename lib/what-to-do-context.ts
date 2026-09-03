@@ -1,4 +1,6 @@
 import type { AgentProfile } from './agent-profile.ts';
+import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
   agentGraphContentPacket,
@@ -9,7 +11,12 @@ import {
 import { PublicApiError } from './api-errors.ts';
 import { readDomainModel, type DomainModel } from './domain-model.ts';
 import type { RegisteredProject } from './project-registry.ts';
+import { resolvePlanningPath } from './planning-paths.ts';
 import { readTaskGraphMarkdownResource } from './task-graph.ts';
+import {
+  whatToDoCurrentMapPromptView,
+  type WhatToDoDeliveryMap,
+} from './what-to-do-map.ts';
 import {
   collectWhatToDoRepositoryFacts,
   readWhatToDoRepositoryEvidence,
@@ -31,6 +38,8 @@ export type WhatToDoRunInput = {
   contextRefs?: string[];
   files?: File[];
   repositoryEvidencePaths?: string[];
+  focusContractIds?: string[];
+  currentMap?: WhatToDoDeliveryMap | null;
 };
 
 export async function prepareWhatToDoContext(
@@ -46,6 +55,29 @@ export async function prepareWhatToDoContext(
   const repositoryEvidencePaths = [
     ...new Set(input.repositoryEvidencePaths ?? []),
   ];
+  const focusContractIds = [...new Set(input.focusContractIds ?? [])];
+  const currentMap = input.currentMap ?? null;
+  if (!currentMap && input.sourceUids.length === 0)
+    throw new PublicApiError(
+      'Select at least one accepted Product Design Feature.',
+      400,
+    );
+  const currentContracts = new Map(
+    (currentMap?.contracts ?? []).map((contract) => [contract.id, contract]),
+  );
+  if (
+    currentMap &&
+    input.sourceUids.some((uid) => currentMap.sourceUids.includes(uid))
+  )
+    throw new PublicApiError(
+      'A selected Product Design Feature is already part of the current Delivery Map.',
+      409,
+    );
+  if (focusContractIds.some((id) => !currentContracts.has(id)))
+    throw new PublicApiError(
+      'A selected Delivery Contract is no longer available.',
+      409,
+    );
   if (contextRefs.length > 50)
     throw new PublicApiError('Select no more than 50 Context documents.', 400);
   if (files.length > 20)
@@ -58,12 +90,40 @@ export async function prepareWhatToDoContext(
 
   const [sources, repositoryFacts, repositorySummary, domainModel] =
     await Promise.all([
-      selectWhatToDoFeatureSources(project, input.sourceUids),
+      input.sourceUids.length
+        ? selectWhatToDoFeatureSources(project, input.sourceUids)
+        : Promise.resolve([]),
       collectWhatToDoRepositoryFacts(project),
       readWhatToDoRepositorySummary(project),
       readDomainModel(project),
     ]);
   const featureInputs = await whatToDoFeatureWorkspaceInputs(project, sources);
+  const mapInputs = await Promise.all(
+    (currentMap?.contracts ?? []).map(async (contract) => {
+      const resource = await readTaskGraphMarkdownResource(
+        project,
+        contract.outputPath,
+      );
+      return {
+        role: 'related' as const,
+        kind: focusContractIds.includes(contract.id)
+          ? 'focused-delivery-contract'
+          : 'delivery-contract',
+        logicalPath: resource.path,
+        content: resource.markdown,
+        nodeId: contract.id,
+      };
+    }),
+  );
+  const sourceSnapshotInputs = await currentMapSourceInputs(
+    project,
+    currentMap,
+  );
+  const sourceInputs = [
+    ...featureInputs,
+    ...mapInputs,
+    ...sourceSnapshotInputs,
+  ];
   let repositoryEvidence: Array<{ path: string; content: string }>;
   try {
     const [automatic, targeted] = await Promise.all([
@@ -102,7 +162,17 @@ export async function prepareWhatToDoContext(
   try {
     const staged = await writeAgentGraphContextWorkspace(staging.stagingPath, [
       userInput,
-      ...featureInputs,
+      ...sourceInputs,
+      ...(currentMap
+        ? [
+            {
+              role: 'related' as const,
+              kind: 'delivery-map',
+              logicalPath: 'what-to-do/current-map.json',
+              content: `${JSON.stringify(whatToDoCurrentMapPromptView(currentMap), null, 2)}\n`,
+            },
+          ]
+        : []),
       {
         role: 'related',
         kind: 'repository-facts',
@@ -168,25 +238,63 @@ export async function prepareWhatToDoContext(
       content: userInput.content,
     },
     knownSources: Object.fromEntries(
-      sources.map((source) => [
-        source.outputPath,
+      sourceInputs.map((entry) => [
+        entry.logicalPath,
         {
-          sha256: source.outputSha256,
-          content: featureInputContent(featureInputs, source.outputPath),
+          sha256: createHash('sha256').update(entry.content).digest('hex'),
+          content: entry.content,
         },
       ]),
     ),
+    sourceSnapshots: [
+      ...workspace.manifest.primary,
+      ...workspace.manifest.related,
+    ]
+      .filter((entry) =>
+        sourceInputs.some((source) => source.logicalPath === entry.logicalPath),
+      )
+      .map((entry) => ({
+        logicalPath: entry.logicalPath,
+        sha256: entry.sha256,
+        storedPath: `what-to-do/runs/${runId}/context/${entry.workspacePath}`,
+      })),
+    requiredSourcePaths: [
+      ...new Set([
+        ...sources.map((source) => source.outputPath),
+        ...(currentMap?.sourceClaims.map((claim) => claim.sourcePath) ?? []),
+      ]),
+    ],
     knownEvidencePaths: knownEvidencePaths(workspace.manifest),
   };
 }
 
-function featureInputContent(
-  inputs: ContextWorkspaceInput[],
-  logicalPath: string,
-) {
-  const input = inputs.find((entry) => entry.logicalPath === logicalPath);
-  if (!input) throw new Error('What to Do Feature Context is unavailable.');
-  return input.content;
+async function currentMapSourceInputs(
+  project: RegisteredProject,
+  map: WhatToDoDeliveryMap | null,
+): Promise<ContextWorkspaceInput[]> {
+  return Promise.all(
+    (map?.sourceSnapshots ?? []).map(async (snapshot) => {
+      const resolved = await resolvePlanningPath(project, snapshot.storedPath, {
+        require: 'file',
+        maxBytes: 2 * 1024 * 1024,
+        within: 'what-to-do/runs',
+      });
+      const content = await readFile(resolved.absolutePath, 'utf8');
+      if (
+        createHash('sha256').update(content).digest('hex') !== snapshot.sha256
+      )
+        throw new PublicApiError(
+          'Current Delivery Map source evidence changed. Reload before continuing.',
+          409,
+        );
+      return {
+        role: 'related' as const,
+        kind: 'delivery-map-source',
+        logicalPath: snapshot.logicalPath,
+        content,
+      };
+    }),
+  );
 }
 
 async function contextInputs(

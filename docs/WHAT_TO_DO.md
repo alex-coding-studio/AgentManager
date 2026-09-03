@@ -1,6 +1,6 @@
 # What to Do
 
-Status: product design accepted for documentation; implementation has not started.
+Status: implementation in progress from the accepted product design.
 
 ## Purpose
 
@@ -39,11 +39,8 @@ permits Just Do It imports from exactly three sources:
 
 - **Source Feature:** an accepted Product Design Feature selected for one What
   to Do request.
-- **Delivery Map:** the complete candidate graph proposed for the selected
-  Source Features.
-- **Contract Candidate:** one proposed node in an unaccepted Delivery Map.
-- **Delivery Contract:** one formal Map node after the user accepts the complete
-  Map.
+- **Delivery Map:** the current complete graph of formal Delivery Contracts.
+- **Delivery Contract:** one formal Map node produced by a validated Map update.
 - **Delivery Strategy:** the Agent's recommended way to approach a Contract,
   such as Foundation-first, Experience-first, Vertical slice, or Risk-first.
 - **Hard dependency:** a Contract whose delivered result is required before a
@@ -63,10 +60,26 @@ The standard bottom-right Composer retains the shared Praxis input hierarchy:
 2. Extra Info and attachments;
 3. Agent, model, and reasoning controls.
 
-It adds one required Source Feature control. The user must select one or more
-accepted Product Design Features before submitting. Concrete User Input remains
-required and may explain the desired delivery boundary, urgency, constraints, or
-concerns, but cannot replace the Source Features.
+It adds a Source Feature control. The first Map requires one or more accepted
+Product Design Features. After a Map exists, the complete current Map is default
+Context and a new Feature is optional. Concrete User Input remains required and
+determines what the Agent should generate, reshape, combine, or preserve.
+
+The Composer exposes an **Add Feature** action rather than listing or selecting
+every Feature inline. It opens a compact graph fixed to the Product Design Layer:
+the Product Source is the context anchor and accepted Features are selectable
+children. Nothing is selected implicitly. Confirming adds only the Features the
+user explicitly selected to Main Context; canceling leaves Main Context unchanged.
+
+A Feature already present in Main Context remains visible in the picker as
+**Already added** and cannot be selected again. The user may remove it explicitly
+from Main Context before submitting. Source identity is unique within the current
+request, while the semantic relationship remains many-to-many: one Feature may
+shape several Contracts and one Contract may combine several Features.
+
+The main What to Do Canvas renders formal Delivery Contracts and their hard
+dependencies only. Source Features remain in the Composer and picker as request
+context; they are not copied onto the Delivery Map as if they were outputs.
 
 ### Send from What's Next
 
@@ -76,6 +89,14 @@ selected. The user can then add the same User Input, Extra Info, attachments, an
 Agent configuration available in the native What to Do entry.
 
 Both paths create the same request shape and use the same Harness.
+
+After a Map exists, its Contracts and prior sources are default Context. The user
+may add new Features as new Main Context, select formal Contracts as Focus
+Context, or address the complete Map without selecting a Contract. Selecting the
+same Feature again does not create a duplicate source or Contract. Every request
+still contains the complete current Map; the Agent uses User Input to decide the
+complete replacement and remains responsible for coordinating many-to-many
+source coverage.
 
 ## Standard Input Packet
 
@@ -225,7 +246,7 @@ Each Contract reports one evidence-backed Domain Impact:
 - `add`;
 - `uncertain`.
 
-An `uncertain` impact blocks whole-Map acceptance when the uncertainty can
+An `uncertain` impact blocks whole-Map publication when the uncertainty can
 change Contract boundaries or dependencies.
 
 ## Delivery Strategy
@@ -259,8 +280,14 @@ Latest Response explains why the Agent chose the current boundaries, identifies
 risk or user attention, and links to the complete response. It does not replace
 the Map.
 
-Every Map is complete for the current request. A Contract Candidate represents
-one independently deliverable result. It should:
+What to Do preserves the standard Summary-Log model. The Map is the only current
+formal state. Summary and Latest Response explain the result and material change
+of the latest Run. Log retains the complete execution trail and evidence. Frozen
+Input Packet, response, Summary, Log and Contract Markdown remain Run artifacts
+for inspection; they do not form a second revisioned product state.
+
+Every successful update produces one complete terminal Map. A Delivery Contract
+represents one independently deliverable result. It should:
 
 - have one primary outcome;
 - be reviewable through one coherent pull request or equivalent delivery;
@@ -299,7 +326,7 @@ The Host rejects unknown dependencies, self-dependencies, and cycles.
 
 ## Adjustment and coordination
 
-The user cannot directly edit or delete a Contract Candidate. Direct mutation
+The user cannot directly edit or delete a Delivery Contract. Direct mutation
 would bypass the Agent's responsibility for coverage, sibling boundaries, and
 dependencies.
 
@@ -341,19 +368,21 @@ disappearing.
 The Agent produces material source claims anchored to exact frozen source paths,
 headings or excerpts, and hashes. The Host verifies those anchors exist. Every
 material claim must be assigned to at least one Contract or explicitly marked
-out of scope by current User Input. Map details expose this coverage before the
-user accepts the Map.
+out of scope by current User Input. Map details expose this coverage for every
+applied update.
 
 Recompose validates that every previously acknowledged in-scope claim remains
 covered or is explicitly removed by current user authority. It does not accept
 an Agent statement of completeness as proof that no source meaning was missed.
 
-## Whole-Map acceptance
+## Atomic Map publication
 
-The Delivery Map is accepted as one coordinated result. Individual Contract
-Candidates cannot be accepted separately.
+There is no Candidate or separate acceptance phase in What to Do. A successful
+Agent response is an internal proposal only while the Host validates it. The
+Host then atomically replaces the current Map and materializes every result as a
+formal Delivery Contract.
 
-Acceptance requires:
+Publication requires:
 
 - no blocking Open Decision;
 - no `uncertain` Domain Impact that can change boundaries;
@@ -362,8 +391,15 @@ Acceptance requires:
 - complete coverage of acknowledged in-scope claims;
 - one coherent Contract body for every Map node.
 
-Acceptance materializes formal Delivery Contracts and freezes their dependency
-graph. It does not create Just Do It Cards automatically.
+Publication freezes the resulting dependency graph. It does not create Just Do
+It Cards automatically. A failed, canceled, or invalid Run leaves the current
+Map unchanged.
+
+`what-to-do/current-map.json` is the authoritative current Map and is read
+independently from paginated Run history. Every update freezes the prior source
+contents in its Run workspace, validates full-map Recompose effects and source
+coverage, then replaces this artifact only after all Contract outputs and Run
+evidence are durable.
 
 ## Delivery Contract
 
@@ -390,14 +426,14 @@ or Action list unless an accepted source already makes one authoritative.
 
 ## Contract lifecycle
 
-After whole-Map acceptance, a Contract is:
+After a Map update, a Contract is:
 
 - **Available:** every hard prerequisite is delivered and the Contract has no
   Just Do It Card;
 - **Waiting:** at least one hard prerequisite is not delivered;
 - **In Delivery:** it has a corresponding Just Do It Card;
 - **Delivered:** the corresponding Card's required output is accepted;
-- **Superseded:** a later accepted Map replaced this not-yet-started Contract;
+- **Superseded:** a later Map update replaced this not-yet-started Contract;
   it remains inspectable but cannot enter Just Do It.
 
 The user manually chooses an Available Contract and invokes **Add to Just Do
@@ -434,15 +470,15 @@ only when it has no confirmed Plan, no Actions, and no execution runs. A running
 Planning Agent must first be stopped, but does not by itself create a durable
 lock.
 
-Editing the Feature marks every derived Candidate Map, formal Map,
-not-yet-started Contract, deletable Card, and draft Plan as Stale. Stale
-artifacts remain inspectable but cannot be accepted, converted, or executed.
+Editing the Feature marks every derived formal Map, not-yet-started Contract,
+deletable Card, and draft Plan as Stale. Stale artifacts remain inspectable but
+cannot be converted or executed.
 
 The user does not manually unwind each layer. Opening What to Do from the
-updated Feature regenerates the coordinated Map. Accepting that Map may mark
+updated Feature regenerates the coordinated Map. Publishing that Map may mark
 earlier Available or Waiting Contracts as Superseded. If a Contract already has
 a deletable Card, the Host moves that Card to system Trash and Supersedes its
-Contract atomically when accepting the replacement Map. No protected delivery
+Contract atomically when publishing the replacement Map. No protected delivery
 work is discarded.
 
 ### After a derived Card becomes non-deletable
@@ -483,7 +519,7 @@ Source Feature for What to Do, alongside current implementation reality and
 the Contracts already derived from the original.
 
 A Redesign may be drafted and discussed while a related Card is In Delivery.
-Its Candidate Map may also be generated. That Map cannot be accepted while a
+Its replacement Map may also be generated. That Map cannot be published while a
 non-deletable Card owns the same delivery boundary. The Card must first become
 Delivered or complete a verified full rollback.
 
@@ -551,7 +587,8 @@ The What to Do Harness returns one of:
 - `insufficient-evidence`;
 - `no-change`.
 
-A map proposal always contains the complete Map, explicit Recompose effects when
+A map proposal is an internal validation envelope, never a visible Candidate
+state. It always contains the complete Map, explicit Recompose effects when
 adjusting an existing Map, Contract bodies, hard dependencies, source claims,
 coverage assignments, Domain Impact, Delivery Strategy, and Open Decisions.
 
@@ -564,7 +601,7 @@ The first implementation should include:
 
 - a What to Do sidebar route and shared graph workspace;
 - both Product Design entry points;
-- required accepted Feature selection;
+- required accepted Feature selection for the first Map;
 - the standard Composer and file-backed Packet;
 - deterministic Repository Facts and an Agent-maintained Summary;
 - automatic Domain Summary and detailed-model references;
@@ -572,7 +609,7 @@ The first implementation should include:
 - focused natural-language whole-Map Recompose;
 - hard dependency validation;
 - source-anchor and acknowledged-coverage validation;
-- whole-Map acceptance and Contract materialization;
+- atomic whole-Map validation, replacement, and Contract materialization;
 - manual, dependency-gated one-to-one Just Do It conversion;
 - shared Run, Log, Summary, Latest Response, loading, error, and attention states.
 
@@ -584,10 +621,9 @@ creation; soft ordering edges; multi-user workflows; or cloud storage.
 
 The following remain for the next design round:
 
-- exact Contract Candidate face fields and density;
+- exact Delivery Contract face fields and density;
 - Contract detail-panel information hierarchy;
 - how source coverage is summarized without overwhelming the user;
-- placement and wording of whole-Map acceptance;
 - how Repository Summary refresh is surfaced when it changes the Map;
 - whether Delivery Strategy should remain detail-only or appear on the Card face;
 - exact route and folder naming if `what-to-do` changes before implementation.

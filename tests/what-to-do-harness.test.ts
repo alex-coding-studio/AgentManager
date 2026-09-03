@@ -164,6 +164,33 @@ void test('accepts a complete evidence-bounded Delivery Map', () => {
   );
 });
 
+void test('terminal Maps reject unresolved decisions and Domain Impact', () => {
+  assert.throws(
+    () =>
+      validateWhatToDoHarnessResult(
+        proposal([candidate('CANDIDATE-0001', { openDecisions: ['Choose.'] })]),
+        context(),
+      ),
+    /Open Decision/,
+  );
+  assert.throws(
+    () =>
+      validateWhatToDoHarnessResult(
+        proposal([
+          candidate('CANDIDATE-0001', {
+            domainImpact: {
+              kind: 'uncertain',
+              reason: 'More evidence is needed.',
+              evidencePaths: [evidencePath],
+            },
+          }),
+        ]),
+        context(),
+      ),
+    /uncertain Domain Impact/,
+  );
+});
+
 void test('binds results, evidence and claims to the frozen request', () => {
   assert.throws(
     () =>

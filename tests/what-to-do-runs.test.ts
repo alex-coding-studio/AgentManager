@@ -13,6 +13,7 @@ import {
   startWhatToDoRun,
   whatToDoAgentEnvironment,
 } from '../lib/what-to-do-runs.ts';
+import { readWhatToDoCurrentMap } from '../lib/what-to-do-storage.ts';
 
 const featureUid = '00000000-0000-4000-8000-000000000002';
 
@@ -199,6 +200,36 @@ function result(run: Awaited<ReturnType<typeof startWhatToDoRun>>) {
   };
 }
 
+function retainedResult(
+  run: Awaited<ReturnType<typeof startWhatToDoRun>>,
+  map: NonNullable<Awaited<ReturnType<typeof readWhatToDoCurrentMap>>>,
+) {
+  const contract = map.contracts[0]!;
+  const candidateId = `CANDIDATE-${contract.id.slice(5)}`;
+  const claim = map.sourceClaims[0]!;
+  const { contractIds: _contractIds, ...claimContent } = claim;
+  const factsPath = 'what-to-do/repository-context/facts.json';
+  return {
+    schemaVersion: 1,
+    harness: run.request.harness,
+    request: run.request.request,
+    responseMarkdown: '# Delivery Map\n\nThe focused Contract is retained.',
+    repositorySummary: {
+      markdown: '# Repository Summary\n\nA small fixture repository.',
+      evidencePaths: [factsPath],
+    },
+    reviewedEvidence: [
+      { path: factsPath, reason: 'Read the frozen repository facts.' },
+    ],
+    outcome: 'map-proposal',
+    candidates: [],
+    sourceClaims: [{ ...claimContent, contractCandidateIds: [candidateId] }],
+    recomposition: {
+      effects: [{ kind: 'retain', from: [candidateId], to: [candidateId] }],
+    },
+  };
+}
+
 async function settled(project: RegisteredProject, runId: string) {
   for (let index = 0; index < 100; index += 1) {
     const run = await readWhatToDoRun(project, runId);
@@ -235,6 +266,9 @@ void test('a real What to Do Run persists the frozen request and Agent result', 
   const completed = await settled(project, run.id);
   assert.equal(completed.status, 'succeeded');
   assert.equal(completed.result?.outcome, 'map-proposal');
+  assert.equal(completed.map?.contracts.length, 1);
+  assert.match(completed.map?.contracts[0]?.id ?? '', /^NODE-[0-9a-f]{8,32}$/);
+  assert.equal('candidateId' in completed.map!.contracts[0]!, false);
   assert.equal(completed.agentSessionId, 'agent-session-1');
   const runPath = path.join(planningPath, 'what-to-do/runs', run.id);
   assert.match(
@@ -245,6 +279,13 @@ void test('a real What to Do Run persists the frozen request and Agent result', 
     await readFile(path.join(runPath, 'response.md'), 'utf8'),
     /ready for review/,
   );
+  assert.match(
+    await readFile(
+      path.join(planningPath, completed.map!.contracts[0]!.outputPath),
+      'utf8',
+    ),
+    /Deliver accepted behavior/,
+  );
   assert.deepEqual(
     (await listLatestWhatToDoRuns(project)).map((item) => item.id),
     [run.id],
@@ -254,6 +295,145 @@ void test('a real What to Do Run persists the frozen request and Agent result', 
     'utf8',
   );
   assert.match(currentSummary, new RegExp(run.request.repository.fingerprint));
+});
+
+void test('the current formal Map is default Context and focus is optional emphasis', async (t) => {
+  const { project } = await fixture(t);
+  const control = controlled();
+  const first = await startWhatToDoRun(project, input(), control.transport);
+  control.calls[0]!.resolve({
+    agentSessionId: 'agent-session-1',
+    finalOutput: JSON.stringify(result(first)),
+    usage: null,
+  });
+  const completed = await settled(project, first.id);
+  const contract = completed.map!.contracts[0]!;
+  const second = await startWhatToDoRun(
+    project,
+    {
+      ...input(),
+      sourceUids: [],
+      focusContractIds: [contract.id],
+    },
+    control.transport,
+  );
+  assert.deepEqual(second.request.sourceFeatures, []);
+  assert.ok(
+    second.request.content.references.some(
+      (entry) =>
+        entry.kind === 'focused-delivery-contract' &&
+        entry.logicalPath === contract.outputPath,
+    ),
+  );
+  assert.equal(second.request.operation, 'adjust-map');
+  assert.deepEqual(second.request.focusCandidateIds, [
+    `CANDIDATE-${contract.id.slice(5)}`,
+  ]);
+  control.calls[1]!.resolve({
+    agentSessionId: 'agent-session-2',
+    finalOutput: JSON.stringify(retainedResult(second, completed.map!)),
+    usage: null,
+  });
+  const adjusted = await settled(project, second.id);
+  assert.equal(adjusted.status, 'succeeded');
+  assert.equal(adjusted.map?.contracts[0]?.id, contract.id);
+  assert.equal(adjusted.map?.contracts[0]?.uid, contract.uid);
+  assert.equal((await readWhatToDoCurrentMap(project))?.runId, second.id);
+  assert.deepEqual(await listLatestWhatToDoRuns(project, 0), []);
+  assert.equal(
+    (await readWhatToDoCurrentMap(project))?.contracts[0]?.id,
+    contract.id,
+  );
+  await assert.rejects(
+    startWhatToDoRun(project, input(), control.transport),
+    /already part of the current Delivery Map/,
+  );
+});
+
+void test('a committed current Map completes an interrupted terminal Run publication', async (t) => {
+  const { project, planningPath } = await fixture(t);
+  const control = controlled();
+  const run = await startWhatToDoRun(project, input(), control.transport);
+  control.calls[0]!.resolve({
+    agentSessionId: 'agent-session-1',
+    finalOutput: JSON.stringify(result(run)),
+    usage: null,
+  });
+  const completed = await settled(project, run.id);
+  await new Promise((resolve) => setImmediate(resolve));
+  const directory = path.join(planningPath, 'what-to-do/runs', run.id);
+  await writeFile(
+    path.join(directory, 'run.json'),
+    `${JSON.stringify(
+      {
+        ...completed,
+        status: 'running',
+        endedAt: null,
+        result: null,
+        map: null,
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  await writeFile(
+    path.join(directory, 'terminal.json'),
+    `${JSON.stringify(completed, null, 2)}\n`,
+  );
+  const successor = await startWhatToDoRun(
+    project,
+    { ...input(), sourceUids: [] },
+    control.transport,
+  );
+  const recovered = await readWhatToDoRun(project, run.id);
+  assert.equal(recovered.status, 'succeeded');
+  assert.equal(recovered.map?.runId, run.id);
+  await assert.rejects(
+    readFile(path.join(directory, 'terminal.json')),
+    /ENOENT/,
+  );
+  await cancelWhatToDoRun(project, successor.id);
+  control.calls[1]!.reject(new Error('canceled'));
+});
+
+void test('an uncommitted terminal record rolls back to an interrupted Run', async (t) => {
+  const { project, planningPath } = await fixture(t);
+  const control = controlled();
+  const run = await startWhatToDoRun(project, input(), control.transport);
+  control.calls[0]!.resolve({
+    agentSessionId: 'agent-session-1',
+    finalOutput: JSON.stringify(result(run)),
+    usage: null,
+  });
+  const completed = await settled(project, run.id);
+  await new Promise((resolve) => setImmediate(resolve));
+  const directory = path.join(planningPath, 'what-to-do/runs', run.id);
+  await rm(path.join(planningPath, 'what-to-do/current-map.json'));
+  await writeFile(
+    path.join(directory, 'run.json'),
+    `${JSON.stringify(
+      {
+        ...completed,
+        status: 'running',
+        endedAt: null,
+        result: null,
+        map: null,
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  await writeFile(
+    path.join(directory, 'terminal.json'),
+    `${JSON.stringify(completed, null, 2)}\n`,
+  );
+  const recovered = await readWhatToDoRun(project, run.id);
+  assert.equal(recovered.status, 'failed');
+  assert.match(recovered.error ?? '', /interrupted/);
+  await assert.rejects(
+    readFile(path.join(directory, 'terminal.json')),
+    /ENOENT/,
+  );
 });
 
 void test('invalid Agent output fails while preserving the raw response', async (t) => {
@@ -277,11 +457,18 @@ void test('invalid Agent output fails while preserving the raw response', async 
 });
 
 void test('cancel releases the project and rejects late completion', async (t) => {
-  const { project } = await fixture(t);
+  const { project, planningPath } = await fixture(t);
   const control = controlled();
   const run = await startWhatToDoRun(project, input(), control.transport);
   const canceled = await cancelWhatToDoRun(project, run.id);
   assert.equal(canceled.status, 'canceled');
+  assert.match(
+    await readFile(
+      path.join(planningPath, 'what-to-do/runs', run.id, 'response.md'),
+      'utf8',
+    ),
+    /canceled/,
+  );
   assert.equal(control.calls[0]!.canceled, true);
   control.calls[0]!.resolve({
     agentSessionId: null,
