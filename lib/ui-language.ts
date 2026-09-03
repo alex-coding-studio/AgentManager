@@ -697,6 +697,9 @@ export const chineseUi: Record<string, string> = {
   'Back to projects': '返回项目列表',
   Overview: '概览',
   'Product context': '产品上下文',
+  'Product Context is empty': '产品上下文暂时为空',
+  'Formal documents will appear here as you use Product Discovery & Design, Scope Decomposition, Domain Modeling, Delivery Planning, and Implementation.':
+    '使用产品探索与设计、范围分解、领域建模、交付规划和开发执行时，正式文档会自动出现在这里。',
   "What's next": '下一步',
   Decomposition: '任务分解',
   'Break It Down': '拆开看',
