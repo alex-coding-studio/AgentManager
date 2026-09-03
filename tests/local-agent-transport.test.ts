@@ -2,10 +2,38 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   buildClaudeArguments,
+  localAgentUsageDelta,
   normalizeClaudeUsage,
   parseClaudeEvent,
   parseCodexEvent,
 } from '../lib/local-agent-transport.ts';
+
+void test('subtracts the prior Session total from resumed Codex usage', () => {
+  const baseline = {
+    inputTokens: 144_684,
+    cachedInputTokens: 109_952,
+    cacheWriteInputTokens: 0,
+    outputTokens: 9_740,
+    reasoningOutputTokens: 2_810,
+  };
+  const cumulative = {
+    inputTokens: 361_304,
+    cachedInputTokens: 289_408,
+    cacheWriteInputTokens: 0,
+    outputTokens: 32_312,
+    reasoningOutputTokens: 7_376,
+  };
+
+  assert.deepEqual(localAgentUsageDelta(cumulative, baseline), {
+    inputTokens: 216_620,
+    cachedInputTokens: 179_456,
+    cacheWriteInputTokens: 0,
+    outputTokens: 22_572,
+    reasoningOutputTokens: 4_566,
+  });
+  assert.deepEqual(localAgentUsageDelta(cumulative), cumulative);
+  assert.deepEqual(localAgentUsageDelta(baseline, cumulative), baseline);
+});
 
 void test('parses Codex JSONL events', () => {
   assert.deepEqual(

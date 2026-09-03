@@ -146,6 +146,7 @@ void test('What to Do Harness owns delivery boundaries rather than implementatio
   assert.match(WHAT_TO_DO_HARNESS_PROMPT, /ordinary project onboarding/);
   assert.match(WHAT_TO_DO_HARNESS_PROMPT, /only new or replacement Candidates/);
   assert.match(WHAT_TO_DO_HARNESS_PROMPT, /sourceClaimUpdates/);
+  assert.match(WHAT_TO_DO_HARNESS_PROMPT, /contractDependencyUpdates/);
   assert.match(WHAT_TO_DO_HARNESS_PROMPT, /Negative behavior/);
   assert.match(
     WHAT_TO_DO_HARNESS_PROMPT,
@@ -485,6 +486,77 @@ void test('adjusted Maps discard redundant copies of retained Contracts', () => 
   assert.equal(validated.outcome, 'map-proposal');
   if (validated.outcome === 'map-proposal')
     assert.deepEqual(validated.candidates, []);
+});
+
+void test('a retained Contract can update only its hard dependencies', () => {
+  const knownCandidates = [knownCandidate('CANDIDATE-0001')];
+  const knownSourceClaims = proposal().sourceClaims;
+  const added = candidate('CANDIDATE-0002');
+  const adjusted = proposal([added], {
+    sourceClaims: [],
+    sourceClaimUpdates: [
+      {
+        claimId: 'CLAIM-1',
+        disposition: 'in-scope',
+        contractCandidateIds: ['CANDIDATE-0001', 'CANDIDATE-0002'],
+        exclusionReason: null,
+        exclusionAuthority: null,
+      },
+    ],
+    contractDependencyUpdates: [
+      {
+        candidateId: 'CANDIDATE-0001',
+        dependsOn: ['CANDIDATE-0002'],
+      },
+    ],
+    recomposition: {
+      effects: [
+        {
+          kind: 'retain',
+          from: ['CANDIDATE-0001'],
+          to: ['CANDIDATE-0001'],
+        },
+        { kind: 'add', from: [], to: ['CANDIDATE-0002'] },
+      ],
+    },
+  });
+
+  const validated = validateWhatToDoHarnessResult(
+    adjusted,
+    context({
+      operation: 'adjust-map',
+      knownCandidates,
+      knownSourceClaims,
+    }),
+  );
+
+  assert.equal(validated.outcome, 'map-proposal');
+  if (validated.outcome === 'map-proposal') {
+    assert.equal(validated.candidates.length, 1);
+    assert.deepEqual(validated.contractDependencyUpdates, [
+      {
+        candidateId: 'CANDIDATE-0001',
+        dependsOn: ['CANDIDATE-0002'],
+      },
+    ]);
+  }
+  assert.throws(
+    () =>
+      validateWhatToDoHarnessResult(
+        {
+          ...structuredClone(adjusted),
+          contractDependencyUpdates: [
+            { candidateId: 'CANDIDATE-0002', dependsOn: [] },
+          ],
+        },
+        context({
+          operation: 'adjust-map',
+          knownCandidates,
+          knownSourceClaims,
+        }),
+      ),
+    /must target a retained Contract/,
+  );
 });
 
 void test('adjustment preserves prior claims and reserves old identity for retain only', () => {

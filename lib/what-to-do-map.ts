@@ -160,10 +160,29 @@ export function materializeWhatToDoDeliveryMap(
       return [candidate.candidateId, { uid, id }] as const;
     }),
   ]);
-  const retainedContracts = (input.currentMap?.contracts ?? []).filter(
-    (contract) =>
+  const retainedContracts = (input.currentMap?.contracts ?? [])
+    .filter((contract) =>
       retainedCandidateIds.has(whatToDoContractCandidateId(contract)),
-  );
+    )
+    .map((contract) => {
+      const candidateId = whatToDoContractCandidateId(contract);
+      const update = input.result.contractDependencyUpdates?.find(
+        (item) => item.candidateId === candidateId,
+      );
+      if (!update) return contract;
+      const dependencyIdentities = update.dependsOn.map((dependency) =>
+        identities.get(dependency)!,
+      );
+      return {
+        ...contract,
+        relations: {
+          ...contract.relations,
+          dependsOn: dependencyIdentities.map((dependency) => dependency.uid),
+        },
+        dependsOn: dependencyIdentities.map((dependency) => dependency.id),
+        outputPath: `what-to-do/runs/${input.runId}/contracts/${contract.id}/output.md`,
+      };
+    });
   const newContracts = input.result.candidates.map((candidate) => {
     const identity = identities.get(candidate.candidateId)!;
     const dependencyIdentities = candidate.dependsOn.map((dependency) =>

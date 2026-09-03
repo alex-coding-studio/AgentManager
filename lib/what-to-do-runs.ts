@@ -81,6 +81,7 @@ export type WhatToDoRunRecord = {
   endedAt: string | null;
   agentSessionId: string | null;
   usage: LocalAgentUsage | null;
+  sessionUsage?: LocalAgentUsage | null;
   activity: AgentGraphActivity[];
   request: WhatToDoHarnessRequest;
   result: WhatToDoHarnessResult | null;
@@ -226,6 +227,7 @@ export async function startWhatToDoRun(
       endedAt: null,
       agentSessionId: null,
       usage: null,
+      sessionUsage: null,
       activity,
       request,
       result: null,
@@ -248,6 +250,8 @@ export async function startWhatToDoRun(
       model: effectiveInput.profile.model || undefined,
       effort: effectiveInput.profile.effort || undefined,
       resumeSessionId: coordinatorRun?.agentSessionId ?? undefined,
+      sessionUsageBaseline:
+        coordinatorRun?.sessionUsage ?? coordinatorRun?.usage ?? undefined,
       access: 'read-only',
       disableDelegation: true,
       isolatedProcessGroup: true,
@@ -406,6 +410,7 @@ function settleLater(
         endedAt,
         agentSessionId: agent.agentSessionId,
         usage: agent.usage,
+        sessionUsage: agent.sessionUsage ?? agent.usage,
         activity: [...active.activity],
         result,
         map,
