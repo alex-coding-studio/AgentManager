@@ -877,6 +877,8 @@ export const chineseUi: Record<string, string> = {
   Capability: '能力',
   'More evidence needed': '需要补充资料',
   Recommended: '推荐',
+  'Choose an option or write your own answer in the Composer.':
+    '可以选择一个建议，也可以在右侧自由回答。',
   'Updated {elapsed} ago': '{elapsed} 前更新',
   'Key Rules': '关键规则',
   'No change': '无需修改',

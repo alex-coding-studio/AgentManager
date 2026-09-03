@@ -464,6 +464,29 @@ void test('Latest Response renders clarification options with their effects', as
   assert.equal((html.match(/<button/g) ?? []).length, 2);
 });
 
+void test('Delivery Planning restores clarification Context independently of option selection', async () => {
+  const source = await readFile(
+    new URL('../components/what-to-do-workspace.tsx', import.meta.url),
+    'utf8',
+  );
+  assert.match(
+    source,
+    /initialTerminal\?\.result\?\.outcome === 'clarification'/,
+  );
+  assert.match(source, /initialClarification\?\.sourceUids/);
+  assert.match(source, /setSourceUids\(nextTerminal\.sourceUids\)/);
+  assert.match(source, /setProfile\(nextTerminal\.profile\)/);
+  assert.match(
+    source,
+    /Choose an option or write your own answer in the Composer/,
+  );
+  const selectOption = source.slice(
+    source.indexOf('function selectClarificationOption'),
+    source.indexOf('const presentation ='),
+  );
+  assert.doesNotMatch(selectOption, /setSourceUids|setProfile|startRun/);
+});
+
 void test('Domain Modeling separates the current answer, compact summary and change log', async () => {
   const source = await readFile(
     new URL('../components/domain-model-workspace.tsx', import.meta.url),
