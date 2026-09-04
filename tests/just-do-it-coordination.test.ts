@@ -552,7 +552,15 @@ void test('Coordinator Harness stays a coordinator rather than becoming a Review
   assert.match(prompt, /do not open its references/);
   assert.match(
     prompt,
-    /assign mechanical alone even if the tool generates iOS files/,
+    /assign mechanical alone even if it generates iOS files/,
+  );
+  assert.match(
+    prompt,
+    /unit-test entrypoints used to validate directly authored code remain feedback/,
+  );
+  assert.match(
+    prompt,
+    /may be read, diagnosed and fixed without adding mechanical/,
   );
   assert.match(
     prompt,
