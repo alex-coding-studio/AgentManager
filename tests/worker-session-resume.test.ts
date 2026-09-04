@@ -50,8 +50,19 @@ void test('a run of another Action is not resumed into this one', () => {
   );
 });
 
-void test('an unsuccessful run is not resumed', () => {
-  for (const status of ['failed', 'canceled', 'running'] as const)
+void test('a failed run with a completed Agent session can resume', () => {
+  assert.equal(
+    resumableWorkerSession(
+      [run({ status: 'failed', agentSessionId: 'failed-session' })],
+      'action-1',
+      profile,
+    ),
+    'failed-session',
+  );
+});
+
+void test('a canceled or running attempt is not resumed', () => {
+  for (const status of ['canceled', 'running'] as const)
     assert.equal(
       resumableWorkerSession([run({ status })], 'action-1', profile),
       undefined,
@@ -99,7 +110,6 @@ void test('a card that has never executed resumes nothing', () => {
 
 void test('an unusable latest run stops the search instead of reaching further back', () => {
   for (const latest of [
-    run({ status: 'failed' }),
     run({ status: 'canceled' }),
     run({ agentSessionId: null }),
     run({ profile: { ...profile, model: 'other-model' } }),
