@@ -105,7 +105,9 @@ praxis stop --port 3100
 ```
 
 Use `--lan` to listen on the local network. It is shorthand for
-`--hostname 0.0.0.0` and works with both foreground and detached servers:
+`--hostname 0.0.0.0`, automatically allows the machine's current LAN addresses
+in the Next.js development server, and works with foreground and detached
+servers:
 
 ```bash
 praxis start --lan --port 3100
