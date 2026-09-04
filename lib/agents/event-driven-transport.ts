@@ -150,7 +150,7 @@ export function startEventDrivenWorkerRun(
       : '';
     const turn = driver.startTurn(thread, {
       prompt:
-        withSkillCatalog(input.prompt, catalog) +
+        withSkillCatalog(input.prompt, catalog, input.allowedSkillPaths) +
         permissionContext +
         hostToolContext +
         candidateToolContext,

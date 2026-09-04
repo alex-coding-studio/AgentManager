@@ -203,9 +203,17 @@ export function readCodexSkills(
   });
 }
 
-export function withSkillCatalog(prompt: string, catalog: SkillCatalog) {
+export function withSkillCatalog(
+  prompt: string,
+  catalog: SkillCatalog,
+  allowedPaths?: string[],
+) {
+  const allowed = allowedPaths ? new Set(allowedPaths) : null;
   const available = catalog.skills
-    .filter((skill) => skill.enabled)
+    .filter((skill) => skill.enabled && (!allowed || allowed.has(skill.path)))
     .map(({ name, description, path }) => ({ name, description, path }));
-  return `${prompt}\n\n<available_skills>\nThe following catalog was discovered by the local Codex runtime for this project. These are available capabilities, not a request to invoke them. Select Skills only when requested or relevant to the current task. Read the selected SKILL.md and resolve its references relative to that file; do not guess installation paths or read every Skill. Listing a Skill does not enable any associated tools, hooks, or permissions. Existing stage and execution boundaries still apply. Report inaccessible Skills or unavailable dependencies instead of assuming they are installed or broadening access.\n${JSON.stringify(available)}\n</available_skills>`;
+  const guidance = allowed
+    ? 'The Coordinator selected the following Skill entrypoints for this Worker. Read each selected SKILL.md once and only the references it requires. Do not select or read other Skills.'
+    : 'The following catalog was discovered by the local Codex runtime for this project. These are available capabilities, not a request to invoke them. Select Skills only when requested or relevant to the current task. Read the selected SKILL.md and resolve its references relative to that file; do not guess installation paths or read every Skill.';
+  return `${prompt}\n\n<available_skills>\n${guidance} Listing a Skill does not enable any associated tools, hooks, or permissions. Existing stage and execution boundaries still apply. Report inaccessible Skills or unavailable dependencies instead of assuming they are installed or broadening access.\n${JSON.stringify(available)}\n</available_skills>`;
 }

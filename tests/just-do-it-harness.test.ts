@@ -167,9 +167,13 @@ void test('four stages prepare bounded role-specific prompts without invoking a 
     assert.equal(parse(response(req), req, 0, [artifact]).stage, stage);
   }
   const req = request('execution');
-  const compact = buildCardHarnessPrompt(req, { includeHandoff: false });
+  const compact = buildCardHarnessPrompt(req, {
+    includeHandoff: false,
+    includeSkills: false,
+  });
   assert.ok(compact.includes(req.inputFingerprint));
   assert.doesNotMatch(compact, /Plan not finalized/);
+  assert.doesNotMatch(compact, /skills\/local-review\/SKILL.md/);
 });
 
 void test('stage Harnesses keep their near-neighbor responsibilities separate', () => {
@@ -223,6 +227,21 @@ void test('malformed, wrong-revision, extra completion and empty contract result
   const blank = response(req);
   blank.steps = [{ ...req.context.plan!.steps[0], output: ' ' }];
   assert.throws(() => parse(blank, req));
+
+  const execution = request('execution');
+  assert.throws(
+    () =>
+      parse(
+        {
+          ...response(execution),
+          responsibilityGap: 'Need another responsibility.',
+        },
+        execution,
+        execution.context.contextRevision,
+        [artifact],
+      ),
+    /delivered execution cannot report a responsibility gap/,
+  );
 });
 
 void test('cross-Card, stale-context and wrong-request responses cannot be accepted', () => {

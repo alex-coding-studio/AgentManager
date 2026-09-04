@@ -151,6 +151,7 @@ export const JUST_DO_IT_OUTPUT_SCHEMA = {
         ...executionSchema.properties,
         additionalChecks: { type: 'array', items: additionalCheck },
         scopeNotes: strings,
+        responsibilityGap: text,
       },
     },
     object({
@@ -206,6 +207,7 @@ export type CardHarnessResult = ResultBase &
         checks: Check[];
         additionalChecks?: Check[];
         scopeNotes?: string[];
+        responsibilityGap?: string;
         remaining: string[];
       }
     | {
@@ -339,14 +341,22 @@ function assertRequestIntact(request: CardHarnessRequest) {
 
 export function buildCardHarnessPrompt(
   request: CardHarnessRequest,
-  options: { includeHandoff?: boolean } = {},
+  options: { includeHandoff?: boolean; includeSkills?: boolean } = {},
 ) {
   assertRequestIntact(request);
   const visibleRequest =
-    options.includeHandoff === false
+    options.includeHandoff === false || options.includeSkills === false
       ? {
           ...request,
-          context: { ...request.context, handoffMarkdown: '' },
+          context: {
+            ...request.context,
+            handoffMarkdown:
+              options.includeHandoff === false
+                ? ''
+                : request.context.handoffMarkdown,
+            skills:
+              options.includeSkills === false ? [] : request.context.skills,
+          },
         }
       : request;
   const stageIndex = ['planning', 'execution', 'review', 'todo'].indexOf(
@@ -489,6 +499,14 @@ export function parseCardHarnessResult(
         result,
         [],
         'Delivery requires an observed artifact.',
+      );
+    if (
+      result.stage === 'execution' &&
+      result.outcome === 'delivered' &&
+      result.responsibilityGap
+    )
+      throw new Error(
+        'A delivered execution cannot report a responsibility gap.',
       );
   }
   if (result.stage === 'todo') {

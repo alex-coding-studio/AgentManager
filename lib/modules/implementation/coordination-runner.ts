@@ -224,6 +224,7 @@ export function startCoordinatedExecution(input: {
     role: 'coordinator' | 'worker',
     phase: 'prepare' | 'execute' | 'qualify' | 'repair',
     prompt: string,
+    allowedSkillPaths?: string[],
   ) {
     assertActive();
     if (Buffer.byteLength(prompt) > 1500000)
@@ -271,6 +272,7 @@ export function startCoordinatedExecution(input: {
       model: profile.model || undefined,
       effort: profile.effort || undefined,
       access: role === 'coordinator' ? 'read-only' : 'workspace-write',
+      allowedSkillPaths: role === 'worker' ? allowedSkillPaths : undefined,
       resumeSessionId: undefined,
       isolatedProcessGroup: true,
       disableDelegation: true,
@@ -324,8 +326,16 @@ export function startCoordinatedExecution(input: {
       child = undefined;
     }
   }
-  const workerPromptFor = (decision: CoordinationDecision) =>
-    `${input.workerOptions.prompt}\n\nCOORDINATOR ASSIGNMENT (current Action only):\n${JSON.stringify({ responsibilities: decision.responsibilities, responsibilityInstructions: executionResponsibilityInstructions(decision.responsibilities), environment: input.environment, instructions: decision.instructions, repairAssessment: decision.repairAssessment, verificationPlan: decision.verificationPlan, priorEvidence: input.priorEvidence.filter((item) => decision.verificationPlan.some((plan) => plan.evidenceIds.includes(item.id))) })}\nThe Coordinator-assigned responsibilities, responsibilityInstructions and packet are hard requirements and supersede conflicting generic execution guidance. Apply all assigned responsibilities together. Do not choose, remove or change your roles or reopen the task plan. Read the assigned SKILL.md once, then read only the references that Skill or the assignment requires. Do not read unrelated Skills, broad Memory or old logs. Perform only this packet and return its result. Do not coordinate other roles, expand the task, or plan follow-on work. Treat the Environment Manifest as Host-verified and do not rediscover its Git/worktree/role facts unless the workspace reports a concrete contradiction. When information, capability, permission or another action is missing, report exactly what is needed and stop. Do not spawn or launch other Agents, including through shell commands. Reuse only the referenced applicable evidence, label it as reused, and do not claim its commands ran again. Report all frozen criteria honestly. Keep fixed user/permission/PR boundaries. Return the original required execution JSON.`;
+  const workerPromptFor = (decision: CoordinationDecision) => {
+    const selectedSkills = input.request.context.skills.filter((skill) =>
+      decision.skillPaths.includes(skill.path),
+    );
+    return `${input.workerOptions.prompt}
+
+COORDINATOR ASSIGNMENT (current Action only):
+${JSON.stringify({ responsibilities: decision.responsibilities, responsibilityInstructions: executionResponsibilityInstructions(decision.responsibilities), skills: selectedSkills, environment: input.environment, instructions: decision.instructions, repairAssessment: decision.repairAssessment, verificationPlan: decision.verificationPlan, priorEvidence: input.priorEvidence.filter((item) => decision.verificationPlan.some((plan) => plan.evidenceIds.includes(item.id))) })}
+The Coordinator-assigned responsibilities, responsibilityInstructions, Skills and packet are hard requirements and supersede conflicting generic execution guidance. Apply all assigned responsibilities together. Do not choose, remove or change your roles or reopen the task plan. Read each assigned SKILL.md once, then read only the references that Skill or the assignment requires. Do not read unrelated Skills, broad Memory or old logs. If the assigned responsibilities cannot complete part of the packet, set responsibilityGap to the exact missing role boundary, report blocked, and stop; do not expand your own role. Perform only this packet and return its result. Do not coordinate other roles, expand the task, or plan follow-on work. Treat the Environment Manifest as Host-verified and do not rediscover its Git/worktree/role facts unless the workspace reports a concrete contradiction. When information, capability, permission or another action is missing, report exactly what is needed and stop. Do not spawn or launch other Agents, including through shell commands. Reuse only the referenced applicable evidence, label it as reused, and do not claim its commands ran again. Report all frozen criteria honestly. Keep fixed user/permission/PR boundaries. Return the original required execution JSON.`;
+  };
   const parseWorkerReport = (raw: string): ExecutionReport => {
     let candidate: unknown;
     try {
@@ -447,7 +457,12 @@ export function startCoordinatedExecution(input: {
       }
       let settlement: WorkerSettlement;
       try {
-        lastWorker = await call('worker', phase, workerPromptFor(decision));
+        lastWorker = await call(
+          'worker',
+          phase,
+          workerPromptFor(decision),
+          decision.skillPaths,
+        );
         lastWorkerReport = parseWorkerReport(lastWorker.finalOutput);
         trace.attempts.at(-1)!.summary = lastWorkerReport.summary;
         settlement = classifyWorkerSettlement(lastWorkerReport);
@@ -688,7 +703,12 @@ export function startCoordinatedExecution(input: {
             throw new Error('Coordinator repair budget exhausted.');
           repairs--;
         }
-        lastWorker = await call('worker', phase, workerPromptFor(decision));
+        lastWorker = await call(
+          'worker',
+          phase,
+          workerPromptFor(decision),
+          decision.skillPaths,
+        );
         lastWorkerReport = parseWorkerReport(lastWorker.finalOutput);
         trace.attempts.at(-1)!.summary = lastWorkerReport.summary;
         basis = await input.readBasis();

@@ -46,6 +46,7 @@ export type LocalAgentRunInput = {
   effort?: ReasoningEffort;
   access?: 'read-only' | 'workspace-write';
   protectedPath?: string;
+  allowedSkillPaths?: string[];
   environment?: NodeJS.ProcessEnv;
   gitWritePaths?: string[];
   primaryRepositoryPath?: string;

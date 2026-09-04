@@ -24,13 +24,13 @@ Add a responsibility only when repeated execution work needs a stable behavioral
 
 - `general`: execute the frozen packet, honor its checklist, report the result or exact unmet need, and stop without coordinating follow-on work.
 - `mechanical`: treat a declared script or tool as the black-box execution and error boundary. Run it once and report its result without inspection, decomposition, supplementation or repeated verification.
-- `ios-development`: prefer criterion-linked TDD for unit-observable behavior, avoid artificial Red and low-value tests, and limit unit-test evidence to unit behavior. UI and visual acceptance remain in Review.
+- `ios-development`: prefer criterion-linked TDD for unit-observable behavior, avoid artificial Red and low-value tests, and limit unit-test evidence to unit behavior. UI tests may be authored and compiled but remain unexecuted input for Review or CI; UI and visual acceptance remain in Review.
 
 ## Change path
 
-1. Edit `lib/modules/implementation/execution-responsibilities.ts` as the source of responsibility IDs, inheritance and runtime instructions.
-2. Update the Coordinator contract and structured response in `lib/modules/implementation/coordination.ts`. Responsibility selection belongs here rather than in the Plan.
-3. Compile the Coordinator's selected responsibilities into the Worker packet in `lib/modules/implementation/coordination-runner.ts`. The Coordinator assigns roles and suspends; the Worker follows every assigned responsibility, reports its result, and stops.
+1. Edit `lib/modules/implementation/execution-responsibilities.json` as the source of responsibility IDs, inheritance, assignment hints, rules and named overrides.
+2. Update the compiler and validator in `lib/modules/implementation/execution-responsibilities.ts` only when the representation changes. Update the Coordinator contract and structured response in `lib/modules/implementation/coordination.ts` when assignment behavior changes.
+3. Compile the Coordinator's selected responsibilities and validated Skill paths into the Worker packet in `lib/modules/implementation/coordination-runner.ts`. Filter the runtime Skill catalog to those paths. The Coordinator assigns roles and suspends; the Worker follows every assigned responsibility, reports its result, and stops.
 4. Update `docs/JUST_DO_IT_PLANNING.md` and `docs/JUST_DO_IT_EXECUTION.md` only when the public contract changes.
 5. Verify observable invariants: every responsibility includes `general`, specialized additions compose without duplicating the base, an override replaces only its named general rule, missing values resolve to `general`, and the Worker receives exactly the Coordinator's selections. Avoid tests that only mirror prose.
 

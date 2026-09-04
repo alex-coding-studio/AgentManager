@@ -1641,7 +1641,8 @@ void test('new executions always coordinate, persist role traces, and carry cont
         contextRevision: req.task.context.contextRevision,
         checklistVersion: req.task.context.acceptanceChecklist.version,
         decision: dispatch ? 'dispatch' : 'ready',
-        executionProfiles: ['general'],
+        responsibilities: ['general'],
+        skillPaths: [],
         summary: 'Verified fixture output',
         instructions: dispatch ? 'Write module.txt with ready.' : '',
         verificationPlan: [
@@ -1889,7 +1890,8 @@ void test('coordinated app verification limitations retain diagnostics without f
           contextRevision: req.task.context.contextRevision,
           checklistVersion: req.task.context.acceptanceChecklist.version,
           decision: 'ready',
-          executionProfiles: ['general'],
+          responsibilities: ['general'],
+          skillPaths: [],
           summary: 'Existing simulator delivery meets required checks',
           instructions: '',
           verificationPlan: [
