@@ -1,3 +1,4 @@
+import { syncProjectMain } from '../lib/modules/implementation/sync-main.ts';
 import { githubReader } from '../lib/github-delivery.ts';
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -34,7 +35,6 @@ import type {
   startLocalAgentRun,
 } from '../lib/agents/transport.ts';
 import type { CardHarnessRequest } from '../lib/modules/implementation/harness.ts';
-import { PublicApiError } from '../lib/api-errors.ts';
 
 const exec = promisify(execFile);
 const git = async (directory: string, ...args: string[]) =>
@@ -326,7 +326,7 @@ void test('a remote default rename overrides a stale local origin HEAD', async (
   );
 });
 
-void test('a new Card preserves a local default branch that is ahead of its remote', async (t) => {
+void test('a new Card uses remote main while preserving ahead local commits', async (t) => {
   const f = await fixture(t);
   await initializeRemoteFixture(f.project);
   await writeFile(path.join(f.project.rootPath, 'app.txt'), 'local ahead\n');
@@ -335,14 +335,18 @@ void test('a new Card preserves a local default branch that is ahead of its remo
 
   const workspace = await ensureCardWorkspace(f.project, f.card);
 
-  assert.equal(workspace.baseCommit, localHead);
+  assert.equal(
+    workspace.baseCommit,
+    await git(f.project.rootPath, 'rev-parse', 'origin/main'),
+  );
+  assert.equal(await git(f.project.rootPath, 'rev-parse', 'HEAD'), localHead);
   assert.equal(
     await readFile(path.join(workspace.path, 'app.txt'), 'utf8'),
-    'local ahead\n',
+    'initial\n',
   );
 });
 
-void test('a divergent default branch stops before creating a Card worktree', async (t) => {
+void test('a divergent local branch is preserved while a new worktree uses remote main', async (t) => {
   const f = await fixture(t);
   const { publisher } = await initializeRemoteFixture(f.project);
   await writeFile(path.join(f.project.rootPath, 'local.txt'), 'local\n');
@@ -353,28 +357,15 @@ void test('a divergent default branch stops before creating a Card worktree', as
   await git(publisher, 'commit', '-m', 'remote divergence');
   await git(publisher, 'push', 'origin', 'main');
 
-  await assert.rejects(
-    () => ensureCardWorkspace(f.project, f.card),
-    (error) =>
-      error instanceof PublicApiError &&
-      error.status === 409 &&
-      /default branches diverged/.test(error.message),
-  );
-  await assert.rejects(
-    () =>
-      readFile(
-        path.join(
-          f.project.planningPath,
-          'implementation/cards',
-          f.card.id,
-          'workspace.json',
-        ),
-      ),
-    /ENOENT/,
+  const workspace = await ensureCardWorkspace(f.project, f.card);
+  assert.equal(workspace.baseCommit, await git(publisher, 'rev-parse', 'HEAD'));
+  assert.equal(
+    await readFile(path.join(f.project.rootPath, 'local.txt'), 'utf8'),
+    'local\n',
   );
 });
 
-void test('an unavailable remote keeps local-first Card creation on the current HEAD', async (t) => {
+void test('an unavailable remote cannot silently create a task from stale local HEAD', async (t) => {
   const f = await fixture(t);
   await git(f.project.rootPath, 'init', '-b', 'main');
   await git(f.project.rootPath, 'config', 'user.name', 'Fixture');
@@ -394,14 +385,9 @@ void test('an unavailable remote keeps local-first Card creation on the current 
     'origin',
     path.join(path.dirname(f.project.rootPath), 'missing.git'),
   );
-  const localHead = await git(f.project.rootPath, 'rev-parse', 'HEAD');
-
-  const workspace = await ensureCardWorkspace(f.project, f.card);
-
-  assert.equal(workspace.baseCommit, localHead);
-  assert.equal(
-    await readFile(path.join(workspace.path, 'app.txt'), 'utf8'),
-    'offline\n',
+  await assert.rejects(
+    () => ensureCardWorkspace(f.project, f.card),
+    /Could not fetch the latest default branch/,
   );
 });
 
@@ -966,4 +952,48 @@ void test('sidecar write failure during reset does not strand the old worktree p
     (await ensureCardWorkspace(f.project, f.card)).path,
     workspace.path,
   );
+});
+
+void test('Sync Up fetches main without disturbing another branch or dirty files', async (t) => {
+  const f = await fixture(t);
+  const { publisher } = await initializeRemoteFixture(f.project);
+  await git(f.project.rootPath, 'switch', '-c', 'busy-work');
+  await writeFile(path.join(f.project.rootPath, 'local.txt'), 'unfinished\n');
+  await writeFile(path.join(publisher, 'app.txt'), 'merged\n');
+  await git(publisher, 'commit', '-am', 'merged change');
+  await git(publisher, 'push', 'origin', 'main');
+  const result = await syncProjectMain(f.project.rootPath);
+  assert.equal(result.head, await git(publisher, 'rev-parse', 'HEAD'));
+  assert.equal(
+    await git(f.project.rootPath, 'branch', '--show-current'),
+    'busy-work',
+  );
+  assert.equal(
+    await readFile(path.join(f.project.rootPath, 'local.txt'), 'utf8'),
+    'unfinished\n',
+  );
+  const workspace = await ensureCardWorkspace(f.project, f.card);
+  assert.equal(workspace.baseCommit, result.head);
+  assert.equal(await git(workspace.path, 'status', '--porcelain'), '');
+});
+
+void test('Sync Up materializes merged files in a clean main checkout even when origin was already fetched', async (t) => {
+  const f = await fixture(t);
+  const { publisher } = await initializeRemoteFixture(f.project);
+  await writeFile(
+    path.join(f.project.rootPath, '.git/info/exclude'),
+    '.praxis/\n',
+  );
+  await writeFile(path.join(publisher, 'merged.txt'), 'delivered\n');
+  await git(publisher, 'add', 'merged.txt');
+  await git(publisher, 'commit', '-m', 'delivered');
+  await git(publisher, 'push', 'origin', 'main');
+  await git(f.project.rootPath, 'fetch', 'origin');
+  const result = await syncProjectMain(f.project.rootPath);
+  assert.equal(result.checkoutUpdated, true);
+  assert.equal(
+    await readFile(path.join(f.project.rootPath, 'merged.txt'), 'utf8'),
+    'delivered\n',
+  );
+  assert.equal(await git(f.project.rootPath, 'rev-parse', 'HEAD'), result.head);
 });

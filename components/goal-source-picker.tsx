@@ -103,7 +103,7 @@ function CompactGoalCard({ data }: NodeProps<CompactNode>) {
         type="button"
         disabled={!canAdd}
         title={entry.title}
-        aria-label={`${t(waiting ? 'Waiting for prerequisites' : alreadyAdded ? 'Already added' : 'Add a goal')}: ${entry.title}`}
+        aria-label={`${t(entry.executionStatus === 'completed' ? 'Completed' : waiting ? 'Waiting for prerequisites' : alreadyAdded ? 'Delivery in progress' : 'Add a goal')}: ${entry.title}`}
         onClick={() => {
           if (canAdd) data.onChoose(entry);
         }}
@@ -120,13 +120,21 @@ function CompactGoalCard({ data }: NodeProps<CompactNode>) {
           {entry.title}
         </span>
         <span className="mt-2 flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
-          <span className="shrink-0">
+          <span
+            className={cn(
+              'shrink-0',
+              entry.executionStatus === 'completed' &&
+                'text-emerald-700 dark:text-emerald-400',
+            )}
+          >
             {t(
-              waiting
-                ? 'Waiting'
-                : alreadyAdded
-                  ? 'Already added'
-                  : 'Not started',
+              entry.executionStatus === 'completed'
+                ? 'Completed'
+                : waiting
+                  ? 'Waiting'
+                  : alreadyAdded
+                    ? 'Delivery in progress'
+                    : 'Not started',
             )}
           </span>
           <span className="min-w-0 truncate font-mono" title={entry.id}>
@@ -363,13 +371,7 @@ export function GoalSourcePicker({
               >
                 {t(moduleLabel(value))}
                 <span className="rounded-md bg-secondary px-1.5 text-[10px] text-muted-foreground">
-                  {
-                    entries.filter(
-                      (entry) =>
-                        entry.module === value &&
-                        entry.executionStatus !== 'completed',
-                    ).length
-                  }
+                  {entries.filter((entry) => entry.module === value).length}
                 </span>
               </button>
             ),

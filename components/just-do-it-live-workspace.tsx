@@ -11,6 +11,7 @@ import {
   Pencil,
   Plus,
   Sparkles,
+  RefreshCw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -93,6 +94,28 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
   const [pending, setPending] = useState(false);
   const [reading, setReading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [syncingMain, setSyncingMain] = useState(false);
+  const [syncMessage, setSyncMessage] = useState('');
+  async function syncMain() {
+    setSyncingMain(true);
+    setSyncMessage('');
+    try {
+      const response = await fetch(`/api/projects/${projectId}/sync-main`, {
+        method: 'POST',
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
+      setSyncMessage(
+        t(data.updated ? 'Main synced.' : 'Main is already up to date.'),
+      );
+    } catch (cause) {
+      setSyncMessage(
+        t(cause instanceof Error ? cause.message : 'Could not sync main.'),
+      );
+    } finally {
+      setSyncingMain(false);
+    }
+  }
   const [instructions, setInstructions] = useState<string | null>(null);
   const [contextOpen, setContextOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -423,10 +446,26 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
           'Plan together, execute one Action, then verify the output.',
         )}
         actions={
-          <ModuleContextTrigger
-            disabled={!view}
-            onClick={() => setContextOpen(true)}
-          />
+          <>
+            {syncMessage ? (
+              <output className="max-w-64 text-xs text-muted-foreground">
+                {syncMessage}
+              </output>
+            ) : null}
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={syncingMain}
+              onClick={() => void syncMain()}
+            >
+              <RefreshCw className={cn(syncingMain && 'animate-spin')} />
+              {t(syncingMain ? 'Syncing…' : 'Sync Up')}
+            </Button>
+            <ModuleContextTrigger
+              disabled={!view}
+              onClick={() => setContextOpen(true)}
+            />
+          </>
         }
       />
       <div

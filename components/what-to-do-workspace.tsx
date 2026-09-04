@@ -65,6 +65,31 @@ export function WhatToDoWorkspace({
       : null;
   const [runs, setRuns] = useState(initialRuns);
   const [currentMap, setCurrentMap] = useState(initialMap);
+  const [deliveryStates, setDeliveryStates] = useState<
+    Record<string, 'in-progress' | 'completed'>
+  >({});
+  useEffect(() => {
+    let active = true;
+    const refresh = async () => {
+      try {
+        const response = await fetch(
+          `/api/projects/${projectId}/contract-completion`,
+          { cache: 'no-store' },
+        );
+        if (!response.ok) return;
+        const data = (await response.json()) as {
+          states: Record<string, 'in-progress' | 'completed'>;
+        };
+        if (active) setDeliveryStates(data.states);
+      } catch {}
+    };
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 4000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [projectId]);
   const [sourceUids, setSourceUids] = useState([
     ...new Set([
       ...initialSourceUids,
@@ -112,8 +137,15 @@ export function WhatToDoWorkspace({
     (node) => node.uid && sourceUids.includes(node.uid),
   );
   const contractNodes = useMemo(
-    () => buildContractNodes(currentMap, t),
-    [currentMap, t],
+    () =>
+      buildContractNodes(currentMap, t).map((node) => ({
+        ...node,
+        metadata: {
+          ...node.metadata,
+          deliveryState: deliveryStates[node.uid ?? ''],
+        },
+      })),
+    [currentMap, t, deliveryStates],
   );
   const selectedContracts = currentMap?.contracts.filter((contract) =>
     focusContractIds.includes(contract.id),

@@ -29,6 +29,7 @@ export type GraphNodeCardData = Record<string, unknown> & {
   revision?: number;
   transientKind?: TaskGraphPreview['kind'];
   status?: string;
+  deliveryState?: 'in-progress' | 'completed';
   agentLabel?: string;
   runId?: string;
   startedAt?: string;
@@ -131,6 +132,25 @@ export function GraphNodeCard({
       }
       headerActions={
         <>
+          {data.deliveryState ? (
+            <span
+              className={cn(
+                'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-medium whitespace-nowrap',
+                data.deliveryState === 'completed'
+                  ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+                  : 'bg-blue-500/10 text-blue-700 dark:text-blue-300',
+              )}
+            >
+              {data.deliveryState === 'completed' ? (
+                <CheckCircle2 className="size-3" aria-hidden="true" />
+              ) : null}
+              {t(
+                data.deliveryState === 'completed'
+                  ? 'Completed'
+                  : 'Delivery in progress',
+              )}
+            </span>
+          ) : null}
           {data.relationshipCount > 0 ? (
             <button
               type="button"

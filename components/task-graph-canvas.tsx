@@ -440,6 +440,12 @@ function buildFlowGraph(
       },
       data: {
         readOnly,
+        deliveryState:
+          node?.metadata.deliveryState === 'completed'
+            ? 'completed'
+            : node?.metadata.deliveryState === 'in-progress'
+              ? 'in-progress'
+              : undefined,
         displayId: layoutNode.id,
         kind: layoutNode.kind,
         title: node?.title ?? preview?.title ?? 'Decomposition request',
