@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "manifestFile": "Manifest.md",
+  "origin": [
+    { "id": "environment", "file": "Environment.md", "producer": "host" },
+    {
+      "id": "responsibilities",
+      "file": "Responsibilities.md",
+      "producer": "coordinator"
+    },
+    { "id": "user-input", "file": "UserInput.md", "producer": "host" },
+    { "id": "resources", "file": "Resources.md", "producer": "host" },
+    { "id": "assignment", "file": "Assignment.md", "producer": "coordinator" },
+    { "id": "skills", "file": "Skills.md", "producer": "coordinator" },
+    {
+      "id": "verification-plan",
+      "file": "VerificationPlan.md",
+      "producer": "coordinator"
+    },
+    { "id": "acceptance", "file": "Acceptance.md", "producer": "host" }
+  ],
+  "references": [
+    { "id": "product-context", "file": "ProductContext.md", "producer": "host" }
+  ]
+}
