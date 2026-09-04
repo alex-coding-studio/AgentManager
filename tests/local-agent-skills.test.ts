@@ -138,6 +138,21 @@ void test('a Worker catalog contains only Coordinator-selected Skill paths', () 
   const empty = withSkillCatalog('Execute.', catalog, []);
   assert.match(empty, /Coordinator selected/);
   assert.doesNotMatch(empty, /ios-dev-agent:setup/);
+
+  const args = buildCodexArguments(
+    {
+      workingDirectory: cwd,
+      prompt: 'Execute.',
+      access: 'workspace-write',
+      allowedSkillPaths: [],
+    },
+    catalog,
+  );
+  assert.ok(
+    args.some((argument) =>
+      argument.includes('{path="/installed/ios/setup/SKILL.md",enabled=false}'),
+    ),
+  );
 });
 
 void test('discovery errors and timeout terminate the helper instead of silently starting without Skills', async () => {

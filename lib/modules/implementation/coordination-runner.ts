@@ -35,6 +35,7 @@ import type {
   HostTool,
   HostToolContinuation,
 } from '../../agents/runtime-driver.ts';
+import { readCodexSkills, type SkillCatalog } from '../../agents/skills.ts';
 import { executionResponsibilityInstructions } from './execution-responsibilities.ts';
 import {
   allowedDecisionsAfter,
@@ -178,6 +179,7 @@ export function startCoordinatedExecution(input: {
   coordinatorSession?: (
     input: CoordinatorSessionInput,
   ) => Promise<CoordinatorSession | null>;
+  discoverSkills?: typeof readCodexSkills;
 }): LocalAgentRun {
   const transport = input.transport ?? startLocalAgentRun;
   const coordinatorSession =
@@ -209,6 +211,8 @@ export function startCoordinatedExecution(input: {
   let stopped = false;
   let lastWorker: LocalAgentResult | undefined;
   let lastWorkerReport: ExecutionReport | null = null;
+  let skillCatalog: SkillCatalog | undefined;
+  let availableSkills = input.request.context.skills;
   const workerCommandOutcomes = new Map<string, number>();
   const assertActive = () => {
     if (stopped) throw new Error('Coordinated execution stopped.');
@@ -327,7 +331,7 @@ export function startCoordinatedExecution(input: {
     }
   }
   const workerPromptFor = (decision: CoordinationDecision) => {
-    const selectedSkills = input.request.context.skills.filter((skill) =>
+    const selectedSkills = availableSkills.filter((skill) =>
       decision.skillPaths.includes(skill.path),
     );
     return `${input.workerOptions.prompt}
@@ -424,6 +428,7 @@ The Coordinator-assigned responsibilities, responsibilityInstructions, Skills an
     let req = createCoordinationRequest({
       phase: 'prepare',
       task: input.request,
+      availableSkills,
       basis,
       priorEvidence: input.priorEvidence,
       previousContext: trace.contextSummary,
@@ -489,6 +494,7 @@ The Coordinator-assigned responsibilities, responsibilityInstructions, Skills an
       req = createCoordinationRequest({
         phase: 'qualify',
         task: input.request,
+        availableSkills,
         basis,
         priorEvidence: input.priorEvidence,
         previousContext: trace.contextSummary,
@@ -675,6 +681,7 @@ The Coordinator-assigned responsibilities, responsibilityInstructions, Skills an
       let req = createCoordinationRequest({
         phase: 'prepare',
         task: input.request,
+        availableSkills,
         basis,
         priorEvidence: input.priorEvidence,
         previousContext: trace.contextSummary,
@@ -728,6 +735,7 @@ The Coordinator-assigned responsibilities, responsibilityInstructions, Skills an
         req = createCoordinationRequest({
           phase: 'qualify',
           task: input.request,
+          availableSkills,
           basis,
           priorEvidence: input.priorEvidence,
           previousContext: trace.contextSummary,
@@ -749,11 +757,20 @@ The Coordinator-assigned responsibilities, responsibilityInstructions, Skills an
   }
   const completion = (async (): Promise<CoordinatedResult> => {
     try {
+      if (input.discoverSkills) {
+        skillCatalog = await input.discoverSkills(
+          input.workerOptions.workingDirectory,
+        );
+        availableSkills = skillCatalog.skills
+          .filter((skill) => skill.enabled)
+          .map(({ name, path }) => ({ name, path }));
+      }
       const active = await coordinatorSession({
         profile: input.settings.profile,
         workingDirectory: input.workerOptions.workingDirectory,
         protectedPath: input.workerOptions.protectedPath,
         hostTools: [dispatchTool],
+        skillCatalog,
       });
       assertActive();
       return active ? await runThreaded(active) : await runLegacy();

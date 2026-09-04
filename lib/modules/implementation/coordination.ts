@@ -83,6 +83,7 @@ export type CoordinationRequest = {
   requestId: string;
   phase: 'prepare' | 'qualify';
   task: CardHarnessRequest;
+  availableSkills: Array<{ name: string; path: string }>;
   basis: string;
   priorEvidence: PriorEvidence[];
   previousContext: string;
@@ -192,9 +193,17 @@ export function coordinationPrompt(request: CoordinationRequest) {
 }
 
 export function createCoordinationRequest(
-  input: Omit<CoordinationRequest, 'version' | 'requestId'>,
+  input: Omit<
+    CoordinationRequest,
+    'version' | 'requestId' | 'availableSkills'
+  > & { availableSkills?: CoordinationRequest['availableSkills'] },
 ): CoordinationRequest {
-  return { version: 1, requestId: randomUUID(), ...input };
+  return {
+    version: 1,
+    requestId: randomUUID(),
+    ...input,
+    availableSkills: input.availableSkills ?? input.task.context.skills,
+  };
 }
 
 export function parseCoordinationDecision(
@@ -230,7 +239,7 @@ export function parseCoordinationDecision(
   )
     throw new Error('Coordinator decision does not match the current phase.');
   const allowedSkillPaths = new Set(
-    request.task.context.skills.map((skill) => skill.path),
+    request.availableSkills.map((skill) => skill.path),
   );
   if (value.skillPaths.some((skillPath) => !allowedSkillPaths.has(skillPath)))
     throw new Error('Coordinator selected an unavailable Skill.');

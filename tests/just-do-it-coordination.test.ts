@@ -58,19 +58,20 @@ const criteria = [
     evidence: 'Actual result',
   },
 ];
-function task(): CardHarnessRequest {
+const setupSkill = {
+  name: 'ios-dev-agent:setup',
+  path: '/installed/ios/setup/SKILL.md',
+};
+function task(
+  skills: Array<{ name: string; path: string }> = [setupSkill],
+): CardHarnessRequest {
   return createCardHarnessRequest(
     {
       cardId,
       contextRevision: 2,
       goal: 'Fixture',
       moduleInstructions: 'Fixture rules',
-      skills: [
-        {
-          name: 'ios-dev-agent:setup',
-          path: '/installed/ios/setup/SKILL.md',
-        },
-      ],
+      skills,
       resources: [],
       handoffMarkdown:
         'Earlier verified conclusion: use the canonical repository.',
@@ -214,8 +215,14 @@ function worker(t: CardHarnessRequest, status: 'passed' | 'failed' = 'passed') {
 function setup(
   coordinator: (req: CoordinationRequest) => CoordinationDecision,
   workerStatus: Array<'passed' | 'failed'> = ['passed'],
+  options: {
+    request?: CardHarnessRequest;
+    discoverSkills?: Parameters<
+      typeof startCoordinatedExecution
+    >[0]['discoverSkills'];
+  } = {},
 ) {
-  const request = task();
+  const request = options.request ?? task();
   const calls: Array<{
     agent: string;
     access: unknown;
@@ -257,6 +264,7 @@ function setup(
       readBasis: async () => 'basis',
       onProgress: () => {},
       transport,
+      discoverSkills: options.discoverSkills,
     });
   return { start, calls };
 }
@@ -281,6 +289,40 @@ void test('complete worker self-check bypasses coordinator review and keeps sepa
   assert.match(f.calls[1].prompt, /Read each assigned SKILL.md once/);
   assert.doesNotMatch(f.calls[1].prompt, /Mechanical responsibility/);
   assert.deepEqual(f.calls[1].allowedSkillPaths, []);
+});
+
+void test('runtime-discovered Skills become the validated Coordinator catalog', async () => {
+  const f = setup(
+    (req) => {
+      assert.deepEqual(req.availableSkills, [setupSkill]);
+      const output = decision(
+        req,
+        req.phase === 'prepare' ? 'dispatch' : 'ready',
+      );
+      output.skillPaths = [setupSkill.path];
+      return output;
+    },
+    ['passed'],
+    {
+      request: task([]),
+      discoverSkills: async () => ({
+        skills: [
+          { ...setupSkill, description: 'Setup', enabled: true },
+          {
+            name: 'unselected',
+            description: 'Another Skill',
+            path: '/installed/unselected/SKILL.md',
+            enabled: false,
+          },
+        ],
+        executionAccess: 'workspace-write',
+      }),
+    },
+  );
+  await f.start().completion;
+  assert.deepEqual(f.calls[1].allowedSkillPaths, [setupSkill.path]);
+  assert.match(f.calls[1].prompt, /ios-dev-agent:setup/);
+  assert.doesNotMatch(f.calls[1].prompt, /unselected/);
 });
 
 void test('Coordinator composes inherited Worker responsibilities for mixed work', async () => {

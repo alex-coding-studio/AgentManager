@@ -79,6 +79,7 @@ import {
   type LocalAgentRun,
 } from '../../agents/transport.ts';
 import { startEventDrivenWorkerRun } from '../../agents/event-driven-transport.ts';
+import { readCodexSkills } from '../../agents/skills.ts';
 import {
   captureLocalAcceptanceArtifacts,
   observedChanges,
@@ -982,6 +983,8 @@ export function createExecutionService(
               (transport === startLocalAgentRun
                 ? startEventDrivenWorkerRun
                 : transport),
+            discoverSkills:
+              transport === startLocalAgentRun ? readCodexSkills : undefined,
             environment,
           });
         }

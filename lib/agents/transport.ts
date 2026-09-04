@@ -183,7 +183,9 @@ export function startCodexRun(
     run = launch(
       {
         ...input,
-        prompt: withSkillCatalog(input.prompt, catalog) + permissionContext,
+        prompt:
+          withSkillCatalog(input.prompt, catalog, input.allowedSkillPaths) +
+          permissionContext,
       },
       catalog,
     );
@@ -312,7 +314,12 @@ export function buildCodexArguments(
       ? [
           '-c',
           `skills.config=[${catalog.skills
-            .filter((skill) => !skill.enabled)
+            .filter(
+              (skill) =>
+                !skill.enabled ||
+                (input.allowedSkillPaths !== undefined &&
+                  !input.allowedSkillPaths.includes(skill.path)),
+            )
             .map(
               (skill) => `{path=${JSON.stringify(skill.path)},enabled=false}`,
             )
