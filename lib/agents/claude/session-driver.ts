@@ -18,6 +18,7 @@ import {
 } from '../runtime-driver.ts';
 import {
   HostJobBroker,
+  hostJobCompletionPrompt,
   type HostJobEvent,
   type HostJobRequest,
 } from '../host-job-broker.ts';
@@ -589,7 +590,7 @@ export class ClaudeSessionDriver implements AgentSessionDriver {
         turn.pendingSuspension = {
           tool: 'run_job',
           completion: job.completion.then((result) => ({
-            prompt: `HOST_JOB_COMPLETED\n${JSON.stringify(result)}\nThe Host ran this command exactly once. Do not rerun it merely to obtain the result. Inspect the referenced log only when details are needed, then continue the original assignment. If another long command is necessary, use run_job once and end the turn again.`,
+            prompt: hostJobCompletionPrompt(result),
             jobResult: result,
           })),
         };
