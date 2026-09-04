@@ -352,9 +352,19 @@ void test('coding output persists, feedback creates another round, and only user
   );
   assert.match(card.execution!.git!.baseline, /^[0-9a-f]{40}$/);
   assert.match(card.execution!.runs[0].commit!, /^[0-9a-f]{40}$/);
-  assert.equal(
+  assert.match(card.execution!.runs[0].parentCommit!, /^[0-9a-f]{40}$/);
+  assert.notEqual(
     card.execution!.runs[0].parentCommit,
     card.execution!.git!.baseline,
+  );
+  assert.equal(
+    await readCheckpointDiff(
+      project,
+      id,
+      card.execution!.git!.baseline,
+      card.execution!.runs[0].parentCommit!,
+    ),
+    '',
   );
   assert.deepEqual(card.execution?.acceptedActionIds, []);
   await assert.rejects(

@@ -42,6 +42,15 @@ export async function POST(
           input.expectedRevision,
         ),
       });
+    if (input.action === 'undo-action')
+      return Response.json({
+        card: await executionService.undoAction(
+          project,
+          input.cardId,
+          input.actionId,
+          input.expectedRevision,
+        ),
+      });
     if (input.action === 'override-check')
       return Response.json({
         card: await executionService.overrideRequiredCheck(

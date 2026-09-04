@@ -279,6 +279,10 @@ export const chineseUi: Record<string, string> = {
   'To restart from the original baseline, use the separate Card restart action when available; it creates a backup first.':
     '如需从初始版本重新开始，请使用单独的 Card 重开操作（适用时会先备份）。',
   'Keep running': '继续运行',
+  Undo: '撤销',
+  'Undo this Action?': '撤销这一步？',
+  'Return this Action to its clean starting point. Previous passed Actions and the Plan stay unchanged.':
+    '恢复到这一步开始前。已通过的步骤和计划保持不变。',
   'Execution phase': '执行',
   'Acceptance phase': '验收',
   'Confirm Action acceptance': '确认验收这一步',
