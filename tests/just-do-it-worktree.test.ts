@@ -482,12 +482,6 @@ void test('undo restores only the current Action to its clean baseline', async (
   await writeFile(path.join(firstWorkspace, 'between.txt'), 'before Action 2');
   await writeFile(path.join(firstWorkspace, 'private.txt'), 'private');
   await chmod(path.join(firstWorkspace, 'private.txt'), 0o600);
-  const userState = path.join(
-    firstWorkspace,
-    'App.xcodeproj/project.xcworkspace/xcuserdata/user.xcuserdatad/UserInterfaceState.xcuserstate',
-  );
-  await mkdir(path.dirname(userState), { recursive: true });
-  await writeFile(userState, 'volatile state');
   await f.service.start(f.project, {
     ...f.input,
     actionId: f.actions[1].id,
@@ -496,7 +490,6 @@ void test('undo restores only the current Action to its clean baseline', async (
   });
   await writeFile(path.join(firstWorkspace, 'app.txt'), 'broken second Action');
   await writeFile(path.join(firstWorkspace, 'between.txt'), 'broken Action 2');
-  await rm(userState);
   await writeFile(path.join(firstWorkspace, 'partial.txt'), 'remove me');
   f.calls[1].reject(new Error('Needs user input'));
   card = await f.settled();
@@ -537,13 +530,6 @@ void test('undo restores only the current Action to its clean baseline', async (
     0o600,
   );
   await assert.rejects(
-    () =>
-      readFile(
-        path.join(cleanWorkspace, path.relative(firstWorkspace, userState)),
-      ),
-    /ENOENT/,
-  );
-  await assert.rejects(
     () => readFile(path.join(cleanWorkspace, 'partial.txt')),
     /ENOENT/,
   );
@@ -558,6 +544,80 @@ void test('undo restores only the current Action to its clean baseline', async (
     'remove me',
   );
   assert.equal(f.calls.length, 2);
+});
+
+void test('legacy Undo ignores unrecoverable untracked baseline state generically', async (t) => {
+  const f = await fixture(t);
+  await f.service.start(f.project, {
+    ...f.input,
+    initializeRepository: true,
+  });
+  const workspace = f.calls[0].options.workingDirectory;
+  await writeFile(path.join(workspace, 'app.txt'), 'accepted Action');
+  f.calls[0].resolve(delivered(f.calls[0].request));
+  let card = await f.settled();
+  card = await f.service.update(
+    f.project,
+    f.card.id,
+    card.revision,
+    'accept',
+    card.execution!.runs[0].id,
+  );
+  const transient = path.join(workspace, 'tool-local-state.tmp');
+  await writeFile(transient, 'temporary');
+  await f.service.start(f.project, {
+    ...f.input,
+    actionId: f.actions[1].id,
+    expectedRevision: card.revision,
+  });
+  await rm(transient);
+  f.calls[1].reject(new Error('Needs user input'));
+  card = await f.settled();
+  const legacy = structuredClone(card);
+  legacy.revision += 1;
+  legacy.execution!.runs[1].baselineRef = undefined;
+  legacy.execution!.runs[1].parentCommit = legacy.execution!.runs[0].commit;
+  await appendCardWorkRecord(
+    path.join(f.project.planningPath, 'implementation/cards'),
+    f.card.id,
+    card.revision,
+    {
+      kind: 'system-event',
+      stage: 'execution',
+      actionId: f.actions[1].id,
+      event: 'run-ended',
+      text: 'Fixture converted this Round to the legacy checkpoint shape.',
+      refs: [],
+    },
+    { 'planning-state.json': JSON.stringify(legacy) },
+  );
+
+  const undone = await f.service.undoAction(
+    f.project,
+    f.card.id,
+    f.actions[1].id,
+    legacy.revision,
+  );
+
+  assert.deepEqual(undone.execution?.acceptedActionIds, [f.actions[0].id]);
+  assert.deepEqual(
+    undone.execution?.runs.map((run) => run.actionId),
+    [f.actions[0].id],
+  );
+  assert.equal(
+    await readFile(
+      path.join(undone.execution!.workspace!.path, 'app.txt'),
+      'utf8',
+    ),
+    'accepted Action',
+  );
+  await assert.rejects(
+    () =>
+      readFile(
+        path.join(undone.execution!.workspace!.path, 'tool-local-state.tmp'),
+      ),
+    /ENOENT/,
+  );
 });
 
 void test('failed Undo persistence restores the original active worktree', async (t) => {
