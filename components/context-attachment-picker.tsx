@@ -110,9 +110,9 @@ export function ContextAttachmentPicker({
         <div
           className={cn('space-y-4', !embedded && 'border-t border-border p-4')}
         >
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid min-w-0 grid-cols-1 gap-3">
             {folders.length > 0 ? (
-              <div className="flex flex-col">
+              <div className="flex min-w-0 flex-col">
                 <div className="relative">
                   <select
                     disabled={disabled}
@@ -129,7 +129,7 @@ export function ContextAttachmentPicker({
                   </select>
                   <ChevronDown className="pointer-events-none absolute top-1/2 right-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
                 </div>
-                <div className="mt-2 flex max-h-64 min-h-[8.5rem] flex-col gap-0.5 overflow-y-auto">
+                <div className="mt-2 flex max-h-64  flex-col gap-0.5 overflow-y-auto">
                   {(folder?.entries ?? [])
                     .filter((entry) => entry.kind === 'file')
                     .map((entry) => (
@@ -157,7 +157,7 @@ export function ContextAttachmentPicker({
                 </div>
               </div>
             ) : (
-              <div className="grid min-h-[8.5rem] place-items-center rounded-lg border border-border px-4 text-center">
+              <div className="grid  place-items-center rounded-lg border border-border px-4 text-center">
                 <p className="text-[11px] leading-5 text-muted-foreground">
                   {t('This project has no Product Context library yet.')}
                 </p>
@@ -166,7 +166,7 @@ export function ContextAttachmentPicker({
 
             <div
               className={cn(
-                'grid min-h-[8.5rem] place-items-center rounded-lg border border-dashed border-border p-4 text-center transition',
+                'grid  place-items-center rounded-lg border border-dashed border-border p-4 text-center transition',
                 dragging && 'border-violet-500 bg-violet-500/5',
               )}
               onDragOver={(event: DragEvent<HTMLDivElement>) => {
@@ -194,7 +194,7 @@ export function ContextAttachmentPicker({
               <button
                 type="button"
                 disabled={disabled || choosing}
-                className="flex w-full items-center justify-center gap-1.5 text-[11px] text-muted-foreground transition hover:text-foreground"
+                className="flex w-full min-w-0 items-center justify-center gap-1.5 whitespace-normal text-[11px] text-muted-foreground transition hover:text-foreground"
                 onClick={() => void addReference()}
               >
                 <Upload className="size-3.5" />

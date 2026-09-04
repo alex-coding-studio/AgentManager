@@ -15,6 +15,10 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  AgentComposerShell,
+  AgentComposerAttachments,
+} from '@/components/agent-composer-shell';
 import { AgentGraphComposerCard } from '@/components/agent-graph-composer-card';
 import { AgentGraphRunningCard } from '@/components/agent-graph-running-card';
 import { AgentProfileSelector } from '@/components/agent-profile-selector';
@@ -385,20 +389,11 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
     }
   }
 
-  const setup = card && draft && (
-    <div className="space-y-3">
-      <label className="block text-xs font-medium">
-        {t('Original input')}
-        <Textarea
-          className="mt-1 min-h-24 resize-none text-sm"
-          value={draft.requirements}
-          disabled={busy}
-          onChange={(event) =>
-            patchDraft(card.id, { requirements: event.target.value })
-          }
-        />
-      </label>
+  const attachmentPicker = (embedded = false) =>
+    card &&
+    draft && (
       <ContextAttachmentPicker
+        embedded={embedded}
         folders={view?.folders ?? []}
         folderPath={draft.folder || view?.folders[0]?.path || ''}
         onFolderPath={(folder) => patchDraft(card.id, { folder })}
@@ -438,6 +433,22 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
         disabled={busy}
         accept=".md,.markdown,.txt"
       />
+    );
+
+  const setup = card && draft && (
+    <div className="space-y-3">
+      <label className="block text-xs font-medium">
+        {t('Original input')}
+        <Textarea
+          className="mt-1 min-h-24 resize-none text-sm"
+          value={draft.requirements}
+          disabled={busy}
+          onChange={(event) =>
+            patchDraft(card.id, { requirements: event.target.value })
+          }
+        />
+      </label>
+      {attachmentPicker()}
     </div>
   );
 
@@ -702,18 +713,72 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
                   'This goal is here. Nothing has been planned or started yet.',
                 )}
               >
-                {setup}
-                <div className="mt-3">
-                  <AgentRunControls
-                    key={card.id}
-                    value={draft!.profile}
-                    onChange={(profile) => patchDraft(card.id, { profile })}
-                    disabled={busy || dependencyReview.length > 0}
-                    actionLabel="Start planning"
-                    agents={justDoItAgents}
-                    onRun={() => void generate(null)}
+                <AgentComposerAttachments
+                  label={t('Extra info')}
+                  className="mb-3"
+                  items={[
+                    ...draft!.contextRefs.map((ref) => ({
+                      id: ref,
+                      label: ref.split('/').at(-1) ?? ref,
+                      onRemove: () =>
+                        patchDraft(card.id, {
+                          contextRefs: draft!.contextRefs.filter(
+                            (item) => item !== ref,
+                          ),
+                        }),
+                    })),
+                    ...card.resources
+                      .filter((item) => draft!.retainRefs.includes(item.ref))
+                      .map((item) => ({
+                        id: item.ref,
+                        label: item.name,
+                        onRemove: () =>
+                          patchDraft(card.id, {
+                            retainRefs: draft!.retainRefs.filter(
+                              (ref) => ref !== item.ref,
+                            ),
+                          }),
+                      })),
+                    ...draft!.files.map((file, index) => ({
+                      id: `file-${index}`,
+                      label: file.name,
+                      onRemove: () =>
+                        patchDraft(card.id, {
+                          files: draft!.files.filter((_, i) => i !== index),
+                        }),
+                    })),
+                  ]}
+                />
+                <AgentComposerShell
+                  controls={
+                    <AgentRunControls
+                      key={card.id}
+                      value={draft!.profile}
+                      onChange={(profile) => patchDraft(card.id, { profile })}
+                      disabled={busy || dependencyReview.length > 0}
+                      actionLabel="Start planning"
+                      agents={justDoItAgents}
+                      extraInfo={attachmentPicker(true)}
+                      extraInfoCount={
+                        draft!.files.length +
+                        draft!.retainRefs.length +
+                        draft!.contextRefs.length
+                      }
+                      onRun={() => void generate(null)}
+                    />
+                  }
+                >
+                  <Textarea
+                    className="min-h-24 resize-none text-sm"
+                    aria-label={t('Your requirements')}
+                    placeholder={t('Your requirements')}
+                    value={draft!.requirements}
+                    disabled={busy}
+                    onChange={(event) =>
+                      patchDraft(card.id, { requirements: event.target.value })
+                    }
                   />
-                </div>
+                </AgentComposerShell>
               </AgentGraphComposerCard>
             ) : (
               <section className="space-y-4">
