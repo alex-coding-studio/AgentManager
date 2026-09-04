@@ -89,21 +89,37 @@ void test('a single-reference entry rejects a second reference', () => {
   );
 });
 
-void test('reading order names only material the Worker can actually open', () => {
-  const manifest = buildPacketManifest(
+const headings = (manifest: string) =>
+  [...manifest.matchAll(/^## (.+)$/gm)].map((match) => match[1]);
+
+void test('the section list and its order do not vary with what a round supplies', () => {
+  const full = buildPacketManifest(
+    input({
+      references: {
+        ...input().references,
+        responsibilities: [
+          {
+            ref: 'lib/responsibilities/general.json',
+            description: 'Base.',
+            state: 'present',
+          },
+        ],
+        plan: [{ ref: 'a/plan.md', description: 'Plan.', state: 'present' }],
+      },
+    }),
+  );
+  const sparse = buildPacketManifest(
     input({ materialized: { ...materialized, environment: false } }),
   );
-  const order = manifest.slice(
-    manifest.indexOf('## Reading Order'),
-    manifest.indexOf('Execute only'),
+  assert.deepEqual(headings(full), headings(sparse));
+  assert.equal(headings(full).length, PACKET_SPEC.entries.length);
+  assert.deepEqual(
+    headings(full),
+    PACKET_SPEC.entries.map((entry, index) => `${index + 1}. ${entry.title}`),
   );
-  assert.ok(!order.includes('Environment.json'));
-  assert.ok(order.includes('UserInput.md'));
-  assert.ok(order.includes('Source Goal'));
-  assert.ok(!order.includes('Prerequisites'));
 });
 
-void test('an absent optional item stays recorded instead of disappearing', () => {
+void test('an absent item reads None instead of disappearing', () => {
   const manifest = buildPacketManifest(
     input({
       materialized: { ...materialized, environment: false },
@@ -115,12 +131,9 @@ void test('an absent optional item stays recorded instead of disappearing', () =
       },
     }),
   );
-  assert.match(manifest, /`Environment\.json` \| not-applicable/);
+  assert.match(manifest, /## 10\. Environment\n\n[^\n]+\n\nNone/);
+  assert.match(manifest, /## 17\. Prerequisites\n\n[^\n]+\n\nNone/);
   assert.match(manifest, /`context\/a\.md` — missing/);
-  assert.match(
-    manifest,
-    /### Prerequisites\n\nOutput of accepted[\s\S]*?- none/,
-  );
 });
 
 void test('a reference hash is rendered as this round evidence', () => {

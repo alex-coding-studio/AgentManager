@@ -111,73 +111,37 @@ export function placeholderFor(id: string) {
   return `<!-- AGENT-MUST-UPDATE:${id} -->`;
 }
 
-function readingOrder(spec: PacketSpec, input: PacketManifestInput) {
-  const steps = [
-    ...spec.entries
-      .filter((entry) => entry.kind === 'agent-filled')
-      .map((entry) => `\`${spec.manifestFile}\` section "${entry.title}"`),
-    ...spec.entries
-      .filter(
-        (entry) =>
-          entry.kind === 'materialized' &&
-          input.materialized[entry.id] === true,
-      )
-      .map((entry) => `\`${entry.file}\``),
-    ...spec.entries
-      .filter(
-        (entry) =>
-          entry.kind === 'referenced' &&
-          (input.references[entry.id] ?? []).some(
-            (item) => item.state === 'present',
-          ),
-      )
-      .map((entry) => `${entry.title} references under "References"`),
-  ];
-  return steps.map((step, index) => `${index + 1}. ${step}`).join('\n');
-}
-
-function materializedSection(spec: PacketSpec, input: PacketManifestInput) {
-  const rows = spec.entries
-    .filter((entry) => entry.kind === 'materialized')
-    .map((entry) => {
-      const present = input.materialized[entry.id] === true;
-      if (!present && entry.required)
-        throw new Error(`Required packet file was not produced: ${entry.id}`);
-      return `| \`${entry.file}\` | ${present ? 'present' : 'not-applicable'} | ${entry.description} |`;
-    });
-  return `| File | State | Purpose |\n| --- | --- | --- |\n${rows.join('\n')}`;
-}
-
-function referenceSection(spec: PacketSpec, input: PacketManifestInput) {
-  return spec.entries
-    .filter((entry) => entry.kind === 'referenced')
-    .map((entry) => {
-      const items = input.references[entry.id] ?? [];
-      if (!entry.multiple && items.length > 1)
-        throw new Error(`Entry accepts one reference: ${entry.id}`);
-      const usable = items.filter((item) => item.state === 'present');
-      if (entry.required && !usable.length)
-        throw new Error(`Required reference is unavailable: ${entry.id}`);
-      const body = items.length
-        ? items
-            .map(
-              (item) =>
-                `- \`${item.ref}\` — ${item.state}${item.hash ? ` — ${item.hash}` : ''} — ${item.description}`,
-            )
-            .join('\n')
-        : '- none';
-      return `### ${entry.title}\n\n${entry.description}\n\n${body}`;
-    })
-    .join('\n\n');
-}
-
-function agentSection(spec: PacketSpec) {
-  return spec.entries
-    .filter((entry) => entry.kind === 'agent-filled')
+function sectionBody(entry: PacketSpecEntry, input: PacketManifestInput) {
+  if (entry.kind === 'agent-filled') return placeholderFor(entry.id);
+  if (entry.kind === 'materialized') {
+    const present = input.materialized[entry.id] === true;
+    if (!present && entry.required)
+      throw new Error(`Required packet file was not produced: ${entry.id}`);
+    return present ? `\`${entry.file}\`` : 'None';
+  }
+  const items = input.references[entry.id] ?? [];
+  if (!entry.multiple && items.length > 1)
+    throw new Error(`Entry accepts one reference: ${entry.id}`);
+  if (entry.required && !items.some((item) => item.state === 'present'))
+    throw new Error(`Required reference is unavailable: ${entry.id}`);
+  if (!items.length) return 'None';
+  return items
     .map(
-      (entry) =>
-        `### ${entry.title}\n\nOwner: ${entry.owner ?? 'Coordinator'}\n\n${entry.description}\n\n${placeholderFor(entry.id)}`,
+      (item) =>
+        `- \`${item.ref}\` — ${item.state}${item.hash ? ` — ${item.hash}` : ''} — ${item.description}`,
     )
+    .join('\n');
+}
+
+function sections(spec: PacketSpec, input: PacketManifestInput) {
+  return spec.entries
+    .map((entry, index) => {
+      const owner =
+        entry.kind === 'agent-filled'
+          ? `\n\nOwner: ${entry.owner ?? 'Coordinator'}`
+          : '';
+      return `## ${index + 1}. ${entry.title}${owner}\n\n${entry.description}\n\n${sectionBody(entry, input)}`;
+    })
     .join('\n\n');
 }
 
@@ -191,10 +155,7 @@ export function buildPacketManifest(
     actionId: input.actionId,
     contextRevision: String(input.contextRevision),
     checklistVersion: input.checklistVersion,
-    readingOrder: readingOrder(spec, input),
-    materialized: materializedSection(spec, input),
-    references: referenceSection(spec, input),
-    agentSections: agentSection(spec),
+    sections: sections(spec, input),
   };
   const rendered = template.replace(
     /{{(\w+)}}/g,

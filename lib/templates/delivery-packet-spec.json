@@ -3,6 +3,24 @@
   "manifestFile": "Manifest.md",
   "entries": [
     {
+      "id": "responsibilities",
+      "kind": "referenced",
+      "multiple": true,
+      "required": false,
+      "source": "lib/responsibilities",
+      "pathBase": "project",
+      "title": "Responsibilities",
+      "description": "Assigned execution boundaries. Read each file and resolve its inherits path relative to that file."
+    },
+    {
+      "id": "assignment",
+      "kind": "agent-filled",
+      "required": true,
+      "owner": "Coordinator",
+      "title": "Assignment",
+      "description": "Task summary, dynamic boundaries, requested result and stop condition."
+    },
+    {
       "id": "user-input",
       "kind": "materialized",
       "file": "UserInput.md",
@@ -30,22 +48,12 @@
       "description": "Frozen acceptance checklist and recorded overrides."
     },
     {
-      "id": "identity",
-      "kind": "materialized",
-      "file": "Identity.json",
+      "id": "verification-plan",
+      "kind": "agent-filled",
       "required": true,
-      "source": "CardHarnessRequest",
-      "title": "Identity",
-      "description": "Card, Action, request and revision coordinates for this round."
-    },
-    {
-      "id": "environment",
-      "kind": "materialized",
-      "file": "Environment.json",
-      "required": false,
-      "source": "CardEnvironmentManifest",
-      "title": "Environment",
-      "description": "Host-verified workspace, repository and role facts."
+      "owner": "Coordinator",
+      "title": "Verification Plan",
+      "description": "One entry per required acceptance criterion."
     },
     {
       "id": "skills",
@@ -66,14 +74,22 @@
       "description": "Fixed execution lifecycle rules that apply to every round."
     },
     {
-      "id": "responsibilities",
-      "kind": "referenced",
-      "multiple": true,
+      "id": "identity",
+      "kind": "materialized",
+      "file": "Identity.json",
+      "required": true,
+      "source": "CardHarnessRequest",
+      "title": "Identity",
+      "description": "Card, Action, request and revision coordinates for this round."
+    },
+    {
+      "id": "environment",
+      "kind": "materialized",
+      "file": "Environment.json",
       "required": false,
-      "source": "lib/responsibilities",
-      "pathBase": "project",
-      "title": "Responsibilities",
-      "description": "Assigned execution boundaries. Read each file and resolve its inherits path relative to that file."
+      "source": "CardEnvironmentManifest",
+      "title": "Environment",
+      "description": "Host-verified workspace, repository and role facts."
     },
     {
       "id": "product-context",
@@ -144,22 +160,6 @@
       "pathBase": "project",
       "title": "Prerequisites",
       "description": "Output of accepted prerequisite Actions."
-    },
-    {
-      "id": "assignment",
-      "kind": "agent-filled",
-      "required": true,
-      "owner": "Coordinator",
-      "title": "Assignment",
-      "description": "Task summary, dynamic boundaries, requested result and stop condition."
-    },
-    {
-      "id": "verification-plan",
-      "kind": "agent-filled",
-      "required": true,
-      "owner": "Coordinator",
-      "title": "Verification Plan",
-      "description": "One entry per required acceptance criterion."
     }
   ]
 }
