@@ -46,14 +46,6 @@ async function optionalGit(directory: string, ...args: string[]) {
     return null;
   }
 }
-async function isAncestor(repository: string, ancestor: string, head: string) {
-  try {
-    await git(repository, 'merge-base', '--is-ancestor', ancestor, head);
-    return true;
-  } catch {
-    return false;
-  }
-}
 async function resolveCardBase(repository: string) {
   const currentHead = await git(repository, 'rev-parse', 'HEAD');
   if (!(await optionalGit(repository, 'remote', 'get-url', 'origin')))
@@ -61,7 +53,10 @@ async function resolveCardBase(repository: string) {
   try {
     await git(repository, 'fetch', '--prune', 'origin');
   } catch {
-    return currentHead;
+    throw new PublicApiError(
+      'Could not fetch the latest default branch. Retry before creating a new task.',
+      409,
+    );
   }
   const advertised = await optionalGit(
     repository,
@@ -81,26 +76,23 @@ async function resolveCardBase(repository: string) {
         '--short',
         'refs/remotes/origin/HEAD',
       );
-  if (!remoteDefault?.startsWith('origin/')) return currentHead;
+  if (!remoteDefault?.startsWith('origin/'))
+    throw new PublicApiError(
+      'Remote default branch is unavailable. Retry before creating a new task.',
+      409,
+    );
   const defaultBranch = remoteDefault.slice('origin/'.length);
   const remoteHead = await optionalGit(
     repository,
     'rev-parse',
     `refs/remotes/origin/${defaultBranch}`,
   );
-  if (!remoteHead) return currentHead;
-  const localHead = await optionalGit(
-    repository,
-    'rev-parse',
-    `refs/heads/${defaultBranch}`,
-  );
-  if (!localHead || localHead === remoteHead) return remoteHead;
-  if (await isAncestor(repository, localHead, remoteHead)) return remoteHead;
-  if (await isAncestor(repository, remoteHead, localHead)) return localHead;
-  throw new PublicApiError(
-    'Local and remote default branches diverged. Reconcile them before starting a new Card.',
-    409,
-  );
+  if (!remoteHead)
+    throw new PublicApiError(
+      'Remote default branch is unavailable. Retry before creating a new task.',
+      409,
+    );
+  return remoteHead;
 }
 async function regularDirectory(directory: string) {
   const stat = await lstat(directory);

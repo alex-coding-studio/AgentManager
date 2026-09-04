@@ -568,6 +568,25 @@ export const chineseUi: Record<string, string> = {
   'Needs attention': '等你处理',
   'In progress': '推进中',
   Completed: '已完成',
+  'Sync Up': '同步',
+  'Syncing…': '同步中…',
+  'Main sync is already running.': '正在同步 main，请稍候。',
+  'The project directory is not a repository root.':
+    '项目目录不是 Git 仓库根目录。',
+  'Remote default branch is unavailable. Retry before creating a new task.':
+    '远端主分支不可用，请重试后再创建任务。',
+  'Could not fetch the latest default branch. Retry before creating a new task.':
+    '无法获取最新主分支，请重试后再创建任务。',
+  'Main synced.': 'main 已同步',
+  'Main is already up to date.': 'main 已是最新',
+  'Commit or save local changes before syncing main.':
+    '请先提交或保存主目录中的改动，再同步 main。',
+  'Switch the primary checkout to main before syncing.':
+    '请先将项目主目录切换到 main，再同步。',
+  'Local main has commits outside origin/main. Sync stopped without changing local files.':
+    '本地 main 有远端之外的提交，已停止同步并保留本地文件。',
+  'Could not sync main.': '无法同步 main。',
+  'Delivery in progress': '交付中',
   'Filter goals': '筛选目标',
   'Search goals': '搜索目标',
   'No goals match this view.': '没有符合条件的目标。',

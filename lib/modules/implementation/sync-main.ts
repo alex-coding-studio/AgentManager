@@ -1,0 +1,37 @@
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { realpath } from 'node:fs/promises';
+
+const execute = promisify(execFile);
+const syncing = new Set<string>();
+export async function syncProjectMain(directory: string) {
+  const root = await realpath(directory);
+  if (syncing.has(root)) throw new Error('Main sync is already running.');
+  syncing.add(root);
+  const env: NodeJS.ProcessEnv = { ...process.env, GIT_TERMINAL_PROMPT: '0' };
+  for (const key of Object.keys(env))
+    if (key.startsWith('GIT_') && key !== 'GIT_TERMINAL_PROMPT')
+      delete env[key];
+  const git = async (...args: string[]) =>
+    (
+      await execute('git', ['-C', root, ...args], {
+        env,
+        timeout: 60000,
+        maxBuffer: 2000000,
+      })
+    ).stdout.trim();
+  try {
+    if ((await realpath(await git('rev-parse', '--show-toplevel'))) !== root)
+      throw new Error('The project directory is not a repository root.');
+    const before = await git(
+      'rev-parse',
+      '--verify',
+      'refs/remotes/origin/main',
+    ).catch(() => null);
+    await git('fetch', 'origin', 'refs/heads/main:refs/remotes/origin/main');
+    const target = await git('rev-parse', 'refs/remotes/origin/main');
+    return { updated: before !== target, head: target };
+  } finally {
+    syncing.delete(root);
+  }
+}

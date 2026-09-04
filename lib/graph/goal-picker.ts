@@ -84,7 +84,7 @@ export function buildGoalPickerGraph(
   const all = entries
     .filter((entry) => entry.module === moduleName)
     .sort((a, b) => a.uid.localeCompare(b.uid));
-  const visible = all.filter((entry) => entry.executionStatus !== 'completed');
+  const visible = all;
   const byRef = new Map<string, GoalPickerEntry>();
   for (const entry of all) {
     byRef.set(entry.id, entry);
@@ -107,8 +107,7 @@ export function buildGoalPickerGraph(
         unresolved.add(`${entry.uid}:${ref}`);
         continue;
       }
-      if (prerequisite.executionStatus !== 'completed')
-        edge(prerequisite.uid, entry.uid, 'dependency');
+      edge(prerequisite.uid, entry.uid, 'dependency');
     }
   }
   const constraints = new Map(

@@ -146,7 +146,7 @@ void test('module tabs never mix source graphs and retain disconnected unfinishe
   );
 });
 
-void test('only execution-completed entries are excluded; finalized Plans remain unfinished goals', () => {
+void test('completed goals and their dependency edges remain visible', () => {
   const graph = buildGoalPickerGraph(
     [
       entry(1, { executionStatus: 'completed' }),
@@ -157,9 +157,9 @@ void test('only execution-completed entries are excluded; finalized Plans remain
   );
   assert.deepEqual(
     new Set(graph.nodes.map((node) => node.entry.uid)),
-    new Set([entry(2).uid, entry(3).uid]),
+    new Set([entry(1).uid, entry(2).uid, entry(3).uid]),
   );
-  assert.equal(graph.edges.length, 0);
+  assert.equal(graph.edges.length, 1);
   assert.equal(graph.unresolvedDependencies, 0);
 });
 
