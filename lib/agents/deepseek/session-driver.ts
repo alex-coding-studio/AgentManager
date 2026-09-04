@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { Context } from '@deepseek-ai/cordis';
 import {
   isHostToolSuspension,
@@ -25,8 +25,6 @@ import {
 } from '../host-job-broker.ts';
 import { buildDeepseekPatches, summarize } from './runtime.ts';
 import { deepseekEffort } from './models.ts';
-
-const require = createRequire(import.meta.url);
 
 export type DeepseekSessionDriverOptions = {
   brokerFactory: (input: AgentRuntimeThreadInput) => HostJobBroker;
@@ -96,7 +94,8 @@ const RUN_JOB_TOOL = 'run_job';
 function findNodeModules(start: string): string {
   let dir = start;
   while (dir !== dirname(dir)) {
-    if (dir.endsWith('node_modules')) return dir;
+    const candidate = join(dir, 'node_modules');
+    if (existsSync(candidate)) return candidate;
     dir = dirname(dir);
   }
   throw new Error('DeepSeek runtime could not locate node_modules.');
@@ -126,17 +125,19 @@ async function bootSessionRuntime(
   load: () => Promise<SessionModules> = loadSessionModules,
 ): Promise<SessionRuntime> {
   const dsh = await load();
-  const patchFile = require.resolve(
-    ['@deepseek-ai', 'dsh-base', 'cordis.patch.yml'].join('/'),
+  const nodeModules = findNodeModules(dirname(fileURLToPath(import.meta.url)));
+  const patchFile = join(
+    nodeModules,
+    '@deepseek-ai',
+    'dsh-base',
+    'cordis.patch.yml',
   );
   const patches = buildDeepseekPatches(
     dsh.loadOverlayPatches('praxis', patchFile),
     workingDirectory,
     'workspace-write',
   );
-  const baseUrl = pathToFileURL(
-    join(findNodeModules(dirname(patchFile)), '/'),
-  ).href;
+  const baseUrl = pathToFileURL(join(nodeModules, '/')).href;
   const configDir = await mkdtemp(join(tmpdir(), 'praxis-dsh-'));
   const configPath = join(configDir, 'cordis.yml');
   await writeFile(configPath, '[]\n');
