@@ -35,7 +35,30 @@ export async function syncProjectMain(directory: string) {
     ).catch(() => null);
     await git('fetch', 'origin', 'refs/heads/main:refs/remotes/origin/main');
     const target = await git('rev-parse', 'refs/remotes/origin/main');
-    return { updated: before !== target, head: target };
+    let checkoutUpdated = false;
+    if (
+      (await git('branch', '--show-current')) === 'main' &&
+      !(await git('status', '--porcelain', '--untracked-files=all'))
+    ) {
+      const localHead = await git('rev-parse', 'HEAD');
+      const canFastForward = await git(
+        'merge-base',
+        '--is-ancestor',
+        localHead,
+        target,
+      )
+        .then(() => true)
+        .catch(() => false);
+      if (localHead !== target && canFastForward) {
+        await git('merge', '--ff-only', target);
+        checkoutUpdated = true;
+      }
+    }
+    return {
+      updated: before !== target || checkoutUpdated,
+      head: target,
+      checkoutUpdated,
+    };
   } finally {
     syncing.delete(root);
   }

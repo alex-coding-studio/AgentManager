@@ -976,3 +976,24 @@ void test('Sync Up fetches main without disturbing another branch or dirty files
   assert.equal(workspace.baseCommit, result.head);
   assert.equal(await git(workspace.path, 'status', '--porcelain'), '');
 });
+
+void test('Sync Up materializes merged files in a clean main checkout even when origin was already fetched', async (t) => {
+  const f = await fixture(t);
+  const { publisher } = await initializeRemoteFixture(f.project);
+  await writeFile(
+    path.join(f.project.rootPath, '.git/info/exclude'),
+    '.praxis/\n',
+  );
+  await writeFile(path.join(publisher, 'merged.txt'), 'delivered\n');
+  await git(publisher, 'add', 'merged.txt');
+  await git(publisher, 'commit', '-m', 'delivered');
+  await git(publisher, 'push', 'origin', 'main');
+  await git(f.project.rootPath, 'fetch', 'origin');
+  const result = await syncProjectMain(f.project.rootPath);
+  assert.equal(result.checkoutUpdated, true);
+  assert.equal(
+    await readFile(path.join(f.project.rootPath, 'merged.txt'), 'utf8'),
+    'delivered\n',
+  );
+  assert.equal(await git(f.project.rootPath, 'rev-parse', 'HEAD'), result.head);
+});
