@@ -33,6 +33,13 @@ void test('Host job completion is pushed once with durable log and status', asyn
   const continuation = hostJobCompletionPrompt(result);
   assert.match(continuation, /cite this event's jobId/);
   assert.match(continuation, /without opening or copying the log/);
+  const failed = hostJobCompletionPrompt({
+    ...result,
+    status: 'failed',
+    exitCode: 1,
+  });
+  assert.match(failed, /Inspect logRef only when needed/);
+  assert.doesNotMatch(failed, /return without opening or copying the log/);
   assert.equal(
     JSON.parse(await readFile(path.join(records, job.id, 'job.json'), 'utf8'))
       .status,
