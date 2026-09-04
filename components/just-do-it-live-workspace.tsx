@@ -128,7 +128,15 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
   const [actionHeaderStatusTarget, setActionHeaderStatusTarget] =
     useState<HTMLDivElement | null>(null);
   const [planHeaderStuck, setPlanHeaderStuck] = useState(false);
-  const planHeaderSentinel = useRef<HTMLDivElement | null>(null);
+  const [planHeaderSentinel, setPlanHeaderSentinel] =
+    useState<HTMLDivElement | null>(null);
+  const attachPlanHeaderSentinel = useCallback(
+    (element: HTMLDivElement | null) => {
+      setPlanHeaderSentinel(element);
+      setPlanHeaderStuck(false);
+    },
+    [],
+  );
   const initialSourceHandled = useRef(false);
   const mounted = useRef(true);
   const refreshBusy = useRef(false);
@@ -209,21 +217,30 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
   }, [refresh]);
   const card = view?.cards.find((item) => item.id === selectedId);
   useEffect(() => {
-    const sentinel = planHeaderSentinel.current;
+    const sentinel = planHeaderSentinel;
     if (!sentinel) return;
+    let active = true;
     const observer = new IntersectionObserver(
-      ([entry]) =>
+      ([entry]) => {
+        if (!active) return;
         setPlanHeaderStuck(
           Boolean(
             entry &&
+            sentinel.isConnected &&
+            sentinel.getClientRects().length &&
+            entry.rootBounds &&
             entry.boundingClientRect.bottom <= (entry.rootBounds?.top ?? 0),
           ),
-        ),
+        );
+      },
       { threshold: 1 },
     );
     observer.observe(sentinel);
-    return () => observer.disconnect();
-  }, [card?.id]);
+    return () => {
+      active = false;
+      observer.disconnect();
+    };
+  }, [planHeaderSentinel]);
   const draft = card ? (drafts[card.id] ?? initialDraft(card)) : null;
   const selectedStep = card?.plan?.steps.find((item) => item.id === stepId);
   const running = card?.run?.status === 'running';
@@ -783,7 +800,7 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
             ) : (
               <section className="space-y-4">
                 <div
-                  ref={planHeaderSentinel}
+                  ref={attachPlanHeaderSentinel}
                   aria-hidden="true"
                   className="h-px"
                 />

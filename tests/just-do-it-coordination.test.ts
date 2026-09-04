@@ -552,7 +552,15 @@ void test('Coordinator Harness stays a coordinator rather than becoming a Review
   assert.match(prompt, /do not open its references/);
   assert.match(
     prompt,
-    /assign mechanical alone even if the tool generates iOS files/,
+    /assign mechanical alone even if it generates iOS files/,
+  );
+  assert.match(
+    prompt,
+    /unit-test entrypoints used to validate directly authored code remain feedback/,
+  );
+  assert.match(
+    prompt,
+    /may be read, diagnosed and fixed without adding mechanical/,
   );
   assert.match(
     prompt,
@@ -1767,4 +1775,69 @@ void test('a responsibility extension resumes its Worker and preserves fresh rep
     ),
   ) as { id: string };
   assert.deepEqual([first.id, second.id], ['general', 'ios-development']);
+});
+
+void test('a rejected dispatch followed by an empty final response preserves the original validation error', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'coordinator-cap-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const server = path.join(root, 'fake-server.mjs');
+  await writeFile(
+    server,
+    `import readline from 'node:readline';
+const rl=readline.createInterface({input:process.stdin});
+let calls=0;let interrupted=false;
+function send(value){process.stdout.write(JSON.stringify(value)+'\\n')}
+function dispatch(){calls++;send({id:1000+calls,method:'item/tool/call',params:{threadId:'thread-cap',turnId:'turn-1',callId:'call-'+calls,tool:'dispatch_worker',arguments:{decision:{}}}});}
+rl.on('line',line=>{const message=JSON.parse(line);
+if(message.method==='initialize')send({id:message.id,result:{}});
+else if(message.method==='thread/start')send({id:message.id,result:{thread:{id:'thread-cap'}}});
+else if(message.method==='turn/start'){send({id:message.id,result:{turn:{id:'turn-1'}}});dispatch();}
+else if(typeof message.id==='number'&&message.id>1000){if(message.result?.success!==false)process.exit(3);send({method:'turn/completed',params:{threadId:'thread-cap',turn:{id:'turn-1',status:'completed'}}});}
+else if(message.method==='turn/interrupt'){interrupted=true;send({id:message.id,result:{}});process.stderr.write('INTERRUPTED_AFTER_'+calls+'\\n');send({method:'turn/completed',params:{threadId:'thread-cap',turn:{id:'turn-1',status:'interrupted'}}});}
+});`,
+  );
+  const request = task();
+  let dispatched = 0;
+  const workerTransport: typeof startLocalAgentRun = () => {
+    dispatched++;
+    return { completion: Promise.resolve(worker(request)), cancel: () => {} };
+  };
+  const progress: string[] = [];
+  const run = startCoordinatedExecution({
+    request,
+    workerOptions: {
+      workingDirectory: root,
+      prompt: 'WORKER',
+      access: 'workspace-write',
+    },
+    workerAgent: 'codex',
+    settings: { profile },
+    priorEvidence: [],
+    previousContext: '',
+    readBasis: async () => 'basis',
+    onProgress: (event) => progress.push(event.summary),
+    workerTransport,
+    coordinatorSession: async (input): Promise<CoordinatorSession> => ({
+      driver: new CodexAppServerDriver({
+        command: process.execPath,
+        arguments: [server],
+        brokerFactory: (thread) =>
+          new HostJobBroker(thread.workingDirectory, path.join(root, 'jobs')),
+        hostTools: input.hostTools,
+      }),
+      decoratePrompt: (prompt) => prompt,
+    }),
+  });
+  await assert.rejects(
+    () => run.completion,
+    (error) =>
+      error instanceof CoordinationRunError &&
+      /Coordinator response does not match its contract/.test(error.message),
+  );
+  assert.equal(dispatched, 0);
+  assert.equal(
+    progress.filter((summary) => summary === 'Running tool: dispatch_worker')
+      .length,
+    1,
+  );
 });

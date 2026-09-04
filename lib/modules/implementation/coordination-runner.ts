@@ -476,6 +476,7 @@ The Coordinator-assigned responsibilities, responsibilityInstructions, Skills an
     });
     let repairs = 1;
     let workerBusy = false;
+    let dispatchError: Error | undefined;
     let delivered: CoordinatedResult | undefined;
     let continuationPrompt = '';
     const recordDecision = (decision: CoordinationDecision) => {
@@ -577,10 +578,20 @@ The Coordinator-assigned responsibilities, responsibilityInstructions, Skills an
       assertActive();
       if (workerBusy)
         throw new Error('A worker is already dispatched for this Action.');
-      const decision = parseCoordinationDecision(
-        JSON.stringify(arguments_.decision ?? null),
-        req,
-      );
+      let decision: CoordinationDecision;
+      try {
+        decision = parseCoordinationDecision(
+          JSON.stringify(arguments_.decision ?? null),
+          req,
+        );
+        dispatchError = undefined;
+      } catch (error) {
+        dispatchError =
+          error instanceof Error
+            ? error
+            : new Error('Coordinator dispatch was rejected.');
+        throw dispatchError;
+      }
       recordDecision(decision);
       workerBusy = true;
       const continuation = dispatch(decision).finally(() => {
@@ -722,6 +733,7 @@ The Coordinator-assigned responsibilities, responsibilityInstructions, Skills an
       initial = false;
       assertActive();
       if (delivered) return delivered;
+      if (!response.finalOutput.trim() && dispatchError) throw dispatchError;
       if (
         !response.finalOutput.trim() &&
         lastWorkerReport?.outcome === 'blocked' &&
