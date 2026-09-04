@@ -1,7 +1,7 @@
 'use client';
 import { useUiText } from '@/components/ui-language-provider';
 
-import { useRef, useState, type DragEvent } from 'react';
+import { useState, type DragEvent } from 'react';
 import { ChevronDown, FileText, Upload, X } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import type { ContextBrowserFolder } from '@/lib/modules/product-context/catalog';
@@ -29,7 +29,6 @@ export function ContextAttachmentPicker({
   onRemoveFile,
   label,
   disabled = false,
-  accept = '.md,.markdown',
   embedded = false,
 }: {
   folders: ContextBrowserFolder[];
@@ -48,7 +47,39 @@ export function ContextAttachmentPicker({
   const { t } = useUiText();
   const [open, setOpen] = useState(false);
   const [dragging, setDragging] = useState(false);
-  const fileInput = useRef<HTMLInputElement>(null);
+  const [localPath, setLocalPath] = useState('');
+  const [referenceError, setReferenceError] = useState('');
+  const [choosing, setChoosing] = useState(false);
+  async function addReference(value?: string) {
+    setChoosing(true);
+    setReferenceError('');
+    try {
+      const projectId =
+        window.location.pathname.match(/\/projects\/([^/]+)/)?.[1];
+      const response = await fetch('/api/system/local-file-reference', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: value, projectId }),
+      });
+      const result = await response.json();
+      if (result.cancelled) return;
+      if (!response.ok) throw new Error(result.error);
+      onAddFiles([
+        new File([result.content], result.name, { type: 'text/plain' }),
+      ]);
+      setLocalPath('');
+    } catch (error) {
+      setReferenceError(
+        t(
+          error instanceof Error
+            ? error.message
+            : 'Could not reference the local file.',
+        ),
+      );
+    } finally {
+      setChoosing(false);
+    }
+  }
   const folder =
     folders.find((entry) => entry.path === folderPath) ?? folders[0];
 
@@ -79,9 +110,9 @@ export function ContextAttachmentPicker({
         <div
           className={cn('space-y-4', !embedded && 'border-t border-border p-4')}
         >
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid min-w-0 grid-cols-1 gap-3">
             {folders.length > 0 ? (
-              <div className="flex flex-col">
+              <div className="flex min-w-0 flex-col">
                 <div className="relative">
                   <select
                     disabled={disabled}
@@ -98,7 +129,7 @@ export function ContextAttachmentPicker({
                   </select>
                   <ChevronDown className="pointer-events-none absolute top-1/2 right-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
                 </div>
-                <div className="mt-2 flex max-h-64 min-h-[8.5rem] flex-col gap-0.5 overflow-y-auto">
+                <div className="mt-2 flex max-h-64  flex-col gap-0.5 overflow-y-auto">
                   {(folder?.entries ?? [])
                     .filter((entry) => entry.kind === 'file')
                     .map((entry) => (
@@ -126,7 +157,7 @@ export function ContextAttachmentPicker({
                 </div>
               </div>
             ) : (
-              <div className="grid min-h-[8.5rem] place-items-center rounded-lg border border-border px-4 text-center">
+              <div className="grid  place-items-center rounded-lg border border-border px-4 text-center">
                 <p className="text-[11px] leading-5 text-muted-foreground">
                   {t('This project has no Product Context library yet.')}
                 </p>
@@ -135,7 +166,7 @@ export function ContextAttachmentPicker({
 
             <div
               className={cn(
-                'grid min-h-[8.5rem] place-items-center rounded-lg border border-dashed border-border p-4 text-center transition',
+                'grid  place-items-center rounded-lg border border-dashed border-border p-4 text-center transition',
                 dragging && 'border-violet-500 bg-violet-500/5',
               )}
               onDragOver={(event: DragEvent<HTMLDivElement>) => {
@@ -148,40 +179,54 @@ export function ContextAttachmentPicker({
                 event.preventDefault();
                 setDragging(false);
                 if (disabled) return;
-                onAddFiles(
-                  [...event.dataTransfer.files].filter((file) =>
-                    accept
-                      .split(',')
-                      .some((extension) =>
-                        file.name
-                          .toLowerCase()
-                          .endsWith(extension.trim().toLowerCase()),
-                      ),
-                  ),
-                );
+                const droppedPath =
+                  event.dataTransfer.getData('text/uri-list') ||
+                  event.dataTransfer.getData('text/plain');
+                if (droppedPath.trim()) void addReference(droppedPath.trim());
+                else
+                  setReferenceError(
+                    t(
+                      'Browser drag cannot provide the original path. Choose the file or paste its path.',
+                    ),
+                  );
               }}
             >
-              <input
-                ref={fileInput}
-                type="file"
-                accept={accept}
-                disabled={disabled}
-                multiple
-                className="hidden"
-                onChange={(event) => {
-                  onAddFiles([...(event.target.files ?? [])]);
-                  event.target.value = '';
-                }}
-              />
               <button
                 type="button"
-                disabled={disabled}
-                className="flex w-full items-center justify-center gap-1.5 text-[11px] text-muted-foreground transition hover:text-foreground"
-                onClick={() => fileInput.current?.click()}
+                disabled={disabled || choosing}
+                className="flex w-full min-w-0 items-center justify-center gap-1.5 whitespace-normal text-[11px] text-muted-foreground transition hover:text-foreground"
+                onClick={() => void addReference()}
               >
                 <Upload className="size-3.5" />
-                {t('Drop Markdown files here, or browse')}
+                {t(
+                  choosing
+                    ? 'Choosing file…'
+                    : 'Choose a local file (Markdown, text or HTML)',
+                )}
               </button>
+              <div className="mt-2 flex gap-2">
+                <input
+                  className="min-w-0 flex-1 rounded border border-border bg-background px-2 py-1 text-xs"
+                  aria-label={t('Local file path')}
+                  placeholder={t('Paste a path on the Praxis host')}
+                  value={localPath}
+                  onChange={(event) => setLocalPath(event.target.value)}
+                  disabled={disabled || choosing}
+                />
+                <button
+                  type="button"
+                  className="text-xs"
+                  disabled={disabled || choosing || !localPath.trim()}
+                  onClick={() => void addReference(localPath)}
+                >
+                  {t('Add')}
+                </button>
+              </div>
+              {referenceError ? (
+                <p className="mt-2 text-xs text-destructive">
+                  {referenceError}
+                </p>
+              ) : null}
             </div>
           </div>
 

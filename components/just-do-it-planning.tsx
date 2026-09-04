@@ -401,7 +401,8 @@ function PlanningSetup({
     if (
       files.some(
         (file) =>
-          !/\.(md|markdown|txt)$/i.test(file.name) || file.size > 262_144,
+          !/\.(md|markdown|txt|html|htm)$/i.test(file.name) ||
+          file.size > 262_144,
       ) ||
       files.length + plan.resources.length > 5
     ) {

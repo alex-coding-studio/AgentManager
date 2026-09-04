@@ -927,7 +927,7 @@ export function JustDoItAction({
                     files={files}
                     onAddFiles={(candidates) => {
                       const markdown = candidates.filter((file) =>
-                        /\.(md|markdown)$/i.test(file.name),
+                        /\.(md|markdown|txt|html|htm)$/i.test(file.name),
                       );
                       if (markdown.length !== candidates.length)
                         setError(

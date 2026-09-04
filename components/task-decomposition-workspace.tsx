@@ -599,7 +599,7 @@ export function TaskDecompositionWorkspace({
 
   function addRequestFiles(candidates: File[]) {
     const markdownFiles = candidates.filter((file) =>
-      /\.(md|markdown)$/i.test(file.name),
+      /\.(md|markdown|txt|html|htm)$/i.test(file.name),
     );
     if (markdownFiles.length !== candidates.length) {
       setRequestError(t('Only Markdown Resources can be added right now.'));

@@ -568,6 +568,20 @@ export const chineseUi: Record<string, string> = {
   'Needs attention': '等你处理',
   'In progress': '推进中',
   Completed: '已完成',
+  'Choose a local file (Markdown, text or HTML)':
+    '选择本地文件（Markdown、文本或 HTML）',
+  'Choosing file…': '正在选择文件…',
+  'Local file path': '本地文件路径',
+  'Paste a path on the Praxis host': '粘贴 Praxis 所在电脑的文件路径',
+  'Browser drag cannot provide the original path. Choose the file or paste its path.':
+    '浏览器拖放无法提供原路径，请选择文件或粘贴路径。',
+  'Could not reference the local file.': '无法引用本地文件。',
+  'Paste the file path on the Praxis host.':
+    '请粘贴 Praxis 所在电脑上的文件路径。',
+  'A relative path requires a project.': '相对路径需要关联项目。',
+  'Select a local file.': '请选择本地文件。',
+  'Select a Markdown, text or HTML file.':
+    '请选择 Markdown、文本或 HTML 文件。',
   'Sync Up': '同步',
   'Syncing…': '同步中…',
   'Main sync is already running.': '正在同步 main，请稍候。',

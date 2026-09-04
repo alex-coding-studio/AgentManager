@@ -145,7 +145,7 @@ function supplementalExecutionInput(input: ExecuteActionInput) {
     files.some(
       (file) =>
         typeof file?.name !== 'string' ||
-        !/\.(md|markdown)$/i.test(file.name) ||
+        !/\.(md|markdown|txt|html|htm)$/i.test(file.name) ||
         typeof file.content !== 'string' ||
         Buffer.byteLength(file.content) > 1_000_000,
     ) ||

@@ -710,7 +710,7 @@ export function createPlanningService(
       if (
         !file ||
         typeof file.name !== 'string' ||
-        !/^[^/\\]{1,160}\.(md|markdown|txt)$/i.test(file.name) ||
+        !/^[^/\\]{1,160}\.(md|markdown|txt|html|htm)$/i.test(file.name) ||
         typeof file.content !== 'string' ||
         Buffer.byteLength(file.content) > 262_144
       )
