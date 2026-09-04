@@ -11,6 +11,10 @@
     {
       "id": "script-source-inspection",
       "instruction": "Do not inspect a black-box script or tool implementation. Only an assigned specialized responsibility that explicitly overrides script-source-inspection may change this boundary."
+    },
+    {
+      "id": "repository-delivery",
+      "instruction": "A Praxis checkpoint is local recovery state, not project delivery. For project-changing work, complete the code and obtain a successful compile before creating or updating a Draft pull request. Run the required unit tests against that Draft branch. If they fail, commit the correction to the same Draft and rerun only the required path. Mark the pull request Ready for review only after every required unit test and gate passes. Preserve the Draft and failure evidence when validation remains unsuccessful so the user can review or recover the work."
     }
   ]
 }
