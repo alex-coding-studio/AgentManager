@@ -1186,15 +1186,21 @@ function pushSetup(
   workers: Array<
     'passed' | 'failed' | 'delivered-failed' | 'invalid' | 'hang'
   > = ['passed'],
-  options: { viaTool?: boolean; limits?: typeof coordinationLimits } = {},
+  options: {
+    viaTool?: boolean;
+    limits?: typeof coordinationLimits;
+    resumeWorkerSessionId?: string;
+  } = {},
 ) {
   const request = task();
   const workerCalls: string[] = [];
+  const workerResumes: Array<string | undefined> = [];
   let canceled = 0;
   let index = 0;
   let driver: FakePushDriver | undefined;
   const workerTransport: typeof startLocalAgentRun = (_agent, opts) => {
     workerCalls.push(opts.prompt);
+    workerResumes.push(opts.resumeSessionId);
     const kind = workers[index++] ?? 'passed';
     if (kind === 'hang') {
       let reject!: (error: Error) => void;
@@ -1238,6 +1244,7 @@ function pushSetup(
     onProgress: (event) => progress.push(`${event.phase}: ${event.summary}`),
     workerTransport,
     limits: options.limits,
+    resumeWorkerSessionId: options.resumeWorkerSessionId,
     coordinatorSession: async (input): Promise<CoordinatorSession> => {
       driver = new FakePushDriver(
         script,
@@ -1251,6 +1258,7 @@ function pushSetup(
     run,
     request,
     workerCalls,
+    workerResumes,
     progress,
     driver: () => driver!,
     canceled: () => canceled,
@@ -1569,4 +1577,22 @@ else if(message.method==='turn/interrupt'){interrupted=true;send({id:message.id,
       .length,
     coordinationLimits.maxCoordinatorToolCalls + 1,
   );
+});
+
+void test('the first worker of a round resumes the previous session and its repair starts fresh', async () => {
+  const f = pushSetup(
+    (req) => decision(req, req.phase === 'prepare' ? 'dispatch' : 'repair'),
+    ['delivered-failed', 'passed'],
+    { resumeWorkerSessionId: 'previous-round-session' },
+  );
+  await f.run.completion;
+  assert.deepEqual(f.workerResumes, ['previous-round-session', undefined]);
+});
+
+void test('a round without a previous session starts its worker fresh', async () => {
+  const f = pushSetup((req) =>
+    decision(req, req.phase === 'prepare' ? 'dispatch' : 'ready'),
+  );
+  await f.run.completion;
+  assert.deepEqual(f.workerResumes, [undefined]);
 });

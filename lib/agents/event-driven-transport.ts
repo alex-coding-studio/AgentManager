@@ -17,7 +17,11 @@ import { ClaudeSessionDriver } from './claude/session-driver.ts';
 import { DeepseekSessionDriver } from './deepseek/session-driver.ts';
 import { HostJobBroker } from './host-job-broker.ts';
 import { publishCardCandidate } from '../card-host-operations.ts';
-import type { AgentSessionDriver, HostTool } from './runtime-driver.ts';
+import type {
+  AgentRuntimeThreadInput,
+  AgentSessionDriver,
+  HostTool,
+} from './runtime-driver.ts';
 
 export type CoordinatorSessionInput = {
   profile: AgentProfile;
@@ -73,6 +77,23 @@ export async function startPushCoordinatorSession(
   };
 }
 
+export async function openWorkerThread(
+  driver: AgentSessionDriver,
+  resumeSessionId: string | undefined,
+  threadInput: AgentRuntimeThreadInput,
+) {
+  if (!resumeSessionId) return driver.startThread(threadInput);
+  try {
+    return await driver.resumeThread({
+      provider: driver.provider,
+      threadId: resumeSessionId,
+      ...threadInput,
+    });
+  } catch {
+    return driver.startThread(threadInput);
+  }
+}
+
 export function startEventDrivenWorkerRun(
   agent: LocalAgentKind,
   input: LocalAgentRunInput,
@@ -89,7 +110,10 @@ export function startEventDrivenWorkerRun(
     const catalog = await readCodexSkills(input.workingDirectory);
     if (canceled) throw new Error('Execution canceled before Agent startup.');
     if (catalog.executionAccess !== 'full-access') {
-      fallback = startLocalAgentRun(agent, input);
+      fallback = startLocalAgentRun(agent, {
+        ...input,
+        resumeSessionId: undefined,
+      });
       if (canceled) fallback.cancel();
       return await fallback.completion;
     }
@@ -159,7 +183,7 @@ export function startEventDrivenWorkerRun(
       model: input.model ?? '',
       effort: input.effort ?? '',
     };
-    const thread = await driver.startThread({
+    const thread = await openWorkerThread(driver, input.resumeSessionId, {
       profile,
       workingDirectory: input.workingDirectory,
       access: 'full-access',
@@ -279,7 +303,7 @@ function startClaudeWorkerRun(input: LocalAgentRunInput): LocalAgentRun {
   });
   const completion = (async () => {
     if (canceled) throw new Error('Execution canceled before Agent startup.');
-    const thread = await driver.startThread({
+    const thread = await openWorkerThread(driver, input.resumeSessionId, {
       profile: {
         agent: 'claude',
         model: input.model ?? '',
@@ -358,7 +382,7 @@ function startDeepseekWorkerRun(input: LocalAgentRunInput): LocalAgentRun {
   });
   const completion = (async () => {
     if (canceled) throw new Error('Execution canceled before Agent startup.');
-    const thread = await driver.startThread({
+    const thread = await openWorkerThread(driver, input.resumeSessionId, {
       profile: {
         agent: 'deepseek',
         model: input.model ?? '',

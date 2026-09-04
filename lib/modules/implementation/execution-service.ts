@@ -52,7 +52,10 @@ import {
   includeInGitHistory,
   restoreCheckpoint,
 } from './git.ts';
-import { validateAgentProfile } from '../../agents/profile.ts';
+import {
+  validateAgentProfile,
+  type AgentProfile,
+} from '../../agents/profile.ts';
 import {
   assertCurrentPlanningCardSource,
   planningService,
@@ -113,6 +116,21 @@ const root = (project: Parameters<typeof planningService.read>[0]) =>
 type Project = Parameters<typeof planningService.read>[0];
 const reference = (card: PlanningCard, file: string) =>
   `implementation/cards/${card.id}/${String(card.revision + 1).padStart(8, '0')}/${file}`;
+
+export function resumableWorkerSession(
+  runs: ActionRun[] | undefined,
+  actionId: string,
+  profile: AgentProfile,
+) {
+  const latest = runs?.findLast((run) => run.actionId === actionId);
+  return latest &&
+    latest.status === 'succeeded' &&
+    latest.agentSessionId &&
+    latest.profile.agent === profile.agent &&
+    latest.profile.model === profile.model
+    ? latest.agentSessionId
+    : undefined;
+}
 
 function supplementalExecutionInput(input: ExecuteActionInput) {
   const contextRefs = input.contextRefs ?? [];
@@ -974,6 +992,11 @@ export function createExecutionService(
               card.execution?.runs.findLast(
                 (previous) => previous.coordination?.contextSummary,
               )?.coordination?.contextSummary ?? '',
+            resumeWorkerSessionId: resumableWorkerSession(
+              card.execution?.runs,
+              input.actionId,
+              input.profile,
+            ),
             readBasis: async () =>
               verificationBasis(await snapshotWorkspace(workingProject)),
             onProgress: recordProgress,
