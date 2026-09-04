@@ -93,14 +93,18 @@ export function buildPacketManifest(
     origin: list(spec.origin),
     references: list(spec.references),
   };
-  const rendered = readFileSync(TEMPLATE_PATH, 'utf8').replace(
-    /{{(\w+)}}/g,
-    (_, slot: string) => values[slot] ?? '',
-  );
-  const unresolved = rendered.match(/{{\w+}}/g);
-  if (unresolved)
-    throw new Error(`Unresolved manifest slots: ${unresolved.join(', ')}`);
-  return rendered;
+  return renderTemplate(readFileSync(TEMPLATE_PATH, 'utf8'), values);
+}
+
+export function renderTemplate(
+  template: string,
+  values: Record<string, string>,
+) {
+  return template.replace(/{{(\w+)}}/g, (_, slot: string) => {
+    if (!Object.hasOwn(values, slot))
+      throw new Error(`Unknown manifest slot: ${slot}`);
+    return values[slot]!;
+  });
 }
 
 export async function verifyPacket(

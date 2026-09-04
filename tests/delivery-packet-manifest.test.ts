@@ -8,6 +8,7 @@ import {
   verifyPacket,
   PACKET_SPEC,
   PACKET_FILES,
+  renderTemplate,
 } from '../lib/modules/implementation/delivery-packet-manifest.ts';
 
 const input = {
@@ -43,6 +44,17 @@ void test('references stay out of the Origin block', () => {
     assert.ok(!origin.includes(entry.file));
     assert.ok(block(manifest, 'References').includes(entry.file));
   }
+});
+
+void test('a slot the builder does not supply fails instead of rendering empty', () => {
+  assert.throws(
+    () => renderTemplate('Card: {{cardId}}\nOwner: {{owner}}', { cardId: 'c' }),
+    /Unknown manifest slot: owner/,
+  );
+});
+
+void test('a slot whose value is empty still renders', () => {
+  assert.equal(renderTemplate('[{{references}}]', { references: '' }), '[]');
 });
 
 void test('every template slot resolves', () => {
