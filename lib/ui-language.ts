@@ -159,6 +159,7 @@ export const chineseUi: Record<string, string> = {
   'Add development conventions or local Skill instructions. Leave empty to use the built-in workflow.':
     '填写开发约定、使用哪些本地 Skill 等。可以留空，系统会自动应用内置流程规则。',
   'Your additional requirements': '你的补充要求',
+  'Original input': '原输入',
   'Dependency review required': '需要确认依赖关系',
   'This Card derives from unfinished Nodes that were not marked as prerequisites. Classify each one before planning or confirming this Card.':
     '这张卡片来源于尚未完成、但未标记为前置依赖的节点。开始或确认计划前，请逐项确认它们的关系。',
