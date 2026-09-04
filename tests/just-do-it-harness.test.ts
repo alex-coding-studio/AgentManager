@@ -170,16 +170,20 @@ void test('four stages prepare bounded role-specific prompts without invoking a 
 
 void test('stage Harnesses keep their near-neighbor responsibilities separate', () => {
   const planning = buildCardHarnessPrompt(request('planning'));
-  assert.match(
-    planning,
-    /acceptanceCriteria must be detailed before finalization/,
-  );
+  assert.match(planning, /fewest meaningful steps/);
+  assert.match(planning, /Acceptance criteria are not a work breakdown/);
+  assert.match(planning, /environment readiness.*in input/);
+  assert.match(planning, /script-owned guarantees in validation/);
+  assert.match(planning, /publication facts in delivery reporting/);
+  assert.match(planning, /follow it exactly rather than splitting/);
   assert.match(planning, /Do not execute the Plan or finalize it/);
 
   const execution = buildCardHarnessPrompt(request('execution'));
   assert.match(execution, /Additional checks are non-blockers/);
   assert.match(execution, /Self-checking is not user acceptance/);
   assert.match(execution, /do not merge or infer user acceptance/i);
+  assert.match(execution, /Never alter correct code/);
+  assert.match(execution, /absent new behavior naturally fails/);
 
   const review = buildCardHarnessPrompt(request('review'));
   assert.match(review, /Do not fix code, run a correction loop/);

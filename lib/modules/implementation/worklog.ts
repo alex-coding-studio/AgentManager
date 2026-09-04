@@ -20,6 +20,7 @@ export type CardWorkRecord = RecordBase &
         kind: 'system-event';
         event:
           | 'plan-finalized'
+          | 'plan-reopened'
           | 'run-started'
           | 'run-ended'
           | 'output-recorded'
@@ -84,6 +85,7 @@ const recordSchema = {
       event: {
         enum: [
           'plan-finalized',
+          'plan-reopened',
           'run-started',
           'run-ended',
           'output-recorded',

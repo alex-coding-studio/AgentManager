@@ -559,11 +559,12 @@ void test('real planning transport input, validated draft and exact finalized Ac
   const fresh = createPlanningService(undefined, new Map());
   assert.deepEqual((await fresh.read(project, uid)).actions, card.actions);
   await assert.rejects(() => service.start(project, input(card)), /locked/);
-  await assert.rejects(
-    () => service.update(project, uid, card.revision, 'reopen'),
-    /locked/,
-  );
-  assert.equal((await service.read(project, uid)).plan?.status, 'finalized');
+  card = await service.update(project, uid, card.revision, 'reopen');
+  assert.equal(card.plan?.status, 'draft');
+  assert.deepEqual(card.actions, []);
+  assert.equal(card.finalizedAt, null);
+  await service.start(project, input(card));
+  assert.equal(calls.length, 2);
 });
 
 void test('cancel rejects late results and retains the previous Plan for retry', async (t) => {

@@ -948,6 +948,7 @@ void test('Just Do It separates the Task coordinator from the Action Composer', 
   assert.match(workspace, /ref=\{setActionHeaderStatusTarget\}/);
   assert.match(workspace, /headerActionsTarget=\{actionHeaderTarget\}/);
   assert.match(workspace, /headerStatusTarget=\{actionHeaderStatusTarget\}/);
+  assert.match(workspace, /onClick=\{\(\) => command\('reopen'\)\}/);
   assert.doesNotMatch(
     workspace,
     /Plan and acceptance criteria are locked after confirmation/,

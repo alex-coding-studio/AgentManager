@@ -11,9 +11,15 @@ single-step adjustment, cancel/retry, Finalize and reopening before execution.
 Finalize copies the exact displayed contracts into ready Actions. The subsequent
 [Action execution integration](JUST_DO_IT_EXECUTION.md) adds coding, output and
 manual acceptance endpoints. Reopening remains available before execution; once
-execution starts, it is locked until clean rollback is supported. PR/Issue
-automation, automatic merge synchronization and rollback remain separate work.
+execution starts, Action Undo or Card return-to-planning must first restore a clean
+workspace. PR/Issue automation and automatic merge synchronization remain separate work.
 The preview's simulation controls are never mounted on the live route.
+
+Acceptance criteria describe independently judgeable delivered outcomes. Execution
+preconditions belong in Action input, exclusions in Overview or output, internal
+commands and script guarantees in validation, and publication facts in delivery
+reporting. A script-owned result stays one criterion instead of expanding into its
+preflight, commands, cleanup, and final scope audit.
 
 Add a goal opens a near-fullscreen source map with separate What's Next and
 Break It Down tabs. Compact 216-by-94 cards show title, planning/added status and
