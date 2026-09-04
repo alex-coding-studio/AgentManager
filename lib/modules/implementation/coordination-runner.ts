@@ -366,7 +366,7 @@ export function startCoordinatedExecution(input: {
         priorEvidence: input.priorEvidence,
         runtimeInstructions: input.runtimeInstructions ?? '',
       });
-      return workerPacketPrompt(packet.manifestPath);
+      return workerPacketPrompt(packet.manifestPath, input.request);
     }
     return `${input.workerOptions.prompt}
 

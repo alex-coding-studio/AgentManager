@@ -1685,19 +1685,27 @@ void test('a round without a previous session starts its worker fresh', async ()
   assert.deepEqual(f.workerResumes, [undefined]);
 });
 
-void test('a materialized packet replaces the concatenated Worker assignment', async (t) => {
+void test('a resumed packet Worker receives the current response identity', async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'worker-packet-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const packetDir = path.join(root, 'packet');
   const f = pushSetup(
     (req) => decision(req, req.phase === 'prepare' ? 'dispatch' : 'ready'),
     ['passed'],
-    { packetDir, runtimeInstructions: 'Use the prepared worktree.' },
+    {
+      packetDir,
+      runtimeInstructions: 'Use the prepared worktree.',
+      resumeWorkerSessionId: 'previous-round-session',
+    },
   );
   await f.run.completion;
+  assert.deepEqual(f.workerResumes, ['previous-round-session']);
   assert.match(f.workerCalls[0], /Read .*\/Manifest\.md/);
   assert.doesNotMatch(f.workerCalls[0], /COORDINATOR ASSIGNMENT/);
-  assert.ok(f.workerCalls[0].length < 500);
+  assert.ok(f.workerCalls[0].length < 900);
+  assert.match(f.workerCalls[0], /supersedes every prior response identity/);
+  assert.match(f.workerCalls[0], new RegExp(f.request.requestId));
+  assert.match(f.workerCalls[0], new RegExp(f.request.inputFingerprint));
   assert.match(
     await readFile(path.join(packetDir, 'Environment.md'), 'utf8'),
     /Use the prepared worktree/,
