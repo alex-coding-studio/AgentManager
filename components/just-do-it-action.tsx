@@ -133,8 +133,7 @@ export function JustDoItAction({
   const canReturnToPlanning = Boolean(
     card.execution?.workspace &&
     card.execution.acceptedActionIds.length > 0 &&
-    lastCardRun &&
-    lastCardRun.status !== 'running',
+    lastCardRun,
   );
 
   async function send(

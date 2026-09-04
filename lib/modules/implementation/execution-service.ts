@@ -1706,13 +1706,14 @@ export function createExecutionService(
       if (
         !workspace ||
         !last ||
+        (reopenPlan && card.execution!.acceptedActionIds.length === 0) ||
         (!reopenPlan && card.execution!.acceptedActionIds.length > 0) ||
         card.run?.status === 'running' ||
         !['failed', 'canceled', 'succeeded'].includes(last.status)
       )
         throw new PublicApiError(
           reopenPlan
-            ? 'Only Cards with a completed Round can return to planning.'
+            ? 'Only Cards with accepted work and a completed Round can return to planning.'
             : 'Only unaccepted Cards with a completed Round can restart from their base.',
           400,
         );

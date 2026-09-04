@@ -766,6 +766,10 @@ void test('delivered but unaccepted Card can restart from its base', async (t) =
   f.calls[0].resolve(delivered(f.calls[0].request));
   const current = await f.settled();
   assert.equal(current.execution?.runs.at(-1)?.result?.outcome, 'delivered');
+  await assert.rejects(
+    () => f.service.reopenPlanFromBase(f.project, f.card.id, current.revision),
+    /accepted work/,
+  );
   const preview = (
     await f.service.resetWorkspace(f.project, f.card.id, current.revision)
   ).preview!;
