@@ -1,165 +1,25 @@
 {
   "version": 1,
   "manifestFile": "Manifest.md",
-  "entries": [
+  "origin": [
+    { "id": "environment", "file": "Environment.md", "producer": "host" },
     {
       "id": "responsibilities",
-      "kind": "referenced",
-      "multiple": true,
-      "required": false,
-      "source": "lib/responsibilities",
-      "pathBase": "project",
-      "title": "Responsibilities",
-      "description": "Assigned execution boundaries. Read each file and resolve its inherits path relative to that file."
+      "file": "Responsibilities.md",
+      "producer": "coordinator"
     },
-    {
-      "id": "assignment",
-      "kind": "agent-filled",
-      "required": true,
-      "owner": "Coordinator",
-      "title": "Assignment",
-      "description": "Task summary, dynamic boundaries, requested result and stop condition."
-    },
-    {
-      "id": "user-input",
-      "kind": "materialized",
-      "file": "UserInput.md",
-      "required": true,
-      "source": "ExecuteActionInput.instruction",
-      "title": "User Input",
-      "description": "The user's own words for this round. Constraint source, not a task breakdown."
-    },
-    {
-      "id": "action",
-      "kind": "materialized",
-      "file": "Action.md",
-      "required": true,
-      "source": "context.plan",
-      "title": "Action",
-      "description": "The finalized Action contract for this round."
-    },
-    {
-      "id": "acceptance",
-      "kind": "materialized",
-      "file": "Acceptance.json",
-      "required": true,
-      "source": "context.acceptanceChecklist",
-      "title": "Acceptance",
-      "description": "Frozen acceptance checklist and recorded overrides."
-    },
+    { "id": "user-input", "file": "UserInput.md", "producer": "host" },
+    { "id": "resources", "file": "Resources.md", "producer": "host" },
+    { "id": "assignment", "file": "Assignment.md", "producer": "coordinator" },
+    { "id": "skills", "file": "Skills.md", "producer": "coordinator" },
     {
       "id": "verification-plan",
-      "kind": "agent-filled",
-      "required": true,
-      "owner": "Coordinator",
-      "title": "Verification Plan",
-      "description": "One entry per required acceptance criterion."
+      "file": "VerificationPlan.md",
+      "producer": "coordinator"
     },
-    {
-      "id": "skills",
-      "kind": "materialized",
-      "file": "Skills.json",
-      "required": true,
-      "source": "context.skills",
-      "title": "Skill Catalog",
-      "description": "Discovered Skill entrypoints. The full catalog, not an assignment."
-    },
-    {
-      "id": "boundary",
-      "kind": "materialized",
-      "file": "Boundary.md",
-      "required": true,
-      "source": "JUST_DO_IT_BUILT_IN_INSTRUCTIONS",
-      "title": "Lifecycle Boundary",
-      "description": "Fixed execution lifecycle rules that apply to every round."
-    },
-    {
-      "id": "identity",
-      "kind": "materialized",
-      "file": "Identity.json",
-      "required": true,
-      "source": "CardHarnessRequest",
-      "title": "Identity",
-      "description": "Card, Action, request and revision coordinates for this round."
-    },
-    {
-      "id": "environment",
-      "kind": "materialized",
-      "file": "Environment.json",
-      "required": false,
-      "source": "CardEnvironmentManifest",
-      "title": "Environment",
-      "description": "Host-verified workspace, repository and role facts."
-    },
-    {
-      "id": "product-context",
-      "kind": "referenced",
-      "multiple": true,
-      "required": false,
-      "source": "supplemental.contextRefs",
-      "pathBase": "project",
-      "title": "Product Context",
-      "description": "Product Context documents selected for this round."
-    },
-    {
-      "id": "uploaded-resources",
-      "kind": "referenced",
-      "multiple": true,
-      "required": false,
-      "source": "supplemental.files",
-      "pathBase": "project",
-      "title": "Uploaded Resources",
-      "description": "Markdown supplied through the UI for this round."
-    },
-    {
-      "id": "source-goal",
-      "kind": "referenced",
-      "multiple": false,
-      "required": true,
-      "source": "card.sourceRef",
-      "pathBase": "project",
-      "title": "Source Goal",
-      "description": "Retained source goal."
-    },
-    {
-      "id": "card-resources",
-      "kind": "referenced",
-      "multiple": true,
-      "required": false,
-      "source": "card.resources",
-      "pathBase": "project",
-      "title": "Card Resources",
-      "description": "Resources attached to this Card."
-    },
-    {
-      "id": "plan",
-      "kind": "referenced",
-      "multiple": false,
-      "required": false,
-      "source": "card.planRef",
-      "pathBase": "project",
-      "title": "Plan",
-      "description": "Signed-off Plan. Do not change its scope."
-    },
-    {
-      "id": "handoff",
-      "kind": "referenced",
-      "multiple": false,
-      "required": false,
-      "source": "log.handoffPath",
-      "pathBase": "project",
-      "title": "Handoff",
-      "description": "Card handoff and its relevant references."
-    },
-    {
-      "id": "prerequisites",
-      "kind": "referenced",
-      "multiple": true,
-      "required": false,
-      "source": "dependencyResources",
-      "pathBase": "project",
-      "title": "Prerequisites",
-      "description": "Output of accepted prerequisite Actions."
-    }
+    { "id": "acceptance", "file": "Acceptance.md", "producer": "host" }
+  ],
+  "references": [
+    { "id": "product-context", "file": "ProductContext.md", "producer": "host" }
   ]
 }
