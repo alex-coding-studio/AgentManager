@@ -700,7 +700,12 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
                       )}
                     </p>
                   </div>
-                  <div className="flex flex-wrap items-center justify-end gap-3">
+                  <div
+                    className={cn(
+                      'flex flex-wrap justify-end gap-3',
+                      finalized ? 'items-end' : 'items-center',
+                    )}
+                  >
                     {finalized ? (
                       <>
                         {!card.execution?.runs.length ? (
@@ -713,25 +718,28 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
                             {t('Adjust whole plan')}
                           </Button>
                         ) : null}
-                        <div className="flex items-center gap-2 rounded-xl border border-border bg-secondary/40 px-2 py-1.5">
-                          <span className="pl-1 text-xs font-medium">
-                            {t('Coordinator')}
-                          </span>
-                          <AgentProfileSelector
-                            value={draft!.coordinationProfile}
-                            onChange={(coordinationProfile) =>
-                              patchDraft(card.id, { coordinationProfile })
-                            }
-                            disabled={busy || executionRunning}
-                            label="Coordination profile"
-                            showStatus={false}
-                            agents={justDoItAgents}
+                        <div className="flex min-w-0 flex-col items-end gap-2">
+                          <div className="flex h-8 items-center gap-1.5 rounded-lg border border-border bg-secondary/40 px-2">
+                            <span className="text-xs font-medium">
+                              {t('Coordinator')}
+                            </span>
+                            <AgentProfileSelector
+                              value={draft!.coordinationProfile}
+                              onChange={(coordinationProfile) =>
+                                patchDraft(card.id, { coordinationProfile })
+                              }
+                              disabled={busy || executionRunning}
+                              label="Coordination profile"
+                              showStatus={false}
+                              agents={justDoItAgents}
+                              triggerClassName="h-7"
+                            />
+                          </div>
+                          <div
+                            ref={setActionHeaderTarget}
+                            className="flex items-center gap-2"
                           />
                         </div>
-                        <div
-                          ref={setActionHeaderTarget}
-                          className="flex items-center gap-2"
-                        />
                       </>
                     ) : (
                       <>

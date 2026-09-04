@@ -117,6 +117,7 @@ export function JustDoItAction({
   const history =
     card.execution?.runs.filter((run) => run.actionId === action.id) ?? [];
   const latest = history.at(-1);
+  const headerPullRequests = latest?.github?.pullRequests ?? [];
   const accepted =
     card.execution?.acceptedActionIds.includes(action.id) ?? false;
   const current = card.actions.find(
@@ -985,7 +986,7 @@ export function JustDoItAction({
       ) : null}
       {headerActionsTarget
         ? createPortal(
-            <>
+            <div className="flex max-w-full flex-wrap items-center justify-end gap-2">
               {canReturnToPlanning ? (
                 <Button
                   className="bg-destructive text-white hover:bg-destructive/85"
@@ -1022,7 +1023,15 @@ export function JustDoItAction({
                   {t('Pass')}
                 </Button>
               ) : null}
-            </>,
+              {headerPullRequests.map((pr) => (
+                <PullRequestChip
+                  key={pr.url}
+                  pr={pr}
+                  stale={Boolean(latest?.github?.error)}
+                  className="h-8 rounded-lg px-2.5 text-sm"
+                />
+              ))}
+            </div>,
             headerActionsTarget,
           )
         : null}
@@ -1338,9 +1347,11 @@ export function JustDoItAction({
 function PullRequestChip({
   pr,
   stale,
+  className = '',
 }: {
   pr: GitHubPullRequest;
   stale: boolean;
+  className?: string;
 }) {
   const { t } = useUiText();
   return (
@@ -1350,7 +1361,7 @@ function PullRequestChip({
       rel="noreferrer"
       onClick={(event) => event.stopPropagation()}
       title={pr.title}
-      className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring ${stale ? 'border-amber-500/40 text-amber-500' : pr.state === 'MERGED' ? 'border-purple-500/30 text-purple-500' : pr.isDraft || pr.state === 'CLOSED' ? 'border-border text-muted-foreground' : 'border-blue-500/30 text-blue-500'}`}
+      className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring ${stale ? 'border-amber-500/40 text-amber-500' : pr.state === 'MERGED' ? 'border-purple-500/30 text-purple-500' : pr.isDraft || pr.state === 'CLOSED' ? 'border-border text-muted-foreground' : 'border-blue-500/30 text-blue-500'} ${className}`}
     >
       <GitPullRequest aria-hidden="true" className="size-3.5" />#{pr.number} ·{' '}
       {t(pr.isDraft && pr.state === 'OPEN' ? 'Draft' : pr.state)}
