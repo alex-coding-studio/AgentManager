@@ -13,6 +13,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { promisify } from 'node:util';
 import {
+  deliverCardCandidate,
   prepareCardEnvironment,
   publishCardCandidate,
   type HostCommandRunner,
@@ -21,7 +22,10 @@ import type { CardWorkspace } from '../lib/modules/implementation/worktree.ts';
 
 const execute = promisify(execFile);
 
-async function fixture(t: { after: (callback: () => Promise<void>) => void }) {
+async function fixture(
+  t: { after: (callback: () => Promise<void>) => void },
+  empty = false,
+) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'card-host-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const repository = path.join(root, 'repository');
@@ -36,9 +40,19 @@ async function fixture(t: { after: (callback: () => Promise<void>) => void }) {
     'user.email',
     'agent@example.invalid',
   ]);
-  await writeFile(path.join(repository, 'README.md'), 'base\n');
-  await execute('git', ['-C', repository, 'add', 'README.md']);
-  await execute('git', ['-C', repository, 'commit', '-q', '-m', 'base']);
+  if (!empty) {
+    await writeFile(path.join(repository, 'README.md'), 'base\n');
+    await execute('git', ['-C', repository, 'add', 'README.md']);
+  }
+  await execute('git', [
+    '-C',
+    repository,
+    'commit',
+    '--allow-empty',
+    '-q',
+    '-m',
+    'base',
+  ]);
   const baseSha = (
     await execute('git', ['-C', repository, 'rev-parse', 'HEAD'])
   ).stdout.trim();
@@ -95,6 +109,14 @@ function runner(state: {
       state.created = true;
       return 'https://github.com/example/repository/pull/7';
     }
+    if (arguments_[0] === 'pr' && arguments_[1] === 'view')
+      return JSON.stringify({
+        number: 7,
+        url: 'https://github.com/example/repository/pull/7',
+        state: 'OPEN',
+        isDraft: true,
+        headRefOid: state.headSha,
+      });
     if (arguments_[0] === 'pr' && arguments_[1] === 'list')
       return state.created
         ? JSON.stringify([
@@ -164,6 +186,14 @@ void test('Environment Manifest is reusable and records Host-verified facts', as
 
 void test('Candidate Publisher handles multiple commits as one idempotent HEAD', async (t) => {
   const f = await fixture(t);
+  await execute('git', [
+    '-C',
+    f.workspace.path,
+    'remote',
+    'add',
+    'origin',
+    'https://github.com/example/repository.git',
+  ]);
   const state: { headSha?: string; created?: boolean } = {};
   const intercepted = runner(state);
   const environment = await prepareCardEnvironment(
@@ -220,6 +250,38 @@ void test('Candidate Publisher handles multiple commits as one idempotent HEAD',
   const repeated = await publishCardCandidate(request, intercepted);
   assert.equal(repeated.candidateId, publication.candidateId);
   assert.equal(repeated.pullRequest.number, 7);
+  const transitions: string[] = [];
+  await publishCardCandidate(request, async (command, args, options) => {
+    transitions.push(args.join(' '));
+    if (command === 'gh' && args[0] === 'pr' && args[1] === 'list')
+      return JSON.stringify([
+        {
+          number: 7,
+          url: publication.pullRequest.url,
+          state: 'OPEN',
+          isDraft: false,
+          headRefOid: state.headSha,
+        },
+      ]);
+    if (command === 'gh' && args[1] === 'ready') return '';
+    return intercepted(command, args, options);
+  });
+  assert.ok(
+    transitions.findIndex((call) => call.includes('--undo')) <
+      transitions.findIndex((call) => call.includes('push -u')),
+  );
+  await execute('git', [
+    '-C',
+    f.workspace.path,
+    'remote',
+    'set-url',
+    'origin',
+    'https://github.com/example/other.git',
+  ]);
+  await assert.rejects(
+    publishCardCandidate(request, intercepted),
+    /differs from the assigned/,
+  );
 });
 
 void test('Candidate Publisher rejects generated output before GitHub writes', async (t) => {
@@ -281,4 +343,109 @@ void test('Candidate Publisher rejects generated output before GitHub writes', a
     /generated or secret files/,
   );
   assert.equal(state.created, undefined);
+});
+
+void test('initial publication creates a private remote and a Draft before Ready', async (t) => {
+  const f = await fixture(t, true);
+  const state: { headSha?: string; created?: boolean } = {};
+  const calls: string[] = [];
+  let repoCreated = false;
+  let failPermission = true;
+  const original = runner(state);
+  const initialRunner: HostCommandRunner = async (command, args, options) => {
+    const call = args.join(' ');
+    calls.push(call);
+    if (command === 'gh') {
+      if (call === 'api user --jq .login') return 'cunqi-bot';
+      if (call.startsWith('repo list '))
+        return JSON.stringify(
+          repoCreated ? [{ name: 'repository', isPrivate: true }] : [],
+        );
+      if (call.startsWith('repo create ')) {
+        repoCreated = true;
+        return '';
+      }
+      if (call.includes('.permissions.push') && failPermission) {
+        failPermission = false;
+        throw new Error('temporary permission lookup failure');
+      }
+      if (
+        call.startsWith('repo create ') ||
+        call.startsWith('api --method PATCH ') ||
+        call.startsWith('pr ready ')
+      )
+        return '';
+    }
+    if (command === 'git' && args.includes('ls-remote')) return '';
+    return original(command, args, options);
+  };
+  const environment = await prepareCardEnvironment(
+    {
+      cardId: 'card-fixture',
+      projectId: 'project-fixture',
+      workspace: f.workspace,
+      roles: {
+        commit: 'agent-bot',
+        delivery: 'bot',
+        approval: 'user',
+        expectedGitHubLogin: 'cunqi-bot',
+      },
+    },
+    initialRunner,
+  );
+  await writeFile(path.join(f.workspace.path, 'App.swift'), 'import SwiftUI\n');
+  await execute('git', ['-C', f.workspace.path, 'add', 'App.swift']);
+  await execute('git', ['-C', f.workspace.path, 'commit', '-qm', 'shell']);
+  state.headSha = (
+    await execute('git', ['-C', f.workspace.path, 'rev-parse', 'HEAD'])
+  ).stdout.trim();
+  const request = {
+    environment,
+    actionId: 'action',
+    roundId: 'round',
+    baseSha: f.baseSha,
+    headSha: state.headSha,
+    title: 'Shell',
+    body: 'Verified shell',
+    draft: false,
+  };
+  await writeFile(
+    path.join(f.workspace.path, '.shared-config'),
+    'pre_push_tests=deferred\n',
+  );
+  await assert.rejects(
+    deliverCardCandidate(request, initialRunner),
+    /temporary permission/,
+  );
+  state.headSha = (
+    await execute('git', ['-C', f.workspace.path, 'rev-parse', 'HEAD'])
+  ).stdout.trim();
+  const result = await deliverCardCandidate(request, initialRunner);
+  assert.equal(
+    (
+      await execute('git', ['-C', f.workspace.path, 'status', '--porcelain'])
+    ).stdout.trim(),
+    '',
+  );
+  assert.ok(result.changedFiles.includes('.shared-config'));
+  assert.equal(
+    calls.filter((call) => call.startsWith('repo create ')).length,
+    1,
+  );
+  request.headSha = result.headSha;
+  assert.equal(result.pullRequest.draft, false);
+  assert.ok(
+    calls.includes('repo create alex-coding-studio/repository --private'),
+  );
+  const create = calls.findIndex((call) => call.startsWith('pr create '));
+  assert.ok(calls[create].includes('--draft'));
+  assert.ok(calls.findIndex((call) => call.startsWith('pr ready ')) > create);
+  await assert.rejects(
+    publishCardCandidate(request, async (command, args, options) => {
+      if (command === 'git' && args.includes('ls-remote'))
+        return `${'a'.repeat(40)}\trefs/heads/main`;
+      return initialRunner(command, args, options);
+    }),
+    /remote baseline differs/,
+  );
 });

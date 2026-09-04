@@ -185,7 +185,13 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
     const sentinel = planHeaderSentinel.current;
     if (!sentinel) return;
     const observer = new IntersectionObserver(
-      ([entry]) => setPlanHeaderStuck(!entry?.isIntersecting),
+      ([entry]) =>
+        setPlanHeaderStuck(
+          Boolean(
+            entry &&
+            entry.boundingClientRect.bottom <= (entry.rootBounds?.top ?? 0),
+          ),
+        ),
       { threshold: 1 },
     );
     observer.observe(sentinel);
@@ -707,40 +713,42 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
                     )}
                   >
                     {finalized ? (
-                      <>
-                        {!card.execution?.runs.length ? (
-                          <Button
-                            variant="outline"
-                            disabled={busy}
-                            onClick={() => command('reopen')}
-                          >
-                            <Pencil />
-                            {t('Adjust whole plan')}
-                          </Button>
-                        ) : null}
-                        <div className="flex min-w-0 flex-col items-end gap-2">
-                          <div className="flex h-8 items-center gap-1.5 rounded-lg border border-border bg-secondary/40 px-2">
-                            <span className="text-xs font-medium">
-                              {t('Coordinator')}
-                            </span>
-                            <AgentProfileSelector
-                              value={draft!.coordinationProfile}
-                              onChange={(coordinationProfile) =>
-                                patchDraft(card.id, { coordinationProfile })
-                              }
-                              disabled={busy || executionRunning}
-                              label="Coordination profile"
-                              showStatus={false}
-                              agents={justDoItAgents}
-                              triggerClassName="h-7"
-                            />
-                          </div>
-                          <div
-                            ref={setActionHeaderTarget}
-                            className="flex items-center gap-2"
+                      <div className="flex min-w-0 flex-col items-end gap-2">
+                        <div className="flex h-8 items-center gap-1.5 rounded-lg border border-border bg-secondary/40 pl-2">
+                          <span className="text-xs font-medium">
+                            {t('Coordinator')}
+                          </span>
+                          <AgentProfileSelector
+                            value={draft!.coordinationProfile}
+                            onChange={(coordinationProfile) =>
+                              patchDraft(card.id, { coordinationProfile })
+                            }
+                            disabled={busy || executionRunning}
+                            label="Coordination profile"
+                            showStatus={false}
+                            agents={justDoItAgents}
+                            triggerClassName="h-7 focus-visible:ring-inset"
                           />
                         </div>
-                      </>
+                        <div className="flex min-h-8 w-full items-center justify-end gap-2">
+                          {!card.execution?.runs.length ? (
+                            <Button
+                              className="w-full"
+                              variant="outline"
+                              disabled={busy}
+                              onClick={() => command('reopen')}
+                            >
+                              <Pencil />
+                              {t('Adjust whole plan')}
+                            </Button>
+                          ) : (
+                            <div
+                              ref={setActionHeaderTarget}
+                              className="flex items-center gap-2"
+                            />
+                          )}
+                        </div>
+                      </div>
                     ) : (
                       <>
                         <Button

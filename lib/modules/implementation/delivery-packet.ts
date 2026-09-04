@@ -25,6 +25,8 @@ import {
   type PacketFileSpecEntry,
 } from './delivery-packet-manifest.ts';
 import {
+  executionResponsibilityInstructions,
+  executionResponsibilityReference,
   executionResponsibilitySource,
   resolveExecutionResponsibilities,
   type ExecutionResponsibility,
@@ -144,18 +146,47 @@ async function appendResponsibilities(
     ) as { id?: unknown; source?: unknown };
     if (
       typeof pointer.id !== 'string' ||
-      !resolveExecutionResponsibilities([pointer.id]).includes(
-        pointer.id as ExecutionResponsibility,
-      ) ||
-      pointer.source !==
-        executionResponsibilitySource(pointer.id as ExecutionResponsibility) ||
-      assigned.has(pointer.id as ExecutionResponsibility)
+      !resolveExecutionResponsibilities([pointer.id]).includes(pointer.id)
     )
       throw new Error(`Invalid delivery packet responsibility: ${file}`);
-    assigned.add(pointer.id as ExecutionResponsibility);
+    const responsibility = pointer.id as ExecutionResponsibility;
+    const expectedSource = executionResponsibilitySource(responsibility);
+    const logicalSource =
+      pointer.source === executionResponsibilityReference(responsibility);
+    const equivalentLegacySource =
+      !logicalSource &&
+      typeof pointer.source === 'string' &&
+      path.isAbsolute(pointer.source) &&
+      (await lstat(pointer.source)
+        .then(
+          (stat) =>
+            stat.isFile() && !stat.isSymbolicLink() && stat.size <= 2097152,
+        )
+        .catch(() => false))
+        ? await Promise.all([
+            readFile(pointer.source, 'utf8'),
+            readFile(expectedSource, 'utf8'),
+          ])
+            .then(([actual, expected]) => actual === expected)
+            .catch(() => false)
+        : false;
+    if (
+      typeof pointer.id !== 'string' ||
+      !resolveExecutionResponsibilities([pointer.id]).includes(
+        responsibility,
+      ) ||
+      (!logicalSource && !equivalentLegacySource) ||
+      assigned.has(responsibility)
+    )
+      throw new Error(`Invalid delivery packet responsibility: ${file}`);
+    assigned.add(responsibility);
   }
+  executionResponsibilityInstructions([...assigned, ...selected]);
   const created: string[] = [];
-  for (const responsibility of resolveExecutionResponsibilities(selected)) {
+  for (const responsibility of resolveExecutionResponsibilities([
+    ...assigned,
+    ...selected,
+  ])) {
     if (assigned.has(responsibility)) continue;
     const file = `Responsibility-${files.length + created.length + 1}.json`;
     await writeFile(
@@ -163,7 +194,7 @@ async function appendResponsibilities(
       `${JSON.stringify(
         {
           id: responsibility,
-          source: executionResponsibilitySource(responsibility),
+          source: executionResponsibilityReference(responsibility),
         },
         null,
         2,
@@ -174,6 +205,40 @@ async function appendResponsibilities(
     assigned.add(responsibility);
   }
   return created;
+}
+
+export async function packetResponsibilityState(packetDir: string) {
+  const directory = path.join(packetDir, 'Responsibilities');
+  const files = await readdir(directory).catch(
+    (error: NodeJS.ErrnoException) => {
+      if (error.code === 'ENOENT') return [];
+      throw error;
+    },
+  );
+  const entries = await Promise.all(
+    files
+      .filter((file) => /^Responsibility-[1-9]\d*\.json$/.test(file))
+      .map(async (file) => {
+        const pointer = JSON.parse(
+          await readFile(path.join(directory, file), 'utf8'),
+        ) as { id: string };
+        return { file: `Responsibilities/${file}`, id: pointer.id };
+      }),
+  );
+  entries.sort(
+    (a, b) =>
+      Number(a.file.match(/-(\d+)\.json$/)?.[1]) -
+      Number(b.file.match(/-(\d+)\.json$/)?.[1]),
+  );
+  const ids = entries.length
+    ? resolveExecutionResponsibilities(entries.map((entry) => entry.id))
+    : [];
+  return {
+    ids,
+    files: entries
+      .filter((entry) => ids.includes(entry.id))
+      .map((entry) => entry.file),
+  };
 }
 
 function validateContents(contents: PacketContents, producer: PacketProducer) {
@@ -256,7 +321,12 @@ export async function materializeDeliveryPacket(
       createdFiles.push(file);
       amendmentFiles.push(file);
     }
-    const manifest = buildPacketManifest(input.manifest, PACKET_SPEC, present);
+    const active = await packetResponsibilityState(pending);
+    const manifest = buildPacketManifest(
+      { ...input.manifest, activeResponsibilityFiles: active.files },
+      PACKET_SPEC,
+      present,
+    );
     await writeFile(path.join(pending, PACKET_SPEC.manifestFile), manifest);
     present.add(PACKET_SPEC.manifestFile);
     const verification = await verifyPacket(pending);
@@ -403,6 +473,7 @@ export function deliveryPacketContents(input: {
       'verification-plan': packetTemplate('verification-plan', {
         verificationPlan: jsonBlock({
           plan: decision.verificationPlan,
+          currentOutput: request.context.currentOutput ?? null,
           priorEvidence: input.priorEvidence.filter((evidence) =>
             decision.verificationPlan.some((plan) =>
               plan.evidenceIds.includes(evidence.id),
@@ -507,5 +578,5 @@ export function runDeliveryPacketScript(input: DeliveryPacketHandoffInput) {
 }
 
 export function workerPacketPrompt(manifestPath: string) {
-  return `Read ${manifestPath}. Follow Manifest Origin in order. Skip a file only under the exact-filename rule written there. Execute the unchanged finalized Action and return the required JSON.`;
+  return `Read ${manifestPath}; follow Origin order and its exact-filename skip rule. Resolve all Responsibility pointers by id under ${path.dirname(executionResponsibilitySource('general'))}/<id>.json, ignoring legacy source paths. Execute the finalized Action; return required JSON.`;
 }

@@ -12,7 +12,9 @@ An Amendment file supplements its named source. Apply the later file only where 
 
 For an Origin directory, read its numbered files in order. Apply the same exact-filename skip rule to each file inside it.
 
-A Responsibility pointer assigns the definition at its `source` path. Read that definition and follow its declared inheritance before continuing the Action.
+Only the Responsibility files listed in Origin are active. Other files in Responsibilities are historical records. General is either the sole explicit assignment or inherited from the listed specialized responsibilities; never apply it as a duplicate explicit assignment.
+
+A Responsibility pointer assigns the definition identified by `source`. Resolve a `praxis:responsibility/<id>` source through the Responsibility library named in the Host handoff, then read the definition and follow its declared inheritance before continuing the Action. A legacy pointer may contain the definition path directly in `source`.
 
 {{origin}}
 
