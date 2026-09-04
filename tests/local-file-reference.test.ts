@@ -36,3 +36,23 @@ void test('HTML references carry the original location without copying source or
     'h1 { color: red; }',
   );
 });
+
+void test('a missing local path returns an error rather than pretending the user cancelled', async () => {
+  const response = await POST(
+    new Request('http://localhost:3000/api/system/local-file-reference', {
+      method: 'POST',
+      headers: {
+        host: 'localhost:3000',
+        origin: 'http://localhost:3000',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        path: '/nonexistent-praxis-reference/design.html',
+      }),
+    }),
+  );
+  assert.equal(response.status, 500);
+  const result = await response.json();
+  assert.equal(result.cancelled, undefined);
+  assert.equal(result.error, 'Could not reference the local file.');
+});

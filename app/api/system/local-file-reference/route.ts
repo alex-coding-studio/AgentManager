@@ -5,11 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { guardJsonRequest } from '@/lib/request-boundary';
 import { getProject } from '@/lib/project-registry';
-import {
-  apiErrorResponse,
-  PublicApiError,
-  isCancellationError,
-} from '@/lib/api-errors';
+import { apiErrorResponse, PublicApiError } from '@/lib/api-errors';
 
 export const runtime = 'nodejs';
 const execute = promisify(execFile);
@@ -28,12 +24,22 @@ export async function POST(request: Request) {
           'Paste the file path on the Praxis host.',
           400,
         );
-      selected = (
-        await execute('osascript', [
-          '-e',
-          'POSIX path of (choose file with prompt "Choose a local reference file")',
-        ])
-      ).stdout.trim();
+      try {
+        selected = (
+          await execute('osascript', [
+            '-e',
+            'POSIX path of (choose file with prompt "Choose a local reference file")',
+          ])
+        ).stdout.trim();
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          'stderr' in error &&
+          /\(-128\)/.test(String(error.stderr))
+        )
+          return Response.json({ cancelled: true });
+        throw error;
+      }
     }
     if (selected.startsWith('file:')) selected = fileURLToPath(selected);
     const project = input.projectId ? await getProject(input.projectId) : null;
@@ -53,7 +59,6 @@ export async function POST(request: Request) {
       content: `# Local file reference\n\nOriginal path: ${JSON.stringify(absolute)}\nBase directory for relative dependencies: ${JSON.stringify(path.dirname(absolute))}\n\nThis attachment contains only a reference, not the document contents. Read or open the original file at its original location. Resolve HTML stylesheets, images and other relative dependencies from that directory.\n`,
     });
   } catch (error) {
-    if (isCancellationError(error)) return Response.json({ cancelled: true });
     return apiErrorResponse(
       error,
       'Could not reference the local file.',
