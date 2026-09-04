@@ -34,6 +34,21 @@ export async function POST(
         ),
       );
     }
+    if (input.action === 'preview-replan' || input.action === 'replan') {
+      if (
+        input.action === 'replan' &&
+        (typeof input.token !== 'string' || !/^[0-9a-f]{64}$/.test(input.token))
+      )
+        throw new Error('Preview and confirm the return first.');
+      return Response.json(
+        await executionService.reopenPlanFromBase(
+          project,
+          input.cardId,
+          input.expectedRevision,
+          input.action === 'replan' ? input.token : undefined,
+        ),
+      );
+    }
     if (input.action === 'open-workspace')
       return Response.json({
         card: await executionService.openWorkspace(

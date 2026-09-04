@@ -159,6 +159,7 @@ export const chineseUi: Record<string, string> = {
   'Add development conventions or local Skill instructions. Leave empty to use the built-in workflow.':
     '填写开发约定、使用哪些本地 Skill 等。可以留空，系统会自动应用内置流程规则。',
   'Your additional requirements': '你的补充要求',
+  'Original input': '原输入',
   'Dependency review required': '需要确认依赖关系',
   'This Card derives from unfinished Nodes that were not marked as prerequisites. Classify each one before planning or confirming this Card.':
     '这张卡片来源于尚未完成、但未标记为前置依赖的节点。开始或确认计划前，请逐项确认它们的关系。',
@@ -219,6 +220,11 @@ export const chineseUi: Record<string, string> = {
   'Main, GitHub repositories, PRs and installed apps are not reverted by this operation.':
     '此操作不会回退 main、GitHub 仓库、PR 或已安装应用。',
   'Back up and restart Card workspace': '备份并重建 Card 工作区',
+  'Roll back': '回退',
+  'Return to planning?': '回退到计划？',
+  'Back up the current workspace, restore the Card baseline, clear accepted Actions, and reopen the Plan.':
+    '备份当前工作区，恢复 Card 起点，清除已验收步骤，并重新打开计划。',
+  'Confirm roll back': '确认回退',
   'Working…': '处理中…',
   'Execution permissions': '执行权限',
   'full-access': '完全访问',

@@ -766,6 +766,10 @@ void test('delivered but unaccepted Card can restart from its base', async (t) =
   f.calls[0].resolve(delivered(f.calls[0].request));
   const current = await f.settled();
   assert.equal(current.execution?.runs.at(-1)?.result?.outcome, 'delivered');
+  await assert.rejects(
+    () => f.service.reopenPlanFromBase(f.project, f.card.id, current.revision),
+    /accepted work/,
+  );
   const preview = (
     await f.service.resetWorkspace(f.project, f.card.id, current.revision)
   ).preview!;
@@ -786,6 +790,50 @@ void test('delivered but unaccepted Card can restart from its base', async (t) =
   assert.equal(
     await readFile(path.join(backup.path, 'app.txt'), 'utf8'),
     'delivered candidate',
+  );
+});
+void test('an accepted Action can return the Card to planning from its base', async (t) => {
+  const f = await fixture(t);
+  await f.service.start(f.project, { ...f.input, initializeRepository: true });
+  const directory = f.calls[0].options.workingDirectory;
+  await writeFile(path.join(directory, 'app.txt'), 'accepted output');
+  f.calls[0].resolve(delivered(f.calls[0].request));
+  let current = await f.settled();
+  const output = current.execution!.runs.at(-1)!;
+  current = await f.service.update(
+    f.project,
+    f.card.id,
+    current.revision,
+    'accept',
+    output.id,
+  );
+  await assert.rejects(
+    () => f.service.resetWorkspace(f.project, f.card.id, current.revision),
+    /Only unaccepted Cards/,
+  );
+
+  const preview = (
+    await f.service.reopenPlanFromBase(f.project, f.card.id, current.revision)
+  ).preview!;
+  const reopened = (
+    await f.service.reopenPlanFromBase(
+      f.project,
+      f.card.id,
+      current.revision,
+      preview.token,
+    )
+  ).card!;
+
+  assert.equal(reopened.plan?.status, 'draft');
+  assert.deepEqual(reopened.actions, []);
+  assert.equal(reopened.finalizedAt, null);
+  assert.deepEqual(reopened.execution?.runs, []);
+  assert.deepEqual(reopened.execution?.acceptedActionIds, []);
+  const backup = reopened.execution?.workspaceBackups?.at(-1);
+  assert.ok(backup);
+  assert.equal(
+    await readFile(path.join(backup.path, 'app.txt'), 'utf8'),
+    'accepted output',
   );
 });
 void test('missing and branch-switched worktrees block continuation rather than silently changing directories', async (t) => {

@@ -122,13 +122,19 @@ export function JustDoItAction({
   const current = card.actions.find(
     (item) => !card.execution?.acceptedActionIds.includes(item.id),
   );
-  const running = card.execution?.runs.at(-1)?.status === 'running';
+  const lastCardRun = card.execution?.runs.at(-1);
+  const running = lastCardRun?.status === 'running';
   const enabled = current?.id === action.id && !pending && !running;
   const canUndo =
     !accepted &&
     current?.id === action.id &&
     Boolean(latest) &&
     latest?.status !== 'running';
+  const canReturnToPlanning = Boolean(
+    card.execution?.workspace &&
+    card.execution.acceptedActionIds.length > 0 &&
+    lastCardRun,
+  );
 
   async function send(
     operation:
@@ -228,7 +234,7 @@ export function JustDoItAction({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: token ? 'reset' : 'preview-reset',
+          action: token ? 'replan' : 'preview-replan',
           cardId: card.id,
           expectedRevision: card.revision,
           token,
@@ -980,12 +986,9 @@ export function JustDoItAction({
       {headerActionsTarget
         ? createPortal(
             <>
-              {card.execution?.workspace &&
-              !card.execution.acceptedActionIds.length &&
-              latest &&
-              latest.status !== 'running' ? (
+              {canReturnToPlanning ? (
                 <Button
-                  variant="outline"
+                  className="bg-destructive text-white hover:bg-destructive/85"
                   disabled={pending || running}
                   onClick={() => {
                     setResetPreview(null);
@@ -993,7 +996,7 @@ export function JustDoItAction({
                   }}
                 >
                   <RotateCcw />
-                  {t('Redo')}
+                  {t('Roll back')}
                 </Button>
               ) : null}
               {canUndo ? (
@@ -1273,13 +1276,13 @@ export function JustDoItAction({
       >
         <DialogContent className="max-h-[85dvh] overflow-auto sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle>{t('Restart this Card from its base')}</DialogTitle>
+            <DialogTitle>{t('Return to planning?')}</DialogTitle>
+            <DialogDescription>
+              {t(
+                'Back up the current workspace, restore the Card baseline, clear accepted Actions, and reopen the Plan.',
+              )}
+            </DialogDescription>
           </DialogHeader>
-          <p className="text-sm">
-            {t(
-              'Keep the confirmed Plan. Preserve this worktree and branch as a backup, then create a fresh Card worktree at its original base. No Action starts automatically.',
-            )}
-          </p>
           {resetPreview && (
             <>
               <p className="break-all text-xs">
@@ -1300,10 +1303,11 @@ export function JustDoItAction({
                 </p>
               )}
               <Button
+                className="bg-destructive text-white hover:bg-destructive/85"
                 disabled={pending}
                 onClick={() => void resetCard(resetPreview.token)}
               >
-                {t('Back up and restart Card workspace')}
+                {t('Confirm roll back')}
               </Button>
             </>
           )}

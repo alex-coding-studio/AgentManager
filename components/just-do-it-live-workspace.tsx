@@ -356,7 +356,7 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
   const setup = card && draft && (
     <div className="space-y-3">
       <label className="block text-xs font-medium">
-        {t('Your additional requirements')}
+        {t('Original input')}
         <Textarea
           className="mt-1 min-h-24 resize-none text-sm"
           value={draft.requirements}
