@@ -1,7 +1,5 @@
+import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
-import general from '../../responsibilities/general.json' with { type: 'json' };
-import mechanical from '../../responsibilities/mechanical.json' with { type: 'json' };
-import iosDevelopment from '../../responsibilities/ios-development.json' with { type: 'json' };
 
 export type ResponsibilityRule = { id: string; instruction: string };
 export type ResponsibilityDefinition = {
@@ -12,8 +10,7 @@ export type ResponsibilityDefinition = {
   rules: ResponsibilityRule[];
 };
 
-const sourceDefinitions = [general, mechanical, iosDevelopment] as const;
-export type ExecutionResponsibility = (typeof sourceDefinitions)[number]['id'];
+export type ExecutionResponsibility = string;
 
 function assertDefinitions(
   value: unknown,
@@ -73,18 +70,43 @@ function assertDefinitions(
   }
 }
 
-const definitions = Object.fromEntries(
-  sourceDefinitions.map((definition) => [definition.id, definition]),
-) as Record<ExecutionResponsibility, ResponsibilityDefinition>;
-assertDefinitions(definitions);
-
 export const EXECUTION_RESPONSIBILITY_LIBRARY = path.join(
   process.cwd(),
   'lib/responsibilities',
 );
 
+export function loadExecutionResponsibilities(
+  library = EXECUTION_RESPONSIBILITY_LIBRARY,
+) {
+  const files = readdirSync(library, { withFileTypes: true })
+    .filter((entry) => entry.name.endsWith('.json'))
+    .sort((left, right) =>
+      left.name === 'general.json'
+        ? -1
+        : right.name === 'general.json'
+          ? 1
+          : left.name.localeCompare(right.name),
+    );
+  const definitions: Record<string, ResponsibilityDefinition> = {};
+  for (const file of files) {
+    if (!file.isFile() || !/^[a-z0-9]+(?:-[a-z0-9]+)*\.json$/.test(file.name))
+      throw new Error(`Invalid execution responsibility file: ${file.name}`);
+    const id = file.name.slice(0, -'.json'.length);
+    const definition = JSON.parse(
+      readFileSync(path.join(library, file.name), 'utf8'),
+    ) as ResponsibilityDefinition;
+    if (Object.hasOwn(definitions, id))
+      throw new Error(`Duplicate execution responsibility: ${id}`);
+    definitions[id] = definition;
+  }
+  assertDefinitions(definitions);
+  return definitions;
+}
+
+const definitions = loadExecutionResponsibilities();
+
 export const EXECUTION_RESPONSIBILITY_IDS = Object.freeze(
-  Object.keys(definitions) as ExecutionResponsibility[],
+  Object.keys(definitions),
 );
 
 export const EXECUTION_RESPONSIBILITY_SELECTION = `Assign responsibilities from the Worker task. General is the inherited default. ${EXECUTION_RESPONSIBILITY_IDS.map((id) => `${id}: ${definitions[id].assignment}`).join(' ')} Responsibilities compose when one packet needs multiple boundaries. Return general alone for ordinary work; do not return general beside a specialized responsibility. The Coordinator selects responsibilities; the Worker must not choose or change them.`;

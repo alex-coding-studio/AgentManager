@@ -236,6 +236,7 @@ export function startCoordinatedExecution(input: {
     phase: 'prepare' | 'execute' | 'qualify' | 'extend' | 'repair',
     prompt: string,
     allowedSkillPaths?: string[],
+    publicProgress = true,
   ) {
     assertActive();
     if (Buffer.byteLength(prompt) > 1500000)
@@ -282,12 +283,13 @@ export function startCoordinatedExecution(input: {
     };
     trace.attempts.push(attempt);
     records[`${attempt.id}-request.txt`] = redactRecord(prompt);
-    progress(
-      phase,
-      role === 'coordinator'
-        ? 'Coordinator is preparing or assessing the Action.'
-        : 'Worker is executing the bounded assignment.',
-    );
+    if (publicProgress)
+      progress(
+        phase,
+        role === 'coordinator'
+          ? 'Coordinator is preparing or assessing the Action.'
+          : 'Worker is executing the bounded assignment.',
+      );
     const options: Options = {
       ...input.workerOptions,
       prompt,
@@ -315,7 +317,8 @@ export function startCoordinatedExecution(input: {
           );
           if (match) workerCommandOutcomes.set(match[1], Number(match[2]));
         }
-        if (!stopped) progress(phase, redactActivity(activity.summary));
+        if (!stopped && publicProgress)
+          progress(phase, redactActivity(activity.summary));
       },
     };
     try {
@@ -507,6 +510,7 @@ The Coordinator-assigned responsibilities, responsibilityInstructions, Skills an
           phase,
           workerPrompt,
           decision.skillPaths,
+          phase !== 'extend',
         );
         lastWorkerReport = parseWorkerReport(lastWorker.finalOutput);
         trace.attempts.at(-1)!.summary = lastWorkerReport.summary;
@@ -546,14 +550,18 @@ The Coordinator-assigned responsibilities, responsibilityInstructions, Skills an
         repairsRemaining: settlement.kind === 'failed' ? 0 : repairs,
         environment: input.environment,
       });
-      progress(
-        'qualify',
-        settlement.kind === 'failed'
-          ? 'Worker failed; resuming the coordinator.'
-          : settlement.kind === 'attention-required'
-            ? 'Worker needs attention; resuming the coordinator.'
-            : 'Worker completed with unresolved checks; resuming the coordinator.',
-      );
+      if (
+        settlement.kind === 'failed' ||
+        !settlement.report.responsibilityGap?.trim()
+      )
+        progress(
+          'qualify',
+          settlement.kind === 'failed'
+            ? 'Worker failed; resuming the coordinator.'
+            : settlement.kind === 'attention-required'
+              ? 'Worker needs attention; resuming the coordinator.'
+              : 'Worker completed with unresolved checks; resuming the coordinator.',
+        );
       continuationPrompt = workerSettlementPrompt(
         settlement,
         req,
@@ -587,7 +595,7 @@ The Coordinator-assigned responsibilities, responsibilityInstructions, Skills an
       instructions: coordinatorThreadInstructions,
       hostJobs: false,
     });
-    const runTurn = (prompt: string, initial: boolean) =>
+    const runTurn = (prompt: string, initial: boolean, publicProgress = true) =>
       new Promise<LocalAgentResult>((resolve, reject) => {
         assertActive();
         if (Buffer.byteLength(prompt) > 1500000)
@@ -606,6 +614,8 @@ The Coordinator-assigned responsibilities, responsibilityInstructions, Skills an
           coordinatorTurn?.interrupt();
         };
         const onEvent = (event: AgentRuntimeEvent) => {
+          const showProgress =
+            publicProgress && !req.workerReport?.responsibilityGap?.trim();
           if (event.type === 'turn-started') {
             if (trace.attempts.length >= limits.maxAgentCalls) {
               fail(new Error('Coordinator dispatch budget exhausted.'));
@@ -627,10 +637,11 @@ The Coordinator-assigned responsibilities, responsibilityInstructions, Skills an
             };
             trace.attempts.push(attempt);
             records[`${attempt.id}-request.txt`] = redactRecord(pendingPrompt);
-            progress(
-              attempt.phase,
-              'Coordinator is preparing or assessing the Action.',
-            );
+            if (showProgress)
+              progress(
+                attempt.phase,
+                'Coordinator is preparing or assessing the Action.',
+              );
             deadline = setTimeout(
               () => fail(new Error('Coordinator call timed out.')),
               limits.coordinatorTimeoutMs,
@@ -642,17 +653,18 @@ The Coordinator-assigned responsibilities, responsibilityInstructions, Skills an
               ++toolCalls > limits.maxCoordinatorToolCalls
             )
               fail(new Error('Coordinator tool-call budget exhausted.'));
-            if (!stopped)
+            if (!stopped && showProgress)
               progress(
                 attempt?.phase ?? 'prepare',
                 redactActivity(event.summary),
               );
           } else if (event.type === 'tool-suspended') {
             clearDeadline();
-            progress(
-              'dispatch',
-              'Coordinator dispatched a worker; the coordination thread is suspended.',
-            );
+            if (showProgress)
+              progress(
+                'dispatch',
+                'Coordinator dispatched a worker; the coordination thread is suspended.',
+              );
           } else if (event.type === 'tool-resumed') {
             pendingPrompt = continuationPrompt;
           } else if (event.type === 'turn-completed') {
@@ -698,7 +710,11 @@ The Coordinator-assigned responsibilities, responsibilityInstructions, Skills an
     let prompt = coordinationPrompt(req);
     let initial = true;
     while (true) {
-      const response = await runTurn(prompt, initial);
+      const response = await runTurn(
+        prompt,
+        initial,
+        !req.workerReport?.responsibilityGap?.trim(),
+      );
       initial = false;
       assertActive();
       if (delivered) return delivered;
@@ -768,6 +784,7 @@ The Coordinator-assigned responsibilities, responsibilityInstructions, Skills an
           phase,
           await workerPromptFor(decision),
           decision.skillPaths,
+          phase !== 'extend',
         );
         lastWorkerReport = parseWorkerReport(lastWorker.finalOutput);
         trace.attempts.at(-1)!.summary = lastWorkerReport.summary;
@@ -801,6 +818,8 @@ The Coordinator-assigned responsibilities, responsibilityInstructions, Skills an
           'coordinator',
           'qualify',
           coordinationPrompt(req),
+          undefined,
+          !lastWorkerReport.responsibilityGap?.trim(),
         );
         decision = parseCoordinationDecision(response.finalOutput, req);
       }
