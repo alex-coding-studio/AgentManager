@@ -4,6 +4,8 @@ import test from 'node:test';
 import {
   mkdtemp,
   mkdir,
+  chmod,
+  lstat,
   readFile,
   writeFile,
   rm,
@@ -478,6 +480,8 @@ void test('undo restores only the current Action to its clean baseline', async (
     card.execution!.runs[0].id,
   );
   await writeFile(path.join(firstWorkspace, 'between.txt'), 'before Action 2');
+  await writeFile(path.join(firstWorkspace, 'private.txt'), 'private');
+  await chmod(path.join(firstWorkspace, 'private.txt'), 0o600);
   await f.service.start(f.project, {
     ...f.input,
     actionId: f.actions[1].id,
@@ -520,6 +524,10 @@ void test('undo restores only the current Action to its clean baseline', async (
   assert.equal(
     await readFile(path.join(cleanWorkspace, 'between.txt'), 'utf8'),
     'before Action 2',
+  );
+  assert.equal(
+    (await lstat(path.join(cleanWorkspace, 'private.txt'))).mode & 0o777,
+    0o600,
   );
   await assert.rejects(
     () => readFile(path.join(cleanWorkspace, 'partial.txt')),

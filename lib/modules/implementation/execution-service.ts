@@ -38,7 +38,15 @@ import {
 } from '../../github-delivery.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
-import { cp, lstat, mkdir, readFile, realpath, rm } from 'node:fs/promises';
+import {
+  chmod,
+  cp,
+  lstat,
+  mkdir,
+  readFile,
+  realpath,
+  rm,
+} from 'node:fs/promises';
 import {
   checkpointWorkspace,
   includeInGitHistory,
@@ -217,6 +225,26 @@ async function copyPreservedBaselineFiles(
     await mkdir(path.dirname(target), { recursive: true });
     await rm(target, { force: true });
     await cp(source, target, { force: true, verbatimSymlinks: true });
+  }
+}
+
+async function restoreBaselineModes(
+  rootPath: string,
+  files: Record<string, string>,
+) {
+  for (const [file, fingerprint] of Object.entries(files)) {
+    if (fingerprint.startsWith('link:')) continue;
+    const match = fingerprint.match(/^(\d{1,3}):[0-9a-f]{64}$/);
+    const mode = Number(match?.[1]);
+    if (!match || !Number.isInteger(mode) || mode < 0 || mode > 0o777)
+      throw new Error('Invalid Action baseline file mode.');
+    const absolute = path.resolve(rootPath, file);
+    if (!absolute.startsWith(rootPath + path.sep))
+      throw new Error('Unsafe Action baseline mode path.');
+    const stat = await lstat(absolute);
+    if (!stat.isFile() || stat.isSymbolicLink())
+      throw new Error('Action baseline mode target is not a regular file.');
+    await chmod(absolute, mode);
   }
 }
 
@@ -1807,6 +1835,7 @@ export function createExecutionService(
           restarted.workspace.path,
           preservedFiles,
         );
+        await restoreBaselineModes(restarted.workspace.path, baseline.files);
         const restored = await snapshotWorkspace(workingProject);
         if (
           restored.head !== baseline.head ||
