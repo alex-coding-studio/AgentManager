@@ -117,6 +117,12 @@ export function executionResponsibilitySource(
   return path.join(EXECUTION_RESPONSIBILITY_LIBRARY, `${responsibility}.json`);
 }
 
+export function executionResponsibilityReference(
+  responsibility: ExecutionResponsibility,
+) {
+  return `praxis:responsibility/${responsibility}`;
+}
+
 export function resolveExecutionResponsibilities(
   value: unknown,
 ): ExecutionResponsibility[] {

@@ -25,6 +25,7 @@ import {
   type PacketFileSpecEntry,
 } from './delivery-packet-manifest.ts';
 import {
+  executionResponsibilityReference,
   executionResponsibilitySource,
   resolveExecutionResponsibilities,
   type ExecutionResponsibility,
@@ -142,17 +143,29 @@ async function appendResponsibilities(
     const pointer = JSON.parse(
       await readFile(path.join(directory, file), 'utf8'),
     ) as { id?: unknown; source?: unknown };
+    const responsibility = pointer.id as ExecutionResponsibility;
+    const expectedSource = executionResponsibilitySource(responsibility);
+    const logicalSource =
+      pointer.source === executionResponsibilityReference(responsibility);
+    const equivalentLegacySource =
+      !logicalSource && typeof pointer.source === 'string'
+        ? await Promise.all([
+            readFile(pointer.source, 'utf8'),
+            readFile(expectedSource, 'utf8'),
+          ])
+            .then(([actual, expected]) => actual === expected)
+            .catch(() => false)
+        : false;
     if (
       typeof pointer.id !== 'string' ||
       !resolveExecutionResponsibilities([pointer.id]).includes(
-        pointer.id as ExecutionResponsibility,
+        responsibility,
       ) ||
-      pointer.source !==
-        executionResponsibilitySource(pointer.id as ExecutionResponsibility) ||
-      assigned.has(pointer.id as ExecutionResponsibility)
+      (!logicalSource && !equivalentLegacySource) ||
+      assigned.has(responsibility)
     )
       throw new Error(`Invalid delivery packet responsibility: ${file}`);
-    assigned.add(pointer.id as ExecutionResponsibility);
+    assigned.add(responsibility);
   }
   const created: string[] = [];
   for (const responsibility of resolveExecutionResponsibilities(selected)) {
@@ -163,7 +176,7 @@ async function appendResponsibilities(
       `${JSON.stringify(
         {
           id: responsibility,
-          source: executionResponsibilitySource(responsibility),
+          source: executionResponsibilityReference(responsibility),
         },
         null,
         2,
@@ -507,5 +520,5 @@ export function runDeliveryPacketScript(input: DeliveryPacketHandoffInput) {
 }
 
 export function workerPacketPrompt(manifestPath: string) {
-  return `Read ${manifestPath}. Follow Manifest Origin in order. Skip a file only under the exact-filename rule written there. Execute the unchanged finalized Action and return the required JSON.`;
+  return `Read ${manifestPath}. Follow Manifest Origin in order. Skip a file only under the exact-filename rule written there. Resolve a Responsibility source named praxis:responsibility/<id> to ${path.dirname(executionResponsibilitySource('general'))}/<id>.json. Execute the unchanged finalized Action and return the required JSON.`;
 }

@@ -1,6 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import {
+  copyFile,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {
@@ -8,6 +16,7 @@ import {
   type DeliveryPacketMaterializeInput,
 } from '../lib/modules/implementation/delivery-packet.ts';
 import { verifyPacket } from '../lib/modules/implementation/delivery-packet-manifest.ts';
+import { executionResponsibilitySource } from '../lib/modules/implementation/execution-responsibilities.ts';
 
 function request(packetDir: string): DeliveryPacketMaterializeInput {
   return {
@@ -60,7 +69,33 @@ void test('materialization creates a complete ordered packet', async (t) => {
     ),
   ) as { id: string; source: string };
   assert.equal(pointer.id, 'mechanical');
-  assert.match(pointer.source, /\/lib\/responsibilities\/mechanical\.json$/);
+  assert.equal(pointer.source, 'praxis:responsibility/mechanical');
+});
+
+void test('an equivalent legacy responsibility path survives another Praxis checkout', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'delivery-packet-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const packetDir = path.join(root, 'packet');
+  await materializeDeliveryPacket(request(packetDir));
+  const pointerPath = path.join(
+    packetDir,
+    'Responsibilities/Responsibility-1.json',
+  );
+  const pointer = JSON.parse(await readFile(pointerPath, 'utf8')) as {
+    id: string;
+  };
+  const legacyPath = path.join(
+    root,
+    'another-praxis/lib/responsibilities/mechanical.json',
+  );
+  await mkdir(path.dirname(legacyPath), { recursive: true });
+  await copyFile(executionResponsibilitySource('mechanical'), legacyPath);
+  await writeFile(
+    pointerPath,
+    `${JSON.stringify({ id: pointer.id, source: legacyPath }, null, 2)}\n`,
+  );
+
+  await assert.doesNotReject(materializeDeliveryPacket(request(packetDir)));
 });
 
 void test('a coordinator responsibility gap appends only a new pointer', async (t) => {
@@ -92,10 +127,7 @@ void test('a coordinator responsibility gap appends only a new pointer', async (
     ),
   ) as { id: string; source: string };
   assert.equal(second.id, 'ios-development');
-  assert.match(
-    second.source,
-    /\/lib\/responsibilities\/ios-development\.json$/,
-  );
+  assert.equal(second.source, 'praxis:responsibility/ios-development');
 });
 
 void test('changed content becomes a new ordered amendment and identical content is idempotent', async (t) => {

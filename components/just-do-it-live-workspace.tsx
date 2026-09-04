@@ -185,7 +185,13 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
     const sentinel = planHeaderSentinel.current;
     if (!sentinel) return;
     const observer = new IntersectionObserver(
-      ([entry]) => setPlanHeaderStuck(!entry?.isIntersecting),
+      ([entry]) =>
+        setPlanHeaderStuck(
+          Boolean(
+            entry &&
+            entry.boundingClientRect.bottom <= (entry.rootBounds?.top ?? 0),
+          ),
+        ),
       { threshold: 1 },
     );
     observer.observe(sentinel);
