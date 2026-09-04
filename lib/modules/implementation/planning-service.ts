@@ -944,11 +944,32 @@ export function createPlanningService(
         400,
       );
     if (!card.plan) throw new PublicApiError('Generate a Plan first.', 400);
-    if (action === 'reopen')
-      throw new PublicApiError(
-        'The finalized Plan and acceptance checklist are locked.',
-        400,
+    if (action === 'reopen') {
+      if (card.plan.status !== 'finalized') return card;
+      if (card.execution?.acceptedActionIds.length)
+        throw new PublicApiError(
+          'Clean rollback is required before reopening an accepted Plan.',
+          400,
+        );
+      return commit(
+        project,
+        card.revision,
+        {
+          ...card,
+          plan: { ...card.plan, status: 'draft' },
+          actions: [],
+          finalizedAt: null,
+        },
+        {
+          kind: 'system-event',
+          stage: 'planning',
+          actionId: null,
+          event: 'plan-reopened',
+          text: 'User reopened the confirmed Plan before execution. The previous draft remains available for adjustment.',
+          refs: [],
+        },
       );
+    }
     if (action === 'finalize') {
       await assertDependencyReview(project, card);
       for (const step of card.plan.steps)

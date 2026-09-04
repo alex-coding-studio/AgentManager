@@ -703,6 +703,16 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
                   <div className="flex flex-wrap items-center justify-end gap-3">
                     {finalized ? (
                       <>
+                        {!card.execution?.runs.length ? (
+                          <Button
+                            variant="outline"
+                            disabled={busy}
+                            onClick={() => command('reopen')}
+                          >
+                            <Pencil />
+                            {t('Adjust whole plan')}
+                          </Button>
+                        ) : null}
                         <div className="flex items-center gap-2 rounded-xl border border-border bg-secondary/40 px-2 py-1.5">
                           <span className="pl-1 text-xs font-medium">
                             {t('Coordinator')}
