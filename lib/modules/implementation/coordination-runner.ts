@@ -718,6 +718,12 @@ The Coordinator-assigned responsibilities, responsibilityInstructions, Skills an
       initial = false;
       assertActive();
       if (delivered) return delivered;
+      if (
+        !response.finalOutput.trim() &&
+        lastWorkerReport?.outcome === 'blocked' &&
+        lastWorker
+      )
+        return deliveredResult(lastWorkerReport, lastWorker);
       const decision = parseCoordinationDecision(response.finalOutput, req);
       if (
         decision.decision === 'dispatch' ||

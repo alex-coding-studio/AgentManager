@@ -312,9 +312,28 @@ export async function publishCardCandidate(
   );
   if (!Number.isSafeInteger(commitCount) || commitCount < 1)
     throw new Error('Candidate commit range is invalid.');
-  const repository = githubRepository(environment.repository.remoteUrl);
-  if (!environment.repository.defaultBranch)
-    throw new Error('GitHub default branch is unavailable.');
+  const remoteUrl = await optionalGit(
+    runner,
+    workspace,
+    'remote',
+    'get-url',
+    'origin',
+  );
+  const initialRepository = !environment.repository.remoteUrl;
+  const projectName = path.basename(environment.workspace.repository);
+  if (initialRepository && !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(projectName))
+    throw new Error('Initial repository name is invalid.');
+  const repository = initialRepository
+    ? `alex-coding-studio/${projectName}`
+    : githubRepository(environment.repository.remoteUrl);
+  if (
+    (remoteUrl && githubRepository(remoteUrl) !== repository) ||
+    (!remoteUrl && !initialRepository)
+  )
+    throw new Error('Candidate remote differs from the assigned repository.');
+  const defaultBranch =
+    environment.repository.defaultBranch ?? (initialRepository ? 'main' : null);
+  if (!defaultBranch) throw new Error('GitHub default branch is unavailable.');
   if (!request.title.trim() || request.title.length > 200)
     throw new Error('Candidate PR title is invalid.');
   if (!request.body.trim() || Buffer.byteLength(request.body) > 100_000)
@@ -329,6 +348,75 @@ export async function publishCardCandidate(
     login !== environment.roles.expectedGitHubLogin
   )
     throw new Error('Active GitHub identity does not match the Card role.');
+  if (initialRepository) {
+    if (login !== 'cunqi-bot')
+      throw new Error('Initial repository delivery requires the bot identity.');
+    const baseline = await git(
+      runner,
+      workspace,
+      'rev-parse',
+      `refs/heads/${defaultBranch}`,
+    );
+    const tree = await git(
+      runner,
+      workspace,
+      'ls-tree',
+      '-r',
+      '--name-only',
+      baseline,
+    );
+    const ancestry = await git(
+      runner,
+      workspace,
+      'rev-list',
+      '--parents',
+      '-n',
+      '1',
+      baseline,
+    );
+    if (
+      tree ||
+      ancestry !== baseline ||
+      baseline !== environment.workspace.baseCommit
+    )
+      throw new Error(
+        'Initial repository requires the existing empty root baseline.',
+      );
+    const repositories = JSON.parse(
+      await runner(
+        'gh',
+        [
+          'repo',
+          'list',
+          'alex-coding-studio',
+          '--limit',
+          '1000',
+          '--json',
+          'name,isPrivate',
+        ],
+        { cwd: workspace, env: githubEnvironment },
+      ),
+    ) as Array<{ name: string; isPrivate: boolean }>;
+    const existingRepository = repositories.find(
+      (item) => item.name === projectName,
+    );
+    if (existingRepository && !existingRepository.isPrivate)
+      throw new Error('Initial project repository must be private.');
+    if (!existingRepository)
+      await runner('gh', ['repo', 'create', repository, '--private'], {
+        cwd: workspace,
+        env: githubEnvironment,
+      });
+    if (!remoteUrl)
+      await git(
+        runner,
+        workspace,
+        'remote',
+        'add',
+        'origin',
+        `https://github.com/${repository}.git`,
+      );
+  }
   const canPush = await runner(
     'gh',
     ['api', `repos/${repository}`, '--jq', '.permissions.push'],
@@ -336,14 +424,36 @@ export async function publishCardCandidate(
   );
   if (canPush !== 'true')
     throw new Error('GitHub push permission is unavailable.');
-  await git(
-    runner,
-    workspace,
-    'push',
-    '-u',
-    'origin',
-    `HEAD:refs/heads/${branch}`,
-  );
+  if (initialRepository) {
+    const remoteBaseline = await git(
+      runner,
+      workspace,
+      'ls-remote',
+      '--heads',
+      'origin',
+      `refs/heads/${defaultBranch}`,
+    );
+    if (!remoteBaseline)
+      await git(
+        runner,
+        workspace,
+        'push',
+        'origin',
+        `refs/heads/${defaultBranch}:refs/heads/${defaultBranch}`,
+      );
+    await runner(
+      'gh',
+      [
+        'api',
+        '--method',
+        'PATCH',
+        `repos/${repository}`,
+        '-F',
+        'delete_branch_on_merge=true',
+      ],
+      { cwd: workspace, env: githubEnvironment },
+    );
+  }
   const existing = JSON.parse(
     await runner(
       'gh',
@@ -373,6 +483,46 @@ export async function publishCardCandidate(
   if (!Array.isArray(existing) || existing.length > 1)
     throw new Error('Candidate branch has ambiguous pull request state.');
   let pr = existing[0];
+  if (pr && pr.state !== 'OPEN')
+    throw new Error('Candidate pull request is no longer open.');
+  if (
+    pr &&
+    !pr.isDraft &&
+    (request.draft || pr.headRefOid !== request.headSha)
+  ) {
+    await runner(
+      'gh',
+      ['pr', 'ready', String(pr.number), '--undo', '--repo', repository],
+      { cwd: workspace, env: githubEnvironment },
+    );
+    pr.isDraft = true;
+  }
+  await git(
+    runner,
+    workspace,
+    'push',
+    '-u',
+    'origin',
+    `HEAD:refs/heads/${branch}`,
+  );
+  if (pr) {
+    const refreshed = JSON.parse(
+      await runner(
+        'gh',
+        [
+          'pr',
+          'view',
+          String(pr.number),
+          '--repo',
+          repository,
+          '--json',
+          'number,url,state,isDraft,headRefOid',
+        ],
+        { cwd: workspace, env: githubEnvironment },
+      ),
+    ) as typeof pr;
+    pr = refreshed;
+  }
   if (!pr) {
     const temporaryDirectory = await mkdtemp(
       path.join(os.tmpdir(), 'praxis-pr-'),
@@ -386,7 +536,7 @@ export async function publishCardCandidate(
         '--repo',
         repository,
         '--base',
-        environment.repository.defaultBranch,
+        defaultBranch,
         '--head',
         branch,
         '--title',
@@ -394,7 +544,7 @@ export async function publishCardCandidate(
         '--body-file',
         bodyPath,
       ];
-      if (request.draft) arguments_.push('--draft');
+      arguments_.push('--draft');
       await runner('gh', arguments_, {
         cwd: workspace,
         env: githubEnvironment,
@@ -428,6 +578,14 @@ export async function publishCardCandidate(
   }
   if (pr.headRefOid !== request.headSha)
     throw new Error('Pull request HEAD does not match the candidate.');
+  if (!request.draft && pr.isDraft) {
+    await runner(
+      'gh',
+      ['pr', 'ready', String(pr.number), '--repo', repository],
+      { cwd: workspace, env: githubEnvironment },
+    );
+    pr.isDraft = false;
+  }
   return {
     version: 1,
     candidateId: candidateId(environment.environmentId, request.headSha),
