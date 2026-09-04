@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { execFileSync } from 'node:child_process';
+import { networkInterfaces } from 'node:os';
 
 function configuredOrigins(additional: string) {
   return JSON.parse(
@@ -21,8 +22,14 @@ function configuredOrigins(additional: string) {
   );
 }
 
-void test('both loopback hostnames can load interactive development assets by default', () => {
-  assert.deepEqual(configuredOrigins(''), ['localhost', '127.0.0.1']);
+void test('loopback and local network hosts can load interactive development assets by default', () => {
+  const origins = configuredOrigins('');
+  assert.ok(origins.includes('localhost'));
+  assert.ok(origins.includes('127.0.0.1'));
+  for (const addresses of Object.values(networkInterfaces()))
+    for (const address of addresses ?? [])
+      if (!address.internal && address.family === 'IPv4')
+        assert.ok(origins.includes(address.address));
 });
 
 void test('explicit remote development origins extend rather than replace local access', () => {
@@ -30,6 +37,6 @@ void test('explicit remote development origins extend rather than replace local 
     configuredOrigins(
       ' example.tailnet.test, 127.0.0.1, , example.tailnet.test ',
     ),
-    ['localhost', '127.0.0.1', 'example.tailnet.test'],
+    [...configuredOrigins(''), 'example.tailnet.test'],
   );
 });
