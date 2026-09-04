@@ -37,6 +37,7 @@ import { HostJobBroker } from '../lib/agents/host-job-broker.ts';
 import {
   compileResponsibilityInstructions,
   executionResponsibilityInstructions,
+  loadExecutionResponsibilities,
   resolveExecutionResponsibilities,
 } from '../lib/modules/implementation/execution-responsibilities.ts';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -427,6 +428,35 @@ void test('responsibility resolution defaults to general and keeps additions com
     () => parseCoordinationDecision(JSON.stringify(unavailableSkill), req),
     /unavailable Skill/,
   );
+});
+
+void test('responsibility definitions are discovered from library JSON files', async (t) => {
+  const library = await mkdtemp(path.join(os.tmpdir(), 'responsibilities-'));
+  t.after(() => rm(library, { recursive: true, force: true }));
+  await writeFile(
+    path.join(library, 'general.json'),
+    JSON.stringify({
+      id: 'general',
+      inherits: null,
+      assignment: 'General work.',
+      overrides: [],
+      rules: [{ id: 'base', instruction: 'Follow the packet.' }],
+    }),
+  );
+  await writeFile(
+    path.join(library, 'release.json'),
+    JSON.stringify({
+      id: 'release',
+      inherits: { id: 'general', path: './general.json' },
+      assignment: 'Release work.',
+      overrides: [],
+      rules: [{ id: 'release', instruction: 'Publish the release.' }],
+    }),
+  );
+  assert.deepEqual(Object.keys(loadExecutionResponsibilities(library)), [
+    'general',
+    'release',
+  ]);
 });
 
 void test('Coordinator changes a Worker assignment only after a responsibility gap', () => {
@@ -1678,6 +1708,32 @@ void test('a responsibility extension resumes its Worker and preserves fresh rep
   await f.run.completion;
   assert.deepEqual(f.workerResumes, [undefined, 'fixture', undefined]);
   assert.equal(f.workerCalls.length, 3);
+  assert.equal(
+    f.progress.filter(
+      (entry) =>
+        entry === 'qualify: Coordinator is preparing or assessing the Action.',
+    ).length,
+    1,
+  );
+  assert.equal(
+    f.progress.filter(
+      (entry) =>
+        entry === 'qualify: Worker needs attention; resuming the coordinator.',
+    ).length,
+    0,
+  );
+  assert.equal(
+    f.progress.filter(
+      (entry) =>
+        entry ===
+        'qualify: Worker completed with unresolved checks; resuming the coordinator.',
+    ).length,
+    1,
+  );
+  assert.equal(
+    f.progress.filter((entry) => entry.startsWith('extend:')).length,
+    0,
+  );
   const first = JSON.parse(
     await readFile(
       path.join(packetDir, 'Responsibilities/Responsibility-1.json'),

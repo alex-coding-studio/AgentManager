@@ -71,7 +71,8 @@ in the same provider session. A fresh or uncertain session reads it.
 Responsibility definitions are not copied into the packet. The Host creates
 `Responsibilities/Responsibility-N.json` pointer files in assignment order.
 Each pointer names one Coordinator-selected definition in the built-in
-`lib/responsibilities` library. A responsibility gap may append another pointer;
+`lib/responsibilities` library. JSON definitions in that directory are
+discovered automatically. A responsibility gap may append another pointer;
 existing pointers and library definitions are not rewritten. Responsibility
 assignment is internal and does not require user input. This extension resumes
 the same Worker session and does not consume repair. A repair is reserved for an
