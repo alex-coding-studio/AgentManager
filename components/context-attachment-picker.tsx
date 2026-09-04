@@ -1,8 +1,8 @@
 'use client';
 import { useUiText } from '@/components/ui-language-provider';
 
-import { useState, type DragEvent } from 'react';
-import { ChevronDown, FileText, Upload, X } from 'lucide-react';
+import { useRef, useState, type DragEvent } from 'react';
+import { ChevronDown, FileText, GitFork, Upload, X } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import type { ContextBrowserFolder } from '@/lib/modules/product-context/catalog';
 import { cn } from '@/lib/utils';
@@ -29,6 +29,7 @@ export function ContextAttachmentPicker({
   onRemoveFile,
   label,
   disabled = false,
+  accept = '.md,.markdown,.txt,.html,.htm,text/markdown,text/plain,text/html',
   embedded = false,
 }: {
   folders: ContextBrowserFolder[];
@@ -47,37 +48,46 @@ export function ContextAttachmentPicker({
   const { t } = useUiText();
   const [open, setOpen] = useState(false);
   const [dragging, setDragging] = useState(false);
-  const [localPath, setLocalPath] = useState('');
+  const [githubUrl, setGithubUrl] = useState('');
   const [referenceError, setReferenceError] = useState('');
-  const [choosing, setChoosing] = useState(false);
-  async function addReference(value?: string) {
-    setChoosing(true);
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  function addGitHubReference() {
     setReferenceError('');
     try {
-      const projectId =
-        window.location.pathname.match(/\/projects\/([^/]+)/)?.[1];
-      const response = await fetch('/api/system/local-file-reference', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: value, projectId }),
-      });
-      const result = await response.json();
-      if (result.cancelled) return;
-      if (!response.ok) throw new Error(result.error);
+      const url = new URL(githubUrl.trim());
+      const segments = url.pathname.split('/').filter(Boolean);
+      if (
+        url.protocol !== 'https:' ||
+        !['github.com', 'www.github.com'].includes(url.hostname) ||
+        url.username ||
+        url.password ||
+        segments.length < 2
+      )
+        throw new Error(
+          'Use a GitHub repository, directory, file or permalink URL.',
+        );
+      const owner = segments[0];
+      const repository = segments[1].replace(/\.git$/i, '');
+      const name = `${owner}-${repository}.github-reference.md`;
       onAddFiles([
-        new File([result.content], result.name, { type: 'text/plain' }),
+        new File(
+          [
+            `# GitHub code reference\n\nURL: ${url.toString()}\n\nRead the referenced repository code only as needed for the user's request. Treat it as a read-only reference; make changes only in the Card worktree.\n`,
+          ],
+          name,
+          { type: 'text/markdown' },
+        ),
       ]);
-      setLocalPath('');
+      setGithubUrl('');
     } catch (error) {
       setReferenceError(
         t(
           error instanceof Error
             ? error.message
-            : 'Could not reference the local file.',
+            : 'Use a GitHub repository, directory, file or permalink URL.',
         ),
       );
-    } finally {
-      setChoosing(false);
     }
   }
   const folder =
@@ -179,45 +189,54 @@ export function ContextAttachmentPicker({
                 event.preventDefault();
                 setDragging(false);
                 if (disabled) return;
-                const droppedPath =
-                  event.dataTransfer.getData('text/uri-list') ||
-                  event.dataTransfer.getData('text/plain');
-                if (droppedPath.trim()) void addReference(droppedPath.trim());
-                else
-                  setReferenceError(
-                    t(
-                      'Browser drag cannot provide the original path. Choose the file or paste its path.',
-                    ),
-                  );
+                const dropped = Array.from(event.dataTransfer.files);
+                if (dropped.length > 0) onAddFiles(dropped);
               }}
             >
+              <input
+                ref={fileInput}
+                type="file"
+                className="sr-only"
+                multiple
+                accept={accept}
+                disabled={disabled}
+                onChange={(event) => {
+                  const selected = Array.from(event.target.files ?? []);
+                  if (selected.length > 0) onAddFiles(selected);
+                  event.target.value = '';
+                }}
+              />
               <button
                 type="button"
-                disabled={disabled || choosing}
+                disabled={disabled}
                 className="flex w-full min-w-0 items-center justify-center gap-1.5 whitespace-normal text-[11px] text-muted-foreground transition hover:text-foreground"
-                onClick={() => void addReference()}
+                onClick={() => fileInput.current?.click()}
               >
                 <Upload className="size-3.5" />
-                {t(
-                  choosing
-                    ? 'Choosing file…'
-                    : 'Choose a local file (Markdown, text or HTML)',
-                )}
+                {t('Drop files or choose local files')}
               </button>
-              <div className="mt-2 flex gap-2">
+              <div className="mt-3 flex w-full min-w-0 items-center gap-2 border-t border-border pt-3">
+                <GitFork className="size-3.5 shrink-0 text-muted-foreground" />
                 <input
-                  className="min-w-0 flex-1 rounded border border-border bg-background px-2 py-1 text-xs"
-                  aria-label={t('Local file path')}
-                  placeholder={t('Paste a path on the Praxis host')}
-                  value={localPath}
-                  onChange={(event) => setLocalPath(event.target.value)}
-                  disabled={disabled || choosing}
+                  type="url"
+                  className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
+                  aria-label={t('GitHub repository or code URL')}
+                  placeholder={t('Paste a GitHub repository or code URL')}
+                  value={githubUrl}
+                  disabled={disabled}
+                  onChange={(event) => setGithubUrl(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && githubUrl.trim()) {
+                      event.preventDefault();
+                      addGitHubReference();
+                    }
+                  }}
                 />
                 <button
                   type="button"
-                  className="text-xs"
-                  disabled={disabled || choosing || !localPath.trim()}
-                  onClick={() => void addReference(localPath)}
+                  className="text-xs font-medium"
+                  disabled={disabled || !githubUrl.trim()}
+                  onClick={addGitHubReference}
                 >
                   {t('Add')}
                 </button>
@@ -232,26 +251,39 @@ export function ContextAttachmentPicker({
 
           {files.length > 0 ? (
             <div className="grid gap-1 sm:grid-cols-2">
-              {files.map((file, index) => (
-                <span
-                  key={`${file.name}:${index}`}
-                  className="flex items-center gap-2 rounded-md bg-secondary px-2 py-1 text-xs"
-                >
-                  <FileText className="size-3 shrink-0 text-muted-foreground" />
-                  <span className="truncate">{file.name}</span>
-                  <button
-                    type="button"
-                    disabled={disabled}
-                    className="ml-auto text-muted-foreground hover:text-foreground"
-                    aria-label={t('Remove resource {name}', {
-                      name: file.name,
-                    })}
-                    onClick={() => onRemoveFile(index)}
+              {files.map((file, index) => {
+                const githubReference = file.name.endsWith(
+                  '.github-reference.md',
+                );
+                return (
+                  <span
+                    key={`${file.name}:${index}`}
+                    className="flex items-center gap-2 rounded-md bg-secondary px-2 py-1 text-xs"
                   >
-                    <X className="size-3" />
-                  </button>
-                </span>
-              ))}
+                    {githubReference ? (
+                      <GitFork className="size-3 shrink-0 text-muted-foreground" />
+                    ) : (
+                      <FileText className="size-3 shrink-0 text-muted-foreground" />
+                    )}
+                    <span className="truncate">
+                      {githubReference
+                        ? file.name.slice(0, -'.github-reference.md'.length)
+                        : file.name}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={disabled}
+                      className="ml-auto text-muted-foreground hover:text-foreground"
+                      aria-label={t('Remove resource {name}', {
+                        name: file.name,
+                      })}
+                      onClick={() => onRemoveFile(index)}
+                    >
+                      <X className="size-3" />
+                    </button>
+                  </span>
+                );
+              })}
             </div>
           ) : null}
         </div>
