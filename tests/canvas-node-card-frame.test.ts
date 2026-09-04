@@ -970,9 +970,10 @@ void test('Just Do It separates the Task coordinator from the Action Composer', 
   assert.match(action, /<AgentGraphRunningCard/);
   assert.match(action, /coordination: \{ profile: coordinatorProfile \}/);
   assert.match(action, /createPortal/);
-  assert.match(action, /\{t\('Redo'\)\}/);
+  assert.match(action, /\{t\('Roll back'\)\}/);
   assert.match(action, /\{t\('Undo'\)\}/);
   assert.match(action, /\{t\('Pass'\)\}/);
+  assert.ok(action.indexOf("{t('Roll back')}") < action.indexOf("{t('Pass')}"));
   assert.ok(action.indexOf("{t('Undo')}") < action.indexOf("{t('Pass')}"));
   assert.match(action, /headerStatusTarget/);
   assert.match(action, /\{t\(currentStatus\)\}/);

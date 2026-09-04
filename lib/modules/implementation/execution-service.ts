@@ -1650,6 +1650,37 @@ export function createExecutionService(
     expectedRevision: number,
     confirmation?: string,
   ) {
+    return restartFromBase(
+      project,
+      cardId,
+      expectedRevision,
+      confirmation,
+      false,
+    );
+  }
+
+  async function reopenPlanFromBase(
+    project: Project,
+    cardId: string,
+    expectedRevision: number,
+    confirmation?: string,
+  ) {
+    return restartFromBase(
+      project,
+      cardId,
+      expectedRevision,
+      confirmation,
+      true,
+    );
+  }
+
+  async function restartFromBase(
+    project: Project,
+    cardId: string,
+    expectedRevision: number,
+    confirmation: string | undefined,
+    reopenPlan: boolean,
+  ) {
     assertCardUuid(cardId);
     if (active.has(project.rootPath))
       throw new PublicApiError(
@@ -1675,12 +1706,14 @@ export function createExecutionService(
       if (
         !workspace ||
         !last ||
-        card.execution!.acceptedActionIds.length ||
+        (!reopenPlan && card.execution!.acceptedActionIds.length > 0) ||
         card.run?.status === 'running' ||
         !['failed', 'canceled', 'succeeded'].includes(last.status)
       )
         throw new PublicApiError(
-          'Only unaccepted Cards with a completed Round can restart from their base.',
+          reopenPlan
+            ? 'Only Cards with a completed Round can return to planning.'
+            : 'Only unaccepted Cards with a completed Round can restart from their base.',
           400,
         );
       await verifyCardWorkspace(workspace);
@@ -1703,7 +1736,12 @@ export function createExecutionService(
       }
       const token = createHash('sha256')
         .update(
-          JSON.stringify({ revision: card.revision, workspace, snapshot }),
+          JSON.stringify({
+            revision: card.revision,
+            workspace,
+            snapshot,
+            reopenPlan,
+          }),
         )
         .digest('hex');
       const preview = {
@@ -1725,6 +1763,12 @@ export function createExecutionService(
           project,
           {
             ...card,
+            plan:
+              reopenPlan && card.plan
+                ? { ...card.plan, status: 'draft' as const }
+                : card.plan,
+            actions: reopenPlan ? [] : card.actions,
+            finalizedAt: reopenPlan ? null : card.finalizedAt,
             execution: {
               runs: [],
               profile: last.profile,
@@ -1741,7 +1785,9 @@ export function createExecutionService(
             stage: 'execution',
             actionId: null,
             event: 'rollback-confirmed',
-            text: `User restarted this Card from base ${workspace.baseCommit}. The confirmed Plan is preserved. No Actions are accepted or running. Active worktree: ${restarted.workspace.path}. Previous workspace and branch remain at ${restarted.backup.path}. GitHub and other external effects were not reverted. Next: wait for the user to start the first Action.`,
+            text: reopenPlan
+              ? `User returned this Card to planning from base ${workspace.baseCommit}. The previous Plan is now a draft, and no Actions are accepted or running. Active worktree: ${restarted.workspace.path}. Previous workspace and branch remain at ${restarted.backup.path}. GitHub and other external effects were not reverted. Next: wait for the user to revise or regenerate the Plan.`
+              : `User restarted this Card from base ${workspace.baseCommit}. The confirmed Plan is preserved. No Actions are accepted or running. Active worktree: ${restarted.workspace.path}. Previous workspace and branch remain at ${restarted.backup.path}. GitHub and other external effects were not reverted. Next: wait for the user to start the first Action.`,
             refs: [],
           },
         );
@@ -1946,6 +1992,7 @@ export function createExecutionService(
     refresh,
     refreshGitHub,
     resetWorkspace,
+    reopenPlanFromBase,
     undoAction,
     recheckOutput,
     overrideRequiredCheck,

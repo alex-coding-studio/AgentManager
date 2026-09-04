@@ -219,6 +219,11 @@ export const chineseUi: Record<string, string> = {
   'Main, GitHub repositories, PRs and installed apps are not reverted by this operation.':
     '此操作不会回退 main、GitHub 仓库、PR 或已安装应用。',
   'Back up and restart Card workspace': '备份并重建 Card 工作区',
+  'Roll back': '回退',
+  'Return to planning?': '回退到计划？',
+  'Back up the current workspace, restore the Card baseline, clear accepted Actions, and reopen the Plan.':
+    '备份当前工作区，恢复 Card 起点，清除已验收步骤，并重新打开计划。',
+  'Confirm roll back': '确认回退',
   'Working…': '处理中…',
   'Execution permissions': '执行权限',
   'full-access': '完全访问',
