@@ -50,6 +50,7 @@ import {
 import {
   checkpointWorkspace,
   includeInGitHistory,
+  includeInUndoBaseline,
   restoreCheckpoint,
 } from './git.ts';
 import { validateAgentProfile } from '../../agents/profile.ts';
@@ -203,9 +204,9 @@ async function readActionBaseline(
 
 function orderedFiles(snapshot: WorkspaceSnapshot) {
   return Object.fromEntries(
-    Object.entries(snapshot.files).sort(([left], [right]) =>
-      left.localeCompare(right),
-    ),
+    Object.entries(snapshot.files)
+      .filter(([file]) => includeInUndoBaseline(file))
+      .sort(([left], [right]) => left.localeCompare(right)),
   );
 }
 
@@ -233,6 +234,7 @@ async function restoreBaselineModes(
   files: Record<string, string>,
 ) {
   for (const [file, fingerprint] of Object.entries(files)) {
+    if (!includeInUndoBaseline(file)) continue;
     if (fingerprint.startsWith('link:')) continue;
     const match = fingerprint.match(/^(\d{1,3}):[0-9a-f]{64}$/);
     const mode = Number(match?.[1]);
@@ -1810,7 +1812,7 @@ export function createExecutionService(
         workspaceProject(project, workspace),
       );
       const preservedFiles = Object.keys(baseline.files).filter(
-        (file) => !includeInGitHistory(file),
+        (file) => includeInUndoBaseline(file) && !includeInGitHistory(file),
       );
       if (
         preservedFiles.some(

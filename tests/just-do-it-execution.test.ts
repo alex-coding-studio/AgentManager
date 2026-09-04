@@ -18,6 +18,7 @@ import { githubReader } from '../lib/github-delivery.ts';
 import {
   checkpointWorkspace,
   includeInGitHistory,
+  includeInUndoBaseline,
   readCheckpointDiff,
 } from '../lib/modules/implementation/git.ts';
 import { createExecutionService } from '../lib/modules/implementation/execution-service.ts';
@@ -734,6 +735,12 @@ void test('Git checkpoints preserve exact bytes and deletions without changing t
   );
   assert.equal(includeInGitHistory('.env.example'), true);
   assert.equal(includeInGitHistory('certificates/private.p12'), false);
+  assert.equal(
+    includeInUndoBaseline(
+      'App.xcodeproj/project.xcworkspace/xcuserdata/user.xcuserdatad/UserInterfaceState.xcuserstate',
+    ),
+    false,
+  );
 });
 
 void test('Git checkpoint rejects changed input bytes and linked history stores', async (t) => {

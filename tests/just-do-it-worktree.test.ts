@@ -482,6 +482,12 @@ void test('undo restores only the current Action to its clean baseline', async (
   await writeFile(path.join(firstWorkspace, 'between.txt'), 'before Action 2');
   await writeFile(path.join(firstWorkspace, 'private.txt'), 'private');
   await chmod(path.join(firstWorkspace, 'private.txt'), 0o600);
+  const userState = path.join(
+    firstWorkspace,
+    'App.xcodeproj/project.xcworkspace/xcuserdata/user.xcuserdatad/UserInterfaceState.xcuserstate',
+  );
+  await mkdir(path.dirname(userState), { recursive: true });
+  await writeFile(userState, 'volatile state');
   await f.service.start(f.project, {
     ...f.input,
     actionId: f.actions[1].id,
@@ -490,6 +496,7 @@ void test('undo restores only the current Action to its clean baseline', async (
   });
   await writeFile(path.join(firstWorkspace, 'app.txt'), 'broken second Action');
   await writeFile(path.join(firstWorkspace, 'between.txt'), 'broken Action 2');
+  await rm(userState);
   await writeFile(path.join(firstWorkspace, 'partial.txt'), 'remove me');
   f.calls[1].reject(new Error('Needs user input'));
   card = await f.settled();
@@ -528,6 +535,13 @@ void test('undo restores only the current Action to its clean baseline', async (
   assert.equal(
     (await lstat(path.join(cleanWorkspace, 'private.txt'))).mode & 0o777,
     0o600,
+  );
+  await assert.rejects(
+    () =>
+      readFile(
+        path.join(cleanWorkspace, path.relative(firstWorkspace, userState)),
+      ),
+    /ENOENT/,
   );
   await assert.rejects(
     () => readFile(path.join(cleanWorkspace, 'partial.txt')),

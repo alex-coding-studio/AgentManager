@@ -59,6 +59,7 @@ async function repository(
 
 export function includeInGitHistory(file: string) {
   const parts = file.split('/');
+  if (!includeInUndoBaseline(file)) return false;
   if (
     parts.some((part) =>
       ['.git', '.praxis', '.ssh', '.gnupg', '.DS_Store'].includes(part),
@@ -72,6 +73,12 @@ export function includeInGitHistory(file: string) {
   )
     return false;
   return !/\.(pem|p12|pfx|key|mobileprovision)$/i.test(name);
+}
+
+export function includeInUndoBaseline(file: string) {
+  const parts = file.split('/');
+  const name = parts.at(-1)!;
+  return !parts.includes('xcuserdata') && !/\.xcuserstate$/i.test(name);
 }
 
 function quotePath(file: string) {
