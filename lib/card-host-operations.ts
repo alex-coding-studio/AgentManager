@@ -433,7 +433,23 @@ export async function publishCardCandidate(
       'origin',
       `refs/heads/${defaultBranch}`,
     );
-    if (!remoteBaseline)
+    if (remoteBaseline) {
+      const baseline = await git(
+        runner,
+        workspace,
+        'rev-parse',
+        `refs/heads/${defaultBranch}`,
+      );
+      const [remoteSha, remoteRef, ...extra] = remoteBaseline.split(/\s+/);
+      if (
+        remoteSha !== baseline ||
+        remoteRef !== `refs/heads/${defaultBranch}` ||
+        extra.length
+      )
+        throw new Error(
+          'Initial remote baseline differs from the assigned empty baseline.',
+        );
+    } else
       await git(
         runner,
         workspace,

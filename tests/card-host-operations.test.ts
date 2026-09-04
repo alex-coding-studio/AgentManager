@@ -424,4 +424,12 @@ void test('initial publication creates a private remote and a Draft before Ready
   const create = calls.findIndex((call) => call.startsWith('pr create '));
   assert.ok(calls[create].includes('--draft'));
   assert.ok(calls.findIndex((call) => call.startsWith('pr ready ')) > create);
+  await assert.rejects(
+    publishCardCandidate(request, async (command, args, options) => {
+      if (command === 'git' && args.includes('ls-remote'))
+        return `${'a'.repeat(40)}\trefs/heads/main`;
+      return initialRunner(command, args, options);
+    }),
+    /remote baseline differs/,
+  );
 });
