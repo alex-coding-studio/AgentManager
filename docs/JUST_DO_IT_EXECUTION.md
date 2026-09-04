@@ -45,6 +45,37 @@ delivery repository. See [Git checkpoints](#git-checkpoints) below.
 - There is one active execution per project in this local server. Revisions reject
   conflicting updates; interrupted workers become failed without automatic retry.
 
+## Coordinator and Worker boundary
+
+The Coordinator first forms a concise, high-level understanding from the packet
+summary and hard requirements. It reads the finalized Action, checklist, Host
+Environment Manifest and only the applicable `SKILL.md` entrypoint, prepares at
+least one Worker responsibility, delivers the smallest sufficient assignment,
+and suspends until the Host supplies a Worker result. Skill references stay out
+of Coordinator context.
+
+The Worker performs that packet under every assigned responsibility. It cannot choose,
+remove or reinterpret its roles. It reports success, the original error, or the
+exact missing input, capability or permission to the Coordinator and does not
+arrange follow-on work. It reads the assigned `SKILL.md` once, then follows only
+the references that Skill or the assignment requires.
+
+If a Worker reports that its assigned roles cannot complete part of the packet,
+the Coordinator reassesses that gap after receiving the result. A repair may
+replace a responsibility or append another specialized responsibility while the finalized
+packet, checklist and acceptance criteria remain unchanged. The Worker never
+expands its own role.
+
+`general` is the default base responsibility and owns packet authority, reporting and
+evidence boundaries, including the default ban on inspecting black-box script
+implementations. `mechanical` inherits it and adds black-box tool rules.
+`ios-development` inherits it and adds iOS TDD, meaningful unit-test requirements,
+and the rule that unit tests prove only unit behavior. Responsibilities compose, so one
+Worker may receive both specialized responsibilities while inheriting `general` once. UI
+and visual acceptance stay in the separate Review flow. A specialized responsibility
+may explicitly override one named general rule without dropping the rest; a future
+script-maintenance responsibility can therefore allow source inspection only for that role.
+
 ## Evidence and limitations
 
 Before/after workspace snapshots identify changed files, symlink targets,

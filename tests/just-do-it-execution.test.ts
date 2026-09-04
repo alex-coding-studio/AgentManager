@@ -456,7 +456,7 @@ void test('coding output persists, feedback creates another round, and only user
       item.description.startsWith('Accepted Action'),
     ),
   );
-  assert.match(calls[2].request.context.handoffMarkdown, /compact display/);
+  assert.equal(calls[2].request.context.handoffMarkdown, '');
   calls[2].reject(new Error('Stop fixture'));
   await settled(store, project);
 });
@@ -1641,6 +1641,7 @@ void test('new executions always coordinate, persist role traces, and carry cont
         contextRevision: req.task.context.contextRevision,
         checklistVersion: req.task.context.acceptanceChecklist.version,
         decision: dispatch ? 'dispatch' : 'ready',
+        executionProfiles: ['general'],
         summary: 'Verified fixture output',
         instructions: dispatch ? 'Write module.txt with ready.' : '',
         verificationPlan: [
@@ -1888,6 +1889,7 @@ void test('coordinated app verification limitations retain diagnostics without f
           contextRevision: req.task.context.contextRevision,
           checklistVersion: req.task.context.acceptanceChecklist.version,
           decision: 'ready',
+          executionProfiles: ['general'],
           summary: 'Existing simulator delivery meets required checks',
           instructions: '',
           verificationPlan: [

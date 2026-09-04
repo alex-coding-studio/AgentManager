@@ -166,6 +166,10 @@ void test('four stages prepare bounded role-specific prompts without invoking a 
     assert.match(prompt, /skills\/local-review\/SKILL.md/);
     assert.equal(parse(response(req), req, 0, [artifact]).stage, stage);
   }
+  const req = request('execution');
+  const compact = buildCardHarnessPrompt(req, { includeHandoff: false });
+  assert.ok(compact.includes(req.inputFingerprint));
+  assert.doesNotMatch(compact, /Plan not finalized/);
 });
 
 void test('stage Harnesses keep their near-neighbor responsibilities separate', () => {

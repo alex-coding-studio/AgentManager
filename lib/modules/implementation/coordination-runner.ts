@@ -35,6 +35,7 @@ import type {
   HostTool,
   HostToolContinuation,
 } from '../../agents/runtime-driver.ts';
+import { executionResponsibilityInstructions } from './execution-responsibilities.ts';
 import {
   allowedDecisionsAfter,
   classifyWorkerSettlement,
@@ -324,7 +325,7 @@ export function startCoordinatedExecution(input: {
     }
   }
   const workerPromptFor = (decision: CoordinationDecision) =>
-    `${input.workerOptions.prompt}\n\nCOORDINATOR ASSIGNMENT (current Action only):\n${JSON.stringify({ environment: input.environment, instructions: decision.instructions, repairAssessment: decision.repairAssessment, verificationPlan: decision.verificationPlan, priorEvidence: input.priorEvidence.filter((item) => decision.verificationPlan.some((plan) => plan.evidenceIds.includes(item.id))) })}\nPerform only this delta. Treat the Environment Manifest as Host-verified and do not rediscover its Git/worktree/role facts unless the workspace reports a concrete contradiction. Do not spawn or launch other Agents, including through shell commands. Return additional work to the host coordinator. Reuse only the referenced applicable evidence, label it as reused, and do not claim its commands ran again. Report all frozen criteria honestly. Keep fixed user/permission/PR boundaries. Return the original required execution JSON.`;
+    `${input.workerOptions.prompt}\n\nCOORDINATOR ASSIGNMENT (current Action only):\n${JSON.stringify({ responsibilities: decision.responsibilities, responsibilityInstructions: executionResponsibilityInstructions(decision.responsibilities), environment: input.environment, instructions: decision.instructions, repairAssessment: decision.repairAssessment, verificationPlan: decision.verificationPlan, priorEvidence: input.priorEvidence.filter((item) => decision.verificationPlan.some((plan) => plan.evidenceIds.includes(item.id))) })}\nThe Coordinator-assigned responsibilities, responsibilityInstructions and packet are hard requirements and supersede conflicting generic execution guidance. Apply all assigned responsibilities together. Do not choose, remove or change your roles or reopen the task plan. Read the assigned SKILL.md once, then read only the references that Skill or the assignment requires. Do not read unrelated Skills, broad Memory or old logs. Perform only this packet and return its result. Do not coordinate other roles, expand the task, or plan follow-on work. Treat the Environment Manifest as Host-verified and do not rediscover its Git/worktree/role facts unless the workspace reports a concrete contradiction. When information, capability, permission or another action is missing, report exactly what is needed and stop. Do not spawn or launch other Agents, including through shell commands. Reuse only the referenced applicable evidence, label it as reused, and do not claim its commands ran again. Report all frozen criteria honestly. Keep fixed user/permission/PR boundaries. Return the original required execution JSON.`;
   const parseWorkerReport = (raw: string): ExecutionReport => {
     let candidate: unknown;
     try {
