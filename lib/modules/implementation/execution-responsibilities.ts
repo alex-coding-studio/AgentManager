@@ -1,14 +1,19 @@
-import rawDefinitions from './execution-responsibilities.json' with { type: 'json' };
+import path from 'node:path';
+import general from '../../responsibilities/general.json' with { type: 'json' };
+import mechanical from '../../responsibilities/mechanical.json' with { type: 'json' };
+import iosDevelopment from '../../responsibilities/ios-development.json' with { type: 'json' };
 
 export type ResponsibilityRule = { id: string; instruction: string };
 export type ResponsibilityDefinition = {
-  inherits: 'general' | null;
+  id?: string;
+  inherits: { id: string; path: string } | string | null;
   assignment: string;
   overrides: string[];
   rules: ResponsibilityRule[];
 };
 
-export type ExecutionResponsibility = keyof typeof rawDefinitions;
+const sourceDefinitions = [general, mechanical, iosDevelopment] as const;
+export type ExecutionResponsibility = (typeof sourceDefinitions)[number]['id'];
 
 function assertDefinitions(
   value: unknown,
@@ -26,7 +31,11 @@ function assertDefinitions(
     if (
       (id === 'general'
         ? definition.inherits !== null
-        : definition.inherits !== 'general') ||
+        : !definition.inherits ||
+          typeof definition.inherits !== 'object' ||
+          definition.inherits.id !== 'general' ||
+          definition.inherits.path !== './general.json') ||
+      definition.id !== id ||
       typeof definition.assignment !== 'string' ||
       !definition.assignment.trim() ||
       !Array.isArray(definition.overrides) ||
@@ -64,14 +73,27 @@ function assertDefinitions(
   }
 }
 
-assertDefinitions(rawDefinitions);
-const definitions = rawDefinitions;
+const definitions = Object.fromEntries(
+  sourceDefinitions.map((definition) => [definition.id, definition]),
+) as Record<ExecutionResponsibility, ResponsibilityDefinition>;
+assertDefinitions(definitions);
+
+export const EXECUTION_RESPONSIBILITY_LIBRARY = path.join(
+  process.cwd(),
+  'lib/responsibilities',
+);
 
 export const EXECUTION_RESPONSIBILITY_IDS = Object.freeze(
   Object.keys(definitions) as ExecutionResponsibility[],
 );
 
 export const EXECUTION_RESPONSIBILITY_SELECTION = `Assign responsibilities from the Worker task. General is the inherited default. ${EXECUTION_RESPONSIBILITY_IDS.map((id) => `${id}: ${definitions[id].assignment}`).join(' ')} Responsibilities compose when one packet needs multiple boundaries. Return general alone for ordinary work; do not return general beside a specialized responsibility. The Coordinator selects responsibilities; the Worker must not choose or change them.`;
+
+export function executionResponsibilitySource(
+  responsibility: ExecutionResponsibility,
+) {
+  return path.join(EXECUTION_RESPONSIBILITY_LIBRARY, `${responsibility}.json`);
+}
 
 export function resolveExecutionResponsibilities(
   value: unknown,

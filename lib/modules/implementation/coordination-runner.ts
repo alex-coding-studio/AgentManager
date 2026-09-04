@@ -38,6 +38,10 @@ import type {
 import { readCodexSkills, type SkillCatalog } from '../../agents/skills.ts';
 import { executionResponsibilityInstructions } from './execution-responsibilities.ts';
 import {
+  runDeliveryPacketScript,
+  workerPacketPrompt,
+} from './delivery-packet.ts';
+import {
   allowedDecisionsAfter,
   classifyWorkerSettlement,
   coordinatorThreadInstructions,
@@ -176,6 +180,8 @@ export function startCoordinatedExecution(input: {
   workerTransport?: typeof startLocalAgentRun;
   limits?: typeof coordinationLimits;
   environment?: CardEnvironmentManifest;
+  packetDir?: string;
+  runtimeInstructions?: string;
   resumeWorkerSessionId?: string;
   coordinatorSession?: (
     input: CoordinatorSessionInput,
@@ -227,17 +233,23 @@ export function startCoordinatedExecution(input: {
     });
   async function call(
     role: 'coordinator' | 'worker',
-    phase: 'prepare' | 'execute' | 'qualify' | 'repair',
+    phase: 'prepare' | 'execute' | 'qualify' | 'extend' | 'repair',
     prompt: string,
     allowedSkillPaths?: string[],
   ) {
     assertActive();
     if (Buffer.byteLength(prompt) > 1500000)
       throw new Error('Agent prompt exceeds the bounded dispatch size.');
+    const previousWorkerSession = trace.attempts.findLast(
+      (item) => item.role === 'worker' && item.sessionId,
+    )?.sessionId;
     const resumeWorkerSession =
-      role === 'worker' &&
-      !trace.attempts.some((item) => item.role === 'worker')
-        ? input.resumeWorkerSessionId
+      role === 'worker'
+        ? phase === 'extend'
+          ? (previousWorkerSession ?? undefined)
+          : phase === 'execute'
+            ? input.resumeWorkerSessionId
+            : undefined
         : undefined;
     if (
       trace.attempts.length >= limits.maxAgentCalls ||
@@ -336,10 +348,22 @@ export function startCoordinatedExecution(input: {
       child = undefined;
     }
   }
-  const workerPromptFor = (decision: CoordinationDecision) => {
+  const workerPromptFor = async (decision: CoordinationDecision) => {
     const selectedSkills = availableSkills.filter((skill) =>
       decision.skillPaths.includes(skill.path),
     );
+    if (input.packetDir) {
+      const packet = await runDeliveryPacketScript({
+        packetDir: input.packetDir,
+        request: input.request,
+        decision,
+        environment: input.environment,
+        selectedSkills,
+        priorEvidence: input.priorEvidence,
+        runtimeInstructions: input.runtimeInstructions ?? '',
+      });
+      return workerPacketPrompt(packet.manifestPath);
+    }
     return `${input.workerOptions.prompt}
 
 COORDINATOR ASSIGNMENT (current Action only):
@@ -456,22 +480,32 @@ The Coordinator-assigned responsibilities, responsibilityInstructions, Skills an
     const dispatch = async (
       decision: CoordinationDecision,
     ): Promise<HostToolContinuation> => {
-      if (decision.decision !== 'dispatch' && decision.decision !== 'repair')
+      if (
+        decision.decision !== 'dispatch' &&
+        decision.decision !== 'extend' &&
+        decision.decision !== 'repair'
+      )
         throw new Error(
-          'dispatch_worker accepts only dispatch or repair decisions.',
+          'dispatch_worker accepts only dispatch, extend or repair decisions.',
         );
-      const phase = decision.decision === 'repair' ? 'repair' : 'execute';
+      const phase =
+        decision.decision === 'repair'
+          ? 'repair'
+          : decision.decision === 'extend'
+            ? 'extend'
+            : 'execute';
       if (phase === 'repair') {
         if (repairs < 1)
           throw new Error('Coordinator repair budget exhausted.');
         repairs--;
       }
       let settlement: WorkerSettlement;
+      const workerPrompt = await workerPromptFor(decision);
       try {
         lastWorker = await call(
           'worker',
           phase,
-          workerPromptFor(decision),
+          workerPrompt,
           decision.skillPaths,
         );
         lastWorkerReport = parseWorkerReport(lastWorker.finalOutput);
@@ -669,7 +703,11 @@ The Coordinator-assigned responsibilities, responsibilityInstructions, Skills an
       assertActive();
       if (delivered) return delivered;
       const decision = parseCoordinationDecision(response.finalOutput, req);
-      if (decision.decision === 'dispatch' || decision.decision === 'repair') {
+      if (
+        decision.decision === 'dispatch' ||
+        decision.decision === 'extend' ||
+        decision.decision === 'repair'
+      ) {
         recordDecision(decision);
         const continuation = await dispatch(decision);
         if ('finalOutput' in continuation) return delivered!;
@@ -708,9 +746,18 @@ The Coordinator-assigned responsibilities, responsibilityInstructions, Skills an
         trace.decisions.push(decision);
         trace.attempts.at(-1)!.summary = decision.summary;
         trace.contextSummary = decision.contextSummary;
-        if (decision.decision !== 'dispatch' && decision.decision !== 'repair')
+        if (
+          decision.decision !== 'dispatch' &&
+          decision.decision !== 'extend' &&
+          decision.decision !== 'repair'
+        )
           break;
-        const phase = decision.decision === 'repair' ? 'repair' : 'execute';
+        const phase =
+          decision.decision === 'repair'
+            ? 'repair'
+            : decision.decision === 'extend'
+              ? 'extend'
+              : 'execute';
         if (phase === 'repair') {
           if (repairs < 1)
             throw new Error('Coordinator repair budget exhausted.');
@@ -719,7 +766,7 @@ The Coordinator-assigned responsibilities, responsibilityInstructions, Skills an
         lastWorker = await call(
           'worker',
           phase,
-          workerPromptFor(decision),
+          await workerPromptFor(decision),
           decision.skillPaths,
         );
         lastWorkerReport = parseWorkerReport(lastWorker.finalOutput);

@@ -1,4 +1,4 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
   buildPacketManifest,
@@ -13,7 +13,11 @@ const input = await requestInput<Request>();
 if (!input?.packetDir)
   throw new Error('A packetDir is required to write the manifest.');
 const manifestPath = path.join(input.packetDir, PACKET_SPEC.manifestFile);
-await writeFile(manifestPath, buildPacketManifest(input), 'utf8');
+await writeFile(
+  manifestPath,
+  buildPacketManifest(input, PACKET_SPEC, await readdir(input.packetDir)),
+  'utf8',
+);
 process.stdout.write(
   `${JSON.stringify({
     manifestPath,

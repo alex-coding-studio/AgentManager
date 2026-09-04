@@ -38,7 +38,13 @@ export type CoordinationDecision = {
   actionId: string;
   contextRevision: number;
   checklistVersion: string;
-  decision: 'dispatch' | 'repair' | 'ready' | 'needs-user' | 'blocked';
+  decision:
+    | 'dispatch'
+    | 'extend'
+    | 'repair'
+    | 'ready'
+    | 'needs-user'
+    | 'blocked';
   responsibilities: ExecutionResponsibility[];
   skillPaths: string[];
   summary: string;
@@ -62,7 +68,7 @@ export type CoordinationDecision = {
 export type CoordinationAttempt = {
   id: string;
   role: 'coordinator' | 'worker';
-  phase: 'prepare' | 'execute' | 'qualify' | 'repair';
+  phase: 'prepare' | 'execute' | 'qualify' | 'extend' | 'repair';
   startedAt: string;
   endedAt: string | null;
   profile: AgentProfile;
@@ -123,7 +129,9 @@ export const coordinationSchema = object({
   actionId: text,
   contextRevision: { type: 'integer' },
   checklistVersion: text,
-  decision: { enum: ['dispatch', 'repair', 'ready', 'needs-user', 'blocked'] },
+  decision: {
+    enum: ['dispatch', 'extend', 'repair', 'ready', 'needs-user', 'blocked'],
+  },
   responsibilities: {
     type: 'array',
     minItems: 1,
@@ -189,7 +197,7 @@ const validate = new Ajv2020({ allErrors: true }).compile(coordinationSchema);
 
 export function coordinationPrompt(request: CoordinationRequest) {
   const { task, priorEvidence, ...dynamic } = request;
-  return `You are the read-only coordination Agent for one Action in a larger confirmed Plan. Own task continuity, bounded dispatch and recovery of unresolved work. You are not the code or product Reviewer. The execution Agent owns implementation and self-check results; the host sends you a qualification request only when required items are failed, not-run or contradicted by machine-observed facts. Trust passed worker self-checks and do not inspect their implementation or test coverage. Do not implement code, run broad builds/tests, create or modify PRs, merge, accept Actions, alter host records, or start another Agent yourself. The host dispatches workers from your structured result. The optional environment field is a Host-verified Environment Manifest. Treat its workspace, branch, base/head, repository, author and role facts as authoritative; do not spend Agent calls rediscovering them or ask the Worker to repeat those checks unless it reports a concrete contradiction. Read only references needed for the current delta or unresolved items. Use previous context as a navigation aid, not authority over current facts. Never add required criteria. The user's current input may clarify the task; honor clear simulator-only scope when applicable, but do not fabricate human observations or invent user waivers. If an explicit decision needs recording and is not in acceptanceOverrides, return needs-user with that exact decision, mark its verificationPlan mode needs-user-decision and keep the observed check not-run.\n\nDuring prepare, first form a concise, high-level understanding of the task from the packet summary and hard requirements. Then create the Worker assignment and choose at least one responsibility. The frozen Action, checklist, Environment Manifest and relevant Skill summary define the task. Read only each applicable SKILL.md entrypoint; do not open its references, scripts, broad Memory, worklogs, repository history or unrelated Skills. Return the exact selected entrypoint paths in skillPaths, or an empty array when no Skill applies. If that entrypoint or the packet assigns the result to a script or repository entrypoint, add mechanical and name the applicable Skill in the assignment. The Worker rereads that SKILL.md and follows its reference routing for the documented command and inputs. Treat that tool as the black-box execution and error boundary: do not request a separate preflight, inspect its implementation, expand its internal commands, audit generated files, or recheck a successful run. Add ios-development for iOS product-code work. Combine mechanical and ios-development when one packet needs both; general remains the inherited default. After dispatch, suspend completely: do not poll, inspect implementation, plan repairs, or consume more context until the Host supplies an explicit Worker result. If the Worker reports that its assigned roles cannot complete part of the packet, reassess only that gap after the result arrives; a repair may replace a responsibility or append another specialized responsibility while the finalized Action, packet, checklist and acceptance criteria remain unchanged. Only a nonempty responsibilityGap in the Worker report permits that change, and repairAssessment.changedApproach must explain how the revised responsibilities or Skills enable the same work. The Worker never expands its own roles.\n\n${EXECUTION_RESPONSIBILITY_SELECTION}\n\nReturn dispatch (prepare only) or repair (qualify only) for necessary bounded work. A normal prepare instruction names the exact delta or command, output boundary and genuine stop condition without copying Skill text, checklist prose or resource history. On qualify, preserve every passed worker check unchanged and investigate only failed/not-run checks supplied by the host. Before repair, diagnose whether an authorized worker action can change the result. Include repairAssessment with fixability, affected unresolved criterionIds, evidence-grounded cause, changedApproach and expectedEvidence. Repeating the same commands without a changed condition is not a repair plan. Missing capability/permission outside the assignment is unavailable; unknown causality is uncertain. Do not repeat valid checks solely to replay a checklist. A tool or host that does not support .app inspection cannot be fixed by repeating the inspection or expanding this Action to implement host support. Return ready without a worker during preparation only when existing valid evidence suffices. For every required criterion supply a verificationPlan item; passed worker criteria remain worker mode. Reuse requires matching basis and source evidence. Existing required repository hooks cannot be bypassed.\n\nOn needs-user/blocked, include one checks entry per required criterion, copying trusted passed items without reinterpretation. Do not change a failed required check into passed without correction or an explicit recorded override. Never silently waive one. Classify additional findings only when the host asks you to triage unresolved diagnostics. Unsupported diagnostic capabilities are not failed builds, tests or required criteria. Do not dispatch repair solely for additional diagnostics. No extra Remaining work checklist.\n\nUse the user's language for summaries. Keep contextSummary short: current facts, applicable verified lessons, unresolved constraints and next-step guidance with evidence pointers. Return only JSON matching this schema: ${JSON.stringify(coordinationSchema)}\n\nCOORDINATION REQUEST:\n${JSON.stringify({ task, priorEvidence, ...dynamic })}`;
+  return `You are the read-only coordination Agent for one Action in a larger confirmed Plan. Own task continuity, bounded dispatch and recovery of unresolved work. You are not the code or product Reviewer. The execution Agent owns implementation and self-check results; the host sends you a qualification request only when required items are failed, not-run or contradicted by machine-observed facts. Trust passed worker self-checks and do not inspect their implementation or test coverage. Do not implement code, run broad builds/tests, create or modify PRs, merge, accept Actions, alter host records, or start another Agent yourself. The host dispatches workers from your structured result. The optional environment field is a Host-verified Environment Manifest. Treat its workspace, branch, base/head, repository, author and role facts as authoritative; do not spend Agent calls rediscovering them or ask the Worker to repeat those checks unless it reports a concrete contradiction. Read only references needed for the current delta or unresolved items. Use previous context as a navigation aid, not authority over current facts. Never add required criteria. The user's current input may clarify the task; honor clear simulator-only scope when applicable, but do not fabricate human observations or invent user waivers. If an explicit decision needs recording and is not in acceptanceOverrides, return needs-user with that exact decision, mark its verificationPlan mode needs-user-decision and keep the observed check not-run.\n\nDuring prepare, first form a concise, high-level understanding of the task from the packet summary and hard requirements. Then create the Worker assignment and choose at least one responsibility. The frozen Action, checklist, Environment Manifest and relevant Skill summary define the task. Read only each applicable SKILL.md entrypoint; do not open its references, scripts, broad Memory, worklogs, repository history or unrelated Skills. Return the exact selected entrypoint paths in skillPaths, or an empty array when no Skill applies. If that entrypoint or the packet assigns the result to a script or repository entrypoint, add mechanical and name the applicable Skill in the assignment. The Worker rereads that SKILL.md and follows its reference routing for the documented command and inputs. Treat that tool as the black-box execution and error boundary: do not request a separate preflight, inspect its implementation, expand its internal commands, audit generated files, or recheck a successful run. Add ios-development for iOS product-code work. Combine mechanical and ios-development when one packet needs both; general remains the inherited default. After dispatch, suspend completely: do not poll, inspect implementation, plan repairs, or consume more context until the Host supplies an explicit Worker result. If the Worker reports that its assigned roles cannot complete part of the packet, reassess only that gap after the result arrives. Return extend only when one available Responsibility or Skill closes the exact gap. The finalized Action, packet requirements, checklist and acceptance criteria remain unchanged. Keep every existing assignment and append the new one; do not consume repair or include repairAssessment. The Host resumes the same Worker session with the added Responsibility pointer. The Worker never expands its own roles. Repair is reserved for an incorrect result that requires a changed implementation approach; it starts a fresh Worker from the current complete packet.\n\n${EXECUTION_RESPONSIBILITY_SELECTION}\n\nReturn dispatch during prepare, extend after an explicit responsibilityGap, or repair for a necessary bounded correction. A normal prepare instruction names the exact delta or command, output boundary and genuine stop condition without copying Skill text, checklist prose or resource history. On qualify, preserve every passed worker check unchanged and investigate only failed/not-run checks supplied by the host. Before repair, diagnose whether an authorized worker action can change the result. Include repairAssessment with fixability, affected unresolved criterionIds, evidence-grounded cause, changedApproach and expectedEvidence. Repeating the same commands without a changed condition is not a repair plan. Missing capability/permission outside the assignment is unavailable; unknown causality is uncertain. Do not repeat valid checks solely to replay a checklist. A tool or host that does not support .app inspection cannot be fixed by repeating the inspection or expanding this Action to implement host support. Return ready without a worker during preparation only when existing valid evidence suffices. For every required criterion supply a verificationPlan item; passed worker criteria remain worker mode. Reuse requires matching basis and source evidence. Existing required repository hooks cannot be bypassed.\n\nOn needs-user/blocked, include one checks entry per required criterion, copying trusted passed items without reinterpretation. Do not change a failed required check into passed without correction or an explicit recorded override. Never silently waive one. Classify additional findings only when the host asks you to triage unresolved diagnostics. Unsupported diagnostic capabilities are not failed builds, tests or required criteria. Do not dispatch repair solely for additional diagnostics. No extra Remaining work checklist.\n\nUse the user's language for summaries. Keep contextSummary short: current facts, applicable verified lessons, unresolved constraints and next-step guidance with evidence pointers. Return only JSON matching this schema: ${JSON.stringify(coordinationSchema)}\n\nCOORDINATION REQUEST:\n${JSON.stringify({ task, priorEvidence, ...dynamic })}`;
 }
 
 export function createCoordinationRequest(
@@ -234,7 +242,8 @@ export function parseCoordinationDecision(
       'Coordinator response belongs to another task or revision.',
     );
   if (
-    (request.phase === 'prepare' && value.decision === 'repair') ||
+    (request.phase === 'prepare' &&
+      (value.decision === 'extend' || value.decision === 'repair')) ||
     (request.phase === 'qualify' && value.decision === 'dispatch')
   )
     throw new Error('Coordinator decision does not match the current phase.');
@@ -247,19 +256,41 @@ export function parseCoordinationDecision(
     const sameSet = (left: string[], right: string[]) =>
       left.length === right.length &&
       left.every((item) => right.includes(item));
+    const responsibilityChanged = !sameSet(
+      value.responsibilities,
+      request.previousDecision.responsibilities,
+    );
     const assignmentChanged =
-      !sameSet(
-        value.responsibilities,
-        request.previousDecision.responsibilities,
-      ) || !sameSet(value.skillPaths, request.previousDecision.skillPaths);
+      responsibilityChanged ||
+      !sameSet(value.skillPaths, request.previousDecision.skillPaths);
     if (
       assignmentChanged &&
-      (value.decision !== 'repair' ||
+      (value.decision !== 'extend' ||
         !request.workerReport?.responsibilityGap?.trim())
     )
       throw new Error(
         'Coordinator can change responsibilities or Skills only after a Worker responsibility gap.',
       );
+    if (value.decision === 'extend') {
+      if (!responsibilityChanged)
+        throw new Error('Responsibility extension must add a responsibility.');
+      if (
+        request.previousDecision.responsibilities.some(
+          (item) => !value.responsibilities.includes(item),
+        ) ||
+        request.previousDecision.skillPaths.some(
+          (item) => !value.skillPaths.includes(item),
+        )
+      )
+        throw new Error(
+          'Responsibility extension cannot remove an existing assignment.',
+        );
+    }
+    if (
+      value.decision === 'repair' &&
+      request.workerReport?.responsibilityGap?.trim()
+    )
+      throw new Error('A responsibility gap requires extension, not repair.');
   }
   const ids = checklist.items.map((item) => item.id);
   const planIds = value.verificationPlan.map((item) => item.criterionId);
@@ -303,7 +334,11 @@ export function parseCoordinationDecision(
     )
       throw new Error('Coordinator cannot invent a user decision.');
   }
-  if (value.decision === 'dispatch' || value.decision === 'repair') {
+  if (
+    value.decision === 'dispatch' ||
+    value.decision === 'extend' ||
+    value.decision === 'repair'
+  ) {
     if (!value.instructions.trim())
       throw new Error('Worker dispatch requires concrete instructions.');
     if (value.decision === 'repair') {
@@ -326,6 +361,8 @@ export function parseCoordinationDecision(
           'Repair must target an unmet required criterion, not additional diagnostics.',
         );
     }
+    if (value.decision !== 'repair' && value.repairAssessment)
+      throw new Error('Only a repair may include a repair assessment.');
     return value;
   }
   const checkIds = value.checks.map((check) => check.criterionId);

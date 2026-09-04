@@ -22,7 +22,7 @@ export const dispatchWorkerToolName = 'dispatch_worker';
 export const dispatchWorkerTool = {
   name: dispatchWorkerToolName,
   description:
-    'Dispatch one bounded worker assignment through the Host. Pass your complete JSON coordination decision (decision dispatch or repair) as the decision argument. The Host validates it, starts the worker, suspends this coordination turn and resumes this same thread with a WORKER_COMPLETED, WORKER_ATTENTION_REQUIRED or WORKER_FAILED event once the worker settles. Never poll, wait or start another agent yourself.',
+    'Dispatch or continue one bounded worker assignment through the Host. Pass your complete JSON coordination decision (decision dispatch, extend or repair) as the decision argument. The Host validates it, starts or resumes the worker, suspends this coordination turn and resumes this same thread with a WORKER_COMPLETED, WORKER_ATTENTION_REQUIRED or WORKER_FAILED event once the worker settles. Never poll, wait or start another agent yourself.',
   inputSchema: {
     type: 'object',
     additionalProperties: false,
@@ -31,7 +31,7 @@ export const dispatchWorkerTool = {
   },
 };
 export const coordinatorThreadInstructions =
-  'You are the read-only coordination Agent for one Action. When your decision is dispatch or repair, call the Host dispatch_worker tool with the complete JSON decision instead of returning it; the Host suspends this turn and resumes this thread when the worker settles. Return the JSON decision directly only for ready, needs-user or blocked. Do not create, delegate to, poll or wait for other agents yourself.';
+  'You are the read-only coordination Agent for one Action. When your decision is dispatch, extend or repair, call the Host dispatch_worker tool with the complete JSON decision instead of returning it; the Host suspends this turn and resumes this thread when the worker settles. Return the JSON decision directly only for ready, needs-user or blocked. Do not create, delegate to, poll or wait for other agents yourself.';
 
 export function classifyWorkerSettlement(
   report: ExecutionReport,
@@ -61,6 +61,8 @@ export function allowedDecisionsAfter(
     'blocked',
   ];
   if (settlement.kind === 'failed') return ['needs-user', 'blocked'];
+  if (settlement.report.responsibilityGap?.trim())
+    return ['extend', ...terminal];
   return repairsRemaining > 0 ? ['repair', ...terminal] : terminal;
 }
 
@@ -75,7 +77,9 @@ export function workerSettlementPrompt(
     settlement.kind === 'failed'
       ? `The worker did not return a valid execution report: ${settlement.reason}. The Host performs no automatic full-task replay. Return needs-user or blocked with one checks entry per required criterion, marking unverified items not-run.`
       : settlement.kind === 'attention-required'
-        ? `The worker stopped with outcome ${settlement.report.outcome} and needs attention. Decide whether an authorized, actionable worker repair can change the result; otherwise return needs-user with the exact decision or blocked with the specific blocker.`
+        ? settlement.report.responsibilityGap?.trim()
+          ? `The worker stopped at its assigned responsibility boundary. If one available responsibility or Skill closes that exact gap, extend the assignment without consuming repair; otherwise return needs-user or blocked.`
+          : `The worker stopped with outcome ${settlement.report.outcome} and needs attention. Decide whether an authorized, actionable worker repair can change the result; otherwise return needs-user with the exact decision or blocked with the specific blocker.`
         : 'The worker delivered, but required items are failed, not-run or contradicted by machine-observed evidence. Preserve every passed worker check unchanged and resolve only the unresolved items.';
-  return `${event}\n${JSON.stringify({ ...dynamic, settlement: settlement.kind, allowedDecisions: allowed })}\n${guidance} The Host resumed this coordination thread; the task, plan, checklist and prior evidence you already received are unchanged. Return only JSON matching the coordination schema with requestId ${request.requestId} and phase-appropriate decision from ${JSON.stringify(allowed)}. To dispatch a repair, call ${dispatchWorkerToolName} with the complete JSON decision as its decision argument instead of returning it. Schema: ${JSON.stringify(coordinationSchema)}`;
+  return `${event}\n${JSON.stringify({ ...dynamic, settlement: settlement.kind, allowedDecisions: allowed })}\n${guidance} The Host resumed this coordination thread; the task, plan, checklist and prior evidence you already received are unchanged. Return only JSON matching the coordination schema with requestId ${request.requestId} and phase-appropriate decision from ${JSON.stringify(allowed)}. To dispatch, extend or repair Worker execution, call ${dispatchWorkerToolName} with the complete JSON decision as its decision argument instead of returning it. Schema: ${JSON.stringify(coordinationSchema)}`;
 }
