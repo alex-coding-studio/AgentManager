@@ -1,6 +1,7 @@
 import path from 'node:path';
 import type { AgentProfile } from './profile.ts';
 import {
+  codexSkillConfig,
   readCodexSkills,
   withSkillCatalog,
   type SkillCatalog,
@@ -29,6 +30,18 @@ export type CoordinatorSession = {
   driver: AgentSessionDriver;
   decoratePrompt: (prompt: string) => string;
 };
+
+export function codexWorkerAppServerArguments(
+  catalog: SkillCatalog,
+  allowedSkillPaths?: string[],
+) {
+  return [
+    'app-server',
+    '-c',
+    codexSkillConfig(catalog, allowedSkillPaths),
+    '--stdio',
+  ];
+}
 
 export async function startPushCoordinatorSession(
   input: CoordinatorSessionInput,
@@ -85,6 +98,10 @@ export function startEventDrivenWorkerRun(
       'runtime/jobs',
     );
     driver = new CodexAppServerDriver({
+      arguments: codexWorkerAppServerArguments(
+        catalog,
+        input.allowedSkillPaths,
+      ),
       brokerFactory: (thread) =>
         new HostJobBroker(
           thread.workingDirectory,

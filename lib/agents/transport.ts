@@ -2,6 +2,7 @@ import { publishActivity, type LocalAgentActivity } from './activity.ts';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import readline from 'node:readline';
 import {
+  codexSkillConfig,
   readCodexSkills,
   withSkillCatalog,
   type SkillCatalog,
@@ -311,20 +312,7 @@ export function buildCodexArguments(
           workingDirectory,
         ]),
     ...(catalog
-      ? [
-          '-c',
-          `skills.config=[${catalog.skills
-            .filter(
-              (skill) =>
-                !skill.enabled ||
-                (input.allowedSkillPaths !== undefined &&
-                  !input.allowedSkillPaths.includes(skill.path)),
-            )
-            .map(
-              (skill) => `{path=${JSON.stringify(skill.path)},enabled=false}`,
-            )
-            .join(',')}]`,
-        ]
+      ? ['-c', codexSkillConfig(catalog, input.allowedSkillPaths)]
       : []),
     ...(input.disableDelegation
       ? ['--disable', 'multi_agent', '--disable', 'multi_agent_v2']

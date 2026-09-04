@@ -16,6 +16,7 @@ import {
   buildCodexArguments,
   type LocalAgentRun,
 } from '../lib/agents/transport.ts';
+import { codexWorkerAppServerArguments } from '../lib/agents/event-driven-transport.ts';
 
 const cwd = '/tmp/skill-fixture';
 const catalog: SkillCatalog = {
@@ -153,6 +154,12 @@ void test('a Worker catalog contains only Coordinator-selected Skill paths', () 
       argument.includes('{path="/installed/ios/setup/SKILL.md",enabled=false}'),
     ),
   );
+  assert.deepEqual(codexWorkerAppServerArguments(catalog, []), [
+    'app-server',
+    '-c',
+    'skills.config=[{path="/installed/ios/setup/SKILL.md",enabled=false},{path="/installed/disabled/SKILL.md",enabled=false}]',
+    '--stdio',
+  ]);
 });
 
 void test('discovery errors and timeout terminate the helper instead of silently starting without Skills', async () => {
