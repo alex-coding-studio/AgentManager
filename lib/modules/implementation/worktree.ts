@@ -158,7 +158,8 @@ async function create(
   project: RegisteredProject,
   cardId: string,
   repository: string,
-  baseCommit: string,
+  startCommit: string,
+  cardBaseCommit = startCommit,
 ): Promise<CardWorkspace> {
   const generation = randomUUID().slice(0, 8);
   const branch = `praxis/card-${cardId}-${generation}`;
@@ -166,11 +167,19 @@ async function create(
     path.dirname(repository),
     `.praxis-${path.basename(repository)}-${cardId}-${generation}`,
   );
-  await git(repository, 'worktree', 'add', '-b', branch, directory, baseCommit);
+  await git(
+    repository,
+    'worktree',
+    'add',
+    '-b',
+    branch,
+    directory,
+    startCommit,
+  );
   const workspace = {
     path: await realpath(directory),
     repository,
-    baseCommit,
+    baseCommit: cardBaseCommit,
     branch,
     gitDirectory: await realpath(
       await git(
@@ -274,6 +283,26 @@ export async function restartCardWorkspace(
 ) {
   const workspace = card.execution?.workspace;
   if (!workspace) throw new Error('No Card worktree is available to reset.');
+  return restartWorkspace(project, card, workspace.baseCommit);
+}
+
+export async function restartCardWorkspaceAt(
+  project: RegisteredProject,
+  card: PlanningCard,
+  startCommit: string,
+) {
+  if (!/^[0-9a-f]{40,64}$/.test(startCommit))
+    throw new Error('Invalid Action baseline commit.');
+  return restartWorkspace(project, card, startCommit);
+}
+
+async function restartWorkspace(
+  project: RegisteredProject,
+  card: PlanningCard,
+  startCommit: string,
+) {
+  const workspace = card.execution?.workspace;
+  if (!workspace) throw new Error('No Card worktree is available to reset.');
   await verifyCardWorkspace(workspace);
   const head = await git(workspace.path, 'rev-parse', 'HEAD');
   if (head !== workspace.baseCommit) {
@@ -310,6 +339,7 @@ export async function restartCardWorkspace(
       project,
       card.id,
       workspace.repository,
+      startCommit,
       workspace.baseCommit,
     );
     return { workspace: fresh, backup: archived };

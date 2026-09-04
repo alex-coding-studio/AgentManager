@@ -458,6 +458,79 @@ void test('empty bootstrap initializes locally and Actions reuse one isolated Ca
   assert.equal(current.execution?.runs[1].status, 'succeeded');
   assert.equal(current.execution?.workspace?.path, directory);
 });
+
+void test('undo restores only the current Action to its clean baseline', async (t) => {
+  const f = await fixture(t);
+  await f.service.start(f.project, {
+    ...f.input,
+    initializeRepository: true,
+  });
+  const firstWorkspace = f.calls[0].options.workingDirectory;
+  await writeFile(path.join(firstWorkspace, 'app.txt'), 'first Action');
+  await writeFile(path.join(firstWorkspace, '.env'), 'LOCAL=value');
+  f.calls[0].resolve(delivered(f.calls[0].request));
+  let card = await f.settled();
+  card = await f.service.update(
+    f.project,
+    f.card.id,
+    card.revision,
+    'accept',
+    card.execution!.runs[0].id,
+  );
+  await f.service.start(f.project, {
+    ...f.input,
+    actionId: f.actions[1].id,
+    expectedRevision: card.revision,
+    instruction: 'Try the risky approach',
+  });
+  await writeFile(path.join(firstWorkspace, 'app.txt'), 'broken second Action');
+  await writeFile(path.join(firstWorkspace, 'partial.txt'), 'remove me');
+  f.calls[1].reject(new Error('Needs user input'));
+  card = await f.settled();
+
+  const undone = await f.service.undoAction(
+    f.project,
+    f.card.id,
+    f.actions[1].id,
+    card.revision,
+  );
+
+  assert.deepEqual(undone.execution?.acceptedActionIds, [f.actions[0].id]);
+  assert.deepEqual(
+    undone.execution?.runs.map((run) => run.actionId),
+    [f.actions[0].id],
+  );
+  assert.equal(
+    undone.execution?.retryInputs?.[f.actions[1].id],
+    'Try the risky approach',
+  );
+  assert.equal(undone.plan?.status, 'finalized');
+  const cleanWorkspace = undone.execution!.workspace!.path;
+  assert.notEqual(cleanWorkspace, firstWorkspace);
+  assert.equal(
+    await readFile(path.join(cleanWorkspace, 'app.txt'), 'utf8'),
+    'first Action',
+  );
+  assert.equal(
+    await readFile(path.join(cleanWorkspace, '.env'), 'utf8'),
+    'LOCAL=value',
+  );
+  await assert.rejects(
+    () => readFile(path.join(cleanWorkspace, 'partial.txt')),
+    /ENOENT/,
+  );
+  assert.equal(
+    await readFile(
+      path.join(
+        undone.execution!.workspaceBackups!.at(-1)!.path,
+        'partial.txt',
+      ),
+      'utf8',
+    ),
+    'remove me',
+  );
+  assert.equal(f.calls.length, 2);
+});
 void test('different Cards have distinct branches, and dirty primary checkout content is never copied or overwritten', async (t) => {
   const f = await fixture(t);
   const first = await ensureCardWorkspace(f.project, f.card, true);

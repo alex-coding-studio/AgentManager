@@ -21,6 +21,7 @@ import {
   FolderOpen,
   GitBranch,
   RotateCcw,
+  Undo2,
 } from 'lucide-react';
 import {
   AgentComposerAttachments,
@@ -81,7 +82,9 @@ export function JustDoItAction({
   onChange: (card: PlanningCard) => void;
 }) {
   const { t } = useUiText();
-  const [instruction, setInstruction] = useState('');
+  const [instruction, setInstruction] = useState(
+    card.execution?.retryInputs?.[action.id] ?? '',
+  );
   const [contextRefs, setContextRefs] = useState<string[]>([]);
   const [files, setFiles] = useState<File[]>([]);
   const [folderPath, setFolderPath] = useState(folders[0]?.path ?? '');
@@ -101,6 +104,7 @@ export function JustDoItAction({
     runId: string;
     revision: number;
   } | null>(null);
+  const [undoOpen, setUndoOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [resetError, setResetError] = useState('');
   const [resetPreview, setResetPreview] = useState<{
@@ -120,6 +124,11 @@ export function JustDoItAction({
   );
   const running = card.execution?.runs.at(-1)?.status === 'running';
   const enabled = current?.id === action.id && !pending && !running;
+  const canUndo =
+    !accepted &&
+    current?.id === action.id &&
+    Boolean(latest) &&
+    latest?.status !== 'running';
 
   async function send(
     operation:
@@ -129,7 +138,8 @@ export function JustDoItAction({
       | 'refresh-github'
       | 'recheck-output'
       | 'override-check'
-      | 'open-workspace',
+      | 'open-workspace'
+      | 'undo-action',
     outputId = latest?.id,
     criterionId?: string,
     decisionNote = instruction,
@@ -176,6 +186,14 @@ export function JustDoItAction({
       }
       if (operation === 'accept') setAcceptancePreview(null);
       if (operation === 'cancel') setStopPreview(null);
+      if (operation === 'undo-action') {
+        setUndoOpen(false);
+        setInstruction(
+          data.card.execution?.retryInputs?.[action.id] ?? latest?.input ?? '',
+        );
+        setContextRefs([]);
+        setFiles([]);
+      }
       return data.card as PlanningCard;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Execution failed.');
@@ -977,6 +995,16 @@ export function JustDoItAction({
                   {t('Redo')}
                 </Button>
               ) : null}
+              {canUndo ? (
+                <Button
+                  variant="outline"
+                  disabled={pending}
+                  onClick={() => setUndoOpen(true)}
+                >
+                  <Undo2 />
+                  {t('Undo')}
+                </Button>
+              ) : null}
               {!accepted && latest?.status !== 'running' && latest?.result ? (
                 <Button
                   disabled={!enabled || preparingAcceptance}
@@ -1055,6 +1083,38 @@ export function JustDoItAction({
               onClick={() => void send('cancel', stopPreview?.runId)}
             >
               {t('Stop execution')}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={undoOpen}
+        onOpenChange={(open) => {
+          if (!pending) setUndoOpen(open);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t('Undo this Action?')}</DialogTitle>
+            <DialogDescription>
+              {t(
+                'Return this Action to its clean starting point. Previous passed Actions and the Plan stay unchanged.',
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              disabled={pending}
+              onClick={() => setUndoOpen(false)}
+            >
+              {t('Cancel')}
+            </Button>
+            <Button
+              disabled={pending || !canUndo}
+              onClick={() => void send('undo-action')}
+            >
+              {t('Undo')}
             </Button>
           </div>
         </DialogContent>

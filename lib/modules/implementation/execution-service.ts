@@ -26,6 +26,7 @@ import {
   verifyCardWorkspace,
   workspaceProject,
   restartCardWorkspace,
+  restartCardWorkspaceAt,
   undoWorkspaceRestart,
   type CardWorkspace,
 } from './worktree.ts';
@@ -37,8 +38,12 @@ import {
 } from '../../github-delivery.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
-import { lstat, readFile } from 'node:fs/promises';
-import { checkpointWorkspace } from './git.ts';
+import { cp, lstat, mkdir, readFile, realpath, rm } from 'node:fs/promises';
+import {
+  checkpointWorkspace,
+  includeInGitHistory,
+  restoreCheckpoint,
+} from './git.ts';
 import { validateAgentProfile } from '../../agents/profile.ts';
 import {
   assertCurrentPlanningCardSource,
@@ -49,6 +54,7 @@ import {
 import { withDeliveryState } from '../../delivery-state-lock.ts';
 import {
   appendCardWorkRecord,
+  readCardWorkDocument,
   readCardWorklog,
   type CardWorkRecord,
 } from './worklog.ts';
@@ -118,6 +124,100 @@ function supplementalExecutionInput(input: ExecuteActionInput) {
   )
     throw new PublicApiError('Invalid execution resources.', 400);
   return { contextRefs: [...new Set(contextRefs)], files };
+}
+
+function baselineRevision(cardId: string, ref?: string) {
+  if (!ref) return null;
+  const parts = ref.split('/');
+  if (
+    parts.length !== 5 ||
+    parts[0] !== 'implementation' ||
+    parts[1] !== 'cards' ||
+    parts[2] !== cardId ||
+    !/^\d{8}$/.test(parts[3]!) ||
+    parts[4] !== 'baseline.json'
+  )
+    return null;
+  return Number(parts[3]);
+}
+
+async function readActionBaseline(
+  project: Project,
+  card: PlanningCard,
+  run: ActionRun,
+) {
+  const readAt = async (revision: number) => {
+    const value: unknown = JSON.parse(
+      await readCardWorkDocument(
+        root(project),
+        card.id,
+        revision,
+        'baseline.json',
+      ),
+    );
+    const baseline = value as Partial<WorkspaceSnapshot>;
+    if (
+      typeof baseline.root !== 'string' ||
+      typeof baseline.head !== 'string' ||
+      !/^[0-9a-f]{40,64}$/.test(baseline.head) ||
+      typeof baseline.files !== 'object' ||
+      baseline.files === null ||
+      Object.values(baseline.files).some((entry) => typeof entry !== 'string')
+    )
+      throw new Error('Invalid Action baseline snapshot.');
+    return baseline as WorkspaceSnapshot & { head: string };
+  };
+  const recorded = baselineRevision(card.id, run.baselineRef);
+  if (recorded !== null) return readAt(recorded);
+  const log = await readCardWorklog(root(project), card.id);
+  for (const entry of log.entries) {
+    if (
+      entry.record.kind !== 'user-input' ||
+      entry.record.actionId !== run.actionId
+    )
+      continue;
+    try {
+      const request = JSON.parse(
+        await readCardWorkDocument(
+          root(project),
+          card.id,
+          entry.revision,
+          'request.json',
+        ),
+      ) as { requestId?: unknown };
+      if (request.requestId === run.id) return readAt(entry.revision);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
+  }
+  throw new Error('Action baseline snapshot is unavailable.');
+}
+
+function orderedFiles(snapshot: WorkspaceSnapshot) {
+  return Object.fromEntries(
+    Object.entries(snapshot.files).sort(([left], [right]) =>
+      left.localeCompare(right),
+    ),
+  );
+}
+
+async function copyPreservedBaselineFiles(
+  sourceRoot: string,
+  targetRoot: string,
+  files: string[],
+) {
+  for (const file of files) {
+    const source = path.resolve(sourceRoot, file);
+    const target = path.resolve(targetRoot, file);
+    if (
+      !source.startsWith(sourceRoot + path.sep) ||
+      !target.startsWith(targetRoot + path.sep)
+    )
+      throw new Error('Unsafe preserved baseline path.');
+    await mkdir(path.dirname(target), { recursive: true });
+    await rm(target, { force: true });
+    await cp(source, target, { force: true, verbatimSymlinks: true });
+  }
 }
 
 export function createExecutionService(
@@ -684,6 +784,8 @@ export function createExecutionService(
         };
       }
       reservation.id = request.requestId;
+      const retryInputs = { ...card.execution?.retryInputs };
+      delete retryInputs[input.actionId];
       const run: ActionRun = {
         id: request.requestId,
         actionId: input.actionId,
@@ -701,6 +803,7 @@ export function createExecutionService(
         outputRef: null,
         parentCommit: git.head,
         acceptanceChecklist,
+        baselineRef: reference(card, 'baseline.json'),
       };
       const prompt = `${buildCardHarnessPrompt(request)}\n\nExecution runtime: work only in ${baseline.root}. This is the Card-owned worktree on branch ${workspace?.branch ?? 'legacy'}. Keep all Actions and Rounds on this branch. The primary checkout ${project.codePath ?? project.rootPath} is not your editing directory. Never switch this worktree to main, reset the primary checkout, or merge into main. Repository commits and pushes belong on this Card branch; only the agreed PR delivery process may merge to main. The planning store ${project.planningPath} is host-owned; do not edit it or call Praxis mutation APIs. Preserve pre-existing user changes. The host has prepared the local repository and Card branch. Do not reinitialize Git or create a replacement branch. Creating a GitHub repository or publishing branches still requires the signed-off Action or explicit user instruction. A local empty baseline does not authorize pushing the default branch to GitHub. If initializing or publishing a project repository, exclude .praxis/ before staging; never publish the host-owned planning store or its private Git history. No automatic merge, rollback, acceptance, or next Action. Use file:relative/path for changed files, deleted:relative/path for removals, or git:full-commit-hash for a commit newly reachable from the final project HEAD in artifactRefs. Command descriptions and external URLs may be included in check evidenceRefs, but remain Agent-reported unless independently verified. Real GitHub repository or PR URLs may appear in artifactRefs; the host verifies the current origin and remote identity, and requires PR HEAD to match this output. A repository link identifies the delivery location, not proof of new files or completed work. The host checks these against before/after snapshots. artifactRefs identify the resulting deliverable or version, not a list of new changes. You may cite an existing file inside this workspace or a commit reachable from the output HEAD when validating or publishing existing work; state clearly when no code changed. Do not cite unrelated input resources, missing files or invented URLs. The host records actual changes separately. Include actual PR URLs in the output summary when PRs were produced; the host queries GitHub to verify their state. Checks are your reported evidence, not user acceptance. The host records a new local Git checkpoint for this round. You may reference checkpoint:${request.requestId} as this round's workspace snapshot when reporting checks without file changes; explicitly state that no code changed and do not invent completed functionality. If permissions prevent an operation, report blocked; never bypass sandbox restrictions. Return the required JSON, not a Markdown envelope.`;
       const saved = await commit(
@@ -716,6 +819,7 @@ export function createExecutionService(
             runs: [...(card.execution?.runs ?? []), run],
             acceptedActionIds: card.execution?.acceptedActionIds ?? [],
             git,
+            retryInputs,
           },
         },
         {
@@ -1599,6 +1703,161 @@ export function createExecutionService(
     }
   }
 
+  async function undoAction(
+    project: Project,
+    cardId: string,
+    actionId: string,
+    expectedRevision: number,
+  ) {
+    assertCardUuid(cardId);
+    assertCardUuid(actionId);
+    if (active.has(project.rootPath))
+      throw new PublicApiError('Stop project execution before undoing.', 400);
+    const reservation: Active = {
+      id: randomUUID(),
+      cardId,
+      handle: null,
+      timer: null,
+    };
+    active.set(project.rootPath, reservation);
+    try {
+      const card = await store.read(project, cardId);
+      if (card.revision !== expectedRevision)
+        throw new PublicApiError(
+          'Card changed. Reload before trying again.',
+          409,
+        );
+      const current = card.actions.find(
+        (item) => !card.execution?.acceptedActionIds.includes(item.id),
+      );
+      const runs = card.execution?.runs.filter(
+        (run) => run.actionId === actionId,
+      );
+      const first = runs?.at(0);
+      const last = runs?.at(-1);
+      const workspace = card.execution?.workspace;
+      if (
+        current?.id !== actionId ||
+        !workspace ||
+        !first?.parentCommit ||
+        !last ||
+        last.status === 'running'
+      )
+        throw new PublicApiError(
+          'Only the current completed Action can be undone.',
+          400,
+        );
+      await verifyCardWorkspace(workspace);
+      const repositoryUrl = getGitHubRepositoryUrl(
+        workspaceProject(project, workspace),
+      );
+      if (repositoryUrl) {
+        const prs = await reader.branchPullRequests(
+          repositoryUrl.slice('https://github.com/'.length),
+          workspace.branch,
+        );
+        if (prs.some((pr) => pr.state === 'MERGED'))
+          throw new PublicApiError(
+            'This Card branch has a merged PR. Use a revert PR instead.',
+            400,
+          );
+      }
+      const baseline = await readActionBaseline(project, card, first);
+      if ((await realpath(baseline.root)) !== workspace.path)
+        throw new Error('Action baseline belongs to another workspace.');
+      const currentSnapshot = await snapshotWorkspace(
+        workspaceProject(project, workspace),
+      );
+      const preservedFiles = Object.keys(baseline.files).filter(
+        (file) => !includeInGitHistory(file),
+      );
+      if (
+        preservedFiles.some(
+          (file) => currentSnapshot.files[file] !== baseline.files[file],
+        )
+      )
+        throw new PublicApiError(
+          'This Action changed a protected local file that cannot be restored automatically.',
+          400,
+        );
+      const restarted = await restartCardWorkspaceAt(
+        project,
+        card,
+        baseline.head,
+      );
+      try {
+        const workingProject = workspaceProject(project, restarted.workspace);
+        const fresh = await snapshotWorkspace(workingProject);
+        await restoreCheckpoint(project, card.id, first.parentCommit, fresh);
+        await copyPreservedBaselineFiles(
+          restarted.backup.path,
+          restarted.workspace.path,
+          preservedFiles,
+        );
+        const restored = await snapshotWorkspace(workingProject);
+        if (
+          restored.head !== baseline.head ||
+          JSON.stringify(orderedFiles(restored)) !==
+            JSON.stringify(orderedFiles(baseline))
+        )
+          throw new Error('Action baseline could not be restored exactly.');
+        const retryInputs = { ...card.execution?.retryInputs };
+        retryInputs[actionId] = last.input;
+        const acceptanceOverrides = {
+          ...card.execution?.acceptanceOverrides,
+        };
+        delete acceptanceOverrides[actionId];
+        const verification = { ...card.execution?.verification };
+        delete verification[actionId];
+        return await commit(
+          project,
+          {
+            ...card,
+            execution: {
+              ...card.execution!,
+              runs: card.execution!.runs.filter(
+                (run) => run.actionId !== actionId,
+              ),
+              workspace: restarted.workspace,
+              workspaceBackups: [
+                ...(card.execution?.workspaceBackups ?? []),
+                restarted.backup,
+              ],
+              git: {
+                ...card.execution!.git!,
+                head: first.parentCommit,
+              },
+              retryInputs,
+              acceptanceOverrides,
+              verification,
+              environment: undefined,
+            },
+          },
+          {
+            kind: 'system-event',
+            stage: 'execution',
+            actionId,
+            event: 'rollback-confirmed',
+            text: `User undid Action ${actionId}. Its Rounds remain in the worklog. The confirmed Plan and accepted Actions are unchanged. The workspace was restored to the Action baseline. External effects were not reverted.`,
+            refs: [],
+          },
+        );
+      } catch (error) {
+        await undoWorkspaceRestart(
+          project,
+          cardId,
+          workspace,
+          restarted.workspace,
+          restarted.backup,
+        );
+        throw error;
+      }
+    } finally {
+      if (active.get(project.rootPath) === reservation)
+        active.delete(project.rootPath);
+    }
+  }
+
   async function start(project: Project, input: ExecuteActionInput) {
     return withDeliveryState(project, () => startUnlocked(project, input));
   }
@@ -1609,6 +1868,7 @@ export function createExecutionService(
     refresh,
     refreshGitHub,
     resetWorkspace,
+    undoAction,
     recheckOutput,
     overrideRequiredCheck,
     openWorkspace,

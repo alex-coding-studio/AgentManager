@@ -2,7 +2,7 @@ import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
-import { lstat, mkdir, open, realpath, readlink } from 'node:fs/promises';
+import { lstat, mkdir, open, realpath, readlink, rm } from 'node:fs/promises';
 import path from 'node:path';
 import type { RegisteredProject } from '../../project-registry.ts';
 import { assertCardUuid } from './harness.ts';
@@ -235,4 +235,39 @@ export async function readCheckpointDiff(
       { env: environment(), timeout: 10000, maxBuffer: 2000000 },
     )
   ).stdout;
+}
+
+export async function restoreCheckpoint(
+  project: RegisteredProject,
+  cardId: string,
+  commit: string,
+  snapshot: WorkspaceSnapshot,
+) {
+  if (!sha.test(commit)) throw new Error('Invalid checkpoint commit.');
+  const root = await realpath(snapshot.root);
+  const directory = await repository(project, cardId, false);
+  for (const file of Object.keys(snapshot.files)) {
+    if (!includeInGitHistory(file)) continue;
+    const absolute = path.resolve(root, file);
+    if (!absolute.startsWith(root + path.sep))
+      throw new Error('Unsafe checkpoint restore path.');
+    await rm(absolute, { force: true });
+  }
+  await exec('git', ['--git-dir', directory, 'read-tree', commit], {
+    env: environment(),
+    timeout: 10000,
+  });
+  await exec(
+    'git',
+    [
+      '--git-dir',
+      directory,
+      '--work-tree',
+      root,
+      'checkout-index',
+      '--all',
+      '--force',
+    ],
+    { env: environment(), timeout: 30000, maxBuffer: 2000000 },
+  );
 }

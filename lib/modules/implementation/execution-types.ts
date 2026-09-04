@@ -42,6 +42,7 @@ export type ActionRun = {
   commit?: string;
   parentCommit?: string;
   github?: GitHubDelivery | null;
+  baselineRef?: string;
 };
 export type CardExecution = {
   runs: ActionRun[];
@@ -54,6 +55,7 @@ export type CardExecution = {
   verification?: Record<string, 'manual' | 'github-merge'>;
   git?: { baseline: string; head: string; firstTrackedRunId: string };
   environment?: CardEnvironmentManifest;
+  retryInputs?: Record<string, string>;
 };
 export type ExecuteActionInput = {
   cardId: string;
