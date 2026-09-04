@@ -16,6 +16,7 @@ import {
   buildCodexArguments,
   type LocalAgentRun,
 } from '../lib/agents/transport.ts';
+import { codexWorkerAppServerArguments } from '../lib/agents/event-driven-transport.ts';
 
 const cwd = '/tmp/skill-fixture';
 const catalog: SkillCatalog = {
@@ -126,6 +127,39 @@ void test('catalog injection includes only enabled metadata and preserves the re
       ),
     /Invalid/,
   );
+});
+
+void test('a Worker catalog contains only Coordinator-selected Skill paths', () => {
+  const selected = withSkillCatalog('Execute.', catalog, [
+    '/installed/ios/setup/SKILL.md',
+  ]);
+  assert.match(selected, /Coordinator selected/);
+  assert.match(selected, /ios-dev-agent:setup/);
+
+  const empty = withSkillCatalog('Execute.', catalog, []);
+  assert.match(empty, /Coordinator selected/);
+  assert.doesNotMatch(empty, /ios-dev-agent:setup/);
+
+  const args = buildCodexArguments(
+    {
+      workingDirectory: cwd,
+      prompt: 'Execute.',
+      access: 'workspace-write',
+      allowedSkillPaths: [],
+    },
+    catalog,
+  );
+  assert.ok(
+    args.some((argument) =>
+      argument.includes('{path="/installed/ios/setup/SKILL.md",enabled=false}'),
+    ),
+  );
+  assert.deepEqual(codexWorkerAppServerArguments(catalog, []), [
+    'app-server',
+    '-c',
+    'skills.config=[{path="/installed/ios/setup/SKILL.md",enabled=false},{path="/installed/disabled/SKILL.md",enabled=false}]',
+    '--stdio',
+  ]);
 });
 
 void test('discovery errors and timeout terminate the helper instead of silently starting without Skills', async () => {

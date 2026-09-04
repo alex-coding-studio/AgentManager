@@ -1,6 +1,11 @@
 import path from 'node:path';
 import type { AgentProfile } from './profile.ts';
-import { readCodexSkills, withSkillCatalog } from './skills.ts';
+import {
+  codexSkillConfig,
+  readCodexSkills,
+  withSkillCatalog,
+  type SkillCatalog,
+} from './skills.ts';
 import {
   startLocalAgentRun,
   type LocalAgentKind,
@@ -19,11 +24,24 @@ export type CoordinatorSessionInput = {
   workingDirectory: string;
   protectedPath?: string;
   hostTools: HostTool[];
+  skillCatalog?: SkillCatalog;
 };
 export type CoordinatorSession = {
   driver: AgentSessionDriver;
   decoratePrompt: (prompt: string) => string;
 };
+
+export function codexWorkerAppServerArguments(
+  catalog: SkillCatalog,
+  allowedSkillPaths?: string[],
+) {
+  return [
+    'app-server',
+    '-c',
+    codexSkillConfig(catalog, allowedSkillPaths),
+    '--stdio',
+  ];
+}
 
 export async function startPushCoordinatorSession(
   input: CoordinatorSessionInput,
@@ -42,7 +60,8 @@ export async function startPushCoordinatorSession(
       decoratePrompt: (prompt) => prompt,
     };
   if (input.profile.agent !== 'codex') return null;
-  const catalog = await readCodexSkills(input.workingDirectory);
+  const catalog =
+    input.skillCatalog ?? (await readCodexSkills(input.workingDirectory));
   if (catalog.executionAccess !== 'full-access') return null;
   return {
     driver: new CodexAppServerDriver({
@@ -79,6 +98,10 @@ export function startEventDrivenWorkerRun(
       'runtime/jobs',
     );
     driver = new CodexAppServerDriver({
+      arguments: codexWorkerAppServerArguments(
+        catalog,
+        input.allowedSkillPaths,
+      ),
       brokerFactory: (thread) =>
         new HostJobBroker(
           thread.workingDirectory,
@@ -150,7 +173,7 @@ export function startEventDrivenWorkerRun(
       : '';
     const turn = driver.startTurn(thread, {
       prompt:
-        withSkillCatalog(input.prompt, catalog) +
+        withSkillCatalog(input.prompt, catalog, input.allowedSkillPaths) +
         permissionContext +
         hostToolContext +
         candidateToolContext,

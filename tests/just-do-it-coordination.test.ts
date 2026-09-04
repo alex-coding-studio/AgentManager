@@ -34,6 +34,11 @@ import {
 import type { CoordinatorSession } from '../lib/agents/event-driven-transport.ts';
 import { CodexAppServerDriver } from '../lib/agents/codex/app-server-driver.ts';
 import { HostJobBroker } from '../lib/agents/host-job-broker.ts';
+import {
+  compileResponsibilityInstructions,
+  executionResponsibilityInstructions,
+  resolveExecutionResponsibilities,
+} from '../lib/modules/implementation/execution-responsibilities.ts';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -53,14 +58,20 @@ const criteria = [
     evidence: 'Actual result',
   },
 ];
-function task(): CardHarnessRequest {
+const setupSkill = {
+  name: 'ios-dev-agent:setup',
+  path: '/installed/ios/setup/SKILL.md',
+};
+function task(
+  skills: Array<{ name: string; path: string }> = [setupSkill],
+): CardHarnessRequest {
   return createCardHarnessRequest(
     {
       cardId,
       contextRevision: 2,
       goal: 'Fixture',
       moduleInstructions: 'Fixture rules',
-      skills: [],
+      skills,
       resources: [],
       handoffMarkdown:
         'Earlier verified conclusion: use the canonical repository.',
@@ -107,6 +118,8 @@ function decision(
     contextRevision: 2,
     checklistVersion: 'v1',
     decision: kind,
+    responsibilities: ['general'],
+    skillPaths: [],
     summary: 'Bounded result',
     instructions:
       kind === 'dispatch' || kind === 'repair'
@@ -202,12 +215,28 @@ function worker(t: CardHarnessRequest, status: 'passed' | 'failed' = 'passed') {
 function setup(
   coordinator: (req: CoordinationRequest) => CoordinationDecision,
   workerStatus: Array<'passed' | 'failed'> = ['passed'],
+  options: {
+    request?: CardHarnessRequest;
+    discoverSkills?: Parameters<
+      typeof startCoordinatedExecution
+    >[0]['discoverSkills'];
+  } = {},
 ) {
-  const request = task();
-  const calls: Array<{ agent: string; access: unknown; prompt: string }> = [];
+  const request = options.request ?? task();
+  const calls: Array<{
+    agent: string;
+    access: unknown;
+    prompt: string;
+    allowedSkillPaths?: string[];
+  }> = [];
   let workers = 0;
   const transport: typeof startLocalAgentRun = (agent, options) => {
-    calls.push({ agent, access: options.access, prompt: options.prompt });
+    calls.push({
+      agent,
+      access: options.access,
+      prompt: options.prompt,
+      allowedSkillPaths: options.allowedSkillPaths,
+    });
     const value =
       options.access === 'read-only'
         ? result(
@@ -235,6 +264,7 @@ function setup(
       readBasis: async () => 'basis',
       onProgress: () => {},
       transport,
+      discoverSkills: options.discoverSkills,
     });
   return { start, calls };
 }
@@ -254,6 +284,201 @@ void test('complete worker self-check bypasses coordinator review and keeps sepa
   assert.equal(output.coordination.attempts.length, 2);
   assert.deepEqual(JSON.parse(output.finalOutput).additionalChecks, []);
   assert.match(f.calls[1].prompt, /Only repair the requested output/);
+  assert.match(f.calls[1].prompt, /"responsibilities":\["general"\]/);
+  assert.match(f.calls[1].prompt, /Perform only this packet/);
+  assert.match(f.calls[1].prompt, /Read each assigned SKILL.md once/);
+  assert.doesNotMatch(f.calls[1].prompt, /Mechanical responsibility/);
+  assert.deepEqual(f.calls[1].allowedSkillPaths, []);
+});
+
+void test('runtime-discovered Skills become the validated Coordinator catalog', async () => {
+  const f = setup(
+    (req) => {
+      assert.deepEqual(req.availableSkills, [setupSkill]);
+      const output = decision(
+        req,
+        req.phase === 'prepare' ? 'dispatch' : 'ready',
+      );
+      output.skillPaths = [setupSkill.path];
+      return output;
+    },
+    ['passed'],
+    {
+      request: task([]),
+      discoverSkills: async () => ({
+        skills: [
+          { ...setupSkill, description: 'Setup', enabled: true },
+          {
+            name: 'unselected',
+            description: 'Another Skill',
+            path: '/installed/unselected/SKILL.md',
+            enabled: false,
+          },
+        ],
+        executionAccess: 'workspace-write',
+      }),
+    },
+  );
+  await f.start().completion;
+  assert.deepEqual(f.calls[1].allowedSkillPaths, [setupSkill.path]);
+  assert.match(f.calls[1].prompt, /ios-dev-agent:setup/);
+  assert.doesNotMatch(f.calls[1].prompt, /unselected/);
+});
+
+void test('Coordinator composes inherited Worker responsibilities for mixed work', async () => {
+  const f = setup((req) => {
+    const output = decision(
+      req,
+      req.phase === 'prepare' ? 'dispatch' : 'ready',
+    );
+    output.responsibilities = ['mechanical', 'ios-development'];
+    output.skillPaths = ['/installed/ios/setup/SKILL.md'];
+    return output;
+  });
+  await f.start().completion;
+  const workerPrompt = f.calls[1].prompt;
+  assert.match(
+    workerPrompt,
+    /"responsibilities":\["mechanical","ios-development"\]/,
+  );
+  assert.match(workerPrompt, /Execution responsibility general/);
+  assert.match(workerPrompt, /Mechanical responsibility/);
+  assert.match(workerPrompt, /iOS development responsibility/);
+  assert.match(workerPrompt, /ios-dev-agent:setup/);
+  assert.deepEqual(f.calls[1].allowedSkillPaths, [
+    '/installed/ios/setup/SKILL.md',
+  ]);
+  assert.equal(
+    workerPrompt.match(/Execution responsibility general/g)?.length,
+    1,
+  );
+});
+
+void test('responsibility resolution defaults to general and keeps additions composable', () => {
+  assert.deepEqual(resolveExecutionResponsibilities(undefined), ['general']);
+  assert.deepEqual(resolveExecutionResponsibilities('retired-responsibility'), [
+    'general',
+  ]);
+  assert.deepEqual(
+    resolveExecutionResponsibilities([
+      'mechanical',
+      'ios-development',
+      'mechanical',
+    ]),
+    ['mechanical', 'ios-development'],
+  );
+  assert.deepEqual(
+    resolveExecutionResponsibilities(['general', 'mechanical']),
+    ['mechanical'],
+  );
+  const combined = executionResponsibilityInstructions([
+    'mechanical',
+    'ios-development',
+  ]);
+  assert.equal(combined.match(/Execution responsibility general/g)?.length, 1);
+  assert.match(combined, /Mechanical responsibility/);
+  assert.match(combined, /iOS development responsibility/);
+  assert.equal(combined.match(/script-source-inspection/g)?.length, 1);
+
+  const overridden = compileResponsibilityInstructions(
+    {
+      general: {
+        inherits: null,
+        assignment: 'base',
+        overrides: [],
+        rules: [
+          { id: 'packet', instruction: 'Keep the packet.' },
+          { id: 'script', instruction: 'Do not inspect scripts.' },
+        ],
+      },
+      'script-maintainer': {
+        inherits: 'general',
+        assignment: 'maintain scripts',
+        overrides: ['script'],
+        rules: [{ id: 'script', instruction: 'Inspect the assigned script.' }],
+      },
+    },
+    ['script-maintainer'],
+  );
+  assert.match(overridden, /Keep the packet/);
+  assert.match(overridden, /Inspect the assigned script/);
+  assert.doesNotMatch(overridden, /Do not inspect scripts/);
+
+  const req = createCoordinationRequest({
+    phase: 'prepare',
+    task: task(),
+    basis: 'current',
+    priorEvidence: [],
+    previousContext: '',
+    workerReport: null,
+    previousDecision: null,
+    repairsRemaining: 1,
+  });
+  const invalid = decision(req, 'dispatch');
+  invalid.responsibilities = ['general', 'mechanical'];
+  assert.throws(
+    () => parseCoordinationDecision(JSON.stringify(invalid), req),
+    /General is inherited/,
+  );
+
+  const unavailableSkill = decision(req, 'dispatch');
+  unavailableSkill.skillPaths = ['/installed/unknown/SKILL.md'];
+  assert.throws(
+    () => parseCoordinationDecision(JSON.stringify(unavailableSkill), req),
+    /unavailable Skill/,
+  );
+});
+
+void test('Coordinator changes a Worker assignment only after a responsibility gap', () => {
+  const prepare = createCoordinationRequest({
+    phase: 'prepare',
+    task: task(),
+    basis: 'current',
+    priorEvidence: [],
+    previousContext: '',
+    workerReport: null,
+    previousDecision: null,
+    repairsRemaining: 1,
+  });
+  const previous = decision(prepare, 'dispatch');
+  previous.responsibilities = ['ios-development'];
+  previous.skillPaths = ['/installed/ios/setup/SKILL.md'];
+  const qualify = createCoordinationRequest({
+    phase: 'qualify',
+    task: task(),
+    basis: 'current',
+    priorEvidence: [],
+    previousContext: '',
+    workerReport: {
+      outcome: 'blocked',
+      checks: [
+        {
+          criterionId: 'C1',
+          summary: 'Current responsibility cannot run the required tool.',
+          status: 'failed',
+          evidenceRefs: ['log:worker'],
+        },
+      ],
+      artifactRefs: [],
+      summary: 'Worker stopped.',
+      remaining: [],
+    },
+    previousDecision: previous,
+    repairsRemaining: 1,
+  });
+  const changed = decision(qualify, 'repair');
+  changed.responsibilities = ['mechanical', 'ios-development'];
+  changed.skillPaths = previous.skillPaths;
+  assert.throws(
+    () => parseCoordinationDecision(JSON.stringify(changed), qualify),
+    /only after a Worker responsibility gap/,
+  );
+  qualify.workerReport!.responsibilityGap =
+    'The assigned responsibilities do not permit the required script.';
+  assert.equal(
+    parseCoordinationDecision(JSON.stringify(changed), qualify).decision,
+    'repair',
+  );
 });
 
 void test('Coordinator Harness stays a coordinator rather than becoming a Reviewer or retry loop', () => {
@@ -270,6 +495,18 @@ void test('Coordinator Harness stays a coordinator rather than becoming a Review
   const prompt = coordinationPrompt(req);
   assert.match(prompt, /You are not the code or product Reviewer/);
   assert.match(prompt, /Trust passed worker self-checks/);
+  assert.match(
+    prompt,
+    /first form a concise, high-level understanding of the task/,
+  );
+  assert.match(prompt, /choose at least one responsibility/);
+  assert.match(prompt, /Read only each applicable SKILL.md entrypoint/);
+  assert.match(prompt, /do not open its references/);
+  assert.match(prompt, /Combine mechanical and ios-development/);
+  assert.match(prompt, /black-box execution and error boundary/);
+  assert.match(prompt, /After dispatch, suspend completely/);
+  assert.match(prompt, /Earlier verified conclusion/);
+  assert.match(prompt, /acceptance criteria remain unchanged/);
   assert.match(
     prompt,
     /Repeating the same commands without a changed condition is not a repair plan/,

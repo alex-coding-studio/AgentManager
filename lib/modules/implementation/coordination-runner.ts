@@ -35,6 +35,8 @@ import type {
   HostTool,
   HostToolContinuation,
 } from '../../agents/runtime-driver.ts';
+import { readCodexSkills, type SkillCatalog } from '../../agents/skills.ts';
+import { executionResponsibilityInstructions } from './execution-responsibilities.ts';
 import {
   allowedDecisionsAfter,
   classifyWorkerSettlement,
@@ -177,6 +179,7 @@ export function startCoordinatedExecution(input: {
   coordinatorSession?: (
     input: CoordinatorSessionInput,
   ) => Promise<CoordinatorSession | null>;
+  discoverSkills?: typeof readCodexSkills;
 }): LocalAgentRun {
   const transport = input.transport ?? startLocalAgentRun;
   const coordinatorSession =
@@ -208,6 +211,8 @@ export function startCoordinatedExecution(input: {
   let stopped = false;
   let lastWorker: LocalAgentResult | undefined;
   let lastWorkerReport: ExecutionReport | null = null;
+  let skillCatalog: SkillCatalog | undefined;
+  let availableSkills = input.request.context.skills;
   const workerCommandOutcomes = new Map<string, number>();
   const assertActive = () => {
     if (stopped) throw new Error('Coordinated execution stopped.');
@@ -223,6 +228,7 @@ export function startCoordinatedExecution(input: {
     role: 'coordinator' | 'worker',
     phase: 'prepare' | 'execute' | 'qualify' | 'repair',
     prompt: string,
+    allowedSkillPaths?: string[],
   ) {
     assertActive();
     if (Buffer.byteLength(prompt) > 1500000)
@@ -270,6 +276,7 @@ export function startCoordinatedExecution(input: {
       model: profile.model || undefined,
       effort: profile.effort || undefined,
       access: role === 'coordinator' ? 'read-only' : 'workspace-write',
+      allowedSkillPaths: role === 'worker' ? allowedSkillPaths : undefined,
       resumeSessionId: undefined,
       isolatedProcessGroup: true,
       disableDelegation: true,
@@ -323,8 +330,16 @@ export function startCoordinatedExecution(input: {
       child = undefined;
     }
   }
-  const workerPromptFor = (decision: CoordinationDecision) =>
-    `${input.workerOptions.prompt}\n\nCOORDINATOR ASSIGNMENT (current Action only):\n${JSON.stringify({ environment: input.environment, instructions: decision.instructions, repairAssessment: decision.repairAssessment, verificationPlan: decision.verificationPlan, priorEvidence: input.priorEvidence.filter((item) => decision.verificationPlan.some((plan) => plan.evidenceIds.includes(item.id))) })}\nPerform only this delta. Treat the Environment Manifest as Host-verified and do not rediscover its Git/worktree/role facts unless the workspace reports a concrete contradiction. Do not spawn or launch other Agents, including through shell commands. Return additional work to the host coordinator. Reuse only the referenced applicable evidence, label it as reused, and do not claim its commands ran again. Report all frozen criteria honestly. Keep fixed user/permission/PR boundaries. Return the original required execution JSON.`;
+  const workerPromptFor = (decision: CoordinationDecision) => {
+    const selectedSkills = availableSkills.filter((skill) =>
+      decision.skillPaths.includes(skill.path),
+    );
+    return `${input.workerOptions.prompt}
+
+COORDINATOR ASSIGNMENT (current Action only):
+${JSON.stringify({ responsibilities: decision.responsibilities, responsibilityInstructions: executionResponsibilityInstructions(decision.responsibilities), skills: selectedSkills, environment: input.environment, instructions: decision.instructions, repairAssessment: decision.repairAssessment, verificationPlan: decision.verificationPlan, priorEvidence: input.priorEvidence.filter((item) => decision.verificationPlan.some((plan) => plan.evidenceIds.includes(item.id))) })}
+The Coordinator-assigned responsibilities, responsibilityInstructions, Skills and packet are hard requirements and supersede conflicting generic execution guidance. Apply all assigned responsibilities together. Do not choose, remove or change your roles or reopen the task plan. Read each assigned SKILL.md once, then read only the references that Skill or the assignment requires. Do not read unrelated Skills, broad Memory or old logs. If the assigned responsibilities cannot complete part of the packet, set responsibilityGap to the exact missing role boundary, report blocked, and stop; do not expand your own role. Perform only this packet and return its result. Do not coordinate other roles, expand the task, or plan follow-on work. Treat the Environment Manifest as Host-verified and do not rediscover its Git/worktree/role facts unless the workspace reports a concrete contradiction. When information, capability, permission or another action is missing, report exactly what is needed and stop. Do not spawn or launch other Agents, including through shell commands. Reuse only the referenced applicable evidence, label it as reused, and do not claim its commands ran again. Report all frozen criteria honestly. Keep fixed user/permission/PR boundaries. Return the original required execution JSON.`;
+  };
   const parseWorkerReport = (raw: string): ExecutionReport => {
     let candidate: unknown;
     try {
@@ -413,6 +428,7 @@ export function startCoordinatedExecution(input: {
     let req = createCoordinationRequest({
       phase: 'prepare',
       task: input.request,
+      availableSkills,
       basis,
       priorEvidence: input.priorEvidence,
       previousContext: trace.contextSummary,
@@ -446,7 +462,12 @@ export function startCoordinatedExecution(input: {
       }
       let settlement: WorkerSettlement;
       try {
-        lastWorker = await call('worker', phase, workerPromptFor(decision));
+        lastWorker = await call(
+          'worker',
+          phase,
+          workerPromptFor(decision),
+          decision.skillPaths,
+        );
         lastWorkerReport = parseWorkerReport(lastWorker.finalOutput);
         trace.attempts.at(-1)!.summary = lastWorkerReport.summary;
         settlement = classifyWorkerSettlement(lastWorkerReport);
@@ -473,6 +494,7 @@ export function startCoordinatedExecution(input: {
       req = createCoordinationRequest({
         phase: 'qualify',
         task: input.request,
+        availableSkills,
         basis,
         priorEvidence: input.priorEvidence,
         previousContext: trace.contextSummary,
@@ -659,6 +681,7 @@ export function startCoordinatedExecution(input: {
       let req = createCoordinationRequest({
         phase: 'prepare',
         task: input.request,
+        availableSkills,
         basis,
         priorEvidence: input.priorEvidence,
         previousContext: trace.contextSummary,
@@ -687,7 +710,12 @@ export function startCoordinatedExecution(input: {
             throw new Error('Coordinator repair budget exhausted.');
           repairs--;
         }
-        lastWorker = await call('worker', phase, workerPromptFor(decision));
+        lastWorker = await call(
+          'worker',
+          phase,
+          workerPromptFor(decision),
+          decision.skillPaths,
+        );
         lastWorkerReport = parseWorkerReport(lastWorker.finalOutput);
         trace.attempts.at(-1)!.summary = lastWorkerReport.summary;
         basis = await input.readBasis();
@@ -707,6 +735,7 @@ export function startCoordinatedExecution(input: {
         req = createCoordinationRequest({
           phase: 'qualify',
           task: input.request,
+          availableSkills,
           basis,
           priorEvidence: input.priorEvidence,
           previousContext: trace.contextSummary,
@@ -728,11 +757,20 @@ export function startCoordinatedExecution(input: {
   }
   const completion = (async (): Promise<CoordinatedResult> => {
     try {
+      if (input.discoverSkills) {
+        skillCatalog = await input.discoverSkills(
+          input.workerOptions.workingDirectory,
+        );
+        availableSkills = skillCatalog.skills
+          .filter((skill) => skill.enabled)
+          .map(({ name, path }) => ({ name, path }));
+      }
       const active = await coordinatorSession({
         profile: input.settings.profile,
         workingDirectory: input.workerOptions.workingDirectory,
         protectedPath: input.workerOptions.protectedPath,
         hostTools: [dispatchTool],
+        skillCatalog,
       });
       assertActive();
       return active ? await runThreaded(active) : await runLegacy();

@@ -2,6 +2,7 @@ import { publishActivity, type LocalAgentActivity } from './activity.ts';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import readline from 'node:readline';
 import {
+  codexSkillConfig,
   readCodexSkills,
   withSkillCatalog,
   type SkillCatalog,
@@ -46,6 +47,7 @@ export type LocalAgentRunInput = {
   effort?: ReasoningEffort;
   access?: 'read-only' | 'workspace-write';
   protectedPath?: string;
+  allowedSkillPaths?: string[];
   environment?: NodeJS.ProcessEnv;
   gitWritePaths?: string[];
   primaryRepositoryPath?: string;
@@ -182,7 +184,9 @@ export function startCodexRun(
     run = launch(
       {
         ...input,
-        prompt: withSkillCatalog(input.prompt, catalog) + permissionContext,
+        prompt:
+          withSkillCatalog(input.prompt, catalog, input.allowedSkillPaths) +
+          permissionContext,
       },
       catalog,
     );
@@ -308,15 +312,7 @@ export function buildCodexArguments(
           workingDirectory,
         ]),
     ...(catalog
-      ? [
-          '-c',
-          `skills.config=[${catalog.skills
-            .filter((skill) => !skill.enabled)
-            .map(
-              (skill) => `{path=${JSON.stringify(skill.path)},enabled=false}`,
-            )
-            .join(',')}]`,
-        ]
+      ? ['-c', codexSkillConfig(catalog, input.allowedSkillPaths)]
       : []),
     ...(input.disableDelegation
       ? ['--disable', 'multi_agent', '--disable', 'multi_agent_v2']
