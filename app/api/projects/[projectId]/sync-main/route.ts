@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api-errors';
 import { getProject } from '@/lib/project-registry';
 import { guardRequest } from '@/lib/request-boundary';
 import { syncProjectMain } from '@/lib/modules/implementation/sync-main';
@@ -17,18 +18,6 @@ export async function POST(
       await syncProjectMain(project.codePath ?? project.rootPath),
     );
   } catch (error) {
-    return Response.json(
-      {
-        error:
-          error instanceof Error &&
-          [
-            'Main sync is already running.',
-            'The project directory is not a repository root.',
-          ].includes(error.message)
-            ? error.message
-            : 'Could not sync main.',
-      },
-      { status: 409 },
-    );
+    return apiErrorResponse(error, 'Could not sync main.', 'POST sync-main');
   }
 }
