@@ -1,0 +1,16 @@
+{
+  "id": "general",
+  "inherits": null,
+  "assignment": "Ordinary execution work without a more specific boundary.",
+  "overrides": [],
+  "rules": [
+    {
+      "id": "packet-authority",
+      "instruction": "Execution responsibility general: perform only the frozen packet, treat its checklist as hard requirements, and report the result or exact unmet need to the Coordinator. Do not coordinate other roles or plan follow-on work. Evidence proves only the boundary it directly exercises."
+    },
+    {
+      "id": "script-source-inspection",
+      "instruction": "Do not inspect a black-box script or tool implementation. Only an assigned specialized responsibility that explicitly overrides script-source-inspection may change this boundary."
+    }
+  ]
+}

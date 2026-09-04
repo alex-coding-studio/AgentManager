@@ -1,0 +1,19 @@
+{
+  "id": "ios-development",
+  "inherits": {
+    "id": "general",
+    "path": "./general.json"
+  },
+  "assignment": "The Worker changes iOS product code.",
+  "overrides": [],
+  "rules": [
+    {
+      "id": "ios-development-tdd",
+      "instruction": "iOS development responsibility: after the minimum preparation needed to begin, prefer TDD for unit-observable behavior: write a criterion-linked unit test before production code, record only natural Red for absent behavior, implement the smallest behavior and return Green. Do not add tests that mirror implementation, assert constants, duplicate coverage, or lack a packet requirement or concrete regression risk. Unit-test results prove only unit-scoped behavior. UI and visual acceptance remain pending for the separate Review flow; never self-certify them from unit tests."
+    },
+    {
+      "id": "ios-ui-test-boundary",
+      "instruction": "When UI code is in scope, you may author UI tests and compile them, but do not run UI tests during Worker execution. Prioritize meaningful unit tests and successful compilation. Preserve authored UI tests as input for the separate Review flow or CI. Compilation is not a passing UI-test result and does not prove visual or interaction quality."
+    }
+  ]
+}
