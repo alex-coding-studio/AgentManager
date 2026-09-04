@@ -27,7 +27,7 @@
     "test:markdown": "node --experimental-strip-types --test tests/markdown-feedback-position.test.ts tests/browser-uuid.test.ts",
     "test:settings": "node --experimental-strip-types --test tests/app-settings.test.ts tests/project-reveal.test.ts",
     "test:brand": "node --experimental-strip-types --test tests/praxis-brand.test.ts",
-    "test:boundary": "node --experimental-strip-types --import ./tests/helpers/register-alias.mjs --test tests/api-request-boundary.test.ts",
+    "test:boundary": "node --experimental-strip-types --import ./tests/helpers/register-alias.mjs --test tests/api-request-boundary.test.ts tests/local-file-reference.test.ts",
     "test:cli": "node --experimental-strip-types --test tests/cli-lifecycle.test.ts",
     "test:registry": "node --experimental-strip-types --test tests/project-registry-atomicity.test.ts",
     "test:api-errors": "node --experimental-strip-types --import ./tests/helpers/register-alias.mjs --test tests/api-error-safety.test.ts",

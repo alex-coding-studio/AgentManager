@@ -324,7 +324,7 @@ async function contextInputs(
   }));
   const external = await Promise.all(
     files.map(async (file, index) => {
-      if (!/\.(md|markdown)$/i.test(file.name))
+      if (!/\.(md|markdown|txt|html|htm)$/i.test(file.name))
         throw new PublicApiError(
           'Only Markdown files can be attached to What to Do.',
           400,

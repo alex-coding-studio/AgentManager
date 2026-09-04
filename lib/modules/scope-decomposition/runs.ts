@@ -1232,7 +1232,7 @@ async function saveUploadedResources(
   const usedNames = new Set<string>();
   const resources: ContextWorkspaceInput[] = [];
   for (const file of files) {
-    if (!/\.(md|markdown)$/i.test(file.name)) {
+    if (!/\.(md|markdown|txt|html|htm)$/i.test(file.name)) {
       throw new PublicApiError(
         'Only Markdown Resources can be added to an Agent Run.',
         400,

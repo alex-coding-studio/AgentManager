@@ -298,7 +298,7 @@ void test('Action supplemental input rejects unsupported files before dispatch',
   await assert.rejects(
     service.start(project, {
       ...input,
-      files: [{ name: 'notes.txt', content: 'Not Markdown.' }],
+      files: [{ name: 'notes.bin', content: 'Not a supported reference.' }],
     }),
     /Invalid execution resources/,
   );

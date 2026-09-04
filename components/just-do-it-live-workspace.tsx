@@ -367,7 +367,10 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
         throw new Error(t('Attach no more than five resources.'));
       const values = await Promise.all(
         files.map(async (file) => {
-          if (file.size > 262144 || !/\.(md|markdown|txt)$/i.test(file.name))
+          if (
+            file.size > 262144 ||
+            !/\.(md|markdown|txt|html|htm)$/i.test(file.name)
+          )
             throw new Error(t('Use text or Markdown files up to 256 KB.'));
           return { name: file.name, content: await file.text() };
         }),
