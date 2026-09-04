@@ -477,6 +477,7 @@ void test('undo restores only the current Action to its clean baseline', async (
     'accept',
     card.execution!.runs[0].id,
   );
+  await writeFile(path.join(firstWorkspace, 'between.txt'), 'before Action 2');
   await f.service.start(f.project, {
     ...f.input,
     actionId: f.actions[1].id,
@@ -484,6 +485,7 @@ void test('undo restores only the current Action to its clean baseline', async (
     instruction: 'Try the risky approach',
   });
   await writeFile(path.join(firstWorkspace, 'app.txt'), 'broken second Action');
+  await writeFile(path.join(firstWorkspace, 'between.txt'), 'broken Action 2');
   await writeFile(path.join(firstWorkspace, 'partial.txt'), 'remove me');
   f.calls[1].reject(new Error('Needs user input'));
   card = await f.settled();
@@ -515,6 +517,10 @@ void test('undo restores only the current Action to its clean baseline', async (
     await readFile(path.join(cleanWorkspace, '.env'), 'utf8'),
     'LOCAL=value',
   );
+  assert.equal(
+    await readFile(path.join(cleanWorkspace, 'between.txt'), 'utf8'),
+    'before Action 2',
+  );
   await assert.rejects(
     () => readFile(path.join(cleanWorkspace, 'partial.txt')),
     /ENOENT/,
@@ -530,6 +536,55 @@ void test('undo restores only the current Action to its clean baseline', async (
     'remove me',
   );
   assert.equal(f.calls.length, 2);
+});
+
+void test('failed Undo persistence restores the original active worktree', async (t) => {
+  const f = await fixture(t);
+  await f.service.start(f.project, {
+    ...f.input,
+    initializeRepository: true,
+  });
+  const workspace = f.calls[0].options.workingDirectory;
+  await writeFile(path.join(workspace, 'app.txt'), 'accepted Action');
+  f.calls[0].resolve(delivered(f.calls[0].request));
+  let card = await f.settled();
+  card = await f.service.update(
+    f.project,
+    f.card.id,
+    card.revision,
+    'accept',
+    card.execution!.runs[0].id,
+  );
+  await f.service.start(f.project, {
+    ...f.input,
+    actionId: f.actions[1].id,
+    expectedRevision: card.revision,
+  });
+  await writeFile(path.join(workspace, 'app.txt'), 'broken Action');
+  f.calls[1].reject(new Error('Needs user input'));
+  card = await f.settled();
+  f.failReset();
+
+  await assert.rejects(
+    () =>
+      f.service.undoAction(
+        f.project,
+        f.card.id,
+        f.actions[1].id,
+        card.revision,
+      ),
+    /persistence failed/,
+  );
+
+  assert.equal(
+    (await f.store.read(f.project, f.card.id)).revision,
+    card.revision,
+  );
+  assert.equal((await ensureCardWorkspace(f.project, card)).path, workspace);
+  assert.equal(
+    await readFile(path.join(workspace, 'app.txt'), 'utf8'),
+    'broken Action',
+  );
 });
 void test('different Cards have distinct branches, and dirty primary checkout content is never copied or overwritten', async (t) => {
   const f = await fixture(t);

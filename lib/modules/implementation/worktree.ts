@@ -362,10 +362,16 @@ export async function undoWorkspaceRestart(
   previous: CardWorkspace,
   current: CardWorkspace,
   backup: CardWorkspace,
+  forceCurrent = false,
 ) {
   await verifyCardWorkspace(current);
-  await git(current.repository, 'worktree', 'remove', current.path);
-  await git(current.repository, 'branch', '-d', current.branch);
+  await git(
+    current.repository,
+    'worktree',
+    'remove',
+    ...(forceCurrent ? ['--force'] : []),
+    current.path,
+  );
   await git(
     previous.repository,
     'worktree',
@@ -374,6 +380,12 @@ export async function undoWorkspaceRestart(
     previous.path,
   );
   await save(project, cardId, previous);
+  await git(
+    current.repository,
+    'branch',
+    forceCurrent ? '-D' : '-d',
+    current.branch,
+  ).catch(() => undefined);
 }
 
 export async function cardGitWritePaths(workspace: CardWorkspace) {

@@ -783,6 +783,19 @@ export function createExecutionService(
           firstTrackedRunId: request.requestId,
         };
       }
+      if (
+        !card.execution?.runs.some((run) => run.actionId === input.actionId)
+      ) {
+        const actionBaseline = await checkpointWorkspace(
+          project,
+          card.id,
+          baseline,
+          git.head,
+          randomUUID(),
+          `Action baseline\n${input.actionId}\n${card.source.title}`,
+        );
+        git = { ...git, head: actionBaseline };
+      }
       reservation.id = request.requestId;
       const retryInputs = { ...card.execution?.retryInputs };
       delete retryInputs[input.actionId];
@@ -1849,6 +1862,7 @@ export function createExecutionService(
           workspace,
           restarted.workspace,
           restarted.backup,
+          true,
         );
         throw error;
       }
