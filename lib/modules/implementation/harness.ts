@@ -63,6 +63,8 @@ const stageInstructions: Record<ExecutionStage, string> = {
   todo: `Organize the user's follow-up into an Issue-ready title, concise summary, body and suggested labels, retaining the original intent and relevant provenance. The host creates the Issue only under separate authorization; do not create one or fabricate a URL. Current delivery problems stay in the Action unless the user explicitly chooses to defer them or accept a limited result. When that decision is missing, return needs-decision with the concrete conflict, not an invented deferral. A Todo does not change the Plan or complete an Action. Later promotion selects a parent Node and preserves the Issue association; never automatically import or execute it. Stop after returning the draft or decision request.`,
 };
 
+export const JUST_DO_IT_EXECUTION_INSTRUCTIONS = stageInstructions.execution;
+
 const text = { type: 'string', minLength: 1, pattern: '\\S' };
 const uuid = {
   type: 'string',

@@ -144,6 +144,14 @@ void test('a failed worker never allows an automatic repair and an exhausted bud
     ),
     ['ready', 'needs-user', 'blocked'],
   );
+  const gap = {
+    ...report('blocked'),
+    responsibilityGap: 'Another responsibility is required.',
+  };
+  assert.deepEqual(
+    allowedDecisionsAfter({ kind: 'attention-required', report: gap }, 1),
+    ['extend', 'ready', 'needs-user', 'blocked'],
+  );
 });
 
 void test('continuation prompts carry the event, the new request identity and no task replay', () => {

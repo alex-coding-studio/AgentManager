@@ -39,7 +39,7 @@ import {
   executionResponsibilityInstructions,
   resolveExecutionResponsibilities,
 } from '../lib/modules/implementation/execution-responsibilities.ts';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -122,7 +122,7 @@ function decision(
     skillPaths: [],
     summary: 'Bounded result',
     instructions:
-      kind === 'dispatch' || kind === 'repair'
+      kind === 'dispatch' || kind === 'extend' || kind === 'repair'
         ? 'Only repair the requested output.'
         : '',
     ...(kind === 'repair'
@@ -147,7 +147,7 @@ function decision(
       },
     ],
     checks:
-      kind === 'dispatch' || kind === 'repair'
+      kind === 'dispatch' || kind === 'extend' || kind === 'repair'
         ? []
         : [
             {
@@ -466,7 +466,7 @@ void test('Coordinator changes a Worker assignment only after a responsibility g
     previousDecision: previous,
     repairsRemaining: 1,
   });
-  const changed = decision(qualify, 'repair');
+  const changed = decision(qualify, 'extend');
   changed.responsibilities = ['mechanical', 'ios-development'];
   changed.skillPaths = previous.skillPaths;
   assert.throws(
@@ -477,7 +477,20 @@ void test('Coordinator changes a Worker assignment only after a responsibility g
     'The assigned responsibilities do not permit the required script.';
   assert.equal(
     parseCoordinationDecision(JSON.stringify(changed), qualify).decision,
-    'repair',
+    'extend',
+  );
+  previous.responsibilities = ['general'];
+  changed.responsibilities = ['ios-development'];
+  assert.equal(
+    parseCoordinationDecision(JSON.stringify(changed), qualify).decision,
+    'extend',
+  );
+  const mislabeledRepair = decision(qualify, 'repair');
+  mislabeledRepair.responsibilities = previous.responsibilities;
+  mislabeledRepair.skillPaths = previous.skillPaths;
+  assert.throws(
+    () => parseCoordinationDecision(JSON.stringify(mislabeledRepair), qualify),
+    /requires extension, not repair/,
   );
 });
 
@@ -1105,7 +1118,9 @@ class FakePushDriver implements AgentSessionDriver {
         if (stopped) throw new Error('Agent turn interrupted.');
         if (
           this.viaTool &&
-          (decision.decision === 'dispatch' || decision.decision === 'repair')
+          (decision.decision === 'dispatch' ||
+            decision.decision === 'extend' ||
+            decision.decision === 'repair')
         ) {
           const tool = this.hostTools.find(
             (item) => item.name === 'dispatch_worker',
@@ -1184,12 +1199,19 @@ class FakePushDriver implements AgentSessionDriver {
 function pushSetup(
   script: Scripted,
   workers: Array<
-    'passed' | 'failed' | 'delivered-failed' | 'invalid' | 'hang'
+    | 'passed'
+    | 'failed'
+    | 'delivered-failed'
+    | 'responsibility-gap'
+    | 'invalid'
+    | 'hang'
   > = ['passed'],
   options: {
     viaTool?: boolean;
     limits?: typeof coordinationLimits;
     resumeWorkerSessionId?: string;
+    packetDir?: string;
+    runtimeInstructions?: string;
   } = {},
 ) {
   const request = task();
@@ -1218,12 +1240,18 @@ function pushSetup(
     const value: LocalAgentResult =
       kind === 'invalid'
         ? { agentSessionId: 'w', finalOutput: 'not json', usage }
-        : kind === 'delivered-failed'
+        : kind === 'responsibility-gap'
           ? result({
               ...JSON.parse(worker(request, 'failed').finalOutput),
-              outcome: 'delivered',
+              responsibilityGap:
+                'The assigned responsibility cannot change iOS product code.',
             })
-          : worker(request, kind);
+          : kind === 'delivered-failed'
+            ? result({
+                ...JSON.parse(worker(request, 'failed').finalOutput),
+                outcome: 'delivered',
+              })
+            : worker(request, kind);
     return { completion: Promise.resolve(value), cancel: () => canceled++ };
   };
   const progress: string[] = [];
@@ -1244,6 +1272,8 @@ function pushSetup(
     onProgress: (event) => progress.push(`${event.phase}: ${event.summary}`),
     workerTransport,
     limits: options.limits,
+    packetDir: options.packetDir,
+    runtimeInstructions: options.runtimeInstructions,
     resumeWorkerSessionId: options.resumeWorkerSessionId,
     coordinatorSession: async (input): Promise<CoordinatorSession> => {
       driver = new FakePushDriver(
@@ -1579,7 +1609,7 @@ else if(message.method==='turn/interrupt'){interrupted=true;send({id:message.id,
   );
 });
 
-void test('the first worker of a round resumes the previous session and its repair starts fresh', async () => {
+void test('the first worker resumes the previous round and a repair starts fresh', async () => {
   const f = pushSetup(
     (req) => decision(req, req.phase === 'prepare' ? 'dispatch' : 'repair'),
     ['delivered-failed', 'passed'],
@@ -1595,4 +1625,70 @@ void test('a round without a previous session starts its worker fresh', async ()
   );
   await f.run.completion;
   assert.deepEqual(f.workerResumes, [undefined]);
+});
+
+void test('a materialized packet replaces the concatenated Worker assignment', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'worker-packet-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const packetDir = path.join(root, 'packet');
+  const f = pushSetup(
+    (req) => decision(req, req.phase === 'prepare' ? 'dispatch' : 'ready'),
+    ['passed'],
+    { packetDir, runtimeInstructions: 'Use the prepared worktree.' },
+  );
+  await f.run.completion;
+  assert.match(f.workerCalls[0], /Read .*\/Manifest\.md/);
+  assert.doesNotMatch(f.workerCalls[0], /COORDINATOR ASSIGNMENT/);
+  assert.ok(f.workerCalls[0].length < 500);
+  assert.match(
+    await readFile(path.join(packetDir, 'Environment.md'), 'utf8'),
+    /Use the prepared worktree/,
+  );
+  assert.match(
+    await readFile(path.join(packetDir, 'Assignment.md'), 'utf8'),
+    /Only repair the requested output/,
+  );
+  assert.match(
+    await readFile(path.join(packetDir, 'Assignment.md'), 'utf8'),
+    new RegExp(f.request.requestId),
+  );
+});
+
+void test('a responsibility extension resumes its Worker and preserves fresh repair capacity', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'worker-packet-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const packetDir = path.join(root, 'packet');
+  const f = pushSetup(
+    (req) => {
+      const output = decision(
+        req,
+        req.phase === 'prepare'
+          ? 'dispatch'
+          : req.workerReport?.responsibilityGap
+            ? 'extend'
+            : 'repair',
+      );
+      output.responsibilities =
+        req.phase === 'prepare' ? ['general'] : ['ios-development'];
+      return output;
+    },
+    ['responsibility-gap', 'delivered-failed', 'passed'],
+    { packetDir, runtimeInstructions: 'Use the prepared worktree.' },
+  );
+  await f.run.completion;
+  assert.deepEqual(f.workerResumes, [undefined, 'fixture', undefined]);
+  assert.equal(f.workerCalls.length, 3);
+  const first = JSON.parse(
+    await readFile(
+      path.join(packetDir, 'Responsibilities/Responsibility-1.json'),
+      'utf8',
+    ),
+  ) as { id: string };
+  const second = JSON.parse(
+    await readFile(
+      path.join(packetDir, 'Responsibilities/Responsibility-2.json'),
+      'utf8',
+    ),
+  ) as { id: string };
+  assert.deepEqual([first.id, second.id], ['general', 'ios-development']);
 });

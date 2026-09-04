@@ -5,11 +5,19 @@ import rawSpec from '../../templates/delivery-packet-spec.json' with { type: 'js
 
 export type PacketProducer = 'host' | 'coordinator';
 
-export type PacketSpecEntry = {
+export type PacketFileSpecEntry = {
   id: string;
   file: string;
   producer: PacketProducer;
 };
+
+export type PacketDirectorySpecEntry = {
+  id: string;
+  directory: string;
+  producer: PacketProducer;
+};
+
+export type PacketSpecEntry = PacketFileSpecEntry | PacketDirectorySpecEntry;
 
 export type PacketSpec = {
   version: 1;
@@ -29,9 +37,19 @@ export type PacketVerification = {
   unexpectedFiles: string[];
 };
 
+const isFileEntry = (entry: PacketSpecEntry): entry is PacketFileSpecEntry =>
+  'file' in entry;
+
+export type PacketAmendment = {
+  sequence: number;
+  targetId: string;
+  targetFile: string;
+  file: string;
+};
+
 const TEMPLATE_PATH = path.join(
-  import.meta.dirname,
-  '../../templates/delivery-packet-manifest.md',
+  process.cwd(),
+  'lib/templates/delivery-packet-manifest.md',
 );
 
 function assertSpec(value: unknown): asserts value is PacketSpec {
@@ -54,44 +72,113 @@ function assertSpec(value: unknown): asserts value is PacketSpec {
       !entry ||
       typeof entry.id !== 'string' ||
       !entry.id.trim() ||
-      typeof entry.file !== 'string' ||
-      !/^[\w.-]+\.md$/.test(entry.file) ||
       !['host', 'coordinator'].includes(entry.producer)
     )
       throw new Error(`Invalid delivery packet spec entry: ${entry?.id}`);
+    const packetPath = isFileEntry(entry) ? entry.file : entry.directory;
+    if (
+      typeof packetPath !== 'string' ||
+      !(isFileEntry(entry)
+        ? /^[\w.-]+\.md$/.test(packetPath)
+        : /^[\w.-]+$/.test(packetPath))
+    )
+      throw new Error(`Invalid delivery packet spec entry: ${entry.id}`);
     if (ids.has(entry.id))
       throw new Error(`Duplicate packet entry: ${entry.id}`);
-    if (files.has(entry.file))
-      throw new Error(`Duplicate packet file: ${entry.file}`);
+    if (files.has(packetPath))
+      throw new Error(`Duplicate packet path: ${packetPath}`);
     ids.add(entry.id);
-    files.add(entry.file);
+    files.add(packetPath);
   }
 }
 
 assertSpec(rawSpec);
 export const PACKET_SPEC: PacketSpec = rawSpec;
 
-export const PACKET_ENTRIES = Object.freeze([
-  ...PACKET_SPEC.origin,
-  ...PACKET_SPEC.references,
-]);
+export const PACKET_ENTRIES = Object.freeze(
+  [...PACKET_SPEC.origin, ...PACKET_SPEC.references].filter(isFileEntry),
+);
 
 export const PACKET_FILES = Object.freeze(
   PACKET_ENTRIES.map((entry) => entry.file),
 );
 
+export const PACKET_DIRECTORIES = Object.freeze(
+  [...PACKET_SPEC.origin, ...PACKET_SPEC.references]
+    .filter((entry): entry is PacketDirectorySpecEntry => !isFileEntry(entry))
+    .map((entry) => entry.directory),
+);
+
+export function packetAmendments(
+  files: Iterable<string>,
+  spec: PacketSpec = PACKET_SPEC,
+) {
+  const entries = [...spec.origin, ...spec.references].filter(isFileEntry);
+  const byFile = new Map(entries.map((entry) => [entry.file, entry]));
+  const amendments: PacketAmendment[] = [];
+  for (const file of files) {
+    const match = /^Amendment-(\d+)-([\w.-]+)\.md$/.exec(file);
+    if (!match) continue;
+    const sequence = Number(match[1]);
+    const targetFile = `${match[2]}.md`;
+    const target = byFile.get(targetFile);
+    if (!Number.isSafeInteger(sequence) || sequence < 1 || !target) continue;
+    amendments.push({
+      sequence,
+      targetId: target.id,
+      targetFile,
+      file,
+    });
+  }
+  const ordered = amendments.sort((left, right) =>
+    left.targetId === right.targetId
+      ? left.sequence - right.sequence
+      : left.targetId.localeCompare(right.targetId),
+  );
+  for (const entry of entries) {
+    const targetAmendments = ordered.filter(
+      (amendment) => amendment.targetId === entry.id,
+    );
+    for (const [index, amendment] of targetAmendments.entries()) {
+      if (amendment.sequence !== index + 1)
+        throw new Error('Delivery packet amendment sequence is invalid.');
+    }
+  }
+  return ordered;
+}
+
+export function orderedPacketFiles(
+  entries: PacketFileSpecEntry[],
+  amendments: PacketAmendment[],
+) {
+  return entries.flatMap((entry) => [
+    entry.file,
+    ...amendments
+      .filter((amendment) => amendment.targetId === entry.id)
+      .map((amendment) => amendment.file),
+  ]);
+}
+
 export function buildPacketManifest(
   input: PacketManifestInput,
   spec: PacketSpec = PACKET_SPEC,
+  presentFiles: Iterable<string> = [],
 ) {
-  const list = (entries: PacketSpecEntry[]) =>
-    entries.map((entry) => `- \`${entry.file}\``).join('\n');
+  const amendments = packetAmendments(presentFiles, spec);
+  const list = (files: string[]) =>
+    files.map((file) => `- \`${file}\``).join('\n');
+  const orderedPaths = (entries: PacketSpecEntry[]) =>
+    entries.flatMap((entry) =>
+      isFileEntry(entry)
+        ? orderedPacketFiles([entry], amendments)
+        : [`${entry.directory}/`],
+    );
   const values: Record<string, string> = {
     cardId: input.cardId,
     actionId: input.actionId,
     contextRevision: String(input.contextRevision),
-    origin: list(spec.origin),
-    references: list(spec.references),
+    origin: list(orderedPaths(spec.origin)),
+    references: list(orderedPaths(spec.references)),
   };
   return renderTemplate(readFileSync(TEMPLATE_PATH, 'utf8'), values);
 }
@@ -111,15 +198,38 @@ export async function verifyPacket(
   packetDir: string,
   spec: PacketSpec = PACKET_SPEC,
 ): Promise<PacketVerification> {
-  const present = new Set(
-    (await readdir(packetDir, { withFileTypes: true }))
-      .filter((item) => item.isFile())
-      .map((item) => item.name),
-  );
+  const present = new Set<string>();
+  for (const item of await readdir(packetDir, { withFileTypes: true })) {
+    if (item.isFile()) {
+      present.add(item.name);
+      continue;
+    }
+    if (!item.isDirectory() || !PACKET_DIRECTORIES.includes(item.name)) {
+      present.add(`${item.name}${item.isDirectory() ? '/' : ''}`);
+      continue;
+    }
+    for (const child of await readdir(path.join(packetDir, item.name), {
+      withFileTypes: true,
+    }))
+      present.add(
+        `${item.name}/${child.name}${child.isDirectory() ? '/' : ''}`,
+      );
+  }
   const entries = [...spec.origin, ...spec.references];
+  const amendments = packetAmendments(present, spec);
   const missing = entries
-    .filter((entry) => !present.has(entry.file))
-    .map((entry) => ({ ...entry }));
+    .filter((entry) =>
+      isFileEntry(entry)
+        ? !present.has(entry.file)
+        : ![...present].some((file) =>
+            file.startsWith(`${entry.directory}/Responsibility-`),
+          ),
+    )
+    .map((entry) => ({
+      id: entry.id,
+      file: isFileEntry(entry) ? entry.file : `${entry.directory}/`,
+      producer: entry.producer,
+    }));
   if (!present.has(spec.manifestFile))
     missing.unshift({
       id: 'manifest',
@@ -128,7 +238,11 @@ export async function verifyPacket(
     });
   const expected = new Set([
     spec.manifestFile,
-    ...entries.map((entry) => entry.file),
+    ...entries.filter(isFileEntry).map((entry) => entry.file),
+    ...amendments.map((amendment) => amendment.file),
+    ...[...present].filter((file) =>
+      /^Responsibilities\/Responsibility-[1-9]\d*\.json$/.test(file),
+    ),
   ]);
   return {
     missing,

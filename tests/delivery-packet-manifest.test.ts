@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {
@@ -8,6 +8,7 @@ import {
   verifyPacket,
   PACKET_SPEC,
   PACKET_FILES,
+  packetAmendments,
   renderTemplate,
 } from '../lib/modules/implementation/delivery-packet-manifest.ts';
 
@@ -19,9 +20,15 @@ const input = {
 
 async function packetDirectory(files: readonly string[]) {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'packet-'));
-  for (const file of files) await writeFile(path.join(dir, file), 'x', 'utf8');
+  for (const file of files) {
+    await mkdir(path.dirname(path.join(dir, file)), { recursive: true });
+    await writeFile(path.join(dir, file), 'x', 'utf8');
+  }
   return dir;
 }
+
+const responsibilityFile = 'Responsibilities/Responsibility-1.json';
+const completeFiles = [...PACKET_FILES, responsibilityFile];
 
 const block = (manifest: string, heading: string) => {
   const start = manifest.indexOf(`## ${heading}`);
@@ -33,7 +40,9 @@ void test('the manifest lists Origin files in spec order', () => {
   const origin = block(buildPacketManifest(input), 'Origin');
   assert.deepEqual(
     [...origin.matchAll(/^- `(.+)`$/gm)].map((match) => match[1]),
-    PACKET_SPEC.origin.map((entry) => entry.file),
+    PACKET_SPEC.origin.map((entry) =>
+      'file' in entry ? entry.file : `${entry.directory}/`,
+    ),
   );
 });
 
@@ -41,6 +50,7 @@ void test('references stay out of the Origin block', () => {
   const manifest = buildPacketManifest(input);
   const origin = block(manifest, 'Origin');
   for (const entry of PACKET_SPEC.references) {
+    if (!('file' in entry)) continue;
     assert.ok(!origin.includes(entry.file));
     assert.ok(block(manifest, 'References').includes(entry.file));
   }
@@ -57,6 +67,20 @@ void test('a slot whose value is empty still renders', () => {
   assert.equal(renderTemplate('[{{references}}]', { references: '' }), '[]');
 });
 
+void test('amendment numbering is contiguous for each source file', () => {
+  assert.throws(
+    () => packetAmendments(['Amendment-2-UserInput.md']),
+    /sequence is invalid/,
+  );
+  assert.deepEqual(
+    packetAmendments([
+      'Amendment-1-UserInput.md',
+      'Amendment-1-Resources.md',
+    ]).map((amendment) => amendment.file),
+    ['Amendment-1-Resources.md', 'Amendment-1-UserInput.md'],
+  );
+});
+
 void test('every template slot resolves', () => {
   const manifest = buildPacketManifest(input);
   assert.ok(!/{{\w+}}/.test(manifest));
@@ -65,7 +89,7 @@ void test('every template slot resolves', () => {
 });
 
 void test('a coordinator file that was never written is reported as its own', async () => {
-  const written = PACKET_FILES.filter((file) => file !== 'Assignment.md');
+  const written = completeFiles.filter((file) => file !== 'Assignment.md');
   const dir = await packetDirectory([...written, PACKET_SPEC.manifestFile]);
   const { missing } = await verifyPacket(dir);
   assert.deepEqual(missing, [
@@ -75,7 +99,7 @@ void test('a coordinator file that was never written is reported as its own', as
 });
 
 void test('a host file that was never produced is reported as its own', async () => {
-  const written = PACKET_FILES.filter((file) => file !== 'Acceptance.md');
+  const written = completeFiles.filter((file) => file !== 'Acceptance.md');
   const dir = await packetDirectory([...written, PACKET_SPEC.manifestFile]);
   const { missing } = await verifyPacket(dir);
   assert.deepEqual(missing, [
@@ -86,7 +110,7 @@ void test('a host file that was never produced is reported as its own', async ()
 
 void test('a complete packet reports nothing missing or unexpected', async () => {
   const dir = await packetDirectory([
-    ...PACKET_FILES,
+    ...completeFiles,
     PACKET_SPEC.manifestFile,
   ]);
   assert.deepEqual(await verifyPacket(dir), {
@@ -98,7 +122,7 @@ void test('a complete packet reports nothing missing or unexpected', async () =>
 
 void test('a file the spec never declared is reported', async () => {
   const dir = await packetDirectory([
-    ...PACKET_FILES,
+    ...completeFiles,
     PACKET_SPEC.manifestFile,
     'stray.md',
   ]);
@@ -107,10 +131,25 @@ void test('a file the spec never declared is reported', async () => {
 });
 
 void test('a missing manifest is reported first', async () => {
-  const dir = await packetDirectory(PACKET_FILES);
+  const dir = await packetDirectory(completeFiles);
   const { missing } = await verifyPacket(dir);
   assert.deepEqual(missing, [
     { id: 'manifest', file: PACKET_SPEC.manifestFile, producer: 'host' },
+  ]);
+  await rm(dir, { recursive: true, force: true });
+});
+
+void test('a packet without an assigned responsibility reports the directory', async () => {
+  const dir = await packetDirectory([
+    ...PACKET_FILES,
+    PACKET_SPEC.manifestFile,
+  ]);
+  assert.deepEqual((await verifyPacket(dir)).missing, [
+    {
+      id: 'responsibilities',
+      file: 'Responsibilities/',
+      producer: 'coordinator',
+    },
   ]);
   await rm(dir, { recursive: true, force: true });
 });

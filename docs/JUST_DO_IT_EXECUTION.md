@@ -61,11 +61,27 @@ exact missing input, capability or permission to the Coordinator and does not
 arrange follow-on work. It reads the assigned `SKILL.md` once, then follows only
 the references that Skill or the assignment requires.
 
+Before Worker dispatch, the Host materializes Environment, Responsibilities,
+User Input, Resources, Assignment, Skills, Verification Plan, Acceptance, and
+Product Context as a file-backed Delivery Packet. The Worker receives only the
+Manifest path. Existing entry files remain immutable; changed content becomes a
+new `Amendment-N-<Entry>.md` immediately after its source entry in Manifest
+order. A Worker may skip only an exact filename it can identify as already read
+in the same provider session. A fresh or uncertain session reads it.
+Responsibility definitions are not copied into the packet. The Host creates
+`Responsibilities/Responsibility-N.json` pointer files in assignment order.
+Each pointer names one Coordinator-selected definition in the built-in
+`lib/responsibilities` library. A responsibility gap may append another pointer;
+existing pointers and library definitions are not rewritten. Responsibility
+assignment is internal and does not require user input. This extension resumes
+the same Worker session and does not consume repair. A repair is reserved for an
+incorrect result; it starts a fresh Worker with the current complete packet.
+
 If a Worker reports that its assigned roles cannot complete part of the packet,
-the Coordinator reassesses that gap after receiving the result. A repair may
-replace a responsibility or append another specialized responsibility while the finalized
-packet, checklist and acceptance criteria remain unchanged. The Worker never
-expands its own role.
+the Coordinator reassesses that gap after receiving the result. An `extend`
+decision may append another specialized responsibility while the finalized
+packet, checklist and acceptance criteria remain unchanged. Existing
+responsibilities cannot be removed. The Worker never expands its own role.
 
 `general` is the default base responsibility and owns packet authority, reporting and
 evidence boundaries, including the default ban on inspecting black-box script
