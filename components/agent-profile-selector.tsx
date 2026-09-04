@@ -68,6 +68,7 @@ export function AgentProfileSelector({
   label = 'Agent configuration',
   showStatus = true,
   agents = allAgents,
+  triggerClassName,
 }: {
   value: AgentProfile;
   onChange: (profile: AgentProfile) => void;
@@ -76,6 +77,7 @@ export function AgentProfileSelector({
   label?: string;
   showStatus?: boolean;
   agents?: readonly AgentProfile['agent'][];
+  triggerClassName?: string;
 }) {
   const { t } = useUiText();
   const [catalog, setCatalog] = useState<ModelCatalog | null>(null);
@@ -185,7 +187,10 @@ export function AgentProfileSelector({
       <PopoverTrigger
         disabled={disabled}
         aria-label={t(label)}
-        className="group flex h-8 min-w-0 max-w-64 items-center gap-2 rounded-lg px-2 text-left outline-none transition hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
+        className={cn(
+          'group flex h-8 min-w-0 max-w-64 items-center gap-2 rounded-lg px-2 text-left outline-none transition hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50',
+          triggerClassName,
+        )}
       >
         <span className="min-w-0 flex-1 truncate text-[10px] leading-4 text-muted-foreground">
           {selectedAgentLabel} · {modelLabel}
