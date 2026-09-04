@@ -196,6 +196,7 @@ export function JustDoItAction({
       }
       return data.card as PlanningCard;
     } catch (err) {
+      if (operation === 'undo-action') setUndoOpen(false);
       setError(err instanceof Error ? err.message : 'Execution failed.');
     } finally {
       setPending(false);

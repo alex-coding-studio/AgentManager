@@ -91,6 +91,8 @@ import type { ActionRun, ExecuteActionInput } from './execution-types.ts';
 import { prepareCardEnvironment } from '../../card-host-operations.ts';
 import { resolveProductContextReferences } from '../product-context/resource.ts';
 
+const exec = promisify(execFile);
+
 type Active = {
   id: string;
   cardId: string;
@@ -201,11 +203,14 @@ async function readActionBaseline(
   throw new Error('Action baseline snapshot is unavailable.');
 }
 
-function orderedFiles(snapshot: WorkspaceSnapshot) {
+function orderedFiles(
+  snapshot: WorkspaceSnapshot,
+  omitted = new Set<string>(),
+) {
   return Object.fromEntries(
-    Object.entries(snapshot.files).sort(([left], [right]) =>
-      left.localeCompare(right),
-    ),
+    Object.entries(snapshot.files)
+      .filter(([file]) => !omitted.has(file))
+      .sort(([left], [right]) => left.localeCompare(right)),
   );
 }
 
@@ -231,8 +236,10 @@ async function copyPreservedBaselineFiles(
 async function restoreBaselineModes(
   rootPath: string,
   files: Record<string, string>,
+  omitted: Set<string>,
 ) {
   for (const [file, fingerprint] of Object.entries(files)) {
+    if (omitted.has(file)) continue;
     if (fingerprint.startsWith('link:')) continue;
     const match = fingerprint.match(/^(\d{1,3}):[0-9a-f]{64}$/);
     const mode = Number(match?.[1]);
@@ -246,6 +253,17 @@ async function restoreBaselineModes(
       throw new Error('Action baseline mode target is not a regular file.');
     await chmod(absolute, mode);
   }
+}
+
+async function trackedFilesAt(repository: string, commit: string) {
+  const output = (
+    await exec(
+      'git',
+      ['-C', repository, 'ls-tree', '-r', '--name-only', '-z', commit],
+      { timeout: 10000, maxBuffer: 20_000_000 },
+    )
+  ).stdout;
+  return new Set(output.split('\0').filter(Boolean));
 }
 
 export function createExecutionService(
@@ -1835,12 +1853,29 @@ export function createExecutionService(
           restarted.workspace.path,
           preservedFiles,
         );
-        await restoreBaselineModes(restarted.workspace.path, baseline.files);
+        const beforeModes = await snapshotWorkspace(workingProject);
+        const trackedFiles = await trackedFilesAt(
+          workspace.repository,
+          baseline.head,
+        );
+        const omitted = new Set(
+          Object.keys(baseline.files).filter(
+            (file) =>
+              includeInGitHistory(file) &&
+              !trackedFiles.has(file) &&
+              !Object.hasOwn(beforeModes.files, file),
+          ),
+        );
+        await restoreBaselineModes(
+          restarted.workspace.path,
+          baseline.files,
+          omitted,
+        );
         const restored = await snapshotWorkspace(workingProject);
         if (
           restored.head !== baseline.head ||
-          JSON.stringify(orderedFiles(restored)) !==
-            JSON.stringify(orderedFiles(baseline))
+          JSON.stringify(orderedFiles(restored, omitted)) !==
+            JSON.stringify(orderedFiles(baseline, omitted))
         )
           throw new Error('Action baseline could not be restored exactly.');
         const retryInputs = { ...card.execution?.retryInputs };
