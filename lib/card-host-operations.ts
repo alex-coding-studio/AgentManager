@@ -626,6 +626,51 @@ export async function publishCardCandidate(
   };
 }
 
+export async function deliverCardCandidate(
+  request: CandidatePublishRequest,
+  runner: HostCommandRunner = commandRunner,
+) {
+  const workspace = request.environment.workspace;
+  await verifyCardWorkspace(workspace);
+  const branch = await git(runner, workspace.path, 'branch', '--show-current');
+  if (branch !== workspace.branch)
+    throw new Error('Delivery branch differs from the assigned Card branch.');
+  if (!request.title.trim() || request.title.length > 200)
+    throw new Error('Delivery commit title is invalid.');
+  const changed = await git(
+    runner,
+    workspace.path,
+    'diff',
+    'HEAD',
+    '--name-only',
+    '-z',
+  );
+  const untracked = await git(
+    runner,
+    workspace.path,
+    'ls-files',
+    '--others',
+    '--exclude-standard',
+    '-z',
+  );
+  const files = [
+    ...new Set(
+      [...changed.split('\0'), ...untracked.split('\0')].filter(Boolean),
+    ),
+  ];
+  if (files.some(forbiddenCandidatePath))
+    throw new Error('Delivery contains host-owned, generated or secret files.');
+  if (files.length) {
+    await git(runner, workspace.path, 'add', '--all', '--', ...files);
+    await git(runner, workspace.path, 'commit', '-m', request.title);
+  }
+  const headSha = await git(runner, workspace.path, 'rev-parse', 'HEAD');
+  return publishCardCandidate(
+    { ...request, baseSha: workspace.baseCommit, headSha },
+    runner,
+  );
+}
+
 function forbiddenCandidatePath(file: string) {
   return (
     file === '.praxis' ||

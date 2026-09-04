@@ -39,6 +39,7 @@ import { readCodexSkills, type SkillCatalog } from '../../agents/skills.ts';
 import { executionResponsibilityInstructions } from './execution-responsibilities.ts';
 import {
   runDeliveryPacketScript,
+  packetResponsibilityState,
   workerPacketPrompt,
 } from './delivery-packet.ts';
 import {
@@ -459,6 +460,9 @@ The Coordinator-assigned responsibilities, responsibilityInstructions, Skills an
     let basis = await input.readBasis();
     assertActive();
     let req = createCoordinationRequest({
+      activeResponsibilities: input.packetDir
+        ? (await packetResponsibilityState(input.packetDir)).ids
+        : [],
       phase: 'prepare',
       task: input.request,
       availableSkills,
@@ -745,6 +749,9 @@ The Coordinator-assigned responsibilities, responsibilityInstructions, Skills an
       let basis = await input.readBasis();
       assertActive();
       let req = createCoordinationRequest({
+        activeResponsibilities: input.packetDir
+          ? (await packetResponsibilityState(input.packetDir)).ids
+          : [],
         phase: 'prepare',
         task: input.request,
         availableSkills,

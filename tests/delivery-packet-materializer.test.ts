@@ -197,3 +197,42 @@ void test('an acceptance protocol change becomes an amendment without changing t
     initial.host.acceptance,
   );
 });
+
+void test('general remains implicit when an existing specialized responsibility is selected again', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'delivery-packet-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const packetDir = path.join(root, 'packet');
+  await materializeDeliveryPacket(request(packetDir));
+  const next = request(packetDir);
+  next.responsibilities = ['general'];
+  const result = await materializeDeliveryPacket(next);
+  assert.deepEqual(result.createdFiles, []);
+  assert.equal(
+    (await readdir(path.join(packetDir, 'Responsibilities'))).length,
+    1,
+  );
+});
+
+void test('specialization preserves general history but activates only the specialized pointer', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'delivery-packet-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const packetDir = path.join(root, 'packet');
+  const initial = request(packetDir);
+  initial.responsibilities = ['general'];
+  await materializeDeliveryPacket(initial);
+  const first = await readFile(
+    path.join(packetDir, 'Responsibilities/Responsibility-1.json'),
+    'utf8',
+  );
+  await materializeDeliveryPacket(request(packetDir));
+  const manifest = await readFile(path.join(packetDir, 'Manifest.md'), 'utf8');
+  assert.ok(!manifest.includes('Responsibilities/Responsibility-1.json'));
+  assert.ok(manifest.includes('Responsibilities/Responsibility-2.json'));
+  assert.equal(
+    await readFile(
+      path.join(packetDir, 'Responsibilities/Responsibility-1.json'),
+      'utf8',
+    ),
+    first,
+  );
+});

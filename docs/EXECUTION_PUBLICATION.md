@@ -1,0 +1,21 @@
+# Execution publication
+
+`npm run publish:execution-candidate` reads one CandidatePublishRequest JSON object from standard input and returns one CandidatePublication JSON object. The Agent-facing `publish_candidate` tool invokes this script; callers provide a title, body and optional `ready` flag. The Host supplies the assigned workspace and identity.
+
+The script owns checking the Card branch and allowed pending files, committing pending changes, resolving the assigned repository, creating the initial private repository and empty baseline when needed, pushing, and creating or updating the PR. Existing commits are reused when no files changed. The commit title is the supplied delivery title.
+
+Initial publication uses `alex-coding-studio/<project directory name>`. Existing remotes must match the assigned repository. A resumed initial publication checks the existing remote baseline against the Card's original empty root commit before pushing. An existing Ready PR returns to Draft before unvalidated changes are pushed. A new PR is always created as Draft before optional promotion.
+
+`ready: true` means the caller reports that required validation is complete; it does not run or invent tests. Reused bootstrap evidence remains labelled as reused. Repository hooks remain enabled. Deferred pre-push tests are controlled by the project's supported `.shared-config` policy.
+
+On failure, the script returns a nonzero exit and the original failure message. Commits and external resources already created remain available for a subsequent invocation. The script never runs bootstrap, accepts an Action, merges a PR, or starts another task.
+
+## Responsibility and evidence boundaries
+
+Responsibility history is append-only. Manifest Origin lists the active pointer files explicitly. The effective set is either General alone or specialized responsibilities inheriting General, never both. Continuation and repair preserve existing specialized capabilities; adding General to that set is a no-op. The Coordinator receives the existing effective set and returns a complete assignment. Override conflicts fail during packet materialization.
+
+VerificationPlan includes the previous output alongside selected evidence references. New Worker sessions read the required files, but should not rediscover supplied facts through broad Memory or historical directory searches. Repair retains the confirmed task and successful evidence, names a concrete changed approach, and targets the unresolved blocker.
+
+## Local setup readiness
+
+After updating shared setup infrastructure, run `node --experimental-strip-types scripts/check-setup-readiness.ts INFRA_ROOT INSTALLED_SETUP_SKILL_DIR EXPECTED_GIT_REVISION`. It compares the actual consumed bootstrap, pre-push hook, installed Skill and its tooling reference with the explicit source revision. A plugin installation alone is not readiness. This read-only deployment check belongs to the updating agent, not every project Worker.

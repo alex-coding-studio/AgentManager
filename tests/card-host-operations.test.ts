@@ -13,6 +13,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { promisify } from 'node:util';
 import {
+  deliverCardCandidate,
   prepareCardEnvironment,
   publishCardCandidate,
   type HostCommandRunner,
@@ -408,15 +409,30 @@ void test('initial publication creates a private remote and a Draft before Ready
     body: 'Verified shell',
     draft: false,
   };
+  await writeFile(
+    path.join(f.workspace.path, '.shared-config'),
+    'pre_push_tests=deferred\n',
+  );
   await assert.rejects(
-    publishCardCandidate(request, initialRunner),
+    deliverCardCandidate(request, initialRunner),
     /temporary permission/,
   );
-  const result = await publishCardCandidate(request, initialRunner);
+  state.headSha = (
+    await execute('git', ['-C', f.workspace.path, 'rev-parse', 'HEAD'])
+  ).stdout.trim();
+  const result = await deliverCardCandidate(request, initialRunner);
+  assert.equal(
+    (
+      await execute('git', ['-C', f.workspace.path, 'status', '--porcelain'])
+    ).stdout.trim(),
+    '',
+  );
+  assert.ok(result.changedFiles.includes('.shared-config'));
   assert.equal(
     calls.filter((call) => call.startsWith('repo create ')).length,
     1,
   );
+  request.headSha = result.headSha;
   assert.equal(result.pullRequest.draft, false);
   assert.ok(
     calls.includes('repo create alex-coding-studio/repository --private'),

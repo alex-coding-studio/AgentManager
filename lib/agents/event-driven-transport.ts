@@ -16,7 +16,7 @@ import { CodexAppServerDriver } from './codex/app-server-driver.ts';
 import { ClaudeSessionDriver } from './claude/session-driver.ts';
 import { DeepseekSessionDriver } from './deepseek/session-driver.ts';
 import { HostJobBroker } from './host-job-broker.ts';
-import { publishCardCandidate } from '../card-host-operations.ts';
+import { runCandidatePublicationScript } from './candidate-publication.ts';
 import type {
   AgentRuntimeThreadInput,
   AgentSessionDriver,
@@ -151,11 +151,11 @@ export function startEventDrivenWorkerRun(
             {
               name: 'publish_candidate',
               description:
-                'Publish the current clean Candidate HEAD through the Host. The Host validates the full commit range, GitHub identity and permissions, pushes the Card branch, and creates or reuses its Draft PR.',
+                'Deliver the current Card changes through one script. It checks allowed files, commits pending changes, creates a private repository if needed, pushes and creates or updates the PR. Use ready=true only with successful required validation evidence.',
               inputSchema: {
                 type: 'object',
                 additionalProperties: false,
-                required: ['baseSha', 'headSha', 'title', 'body'],
+                required: ['title', 'body'],
                 properties: {
                   baseSha: { type: 'string' },
                   headSha: { type: 'string' },
@@ -165,12 +165,15 @@ export function startEventDrivenWorkerRun(
                 },
               },
               call: (arguments_) =>
-                publishCardCandidate({
+                runCandidatePublicationScript({
                   environment: input.candidatePublication!.environment,
                   actionId: input.candidatePublication!.actionId,
                   roundId: input.candidatePublication!.roundId,
-                  baseSha: stringArgument(arguments_.baseSha),
-                  headSha: stringArgument(arguments_.headSha),
+                  baseSha:
+                    input.candidatePublication!.environment.workspace
+                      .baseCommit,
+                  headSha:
+                    input.candidatePublication!.environment.workspace.headSha,
                   title: stringArgument(arguments_.title),
                   body: stringArgument(arguments_.body),
                   draft: arguments_.ready !== true,
@@ -194,7 +197,7 @@ export function startEventDrivenWorkerRun(
     const hostToolContext =
       '\n\nHost job tool: use run_job for builds, tests and other commands that may run longer than a quick inspection. The Host owns waiting, progress, logs and cancellation. Starting a job ends the current physical turn; Praxis will create a continuation turn in this same thread only when the operating-system process exits. Never call wait or write_stdin and never start an overlapping replacement. Short read-only commands and file edits may use normal tools.';
     const candidateToolContext = input.candidatePublication
-      ? '\n\nCandidate publication tool: after creating one or more local commits and reaching a clean Candidate HEAD, call publish_candidate once. Do not run gh auth, permission, push, PR creation or PR lookup commands yourself. The Host creates a private project repository when no remote exists and returns a Draft PR bound to the exact HEAD. Set ready=true only after the required gates passed, including explicitly reused successful bootstrap evidence. Further repair commits may call it again with the new HEAD.'
+      ? '\n\nCandidate publication tool: call publish_candidate with a title and body to deliver the current project changes. The script owns inspecting allowed changes, staging, committing, repository initialization, pushing and PR state. Do not perform these steps yourself. Do not run gh auth, permission, push, PR creation or PR lookup commands yourself. The Host creates a private project repository when no remote exists and returns a Draft PR bound to the exact HEAD. Set ready=true only after the required gates passed, including explicitly reused successful bootstrap evidence. Further repair commits may call it again with the new HEAD.'
       : '';
     const turn = driver.startTurn(thread, {
       prompt:
@@ -244,11 +247,11 @@ function candidatePublicationTool(
   return {
     name: 'publish_candidate',
     description:
-      'Publish the current clean Candidate HEAD through the Host. The Host validates the full commit range, GitHub identity and permissions, pushes the Card branch, and creates or reuses its Draft PR.',
+      'Deliver the current Card changes through one script. It checks allowed files, commits pending changes, creates a private repository if needed, pushes and creates or updates the PR. Use ready=true only with successful required validation evidence.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
-      required: ['baseSha', 'headSha', 'title', 'body'],
+      required: ['title', 'body'],
       properties: {
         baseSha: { type: 'string' },
         headSha: { type: 'string' },
@@ -258,12 +261,12 @@ function candidatePublicationTool(
       },
     },
     call: (arguments_) =>
-      publishCardCandidate({
+      runCandidatePublicationScript({
         environment: publication.environment,
         actionId: publication.actionId,
         roundId: publication.roundId,
-        baseSha: stringArgument(arguments_.baseSha),
-        headSha: stringArgument(arguments_.headSha),
+        baseSha: publication.environment.workspace.baseCommit,
+        headSha: publication.environment.workspace.headSha,
         title: stringArgument(arguments_.title),
         body: stringArgument(arguments_.body),
         draft: arguments_.ready !== true,
@@ -317,7 +320,7 @@ function startClaudeWorkerRun(input: LocalAgentRunInput): LocalAgentRun {
     const hostToolContext =
       '\n\nHost job tool: use the praxis run_job tool for builds, tests and other commands that may run longer than a quick inspection. The Host owns waiting, progress, logs and cancellation. After starting a job, end this turn immediately with one short line; Praxis resumes this same session with the result when the operating-system process exits. Never poll for it with shell commands and never start an overlapping job. Short read-only commands and file edits may use normal tools.';
     const candidateToolContext = input.candidatePublication
-      ? '\n\nCandidate publication tool: after creating one or more local commits and reaching a clean Candidate HEAD, call publish_candidate once. Do not run gh auth, permission, push, PR creation or PR lookup commands yourself. The Host creates a private project repository when no remote exists and returns a Draft PR bound to the exact HEAD. Set ready=true only after the required gates passed, including explicitly reused successful bootstrap evidence. Further repair commits may call it again with the new HEAD.'
+      ? '\n\nCandidate publication tool: call publish_candidate with a title and body to deliver the current project changes. The script owns inspecting allowed changes, staging, committing, repository initialization, pushing and PR state. Do not perform these steps yourself. Do not run gh auth, permission, push, PR creation or PR lookup commands yourself. The Host creates a private project repository when no remote exists and returns a Draft PR bound to the exact HEAD. Set ready=true only after the required gates passed, including explicitly reused successful bootstrap evidence. Further repair commits may call it again with the new HEAD.'
       : '';
     const turn = driver.startTurn(thread, {
       prompt: input.prompt + hostToolContext + candidateToolContext,
@@ -396,7 +399,7 @@ function startDeepseekWorkerRun(input: LocalAgentRunInput): LocalAgentRun {
     const hostToolContext =
       '\n\nHost job tool: use the run_job tool for builds, tests and other commands that may run longer than a quick inspection. The Host owns waiting, progress, logs and cancellation. After starting a job, end this turn immediately with one short line; Praxis resumes this same session with the result when the operating-system process exits. Never poll for it with shell commands and never start an overlapping job. Short read-only commands and file edits may use normal tools.';
     const candidateToolContext = input.candidatePublication
-      ? '\n\nCandidate publication tool: after creating one or more local commits and reaching a clean Candidate HEAD, call publish_candidate once. Do not run gh auth, permission, push, PR creation or PR lookup commands yourself. The Host creates a private project repository when no remote exists and returns a Draft PR bound to the exact HEAD. Set ready=true only after the required gates passed, including explicitly reused successful bootstrap evidence. Further repair commits may call it again with the new HEAD.'
+      ? '\n\nCandidate publication tool: call publish_candidate with a title and body to deliver the current project changes. The script owns inspecting allowed changes, staging, committing, repository initialization, pushing and PR state. Do not perform these steps yourself. Do not run gh auth, permission, push, PR creation or PR lookup commands yourself. The Host creates a private project repository when no remote exists and returns a Draft PR bound to the exact HEAD. Set ready=true only after the required gates passed, including explicitly reused successful bootstrap evidence. Further repair commits may call it again with the new HEAD.'
       : '';
     const turn = driver.startTurn(thread, {
       prompt: input.prompt + hostToolContext + candidateToolContext,

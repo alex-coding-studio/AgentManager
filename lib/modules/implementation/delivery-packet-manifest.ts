@@ -27,6 +27,7 @@ export type PacketSpec = {
 };
 
 export type PacketManifestInput = {
+  activeResponsibilityFiles?: string[];
   cardId: string;
   actionId: string;
   contextRevision: number;
@@ -171,7 +172,9 @@ export function buildPacketManifest(
     entries.flatMap((entry) =>
       isFileEntry(entry)
         ? orderedPacketFiles([entry], amendments)
-        : [`${entry.directory}/`],
+        : entry.id === 'responsibilities' && input.activeResponsibilityFiles
+          ? input.activeResponsibilityFiles
+          : [`${entry.directory}/`],
     );
   const values: Record<string, string> = {
     cardId: input.cardId,
