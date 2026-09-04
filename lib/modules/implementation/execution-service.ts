@@ -125,7 +125,7 @@ export function resumableWorkerSession(
 ) {
   const latest = runs?.findLast((run) => run.actionId === actionId);
   return latest &&
-    latest.status === 'succeeded' &&
+    (latest.status === 'succeeded' || latest.status === 'failed') &&
     latest.agentSessionId &&
     latest.profile.agent === profile.agent &&
     latest.profile.model === profile.model
