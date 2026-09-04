@@ -176,6 +176,7 @@ export function startCoordinatedExecution(input: {
   workerTransport?: typeof startLocalAgentRun;
   limits?: typeof coordinationLimits;
   environment?: CardEnvironmentManifest;
+  resumeWorkerSessionId?: string;
   coordinatorSession?: (
     input: CoordinatorSessionInput,
   ) => Promise<CoordinatorSession | null>;
@@ -233,6 +234,11 @@ export function startCoordinatedExecution(input: {
     assertActive();
     if (Buffer.byteLength(prompt) > 1500000)
       throw new Error('Agent prompt exceeds the bounded dispatch size.');
+    const resumeWorkerSession =
+      role === 'worker' &&
+      !trace.attempts.some((item) => item.role === 'worker')
+        ? input.resumeWorkerSessionId
+        : undefined;
     if (
       trace.attempts.length >= limits.maxAgentCalls ||
       (role === 'worker' &&
@@ -277,7 +283,7 @@ export function startCoordinatedExecution(input: {
       effort: profile.effort || undefined,
       access: role === 'coordinator' ? 'read-only' : 'workspace-write',
       allowedSkillPaths: role === 'worker' ? allowedSkillPaths : undefined,
-      resumeSessionId: undefined,
+      resumeSessionId: resumeWorkerSession,
       isolatedProcessGroup: true,
       disableDelegation: true,
       onActivity: (activity) => {
