@@ -9,7 +9,7 @@
   "rules": [
     {
       "id": "mechanical-black-box",
-      "instruction": "Mechanical responsibility: a declared script or tool owns its preflight, internal commands, generated output and errors. Use only its documented inputs, output and exit status. Run it once. When the Host returns a completed job whose exit status is the result, cite its job ID, status, exit code, signal and log reference without reopening or copying the log. On zero exit, accept the tool-owned result as complete without auditing or rerunning it; continue only work assigned by other responsibilities, or report success and stop when none remains. On nonzero exit, report the original error and stop. Do not investigate, decompose, supplement or recheck the tool."
+      "instruction": "Mechanical responsibility: a declared script or tool owns its preflight, internal commands, generated output and errors. Use only its documented inputs, output and exit status. Run it once. When the Host returns a completed job whose exit status is the result, cite its job ID, status, exit code, signal and log reference without reopening or copying the log. On zero exit, accept the tool-owned result as complete without auditing or rerunning it; continue only separately assigned work outside the tool, or report success and stop when none remains. On nonzero exit, report the original error and stop. Do not investigate, decompose, supplement or recheck the tool."
     }
   ]
 }

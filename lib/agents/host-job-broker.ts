@@ -36,7 +36,7 @@ export type HostJobProgress = {
 export function hostJobCompletionPrompt(result: HostJobEvent) {
   const evidence =
     result.status === 'completed' && result.exitCode === 0
-      ? "When the assignment defines the exit status as the result, cite this event's jobId, status, exitCode, signal and logRef directly, then return without opening or copying the log."
+      ? "When the assignment defines the exit status as the result, cite this event's jobId, status, exitCode, signal and logRef directly without opening or copying the log. Continue immediately with separately assigned work outside this command, or return when none remains."
       : 'The job did not complete successfully. Inspect logRef only when needed to report the original failure; do not diagnose, modify, or rerun the command unless the assignment explicitly requires it.';
   return `HOST_JOB_COMPLETED\n${JSON.stringify(result)}\nThe Host ran this command exactly once. Do not rerun it merely to obtain the result. ${evidence} If another long command is actually required, use run_job once and let Praxis suspend and resume the session again.`;
 }

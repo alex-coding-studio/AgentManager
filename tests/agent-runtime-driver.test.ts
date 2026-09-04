@@ -33,6 +33,10 @@ void test('Host job completion is pushed once with durable log and status', asyn
   const continuation = hostJobCompletionPrompt(result);
   assert.match(continuation, /cite this event's jobId/);
   assert.match(continuation, /without opening or copying the log/);
+  assert.match(
+    continuation,
+    /Continue immediately with separately assigned work/,
+  );
   const failed = hostJobCompletionPrompt({
     ...result,
     status: 'failed',

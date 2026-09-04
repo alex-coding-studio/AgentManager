@@ -380,6 +380,11 @@ void test('responsibility resolution defaults to general and keeps additions com
   assert.match(combined, /Mechanical responsibility/);
   assert.match(combined, /iOS development responsibility/);
   assert.equal(combined.match(/script-source-inspection/g)?.length, 1);
+  assert.match(
+    combined,
+    /successful compile before creating or updating a Draft/,
+  );
+  assert.match(combined, /Mark the pull request Ready for review only after/);
 
   const overridden = compileResponsibilityInstructions(
     {
@@ -553,6 +558,9 @@ void test('Coordinator Harness stays a coordinator rather than becoming a Review
     prompt,
     /Add ios-development only when the Worker must directly/,
   );
+  assert.match(prompt, /Repository delivery.*does not require ios-development/);
+  assert.match(prompt, /finish code and compilation, publish a Draft/);
+  assert.match(prompt, /mark it Ready only after every required gate passes/);
   assert.match(
     prompt,
     /logRef without opening, copying or summarizing the log/,
