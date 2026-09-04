@@ -14,7 +14,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import net from 'node:net';
-import { homedir } from 'node:os';
+import { homedir, networkInterfaces } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -637,11 +637,26 @@ function serverUrl(port, hostname) {
 }
 
 function serverEnvironment(port, hostname) {
-  return {
+  const environment = {
     ...process.env,
     PRAXIS_RUNTIME_PORT: String(port),
     PRAXIS_RUNTIME_HOSTNAME: hostname ?? '',
   };
+  const origins = new Set(
+    (environment.PRAXIS_ALLOWED_DEV_ORIGINS ?? '')
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean),
+  );
+  if (hostname === '0.0.0.0')
+    for (const addresses of Object.values(networkInterfaces()))
+      for (const address of addresses ?? [])
+        if (!address.internal && address.family === 'IPv4')
+          origins.add(address.address);
+        else if (hostname && hostname !== 'localhost') origins.add(hostname);
+  if (origins.size > 0)
+    environment.PRAXIS_ALLOWED_DEV_ORIGINS = [...origins].join(',');
+  return environment;
 }
 
 function uptime(startedAt) {

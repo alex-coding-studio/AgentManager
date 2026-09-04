@@ -8,7 +8,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import net from 'node:net';
-import { tmpdir } from 'node:os';
+import { networkInterfaces, tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -38,6 +38,11 @@ function freePort(): Promise<number> {
 const READY_STUB = `import net from 'node:net';
 const server = net.createServer();
 server.listen(Number(process.env.PRAXIS_RUNTIME_PORT), '127.0.0.1', () => console.log('READY'));
+`;
+const LAN_STUB = `import { writeFileSync } from 'node:fs';
+import net from 'node:net';
+writeFileSync(process.env.PRAXIS_CAPTURE_ENV, process.env.PRAXIS_ALLOWED_DEV_ORIGINS ?? '');
+net.createServer().listen(Number(process.env.PRAXIS_RUNTIME_PORT), '127.0.0.1');
 `;
 const QUIET_STUB = 'setInterval(() => {}, 1000);\n';
 
@@ -200,7 +205,11 @@ void test('dev mode is recorded on the managed server', async () => {
 });
 
 void test('--lan forwards an all-interfaces hostname without ambiguity', async () => {
-  const env = isolatedEnv();
+  const env = isolatedEnv(LAN_STUB, {
+    PRAXIS_ALLOWED_DEV_ORIGINS: 'saved.example',
+  });
+  const capturePath = path.join(homeOf(env), 'lan-origins.txt');
+  env.PRAXIS_CAPTURE_ENV = capturePath;
   const port = String(await freePort());
   try {
     const started = run(['start', '-d', '--lan', '--port', port], env);
@@ -208,6 +217,12 @@ void test('--lan forwards an all-interfaces hostname without ambiguity', async (
     const state = JSON.parse(readFileSync(stateFile(env, port), 'utf8'));
     assert.equal(state.hostname, '0.0.0.0');
     assert.deepEqual(state.nextArgs, ['--hostname', '0.0.0.0', '--port', port]);
+    const origins = readFileSync(capturePath, 'utf8').split(',');
+    assert.ok(origins.includes('saved.example'));
+    for (const addresses of Object.values(networkInterfaces()))
+      for (const address of addresses ?? [])
+        if (!address.internal && address.family === 'IPv4')
+          assert.ok(origins.includes(address.address));
 
     const conflicting = run(['start', '--lan', '--hostname', '127.0.0.1'], env);
     assert.equal(conflicting.status, 1);
