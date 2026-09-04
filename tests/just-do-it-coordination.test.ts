@@ -545,7 +545,19 @@ void test('Coordinator Harness stays a coordinator rather than becoming a Review
   assert.match(prompt, /choose at least one responsibility/);
   assert.match(prompt, /Read only each applicable SKILL.md entrypoint/);
   assert.match(prompt, /do not open its references/);
-  assert.match(prompt, /Combine mechanical and ios-development/);
+  assert.match(
+    prompt,
+    /assign mechanical alone even if the tool generates iOS files/,
+  );
+  assert.match(
+    prompt,
+    /Add ios-development only when the Worker must directly/,
+  );
+  assert.match(
+    prompt,
+    /logRef without opening, copying or summarizing the log/,
+  );
+  assert.match(prompt, /Never add a Next step/);
   assert.match(prompt, /black-box execution and error boundary/);
   assert.match(prompt, /After dispatch, suspend completely/);
   assert.match(prompt, /Earlier verified conclusion/);

@@ -16,6 +16,7 @@ import {
 } from '../runtime-driver.ts';
 import {
   HostJobBroker,
+  hostJobCompletionPrompt,
   type HostJobEvent,
   type HostJobRequest,
 } from '../host-job-broker.ts';
@@ -520,7 +521,7 @@ export class CodexAppServerDriver implements AgentSessionDriver {
         jobId: job.id,
         acknowledgement: `Host job ${job.id} started. Praxis will interrupt this physical turn and start a continuation turn with the operating-system result. Do not call wait, write_stdin, or another tool.`,
         completion: job.completion.then((result) => ({
-          prompt: `HOST_JOB_COMPLETED\n${JSON.stringify(result)}\nThe Host ran this command exactly once. Do not rerun it merely to obtain the result. Inspect the referenced log only when details are needed, then continue the original assignment. If another long command is necessary, use run_job once and let Praxis suspend and resume the thread again.`,
+          prompt: hostJobCompletionPrompt(result),
           jobResult: result,
         })),
       });

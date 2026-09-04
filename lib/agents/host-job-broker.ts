@@ -32,6 +32,11 @@ export type HostJobProgress = {
   label: string;
   outputTail: string;
 };
+
+export function hostJobCompletionPrompt(result: HostJobEvent) {
+  return `HOST_JOB_COMPLETED\n${JSON.stringify(result)}\nThe Host ran this command exactly once. Do not rerun it merely to obtain the result. When the assignment defines the exit status as the result, cite this event's jobId, status, exitCode, signal and logRef directly, then return without opening or copying the log. Inspect the referenced log only when a required decision depends on its contents. If another long command is actually required, use run_job once and let Praxis suspend and resume the session again.`;
+}
+
 export class HostJobBroker {
   private active = new Map<string, ChildProcess>();
   private workspaceRoot: string;
