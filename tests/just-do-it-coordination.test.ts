@@ -479,6 +479,12 @@ void test('Coordinator changes a Worker assignment only after a responsibility g
     parseCoordinationDecision(JSON.stringify(changed), qualify).decision,
     'extend',
   );
+  previous.responsibilities = ['general'];
+  changed.responsibilities = ['ios-development'];
+  assert.equal(
+    parseCoordinationDecision(JSON.stringify(changed), qualify).decision,
+    'extend',
+  );
   const mislabeledRepair = decision(qualify, 'repair');
   mislabeledRepair.responsibilities = previous.responsibilities;
   mislabeledRepair.skillPaths = previous.skillPaths;
@@ -1648,7 +1654,7 @@ void test('a materialized packet replaces the concatenated Worker assignment', a
   );
 });
 
-void test('a responsibility extension appends a pointer and continues the same Worker session', async (t) => {
+void test('a responsibility extension resumes its Worker and preserves fresh repair capacity', async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'worker-packet-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const packetDir = path.join(root, 'packet');
@@ -1656,20 +1662,22 @@ void test('a responsibility extension appends a pointer and continues the same W
     (req) => {
       const output = decision(
         req,
-        req.phase === 'prepare' ? 'dispatch' : 'extend',
+        req.phase === 'prepare'
+          ? 'dispatch'
+          : req.workerReport?.responsibilityGap
+            ? 'extend'
+            : 'repair',
       );
       output.responsibilities =
-        req.phase === 'prepare'
-          ? ['mechanical']
-          : ['mechanical', 'ios-development'];
+        req.phase === 'prepare' ? ['general'] : ['ios-development'];
       return output;
     },
-    ['responsibility-gap', 'passed'],
+    ['responsibility-gap', 'delivered-failed', 'passed'],
     { packetDir, runtimeInstructions: 'Use the prepared worktree.' },
   );
   await f.run.completion;
-  assert.deepEqual(f.workerResumes, [undefined, 'fixture']);
-  assert.equal(f.workerCalls.length, 2);
+  assert.deepEqual(f.workerResumes, [undefined, 'fixture', undefined]);
+  assert.equal(f.workerCalls.length, 3);
   const first = JSON.parse(
     await readFile(
       path.join(packetDir, 'Responsibilities/Responsibility-1.json'),
@@ -1682,5 +1690,5 @@ void test('a responsibility extension appends a pointer and continues the same W
       'utf8',
     ),
   ) as { id: string };
-  assert.deepEqual([first.id, second.id], ['mechanical', 'ios-development']);
+  assert.deepEqual([first.id, second.id], ['general', 'ios-development']);
 });

@@ -53,8 +53,8 @@ import {
 type Options = Parameters<typeof startLocalAgentRun>[1];
 type ExecutionReport = Extract<CardHarnessResult, { stage: 'execution' }>;
 export const coordinationLimits = {
-  maxAgentCalls: 5,
-  maxWorkerCalls: 2,
+  maxAgentCalls: 7,
+  maxWorkerCalls: 3,
   maxCoordinatorToolCalls: 40,
   coordinatorTimeoutMs: 300000,
 };

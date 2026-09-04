@@ -276,7 +276,14 @@ export function parseCoordinationDecision(
         throw new Error('Responsibility extension must add a responsibility.');
       if (
         request.previousDecision.responsibilities.some(
-          (item) => !value.responsibilities.includes(item),
+          (item) =>
+            !value.responsibilities.includes(item) &&
+            !(
+              item === 'general' &&
+              value.responsibilities.some(
+                (responsibility) => responsibility !== 'general',
+              )
+            ),
         ) ||
         request.previousDecision.skillPaths.some(
           (item) => !value.skillPaths.includes(item),
