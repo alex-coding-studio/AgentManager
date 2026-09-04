@@ -183,6 +183,7 @@ void test('stage Harnesses keep their near-neighbor responsibilities separate', 
   assert.match(execution, /Self-checking is not user acceptance/);
   assert.match(execution, /do not merge or infer user acceptance/i);
   assert.match(execution, /Never alter correct code/);
+  assert.match(execution, /absent new behavior naturally fails/);
 
   const review = buildCardHarnessPrompt(request('review'));
   assert.match(review, /Do not fix code, run a correction loop/);
