@@ -122,16 +122,14 @@ export function resumableWorkerSession(
   actionId: string,
   profile: AgentProfile,
 ) {
-  return (
-    runs?.findLast(
-      (run) =>
-        run.actionId === actionId &&
-        run.status === 'succeeded' &&
-        run.agentSessionId &&
-        run.profile.agent === profile.agent &&
-        run.profile.model === profile.model,
-    )?.agentSessionId ?? undefined
-  );
+  const latest = runs?.findLast((run) => run.actionId === actionId);
+  return latest &&
+    latest.status === 'succeeded' &&
+    latest.agentSessionId &&
+    latest.profile.agent === profile.agent &&
+    latest.profile.model === profile.model
+    ? latest.agentSessionId
+    : undefined;
 }
 
 function supplementalExecutionInput(input: ExecuteActionInput) {

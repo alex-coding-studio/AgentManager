@@ -97,16 +97,31 @@ void test('a card that has never executed resumes nothing', () => {
   assert.equal(resumableWorkerSession([], 'action-1', profile), undefined);
 });
 
-void test('an earlier succeeded run is used when the latest one is unusable', () => {
+void test('an unusable latest run stops the search instead of reaching further back', () => {
+  for (const latest of [
+    run({ status: 'failed' }),
+    run({ status: 'canceled' }),
+    run({ agentSessionId: null }),
+    run({ profile: { ...profile, model: 'other-model' } }),
+  ])
+    assert.equal(
+      resumableWorkerSession(
+        [run({ id: 'good', agentSessionId: 'session-good' }), latest],
+        'action-1',
+        profile,
+      ),
+      undefined,
+      latest.status,
+    );
+});
+
+void test('a newer run of another Action does not hide this Action latest run', () => {
   assert.equal(
     resumableWorkerSession(
-      [
-        run({ id: 'good', agentSessionId: 'session-good' }),
-        run({ status: 'failed' }),
-      ],
+      [run({ agentSessionId: 'mine' }), run({ actionId: 'action-2' })],
       'action-1',
       profile,
     ),
-    'session-good',
+    'mine',
   );
 });
