@@ -12,6 +12,11 @@ import type { LocalAgentUsage } from '../../agents/transport.ts';
 import type { GitHubDelivery } from '../../github-delivery.ts';
 import type { CardEnvironmentManifest } from '../../card-host-operations.ts';
 
+import type {
+  JobLogReference,
+  ResponseClassification,
+} from '../../execution-observability/types.ts';
+
 export type ActionOutput = Extract<CardHarnessResult, { stage: 'execution' }>;
 export type ActionRun = {
   id: string;
@@ -43,6 +48,11 @@ export type ActionRun = {
   parentCommit?: string;
   github?: GitHubDelivery | null;
   baselineRef?: string;
+  logRef?: string;
+  jobs?: JobLogReference[];
+  cancelRequestedAt?: string;
+  stopResult?: 'confirmed' | 'unconfirmed';
+  response?: ResponseClassification;
 };
 export type CardExecution = {
   runs: ActionRun[];
