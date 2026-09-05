@@ -78,6 +78,7 @@ import {
   candidateDependencyBlockers,
   resolveCandidateDependencies,
 } from '../../graph/proposal/dependencies.ts';
+import { promoteCandidateToNode } from '../../graph/proposal/promote.ts';
 import {
   primarySourceResourcePaths,
   relatedContextNodeIds,
@@ -888,81 +889,15 @@ async function acceptWhatsNextCandidateUnlocked(
   const accepted = existingNodes.find((node) => node.uid === candidate.uid);
   if (accepted) return { node: accepted, nodes: existingNodes };
 
-  const resolvedDependencies = resolveCandidateDependencies(
-    candidate.candidateId,
-    candidate.dependsOn,
+  return promoteCandidateToNode(project, {
+    scope: GRAPH_ROOT,
+    runPath: whatsNextRunPath(project, runId),
+    runId,
+    candidate,
     existingNodes,
-  );
-
-  if (!candidate.uid) throw new Error('Candidate stable identity is missing.');
-  const { id: nodeId } = await reserveNodeIdentity(
-    project.planningPath,
-    GRAPH_ROOT,
-    candidate.uid,
-  );
-  const nodesPath = path.join(project.planningPath, GRAPH_ROOT, 'nodes');
-  const nodePath = path.join(nodesPath, nodeId);
-  const temporaryPath = path.join(nodesPath, `.${nodeId}-${randomUUID()}.tmp`);
-  const candidateOutput = path.join(
-    whatsNextRunPath(project, runId),
-    'candidates',
-    candidateId,
-    'output.md',
-  );
-  await mkdir(temporaryPath, { recursive: true });
-
-  try {
-    await copyFile(candidateOutput, path.join(temporaryPath, 'output.md'));
-    const timestamp = new Date().toISOString();
-    const matchingType = existingNodes.find(
-      (node) => node.type === candidate.type,
-    );
-    const node: TaskGraphNode = {
-      schemaVersion: 1,
-      id: nodeId,
-      uid: candidate.uid,
-      relations: candidate.relations,
-      role: 'node',
-      type: candidate.type,
-      layer: candidate.layer,
-      artifactKind: candidate.artifactKind,
-      title: candidate.title,
-      summary: candidate.summary,
-      status: 'accepted',
-      createdAt: timestamp,
-      updatedAt: timestamp,
-      resources: [
-        ...candidate.resources,
-        { kind: 'output', path: `${GRAPH_ROOT}/nodes/${nodeId}/output.md` },
-      ],
-      derivedFrom: candidate.derivedFrom,
-      dependsOn: resolvedDependencies,
-      typeTemplateRef:
-        candidate.typeTemplateRef ??
-        matchingType?.typeTemplateRef ??
-        matchingType?.id ??
-        nodeId,
-      metadata: candidate.metadata,
-      presentation: candidate.presentation,
-      provenance: {
-        feature: 'whats-next',
-        runId,
-        candidateId,
-        revision: candidate.revision,
-      },
-    };
-    await writeFile(
-      path.join(temporaryPath, 'node.json'),
-      `${JSON.stringify(node, null, 2)}\n`,
-      { flag: 'wx' },
-    );
-    await mkdir(nodesPath, { recursive: true });
-    await rename(temporaryPath, nodePath);
-    return { node, nodes: await listTaskGraphNodes(project, GRAPH_ROOT) };
-  } catch (error) {
-    await rm(temporaryPath, { recursive: true, force: true });
-    throw error;
-  }
+    extension: { layer: candidate.layer, artifactKind: candidate.artifactKind },
+    provenanceFeature: 'whats-next',
+  });
 }
 
 export async function discardWhatsNextCandidate(
