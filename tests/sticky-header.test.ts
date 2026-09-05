@@ -155,9 +155,10 @@ void test('the workspace header no longer says Plan finalized and keeps Cancel w
     new URL('../components/just-do-it-live-workspace.tsx', import.meta.url),
     'utf8',
   );
+  const sentinel = workspace.indexOf('ref={attachPlanHeaderSentinel}');
   const header = workspace.slice(
-    workspace.indexOf('attachPlanHeaderSentinel'),
-    workspace.indexOf('</header>'),
+    sentinel,
+    workspace.indexOf('</header>', sentinel),
   );
   assert.doesNotMatch(header, /'Plan finalized'/);
   assert.match(
