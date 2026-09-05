@@ -13,7 +13,14 @@ Implement one lifecycle and logging model with two output presentations:
 - The lower-right Composer remains the only user-input surface.
 - Every Run and every meaningful standalone Host operation receives a browser-readable, human-readable `.log`.
 
-The implementation must use one cohesive pull request. Do not split status, logging, response presentation, and recovery into independent product changes that leave the lifecycle partially connected.
+Deliver the implementation as an ordered series of pull requests, each of which leaves the product self-consistent after merge:
+
+1. Shared core: status classification, Run Log, Latest Response store, Active Run ownership, Host operation logs. No caller changes.
+2. Global Log Viewer: log routes, incremental API, and adapters for existing records.
+3. Graph and Flow modules: service lifecycle and the upper-left Latest Response presentation together.
+4. Development Execution: Card ownership, cancellation, summaries, and the Sticky Header presentation together.
+
+Within one pull request, do not split status, logging, response presentation, and recovery into independent product changes that leave the lifecycle partially connected.
 
 ## Goals
 
@@ -713,7 +720,7 @@ Do not assume current component placement or status mapping is correct merely be
 
 ## Recommended Implementation Sequence
 
-Implement in one branch and one pull request, but keep the internal work ordered:
+Implement in the pull request order above and keep the internal work ordered:
 
 1. Add shared status classification, response ownership, and Log event types.
 2. Add append-only `.log` writing and global Log Viewer routing.
