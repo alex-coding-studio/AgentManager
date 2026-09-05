@@ -879,17 +879,17 @@ async function acceptWhatsNextCandidateUnlocked(
   );
   if (!candidate)
     throw new PublicApiError('The Candidate could not be found.', 400);
-
-  const existingNodes = await listTaskGraphNodes(project, GRAPH_ROOT);
-  const accepted = existingNodes.find((node) => node.uid === candidate.uid);
-  if (accepted) return { node: accepted, nodes: existingNodes };
+  if (!candidate.uid || !candidate.relations)
+    throw new PublicApiError('The Candidate has no stable identity.', 409);
 
   return promoteCandidateToNode(project, {
     scope: GRAPH_ROOT,
-    runPath: whatsNextRunPath(project, runId),
     runId,
-    candidate,
-    existingNodes,
+    candidate: {
+      ...candidate,
+      uid: candidate.uid,
+      relations: candidate.relations,
+    },
     extension: { layer: candidate.layer, artifactKind: candidate.artifactKind },
     provenanceFeature: 'whats-next',
   });
