@@ -440,6 +440,7 @@ export async function settleRun(
     message: `${input.classification.title} — ${statusLabel(input.classification.status)} response published`,
   });
   let published: LatestResponseDocument | null = null;
+  let failure: unknown = null;
   try {
     published = await publishLatestResponse(
       reservation.owner,
@@ -447,19 +448,30 @@ export async function settleRun(
       { allowTerminalReplace: input.allowTerminalReplace },
     );
   } catch (error) {
-    if (!(error instanceof StaleResponseError)) throw error;
-    reservation.log.append({
-      level: 'WARN',
-      actor: 'HOST',
-      phase: 'RUN',
-      event: 'response.rejected',
-      message: error.message,
-    });
+    if (error instanceof StaleResponseError)
+      reservation.log.append({
+        level: 'WARN',
+        actor: 'HOST',
+        phase: 'RUN',
+        event: 'response.rejected',
+        message: error.message,
+      });
+    else {
+      failure = error;
+      reservation.log.append({
+        level: 'ERROR',
+        actor: 'HOST',
+        phase: 'RUN',
+        event: 'response.publish-failed',
+        message: `The terminal response could not be written: ${error instanceof Error ? error.message : String(error)}`,
+      });
+    }
   }
   if (reservation.stopResult !== 'unconfirmed') {
     await reservation.log.close();
     releaseRun(reservation);
   }
+  if (failure) throw failure;
   return published;
 }
 

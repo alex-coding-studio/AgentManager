@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { writeFileAtomically } from '../atomic-json-store.ts';
 import { readRunLogEntries } from './run-log.ts';
@@ -98,6 +98,22 @@ export function renderLatestResponseMarkdown(doc: LatestResponseDocument) {
 
 export type PublishOptions = { allowTerminalReplace?: boolean };
 
+async function readOptional(file: string) {
+  try {
+    return await readFile(file, 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
+async function restore(file: string, contents: string | null) {
+  try {
+    if (contents === null) await rm(file, { force: true });
+    else await writeFileAtomically(file, contents);
+  } catch {}
+}
+
 function assertPublishable(
   owner: ResponseOwner,
   current: LatestResponseDocument | null,
@@ -141,14 +157,24 @@ export async function publishLatestResponse(
         revision: (current?.revision ?? 0) + 1,
       };
       const paths = latestResponsePaths(owner);
-      await writeFileAtomically(
-        paths.json,
-        `${JSON.stringify(next, null, 2)}\n`,
-      );
-      await writeFileAtomically(
-        paths.markdown,
-        renderLatestResponseMarkdown(next),
-      );
+      const previous = await Promise.all([
+        readOptional(paths.json),
+        readOptional(paths.markdown),
+      ]);
+      try {
+        await writeFileAtomically(
+          paths.json,
+          `${JSON.stringify(next, null, 2)}\n`,
+        );
+        await writeFileAtomically(
+          paths.markdown,
+          renderLatestResponseMarkdown(next),
+        );
+      } catch (error) {
+        await restore(paths.json, previous[0]);
+        await restore(paths.markdown, previous[1]);
+        throw error;
+      }
       return next;
     });
   writes.set(key, pending);

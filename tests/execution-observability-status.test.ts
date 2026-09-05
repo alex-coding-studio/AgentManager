@@ -94,6 +94,34 @@ void test('Coordinator semantic copy shapes Warning text but never the color', (
   assert.deepEqual(failedChecks.recovery, ['log', 'continue', 'undo']);
 });
 
+void test('unexecuted required checks never produce Completed or Pass', () => {
+  const claimed = classifyResponse(
+    settled({
+      outcome: 'delivered',
+      requiredChecks: { total: 2, passed: 1, failed: 0, notRun: 1 },
+    }),
+  );
+  assert.equal(claimed.status, 'warning');
+  assert.equal(claimed.title, 'Required checks incomplete');
+  assert.match(claimed.detail, /1 of 2 required checks did not run/);
+  assert.deepEqual(claimed.recovery, ['log', 'continue', 'undo']);
+  const short = classifyResponse(
+    settled({
+      requiredChecks: { total: 3, passed: 1, failed: 0, notRun: 0 },
+    }),
+  );
+  assert.equal(short.status, 'warning');
+  assert.ok(!short.recovery.includes('pass'));
+  const clarification = classifyResponse(
+    settled({
+      outcome: 'clarification',
+      question: 'Which target?',
+      requiredChecks: { total: 2, passed: 0, failed: 0, notRun: 2 },
+    }),
+  );
+  assert.equal(clarification.title, 'Answer needed');
+});
+
 void test('required check failure without Coordinator copy uses a Host title', () => {
   const result = classifyResponse(
     settled({ requiredChecks: { total: 2, passed: 1, failed: 1, notRun: 0 } }),

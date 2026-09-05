@@ -214,6 +214,33 @@ void test('settlement publishes the terminal response, records the run event and
   assert.ok(isCurrentRun(next));
 });
 
+void test('a failed terminal publication still closes the log and releases the owner', async (t) => {
+  const { owner, start } = await fixture(t);
+  const reservation = await start('RUN-1');
+  const paths = latestResponsePaths(owner);
+  await rm(paths.markdown);
+  await mkdir(paths.markdown);
+  await assert.rejects(
+    settleRun(reservation, {
+      classification: classifyResponse({
+        surface: 'module',
+        runState: 'settled',
+        outcome: 'proposal',
+      }),
+    }),
+  );
+  assert.equal(getActiveRun(owner), null);
+  const events = parseRunLogText(
+    await readFile(reservation.logFile, 'utf8'),
+  ).map((entry) => entry.event);
+  assert.equal(events.at(-1), 'response.publish-failed');
+  assert.equal((await readLatestResponse(owner))?.runId, 'RUN-1');
+  assert.equal((await readLatestResponse(owner))?.status, 'running');
+  await rm(paths.markdown, { recursive: true, force: true });
+  const next = await start('RUN-2');
+  assert.ok(isCurrentRun(next));
+});
+
 void test('confirmed cancellation passes through Stopping and settles as Warning Canceled', async (t) => {
   const { owner, start } = await fixture(t);
   const reservation = await start('RUN-1');

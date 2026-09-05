@@ -159,6 +159,18 @@ export function classifyResponse(
       },
       ['log', 'continue', ...undo],
     );
+  if (checks && (checks.notRun > 0 || checks.passed < checks.total)) {
+    const missing = Math.max(checks.notRun, checks.total - checks.passed);
+    return warning(
+      {
+        title: semantic?.title ?? 'Required checks incomplete',
+        detail:
+          semantic?.detail ??
+          `${missing} of ${checks.total} required checks did not run, so the result is not verified. Continue to run them, or open the Run Log for what was recorded.`,
+      },
+      ['log', 'continue', ...undo],
+    );
+  }
   if (facts.externalPending)
     return warning(
       {

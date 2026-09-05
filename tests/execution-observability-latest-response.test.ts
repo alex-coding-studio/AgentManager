@@ -1,6 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {
@@ -133,6 +141,34 @@ void test('late, canceled or foreign output cannot overwrite a newer response', 
     /another owner/,
   );
   assert.equal((await readLatestResponse(module))?.status, 'completed');
+});
+
+void test('a failed second write restores the previous response pair', async (t) => {
+  const { module } = await fixture(t);
+  const paths = latestResponsePaths(module);
+  await mkdir(paths.markdown, { recursive: true });
+  await assert.rejects(
+    publishLatestResponse(module, document(module, 'RUN-1', 'running')),
+  );
+  assert.equal(await readLatestResponse(module), null);
+  await assert.rejects(stat(paths.json), /ENOENT/);
+  await rm(paths.markdown, { recursive: true, force: true });
+  const first = await publishLatestResponse(
+    module,
+    document(module, 'RUN-1', 'warning'),
+  );
+  await rm(paths.markdown);
+  await mkdir(paths.markdown);
+  await assert.rejects(
+    publishLatestResponse(
+      module,
+      document(module, 'RUN-2', 'running', '2026-09-04T01:00:00.000Z'),
+    ),
+  );
+  const restored = await readLatestResponse(module);
+  assert.equal(restored?.runId, 'RUN-1');
+  assert.equal(restored?.status, 'warning');
+  assert.equal(restored?.revision, first.revision);
 });
 
 void test('the Markdown document follows the response template', async (t) => {
