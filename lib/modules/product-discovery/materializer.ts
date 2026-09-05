@@ -40,14 +40,18 @@ function validateOperationCardinality(
       fail("A What's Next divergence must return two to five directions.");
     return;
   }
+  const { revisionTarget, revisionSource } = state;
+  if (!revisionTarget || !revisionSource)
+    fail('Refine requires the Candidate being revised.');
+  if (revisionSource.localKey !== revisionTarget.candidateId)
+    fail('The Candidate being revised does not match the refine request.');
+  const [candidate] = candidates;
   if (
     candidates.length !== 1 ||
-    candidates[0]?.localKey !== state.revisionTarget?.candidateId
-  ) {
+    candidate?.localKey !== revisionTarget.candidateId
+  )
     fail('Refine must return exactly the requested Candidate identifier.');
-  }
-  if (state.revisionSource && candidates[0])
-    validateRefineBoundary(candidates[0], state.revisionSource);
+  validateRefineBoundary(candidate, revisionSource);
 }
 
 function validateRefineBoundary(

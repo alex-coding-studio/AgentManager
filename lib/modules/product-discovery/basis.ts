@@ -7,6 +7,7 @@ import {
 } from '../../graph/proposal/basis.ts';
 import type { GraphProposalRevision } from '../../graph/proposal/contract.ts';
 import { identitiesFingerprint } from '../../graph/identity-store.ts';
+import { MaterializationError } from '../../materialization/receipt.ts';
 import {
   PRODUCT_EXPLORATION_RESULT_CONTRACT,
   type ProductExplorationCandidate,
@@ -30,8 +31,7 @@ export type ProductExplorationMaterializationBasis = MaterializationBasisCore &
     revisionSource: ProductExplorationCandidate | null;
   };
 
-export type ProductExplorationBasisInput = {
-  operation: ProductExplorationOperation;
+type ProductExplorationBasisSubject = {
   intention: WhatsNextIntention;
   motion: WhatsNextMotion;
   sourceNodeIds: readonly string[];
@@ -40,9 +40,17 @@ export type ProductExplorationBasisInput = {
   knownResourcePaths: readonly string[];
   reservedCandidateIds: readonly string[];
   currentCandidates: readonly GraphProposalCurrentCandidate[];
-  revisionTarget?: GraphProposalRevision | null;
-  revisionSource?: ProductExplorationCandidate | null;
 };
+
+export type ProductExplorationBasisInput = ProductExplorationBasisSubject &
+  (
+    | { operation: 'explore'; revisionTarget?: never; revisionSource?: never }
+    | {
+        operation: 'refine-candidate';
+        revisionTarget: GraphProposalRevision;
+        revisionSource: ProductExplorationCandidate;
+      }
+  );
 
 function frozenState(
   input: ProductExplorationBasisInput,
@@ -81,6 +89,15 @@ export async function prepareProductExplorationMaterializationBasis(
   input: ProductExplorationBasisInput,
   now: () => string = () => new Date().toISOString(),
 ): Promise<ProductExplorationMaterializationBasis> {
+  if (
+    input.operation === 'refine-candidate' &&
+    input.revisionSource.localKey !== input.revisionTarget.candidateId
+  ) {
+    throw new MaterializationError(
+      'validation',
+      'A refine basis must carry the Candidate it is revising.',
+    );
+  }
   const identityFingerprint = await identitiesFingerprint(
     project.planningPath,
     'whats-next',
