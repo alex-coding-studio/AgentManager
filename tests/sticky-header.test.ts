@@ -184,6 +184,12 @@ void test('the workspace header no longer says Plan finalized and keeps Cancel w
   assert.match(leftPortal, /pullRequests=\{headerPullRequests\}/);
   assert.match(
     action,
-    /<AgentGraphComposerCard\s+className="fixed z-30"\s+running=\{latest\?\.status === 'running' \|\| latestResponse\.running\}/,
+    /const actionDocument =\s*latestResponse\.document\?\.actionId === action\.id\s*\? latestResponse\.document\s*: null;/,
+  );
+  assert.match(leftPortal, /actionDocument \?\?\s*runDocument\(/);
+  assert.match(rightPortal, /latest\?\.result &&\s*requiredPassed \? \(/);
+  assert.match(
+    action,
+    /<AgentGraphComposerCard\s+className="fixed z-30"\s+running=\{latest\?\.status === 'running' \|\| running\}/,
   );
 });

@@ -124,6 +124,7 @@ import {
   type HostOperationKind,
 } from '../../execution-observability/host-operations.ts';
 import type { CardHostOperation } from './execution-types.ts';
+import type { CheckOverride } from './checklist.ts';
 import {
   cardOwner,
   cardResponseDocument,
@@ -243,6 +244,7 @@ async function publishRecheck(
   card: PlanningCard,
   run: ActionRun,
   classification: ResponseClassification,
+  event: 'recovery.reread' | 'recovery.override' = 'recovery.reread',
 ) {
   if (run.logRef) {
     try {
@@ -251,8 +253,11 @@ async function publishRecheck(
         level: classification.status === 'completed' ? 'INFO' : 'WARN',
         actor: 'HOST',
         phase: 'RECOVERY',
-        event: 'recovery.reread',
-        message: `Re-read the saved result without starting an Agent: ${classification.title}`,
+        event,
+        message:
+          event === 'recovery.reread'
+            ? `Re-read the saved result without starting an Agent: ${classification.title}`
+            : `User override satisfied the required checklist: ${classification.title}`,
       });
       await log.close();
     } catch {}
@@ -276,9 +281,21 @@ export function classifyActionRun(
     retained?: ClassificationFacts['retained'];
     interruptedPhase?: RunPhase | null;
     interruptedActor?: LogActor | null;
+    overrides?: Record<string, CheckOverride>;
   } = {},
 ): ResponseClassification {
   const result = run.result;
+  const effective =
+    result && run.acceptanceChecklist
+      ? assessRequiredChecks(
+          run.acceptanceChecklist,
+          result.checks,
+          input.overrides,
+        )
+      : null;
+  const overridden = effective?.passed
+    ? (result?.checks ?? []).filter((check) => check.status !== 'passed')
+    : [];
   const decision = run.coordination?.decisions.at(-1);
   const semantic =
     decision &&
@@ -292,7 +309,8 @@ export function classifyActionRun(
     surface: 'card',
     runState: input.runState ?? 'settled',
     outcome: result
-      ? result.outcome === 'delivered'
+      ? result.outcome === 'delivered' ||
+        (result.outcome === 'blocked' && effective?.passed)
         ? 'delivered'
         : result.outcome === 'blocked'
           ? 'blocked'
@@ -303,14 +321,20 @@ export function classifyActionRun(
         ? decision.decision
         : null,
     requiredChecks: result
-      ? {
-          total: checks.length,
-          passed: checks.filter((check) => check.status === 'passed').length,
-          failed: checks.filter((check) => check.status === 'failed').length,
-          notRun: checks.filter((check) => check.status === 'not-run').length,
-        }
+      ? effective?.passed
+        ? { total: checks.length, passed: checks.length, failed: 0, notRun: 0 }
+        : {
+            total: checks.length,
+            passed: checks.filter((check) => check.status === 'passed').length,
+            failed: checks.filter((check) => check.status === 'failed').length,
+            notRun: checks.filter((check) => check.status === 'not-run').length,
+          }
       : null,
     additionalFindings: [
+      ...overridden.map(
+        (check) =>
+          `Accepted by user override: ${check.summary} (${check.status})`,
+      ),
       ...(result?.additionalChecks ?? [])
         .filter((check) => check.status !== 'passed')
         .map((check) => check.summary),
@@ -757,6 +781,7 @@ export function createExecutionService(
         ]);
         nextRun.response = classifyActionRun(nextRun, {
           retained: retainedEffectsOf(nextRun, refs.length),
+          overrides: card.execution?.acceptanceOverrides?.[run.actionId],
         });
         files['result.json'] = JSON.stringify(result);
         files['output.md'] =
@@ -846,6 +871,7 @@ export function createExecutionService(
         nextRun.response = classifyActionRun(nextRun, {
           runState: timedOut ? 'timed-out' : 'settled',
           retained: retainedEffectsOf(nextRun, refs.length),
+          overrides: card.execution?.acceptanceOverrides?.[run.actionId],
           failure:
             advisoryOnly || timedOut
               ? null
@@ -1882,18 +1908,26 @@ export function createExecutionService(
       recordedAt: new Date().toISOString(),
       checklistVersion: run.acceptanceChecklist.version,
     };
-    return commit(
+    const overrides = {
+      ...card.execution?.acceptanceOverrides?.[run.actionId],
+      [criterionId]: decision,
+    };
+    const classification = classifyActionRun(run, {
+      retained: retainedEffectsOf(run, run.observedRefs.length),
+      overrides,
+    });
+    const updated = await commit(
       project,
       {
         ...card,
         execution: {
           ...card.execution!,
+          runs: card.execution!.runs.map((item) =>
+            item.id === run.id ? { ...item, response: classification } : item,
+          ),
           acceptanceOverrides: {
             ...card.execution?.acceptanceOverrides,
-            [run.actionId]: {
-              ...card.execution?.acceptanceOverrides?.[run.actionId],
-              [criterionId]: decision,
-            },
+            [run.actionId]: overrides,
           },
         },
       },
@@ -1904,6 +1938,14 @@ export function createExecutionService(
         text: `User accepts required criterion ${criterionId} as passed for checklist ${decision.checklistVersion}. ${note} Actual check results remain unchanged.`,
       },
     );
+    await publishRecheck(
+      project,
+      updated,
+      { ...run, response: classification },
+      classification,
+      'recovery.override',
+    );
+    return updated;
   }
 
   function refreshGitHub(
@@ -2157,6 +2199,7 @@ export function createExecutionService(
       };
       nextRun.response = classifyActionRun(nextRun, {
         retained: retainedEffectsOf(nextRun, nextRun.observedRefs.length),
+        overrides: card.execution?.acceptanceOverrides?.[run.actionId],
       });
       const rechecked = await commit(
         project,

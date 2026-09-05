@@ -442,6 +442,46 @@ void test('Host Job events are logged with the JOB actor and linked from the Run
   assert.ok(entries.some((entry) => entry.event === 'phase.verifying'));
 });
 
+void test('a user override that satisfies the checklist restores Pass and republishes the response', async (t) => {
+  const {
+    project,
+    cards,
+    calls,
+    service,
+    input,
+    settled,
+    runLog,
+    responseFile,
+  } = await fixture(t);
+  const alpha = cards[0]!;
+  await service.start(project, input(alpha));
+  calls[0]!.resolve(delivered(calls[0]!.request, ['failed']));
+  const blocked = await settled(alpha);
+  const run = blocked.execution!.runs[0]!;
+  assert.equal(run.response?.status, 'fail');
+  assert.ok(!run.response?.recovery.includes('pass'));
+  const overridden = await service.overrideRequiredCheck(
+    project,
+    alpha.id,
+    blocked.revision,
+    'AC-01',
+    'Verified manually on the device.',
+  );
+  const after = overridden.execution!.runs[0]!;
+  assert.equal(after.result?.checks[0]?.status, 'failed');
+  assert.equal(after.response?.status, 'completed');
+  assert.ok(after.response?.recovery.includes('pass'));
+  assert.match(
+    after.response?.supplementaryWarnings.join('\n') ?? '',
+    /Accepted by user override: Check 1 \(failed\)/,
+  );
+  const doc = JSON.parse(await readFile(responseFile(alpha), 'utf8'));
+  assert.equal(doc.status, 'completed');
+  assert.ok(doc.recovery.includes('pass'));
+  const events = (await runLog(alpha, after)).map((entry) => entry.event);
+  assert.equal(events.at(-1), 'recovery.override');
+});
+
 void test('Coordinator title and detail shape a Warning without choosing its color', () => {
   const run = {
     id: 'run',

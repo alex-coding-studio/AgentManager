@@ -11,6 +11,7 @@ import {
   statusPresentation,
 } from '@/lib/execution-observability/status-presentation';
 import type { GitHubPullRequest } from '@/lib/github-delivery';
+import type { ActionRun } from '@/lib/modules/implementation/execution-types';
 import { cn } from '@/lib/utils';
 
 export function PullRequestChip({
@@ -37,6 +38,39 @@ export function PullRequestChip({
       {stale && ` · ${t('Stale status')}`}
     </a>
   );
+}
+
+export function runDocument(
+  projectId: string,
+  cardId: string,
+  run: ActionRun | undefined,
+  subjectLabel: string,
+): LatestResponseDocument | null {
+  if (!run?.response || run.status === 'running') return null;
+  return {
+    schemaVersion: 1,
+    owner: { kind: 'card', cardId },
+    projectId,
+    runId: run.id,
+    revision: 0,
+    status: run.response.status,
+    title: run.response.title,
+    detail: run.response.detail,
+    subject: { kind: 'action', label: subjectLabel, id: run.actionId },
+    supplementaryWarnings: run.response.supplementaryWarnings,
+    recovery: run.response.recovery,
+    startedAt: run.startedAt,
+    updatedAt: run.endedAt ?? run.startedAt,
+    endedAt: run.endedAt,
+    logRef: run.logRef ?? `implementation/cards/${cardId}/logs/${run.id}.log`,
+    logUrlPath: `/projects/${projectId}/logs/implementation/${cardId}/${run.id}`,
+    hostPid: run.hostPid,
+    agentProfile: run.profile,
+    actionId: run.actionId,
+    jobLogs: run.jobs,
+    recentActivity: [],
+    reconstructed: true,
+  };
 }
 
 export function ExecutionHeaderStatus({

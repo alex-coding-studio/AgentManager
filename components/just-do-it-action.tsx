@@ -31,6 +31,7 @@ import { AgentGraphComposerCard } from '@/components/agent-graph-composer-card';
 import {
   ExecutionHeaderStatus,
   PullRequestChip,
+  runDocument,
 } from '@/components/execution-sticky-header';
 import { useLatestResponse } from '@/hooks/use-latest-response';
 import { useSurfacePreference } from '@/hooks/use-surface-preference';
@@ -95,6 +96,10 @@ export function JustDoItAction({
     revision: number;
   } | null>(null);
   const latestResponse = useLatestResponse(projectId, { card: card.id });
+  const actionDocument =
+    latestResponse.document?.actionId === action.id
+      ? latestResponse.document
+      : null;
   const [composerCollapsed, setComposerCollapsed] = useSurfacePreference(
     projectId,
     `card:${card.id}`,
@@ -859,7 +864,7 @@ export function JustDoItAction({
       {!accepted && current?.id === action.id ? (
         <AgentGraphComposerCard
           className="fixed z-30"
-          running={latest?.status === 'running' || latestResponse.running}
+          running={latest?.status === 'running' || running}
           collapsed={composerCollapsed}
           onCollapsedChange={setComposerCollapsed}
           title={t(history.length ? 'Modify or clarify' : 'Start this Action')}
@@ -997,7 +1002,7 @@ export function JustDoItAction({
               {!accepted &&
               latest?.status !== 'running' &&
               latest?.result &&
-              (latestResponse.document?.recovery.includes('pass') ?? true) ? (
+              requiredPassed ? (
                 <Button
                   disabled={!enabled || preparingAcceptance}
                   onClick={() => void prepareAcceptance()}
@@ -1026,7 +1031,7 @@ export function JustDoItAction({
                 >
                   <Square />
                   {t(
-                    latestResponse.document?.phase === 'stopping'
+                    actionDocument?.phase === 'stopping'
                       ? 'Stopping'
                       : 'Cancel',
                   )}
@@ -1039,7 +1044,15 @@ export function JustDoItAction({
       {headerStatusTarget
         ? createPortal(
             <ExecutionHeaderStatus
-              document={latestResponse.document}
+              document={
+                actionDocument ??
+                runDocument(
+                  projectId,
+                  card.id,
+                  latest,
+                  `Action ${card.actions.findIndex((item) => item.id === action.id) + 1}/${card.actions.length} · ${action.title}`,
+                )
+              }
               actionIndex={card.actions.findIndex(
                 (item) => item.id === action.id,
               )}
