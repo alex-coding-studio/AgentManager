@@ -103,7 +103,10 @@ import {
   settleRun,
   type ActiveRunReservation,
 } from '../../execution-observability/active-runs.ts';
-import { publishLatestResponse } from '../../execution-observability/latest-response-store.ts';
+import {
+  clearLatestResponse,
+  publishLatestResponse,
+} from '../../execution-observability/latest-response-store.ts';
 import { openRunLog } from '../../execution-observability/run-log.ts';
 import {
   classifyResponse,
@@ -264,7 +267,7 @@ async function publishRecheck(
   ).catch(() => undefined);
 }
 
-function classifyRun(
+export function classifyActionRun(
   run: ActionRun,
   input: {
     runState?: ClassificationFacts['runState'];
@@ -558,7 +561,9 @@ export function createExecutionService(
     }
     const error =
       'Execution was interrupted. Files may have changed; nothing was rolled back. Inspect the workspace before retrying.';
-    const classification = classifyRun(run, { runState: 'ownership-lost' });
+    const classification = classifyActionRun(run, {
+      runState: 'ownership-lost',
+    });
     const next = replaceRun(card, {
       ...run,
       status: 'failed',
@@ -750,7 +755,7 @@ export function createExecutionService(
           ...(nextRun.verifiedExternalRefs ?? []),
           ...(nextRun.verifiedVersionRefs ?? []),
         ]);
-        nextRun.response = classifyRun(nextRun, {
+        nextRun.response = classifyActionRun(nextRun, {
           retained: retainedEffectsOf(nextRun, refs.length),
         });
         files['result.json'] = JSON.stringify(result);
@@ -838,7 +843,7 @@ export function createExecutionService(
           event: advisoryOnly ? 'result.advisory' : 'result.rejected',
           message,
         });
-        nextRun.response = classifyRun(nextRun, {
+        nextRun.response = classifyActionRun(nextRun, {
           runState: timedOut ? 'timed-out' : 'settled',
           retained: retainedEffectsOf(nextRun, refs.length),
           failure:
@@ -1312,6 +1317,8 @@ export function createExecutionService(
               summary: activity.summary,
               updatedAt: new Date().toISOString(),
               attempts: 1,
+              actor: activity.job ? 'JOB' : 'WORKER',
+              job: activity.job,
             }),
         };
         recordProgress({
@@ -1483,7 +1490,7 @@ export function createExecutionService(
         target.logRef = owner?.logRef ?? target.logRef;
       };
       if (stop === 'unconfirmed') {
-        const classification = classifyRun(run, {
+        const classification = classifyActionRun(run, {
           runState: 'termination-unconfirmed',
           interruptedPhase,
           interruptedActor,
@@ -1523,7 +1530,7 @@ export function createExecutionService(
           });
         return saved;
       }
-      const provisional = classifyRun(run, {
+      const provisional = classifyActionRun(run, {
         runState: 'canceled',
         interruptedPhase,
         interruptedActor,
@@ -1573,7 +1580,7 @@ export function createExecutionService(
           { ...canceledRun, commit: hash },
           changedFiles,
         );
-        const classification = classifyRun(canceledRun, {
+        const classification = classifyActionRun(canceledRun, {
           runState: 'canceled',
           interruptedPhase,
           interruptedActor,
@@ -1604,7 +1611,7 @@ export function createExecutionService(
           }).catch(() => undefined);
         return result;
       } catch (error) {
-        const classification = classifyRun(canceledRun, {
+        const classification = classifyActionRun(canceledRun, {
           runState: 'canceled',
           interruptedPhase,
           interruptedActor,
@@ -2139,7 +2146,7 @@ export function createExecutionService(
           ...versions,
         ]),
       };
-      nextRun.response = classifyRun(nextRun, {
+      nextRun.response = classifyActionRun(nextRun, {
         retained: retainedEffectsOf(nextRun, nextRun.observedRefs.length),
       });
       const rechecked = await commit(
@@ -2525,7 +2532,7 @@ export function createExecutionService(
         delete acceptanceOverrides[actionId];
         const verification = { ...card.execution?.verification };
         delete verification[actionId];
-        return await commit(
+        const undone = await commit(
           project,
           {
             ...card,
@@ -2559,6 +2566,10 @@ export function createExecutionService(
             refs: [],
           },
         );
+        await clearLatestResponse(cardOwner(project, cardId)).catch(
+          () => undefined,
+        );
+        return undone;
       } catch (error) {
         await undoWorkspaceRestart(
           project,

@@ -96,6 +96,12 @@ export function renderLatestResponseMarkdown(doc: LatestResponseDocument) {
   return `${lines.join('\n')}\n`;
 }
 
+export async function clearLatestResponse(owner: ResponseOwner) {
+  const paths = latestResponsePaths(owner);
+  await rm(paths.json, { force: true });
+  await rm(paths.markdown, { force: true });
+}
+
 export type PublishOptions = { allowTerminalReplace?: boolean };
 
 async function readOptional(file: string) {
