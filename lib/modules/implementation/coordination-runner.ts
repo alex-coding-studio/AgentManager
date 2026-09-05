@@ -437,7 +437,6 @@ The Coordinator-assigned responsibilities, responsibilityInstructions, Skills an
   };
   const terminalResult = (
     decision: CoordinationDecision,
-    sessionId: string | null,
   ): CoordinatedResult => {
     const output = {
       harnessRevision: input.request.harnessRevision,
@@ -463,7 +462,7 @@ The Coordinator-assigned responsibilities, responsibilityInstructions, Skills an
     };
     progress('complete', decision.summary);
     return {
-      agentSessionId: lastWorker?.agentSessionId ?? sessionId,
+      agentSessionId: lastWorker?.agentSessionId ?? null,
       finalOutput: JSON.stringify(output),
       usage: totalCoordinationUsage(trace),
       executionAccess: lastWorker?.executionAccess,
@@ -772,7 +771,7 @@ The Coordinator-assigned responsibilities, responsibilityInstructions, Skills an
         continue;
       }
       recordDecision(decision);
-      return terminalResult(decision, thread.threadId);
+      return terminalResult(decision);
     }
   }
   async function runLegacy(): Promise<CoordinatedResult> {
@@ -868,7 +867,7 @@ The Coordinator-assigned responsibilities, responsibilityInstructions, Skills an
         decision = parseCoordinationDecision(response.finalOutput, req);
       }
       assertActive();
-      return terminalResult(decision, response.agentSessionId);
+      return terminalResult(decision);
     }
   }
   const completion = (async (): Promise<CoordinatedResult> => {
