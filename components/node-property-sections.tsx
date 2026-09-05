@@ -2,7 +2,7 @@
 import { useUiText } from '@/components/ui-language-provider';
 
 import { FileText } from 'lucide-react';
-import type { TaskGraphNode } from '@/lib/graph/task/model';
+import type { TaskGraphNode } from '@/lib/graph/task/nodes';
 import { partitionNodeResources } from '@/lib/graph/task/resources';
 
 export function NodeResourceSections({

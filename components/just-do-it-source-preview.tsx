@@ -13,7 +13,7 @@ import {
 import { useUiText } from '@/components/ui-language-provider';
 import { graphCardLabel } from '@/lib/graph/identity';
 import type { DemoGoal } from '@/lib/modules/implementation/demo';
-import type { TaskGraphNode } from '@/lib/graph/task/model';
+import type { TaskGraphNode } from '@/lib/graph/task/nodes';
 
 const noAction = () => {};
 

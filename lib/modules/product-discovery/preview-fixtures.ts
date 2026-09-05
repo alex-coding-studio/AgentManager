@@ -4,7 +4,7 @@ import {
   type WhatsNextCandidate,
 } from '@/lib/modules/product-discovery/harness';
 import type { WhatsNextRunRecord } from '@/lib/modules/product-discovery/runs';
-import type { TaskGraphNode } from '@/lib/graph/task/model';
+import type { TaskGraphNode } from '@/lib/graph/task/nodes';
 
 const timestamp = '2026-08-29T00:00:00.000Z';
 const runId = 'RUN-00000000-0000-4000-8000-000000000022';

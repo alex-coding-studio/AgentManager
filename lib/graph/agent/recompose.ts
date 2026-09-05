@@ -13,6 +13,19 @@ export type AgentGraphRecomposeEffect = {
   to: string[];
 };
 
+export function recomposeEffectSchema<const T extends object>(idArray: T) {
+  return {
+    type: 'object',
+    additionalProperties: false,
+    required: ['kind', 'from', 'to'],
+    properties: {
+      kind: { enum: agentGraphRecomposeEffects },
+      from: idArray,
+      to: idArray,
+    },
+  } as const;
+}
+
 type RecomposeCandidate = {
   candidateId: string;
   dependsOn: string[];

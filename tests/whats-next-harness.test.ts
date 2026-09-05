@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 import {
   WHATS_NEXT_HARNESS_ID,
+  WHATS_NEXT_HARNESS_OUTPUT_SCHEMA,
   WHATS_NEXT_HARNESS_PROMPT,
   WHATS_NEXT_HARNESS_REVISION,
   WhatsNextResultValidationError,
@@ -582,5 +584,17 @@ void test('rejects a non-JSON result', () => {
   assert.throws(
     () => parseWhatsNextHarnessResult('not json', context),
     WhatsNextResultValidationError,
+  );
+});
+
+void test('the composed Harness output schema is byte-identical to the schema before fragment extraction', () => {
+  const fixture = readFileSync(
+    new URL('./fixtures/harness-schemas/whats-next.json', import.meta.url),
+    'utf8',
+  );
+  assert.deepEqual(WHATS_NEXT_HARNESS_OUTPUT_SCHEMA, JSON.parse(fixture));
+  assert.equal(
+    JSON.stringify(WHATS_NEXT_HARNESS_OUTPUT_SCHEMA),
+    JSON.stringify(JSON.parse(fixture)),
   );
 });

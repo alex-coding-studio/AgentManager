@@ -28,7 +28,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useUiText } from '@/components/ui-language-provider';
 import type { AgentProfile } from '@/lib/agents/profile';
 import type { ContextBrowserFolder } from '@/lib/modules/product-context/catalog';
-import type { TaskGraphNode } from '@/lib/graph/task/model';
+import type { TaskGraphNode } from '@/lib/graph/task/nodes';
 import {
   renderWhatToDoContract,
   type WhatToDoDeliveryMap,

@@ -1,0 +1,315 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "What's Next Harness Result",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "harness",
+        "request",
+        "reflection",
+        "exploration",
+        "outcome",
+        "candidates"
+      ],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "harness": { "$ref": "#/$defs/harness" },
+        "request": { "$ref": "#/$defs/request" },
+        "reflection": { "$ref": "#/$defs/reflection" },
+        "exploration": { "$ref": "#/$defs/exploration" },
+        "outcome": { "const": "proposal" },
+        "candidates": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/candidate" }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "harness",
+        "request",
+        "reflection",
+        "exploration",
+        "outcome",
+        "clarification"
+      ],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "harness": { "$ref": "#/$defs/harness" },
+        "request": { "$ref": "#/$defs/request" },
+        "reflection": { "$ref": "#/$defs/reflection" },
+        "exploration": { "$ref": "#/$defs/exploration" },
+        "outcome": { "const": "clarification" },
+        "clarification": { "$ref": "#/$defs/clarification" }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "harness",
+        "request",
+        "reflection",
+        "exploration",
+        "outcome",
+        "reason"
+      ],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "harness": { "$ref": "#/$defs/harness" },
+        "request": { "$ref": "#/$defs/request" },
+        "reflection": { "$ref": "#/$defs/reflection" },
+        "exploration": { "$ref": "#/$defs/exploration" },
+        "outcome": { "const": "no-change" },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S",
+          "maxLength": 600
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "harness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "revision"],
+      "properties": {
+        "id": { "const": "praxis.whats-next" },
+        "revision": { "const": 8 }
+      }
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sessionId", "requestId", "inputFingerprint"],
+      "properties": {
+        "sessionId": { "type": "string", "minLength": 1, "pattern": "\\S" },
+        "requestId": { "type": "string", "minLength": 1, "pattern": "\\S" },
+        "inputFingerprint": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        }
+      }
+    },
+    "reflection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["markdown", "continuationAdvice"],
+      "properties": {
+        "markdown": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S",
+          "maxLength": 2400
+        },
+        "continuationAdvice": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["action", "recommendedFocus", "reason"],
+          "properties": {
+            "action": {
+              "enum": ["continue", "consider-closing", "consider-branching"]
+            },
+            "recommendedFocus": {
+              "enum": ["clarify", "concretize", "expand", "compare", "close"]
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S",
+              "maxLength": 600
+            }
+          }
+        }
+      }
+    },
+    "exploration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["consideredNodeIds", "notes"],
+      "properties": {
+        "consideredNodeIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^NODE-[0-9a-f]{8,32}$" }
+        },
+        "notes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "pattern": "\\S" }
+        }
+      }
+    },
+    "resource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "path"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S",
+          "maxLength": 80
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S",
+          "maxLength": 500
+        }
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidateId",
+        "revision",
+        "type",
+        "title",
+        "summary",
+        "derivedFrom",
+        "dependsOn",
+        "resources",
+        "typeTemplateRef",
+        "metadata",
+        "presentation",
+        "assumptions",
+        "outputMarkdown",
+        "layer",
+        "artifactKind"
+      ],
+      "properties": {
+        "candidateId": {
+          "type": "string",
+          "pattern": "^CANDIDATE-(?:[0-9]{4,}|[0-9a-f]{8,32})$"
+        },
+        "revision": { "type": "integer", "minimum": 1 },
+        "type": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S",
+          "maxLength": 80
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S",
+          "maxLength": 160
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S",
+          "maxLength": 600
+        },
+        "derivedFrom": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^NODE-[0-9a-f]{8,32}$" },
+          "minItems": 1
+        },
+        "dependsOn": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "oneOf": [
+              { "type": "string", "pattern": "^NODE-[0-9a-f]{8,32}$" },
+              {
+                "type": "string",
+                "pattern": "^CANDIDATE-(?:[0-9]{4,}|[0-9a-f]{8,32})$"
+              }
+            ]
+          }
+        },
+        "resources": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/resource" }
+        },
+        "typeTemplateRef": {
+          "oneOf": [
+            { "type": "string", "pattern": "^NODE-[0-9a-f]{8,32}$" },
+            { "type": "null" }
+          ]
+        },
+        "metadata": { "type": "object" },
+        "presentation": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "color": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" }
+          }
+        },
+        "assumptions": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "pattern": "\\S" }
+        },
+        "outputMarkdown": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S",
+          "maxLength": 4000
+        },
+        "layer": { "enum": ["discovery", "product-design"] },
+        "artifactKind": { "enum": ["direction", "mvp", "feature"] }
+      }
+    },
+    "clarification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["question", "options"],
+      "properties": {
+        "question": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S",
+          "maxLength": 600
+        },
+        "options": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 3,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "label", "effect", "recommended"],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S",
+                "maxLength": 80
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S",
+                "maxLength": 160
+              },
+              "effect": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S",
+                "maxLength": 600
+              },
+              "recommended": { "type": "boolean" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -588,7 +588,7 @@ void test('readPlanningFile keeps its internal messages and size boundary', asyn
 void test('the migrated call sites import the shared resolver', async () => {
   const { readFile } = await import('node:fs/promises');
   for (const name of [
-    'graph/task/model.ts',
+    'graph/task/nodes.ts',
     'modules/implementation/planning-sources.ts',
   ]) {
     const source = await readFile(

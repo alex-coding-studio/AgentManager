@@ -6,6 +6,34 @@ import {
   validateAgentGraphRecomposePlan,
   type AgentGraphRecomposeEffect,
 } from '../../graph/agent/recompose.ts';
+import {
+  whatToDoClarification as clarification,
+  whatToDoContractCandidate as contractCandidate,
+  whatToDoContractDependencyUpdate as contractDependencyUpdate,
+  whatToDoObject as object,
+  whatToDoRecomposition as recomposition,
+  whatToDoSourceClaim as sourceClaim,
+  whatToDoSourceClaimUpdate as sourceClaimUpdate,
+  whatToDoStrings as strings,
+  whatToDoText as text,
+  type WhatToDoAcceptanceCriterion,
+  type WhatToDoContractCandidate,
+  type WhatToDoContractDependencyUpdate,
+  type WhatToDoDeliveryStrategy,
+  type WhatToDoDomainImpact,
+  type WhatToDoSourceClaim,
+  type WhatToDoSourceClaimUpdate,
+} from './contract.ts';
+
+export type {
+  WhatToDoAcceptanceCriterion,
+  WhatToDoContractCandidate,
+  WhatToDoContractDependencyUpdate,
+  WhatToDoDeliveryStrategy,
+  WhatToDoDomainImpact,
+  WhatToDoSourceClaim,
+  WhatToDoSourceClaimUpdate,
+};
 
 export const WHAT_TO_DO_HARNESS_ID = 'praxis.what-to-do';
 export const WHAT_TO_DO_HARNESS_REVISION = 3;
@@ -110,78 +138,6 @@ export function whatToDoHarnessPrompt(request: WhatToDoHarnessRequest) {
   return `${WHAT_TO_DO_HARNESS_PROMPT}\n\nCONTEXT ROOT: ${request.contextRoot}\n\nREQUEST:\n${JSON.stringify(request)}\n\nOUTPUT SCHEMA:\n${JSON.stringify(WHAT_TO_DO_HARNESS_OUTPUT_SCHEMA)}`;
 }
 
-export type WhatToDoDomainImpact = {
-  kind: 'none' | 'reuse' | 'change' | 'add' | 'uncertain';
-  reason: string;
-  evidencePaths: string[];
-};
-
-export type WhatToDoDeliveryStrategy = {
-  kind:
-    | 'foundation-first'
-    | 'experience-first'
-    | 'vertical-slice'
-    | 'risk-first';
-  reason: string;
-};
-
-export type WhatToDoAcceptanceCriterion = {
-  id: string;
-  condition: string;
-  passCondition: string;
-  evidence: string;
-};
-
-export type WhatToDoContractCandidate = {
-  candidateId: string;
-  revision: number;
-  title: string;
-  summary: string;
-  outcome: string;
-  includedScope: string[];
-  excludedScope: string[];
-  productRules: string[];
-  domainImpact: WhatToDoDomainImpact;
-  requiredExperienceStates: string[];
-  repositoryConstraints: string[];
-  dependsOn: string[];
-  acceptanceCriteria: WhatToDoAcceptanceCriterion[];
-  validationExpectations: string[];
-  sourceClaimIds: string[];
-  openDecisions: string[];
-  deliveryStrategy: WhatToDoDeliveryStrategy;
-};
-
-export type WhatToDoSourceClaim = {
-  claimId: string;
-  sourcePath: string;
-  sourceSha256: string;
-  anchor: string;
-  summary: string;
-  disposition: 'in-scope' | 'out-of-scope';
-  contractCandidateIds: string[];
-  exclusionReason: string | null;
-  exclusionAuthority: {
-    userInputPath: string;
-    userInputSha256: string;
-    anchor: string;
-  } | null;
-};
-
-export type WhatToDoSourceClaimUpdate = Pick<
-  WhatToDoSourceClaim,
-  | 'claimId'
-  | 'disposition'
-  | 'contractCandidateIds'
-  | 'exclusionReason'
-  | 'exclusionAuthority'
->;
-
-export type WhatToDoContractDependencyUpdate = {
-  candidateId: string;
-  dependsOn: string[];
-};
-
 type WhatToDoResultBase = {
   schemaVersion: 1;
   harness: {
@@ -238,124 +194,6 @@ export type WhatToDoValidationContext = {
   reservedCandidateIds?: Iterable<string>;
 };
 
-const text = {
-  type: 'string',
-  minLength: 1,
-  maxLength: 20_000,
-  pattern: '\\S',
-};
-const strings = {
-  type: 'array',
-  maxItems: 200,
-  uniqueItems: true,
-  items: text,
-};
-const sha256 = { type: 'string', pattern: '^[0-9a-f]{64}$' };
-const candidateId = {
-  type: 'string',
-  pattern: '^CANDIDATE-(?:[0-9]{4,}|[0-9a-f]{8,32})$',
-};
-const object = (properties: Record<string, unknown>) => ({
-  type: 'object',
-  additionalProperties: false,
-  required: Object.keys(properties),
-  properties,
-});
-const domainImpact = object({
-  kind: { enum: ['none', 'reuse', 'change', 'add', 'uncertain'] },
-  reason: text,
-  evidencePaths: strings,
-});
-const deliveryStrategy = object({
-  kind: {
-    enum: [
-      'foundation-first',
-      'experience-first',
-      'vertical-slice',
-      'risk-first',
-    ],
-  },
-  reason: text,
-});
-const acceptanceCriterion = object({
-  id: text,
-  condition: text,
-  passCondition: text,
-  evidence: text,
-});
-const anchor = { ...text, minLength: 8, maxLength: 2_000 };
-const contractCandidate = object({
-  candidateId,
-  revision: { type: 'integer', minimum: 1 },
-  title: { ...text, maxLength: 160 },
-  summary: { ...text, maxLength: 600 },
-  outcome: text,
-  includedScope: { ...strings, minItems: 1 },
-  excludedScope: strings,
-  productRules: { ...strings, minItems: 1 },
-  domainImpact,
-  requiredExperienceStates: strings,
-  repositoryConstraints: strings,
-  dependsOn: { type: 'array', uniqueItems: true, items: candidateId },
-  acceptanceCriteria: {
-    type: 'array',
-    minItems: 1,
-    maxItems: 60,
-    items: acceptanceCriterion,
-  },
-  validationExpectations: { ...strings, minItems: 1 },
-  sourceClaimIds: { ...strings, minItems: 1 },
-  openDecisions: strings,
-  deliveryStrategy,
-});
-const sourceClaim = object({
-  claimId: text,
-  sourcePath: text,
-  sourceSha256: sha256,
-  anchor,
-  summary: text,
-  disposition: { enum: ['in-scope', 'out-of-scope'] },
-  contractCandidateIds: {
-    type: 'array',
-    uniqueItems: true,
-    items: candidateId,
-  },
-  exclusionReason: { oneOf: [text, { type: 'null' }] },
-  exclusionAuthority: {
-    oneOf: [
-      object({
-        userInputPath: text,
-        userInputSha256: sha256,
-        anchor,
-      }),
-      { type: 'null' },
-    ],
-  },
-});
-const sourceClaimUpdate = object({
-  claimId: text,
-  disposition: { enum: ['in-scope', 'out-of-scope'] },
-  contractCandidateIds: {
-    type: 'array',
-    uniqueItems: true,
-    items: candidateId,
-  },
-  exclusionReason: { oneOf: [text, { type: 'null' }] },
-  exclusionAuthority: {
-    oneOf: [
-      object({
-        userInputPath: text,
-        userInputSha256: sha256,
-        anchor,
-      }),
-      { type: 'null' },
-    ],
-  },
-});
-const contractDependencyUpdate = object({
-  candidateId,
-  dependsOn: { type: 'array', uniqueItems: true, items: candidateId },
-});
 const base = {
   schemaVersion: { const: 1 },
   harness: object({
@@ -379,32 +217,6 @@ const base = {
     items: object({ path: text, reason: text }),
   },
 };
-const clarification = object({
-  question: { ...text, maxLength: 600 },
-  options: {
-    type: 'array',
-    minItems: 2,
-    maxItems: 3,
-    items: object({
-      id: text,
-      label: { ...text, maxLength: 160 },
-      effect: { ...text, maxLength: 600 },
-      recommended: { type: 'boolean' },
-    }),
-  },
-});
-const recomposition = object({
-  effects: {
-    type: 'array',
-    minItems: 1,
-    maxItems: 400,
-    items: object({
-      kind: { enum: ['retain', 'replace', 'split', 'merge', 'add', 'remove'] },
-      from: strings,
-      to: strings,
-    }),
-  },
-});
 const mapProposal = object({
   ...base,
   outcome: { const: 'map-proposal' },
