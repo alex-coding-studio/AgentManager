@@ -19,7 +19,9 @@ export type WhatsNextValidationContextInput = {
   nodes: TaskGraphNode[];
   knownResourcePaths: string[];
   reservedCandidateIds: string[];
-  knownCandidates: Array<Pick<WhatsNextCandidate, 'candidateId' | 'dependsOn'>>;
+  knownCandidates: Array<
+    Pick<WhatsNextCandidate, 'candidateId' | 'revision' | 'dependsOn'>
+  >;
   revisionTarget?: WhatsNextCandidate;
 };
 
