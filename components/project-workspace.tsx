@@ -7,7 +7,6 @@ import {
   Code2,
   Folder,
   FolderOpen,
-  HardDrive,
   PackagePlus,
   Plus,
   Settings,
@@ -129,8 +128,6 @@ export function ProjectWorkspace({
               <Settings className="size-4" />
               {t('Settings')}
             </Link>
-            <HardDrive className="size-3.5" />
-            {t('Local only')}
           </div>
         </div>
       </header>

@@ -1,4 +1,5 @@
 import { PublicApiError } from '../../api-errors.ts';
+import { actionPublicationBranch } from './action-publication.ts';
 import {
   startCoordinatedExecution,
   CoordinationRunError,
@@ -802,6 +803,12 @@ export function createExecutionService(
           baseline.head,
           reader,
           snapshot.head,
+          card.execution?.workspace
+            ? actionPublicationBranch(
+                card.execution.workspace.branch,
+                run.actionId,
+              )
+            : undefined,
         );
         files['github-delivery.json'] = JSON.stringify(nextRun.github);
         nextRun.unverifiedCheckRefs = unverifiedCheckRefs(result, request, [
@@ -888,6 +895,12 @@ export function createExecutionService(
             baseline.head,
             reader,
             snapshot.head,
+            card.execution?.workspace
+              ? actionPublicationBranch(
+                  card.execution.workspace.branch,
+                  run.actionId,
+                )
+              : undefined,
           );
           files['github-delivery.json'] = JSON.stringify(nextRun.github);
         }
@@ -2195,6 +2208,12 @@ export function createExecutionService(
               recorded.head,
               reader,
               recorded.head,
+              card.execution?.workspace
+                ? actionPublicationBranch(
+                    card.execution.workspace.branch,
+                    run.actionId,
+                  )
+                : undefined,
             );
       const outputRef = reference(card, 'output.md');
       const nextRun = {
@@ -2366,10 +2385,21 @@ export function createExecutionService(
         workspaceProject(project, workspace),
       );
       if (repositoryUrl) {
-        const prs = await reader.branchPullRequests(
-          repositoryUrl.slice('https://github.com/'.length),
-          workspace.branch,
-        );
+        const prs = (
+          await Promise.all(
+            [
+              workspace.branch,
+              ...card.actions.map((action) =>
+                actionPublicationBranch(workspace.branch, action.id),
+              ),
+            ].map((branch) =>
+              reader.branchPullRequests(
+                repositoryUrl.slice('https://github.com/'.length),
+                branch,
+              ),
+            ),
+          )
+        ).flat();
         if (prs.some((pr) => pr.state === 'MERGED'))
           throw new PublicApiError(
             'This Card branch has a merged PR. Use a revert PR instead of a local restart.',
@@ -2525,10 +2555,19 @@ export function createExecutionService(
         workspaceProject(project, workspace),
       );
       if (repositoryUrl) {
-        const prs = await reader.branchPullRequests(
-          repositoryUrl.slice('https://github.com/'.length),
-          workspace.branch,
-        );
+        const prs = (
+          await Promise.all(
+            [
+              workspace.branch,
+              actionPublicationBranch(workspace.branch, actionId),
+            ].map((branch) =>
+              reader.branchPullRequests(
+                repositoryUrl.slice('https://github.com/'.length),
+                branch,
+              ),
+            ),
+          )
+        ).flat();
         if (prs.some((pr) => pr.state === 'MERGED'))
           throw new PublicApiError(
             'This Card branch has a merged PR. Use a revert PR instead.',

@@ -11,6 +11,7 @@ import {
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { actionPublicationBranch } from './modules/implementation/action-publication.ts';
 import {
   verifyCardWorkspace,
   type CardWorkspace,
@@ -260,7 +261,13 @@ export async function publishCardCandidate(
   await verifyCardWorkspace(environment.workspace);
   const workspace = environment.workspace.path;
   const headSha = await git(runner, workspace, 'rev-parse', 'HEAD');
-  const branch = await git(runner, workspace, 'branch', '--show-current');
+  const workspaceBranch = await git(
+    runner,
+    workspace,
+    'branch',
+    '--show-current',
+  );
+  const branch = actionPublicationBranch(workspaceBranch, request.actionId);
   const status = await git(
     runner,
     workspace,
@@ -270,7 +277,7 @@ export async function publishCardCandidate(
   );
   if (headSha !== request.headSha)
     throw new Error('Candidate HEAD changed before publication.');
-  if (branch !== environment.workspace.branch)
+  if (workspaceBranch !== environment.workspace.branch)
     throw new Error(
       'Candidate branch does not match its Environment Manifest.',
     );
@@ -500,7 +507,9 @@ export async function publishCardCandidate(
     throw new Error('Candidate branch has ambiguous pull request state.');
   let pr = existing[0];
   if (pr && pr.state !== 'OPEN')
-    throw new Error('Candidate pull request is no longer open.');
+    throw new Error(
+      `This Action's pull request is ${pr.state.toLowerCase()}; it cannot be updated.`,
+    );
   if (
     pr &&
     !pr.isDraft &&
@@ -513,14 +522,7 @@ export async function publishCardCandidate(
     );
     pr.isDraft = true;
   }
-  await git(
-    runner,
-    workspace,
-    'push',
-    '-u',
-    'origin',
-    `HEAD:refs/heads/${branch}`,
-  );
+  await git(runner, workspace, 'push', 'origin', `HEAD:refs/heads/${branch}`);
   if (pr) {
     const refreshed = JSON.parse(
       await runner(
@@ -604,7 +606,10 @@ export async function publishCardCandidate(
   }
   return {
     version: 1,
-    candidateId: candidateId(environment.environmentId, request.headSha),
+    candidateId: candidateId(
+      `${environment.environmentId}:${request.actionId}`,
+      request.headSha,
+    ),
     environmentId: environment.environmentId,
     environmentRevision: environment.revision,
     actionId: request.actionId,

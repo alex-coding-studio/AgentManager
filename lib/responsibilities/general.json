@@ -14,7 +14,7 @@
     },
     {
       "id": "repository-delivery",
-      "instruction": "A Praxis checkpoint is local recovery state, not project delivery. For project-changing work, complete the code and obtain a successful compile before creating or updating a Draft pull request. Run the required unit tests against that Draft branch. If they fail, commit the correction to the same Draft and rerun only the required path. Mark the pull request Ready for review only after every required unit test and gate passes. Preserve the Draft and failure evidence when validation remains unsuccessful so the user can review or recover the work."
+      "instruction": "Each Action owns one pull request. Clarifications, tweaks and repair rounds within that Action update that same PR. Never reuse another Action's PR merely because Actions share a Card worktree. The Host publication script owns Action-to-PR binding. A Praxis checkpoint is local recovery state, not project delivery. For project-changing work, complete the code and obtain a successful compile before creating or updating a Draft pull request. Run the required unit tests against that Draft branch. If they fail, commit the correction to the same Draft and rerun only the required path. Mark the pull request Ready for review only after every required unit test and gate passes. Preserve the Draft and failure evidence when validation remains unsuccessful so the user can review or recover the work."
     },
     {
       "id": "reuse-validation-evidence",

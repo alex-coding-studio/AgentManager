@@ -250,6 +250,32 @@ void test('Candidate Publisher handles multiple commits as one idempotent HEAD',
   const repeated = await publishCardCandidate(request, intercepted);
   assert.equal(repeated.candidateId, publication.candidateId);
   assert.equal(repeated.pullRequest.number, 7);
+  const actionBranches: string[] = [];
+  const secondState: { headSha?: string; created?: boolean } = {
+    headSha: state.headSha,
+  };
+  const secondRunner = runner(secondState);
+  const second = await publishCardCandidate(
+    { ...request, actionId: 'action-2' },
+    async (command, args, options) => {
+      if (command === 'gh' && args[0] === 'pr' && args[1] === 'list') {
+        const branch = args[args.indexOf('--head') + 1];
+        actionBranches.push(branch);
+        assert.notEqual(branch, f.workspace.branch);
+        assert.notEqual(branch, publication.branch);
+      }
+      return secondRunner(command, args, options);
+    },
+  );
+  assert.ok(actionBranches.length > 0);
+  assert.notEqual(second.candidateId, publication.candidateId);
+  assert.equal(second.branch, `${f.workspace.branch}--action-action-2`);
+  assert.equal(
+    (
+      await execute('git', ['-C', f.workspace.path, 'branch', '--show-current'])
+    ).stdout.trim(),
+    f.workspace.branch,
+  );
   const transitions: string[] = [];
   await publishCardCandidate(request, async (command, args, options) => {
     transitions.push(args.join(' '));
@@ -268,7 +294,7 @@ void test('Candidate Publisher handles multiple commits as one idempotent HEAD',
   });
   assert.ok(
     transitions.findIndex((call) => call.includes('--undo')) <
-      transitions.findIndex((call) => call.includes('push -u')),
+      transitions.findIndex((call) => call.includes('push origin')),
   );
   await execute('git', [
     '-C',

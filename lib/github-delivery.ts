@@ -169,6 +169,7 @@ export async function discoverGitHubDelivery(
   previousHead: string | null,
   reader = githubReader,
   observedHead?: string | null,
+  publicationBranch?: string,
 ): Promise<GitHubDelivery | null> {
   const repositoryUrl = getGitHubRepositoryUrl(project);
   if (!repositoryUrl) return null;
@@ -213,6 +214,10 @@ export async function discoverGitHubDelivery(
       error:
         'Could not capture repository output. No GitHub delivery was verified.',
     };
+  }
+  if (publicationBranch) {
+    result.outputBranch = publicationBranch;
+    result.requestedNumbers = [];
   }
   return refreshGitHubDelivery(result, reader);
 }
