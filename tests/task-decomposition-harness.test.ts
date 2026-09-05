@@ -210,7 +210,7 @@ void test('rejects unknown, self, and cyclic Candidate dependencies', () => {
         },
         context,
       ),
-    /unknown Node or Candidate/,
+    /depends on an unknown Candidate/,
   );
   assert.throws(
     () =>
@@ -317,7 +317,7 @@ void test('rejects a Candidate identifier already owned by another proposal', ()
         },
         { ...context, reservedCandidateIds: ['CANDIDATE-0001'] },
       ),
-    /already exists/,
+    /is already allocated/,
   );
 });
 
