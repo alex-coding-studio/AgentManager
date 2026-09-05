@@ -297,9 +297,9 @@ export function DomainModelWorkspace({
             title={t('Latest Response')}
             statusLabel={t('Undone')}
             summary={t('The last model change was undone.')}
-            tone="neutral"
+            tone="completed"
             attention="none"
-            icon="neutral"
+            icon="success"
             className="absolute top-4 left-4 z-20 w-[min(360px,calc(100%-2rem))]"
           />
         ) : latest && latest.status !== 'running' ? (

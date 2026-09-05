@@ -386,9 +386,9 @@ void test('Latest Response exposes the standard Response, Summary and Log action
         title: 'Latest Response',
         statusLabel: 'No change',
         summary: 'The current proposal already covers this boundary.',
-        tone: 'neutral',
+        tone: 'completed',
         attention: 'none',
-        icon: 'neutral',
+        icon: 'success',
       },
       createElement(LatestResponseActions, {
         responseLabel: 'Response',
@@ -430,9 +430,9 @@ void test('Latest Response renders clarification options with their effects', as
         title: 'Latest Response',
         statusLabel: 'Answer needed',
         summary: 'Choose one persistence strategy.',
-        tone: 'attention',
+        tone: 'warning',
         attention: 'action-required',
-        icon: 'attention',
+        icon: 'warning',
       },
       createElement(LatestResponseOptions, {
         options: [

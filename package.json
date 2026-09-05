@@ -35,7 +35,7 @@
     "test:ci": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run build",
     "test:implementation-demo": "node --experimental-strip-types --test tests/just-do-it-demo.test.ts",
     "test:implementation-harness": "node --experimental-strip-types --test tests/just-do-it-harness.test.ts",
-    "test:observability": "node --experimental-strip-types --test tests/execution-observability-status.test.ts tests/execution-observability-run-log.test.ts tests/execution-observability-latest-response.test.ts tests/execution-observability-active-runs.test.ts",
+    "test:observability": "node --experimental-strip-types --test tests/execution-observability-status.test.ts tests/execution-observability-run-log.test.ts tests/execution-observability-latest-response.test.ts tests/execution-observability-active-runs.test.ts tests/module-run-lifecycle.test.ts",
     "test:log-viewer": "node --experimental-strip-types --import ./tests/helpers/register-alias.mjs --test tests/log-viewer-api.test.ts",
     "test:delivery-packet": "node --experimental-strip-types --test tests/delivery-packet-manifest.test.ts tests/delivery-packet-materializer.test.ts",
     "publish:execution-candidate": "node --experimental-strip-types scripts/publish-execution-candidate.ts",

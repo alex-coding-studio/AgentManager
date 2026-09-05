@@ -23,7 +23,10 @@ import {
   type RunPhase,
 } from './types.ts';
 
-export const STOP_GRACE_MS = 15_000;
+export const STOP_GRACE_MS =
+  Number(process.env.PRAXIS_STOP_GRACE_MS) > 0
+    ? Number(process.env.PRAXIS_STOP_GRACE_MS)
+    : 15_000;
 const RUNNING_PUBLISH_THROTTLE_MS = 1_000;
 
 export type StopResult = 'confirmed' | 'unconfirmed';
