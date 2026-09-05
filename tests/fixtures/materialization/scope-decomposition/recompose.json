@@ -1,0 +1,321 @@
+{
+  "task-decomposition/runs/RUN-U4/candidates/CANDIDATE-U1/output.md": "# Capture the source\n\nCapture the source stated as one bounded unit of work.\n\n## Candidate\n\n- ID: `CANDIDATE-U1`\n- Revision: 1\n- Type: module\n\n## Relationships\n\n- Derived from: NODE-U0\n- Depends on: None\n\n## Resources\n\n- None\n\n## Assumptions\n\n- The source already describes the intended outcome.\n\n## Metadata\n\nNone.\n",
+  "task-decomposition/runs/RUN-U4/candidates/CANDIDATE-U2/output.md": "# Render the page\n\nRender the page stated as one bounded unit of work.\n\n## Candidate\n\n- ID: `CANDIDATE-U2`\n- Revision: 1\n- Type: module\n\n## Relationships\n\n- Derived from: NODE-U0\n- Depends on: CANDIDATE-U1\n\n## Resources\n\n- None\n\n## Assumptions\n\n- The source already describes the intended outcome.\n\n## Metadata\n\nNone.\n",
+  "task-decomposition/runs/RUN-U4/candidates/CANDIDATE-U3/output.md": "# Publish the site\n\nPublish the site stated as one bounded unit of work.\n\n## Candidate\n\n- ID: `CANDIDATE-U3`\n- Revision: 1\n- Type: module\n\n## Relationships\n\n- Derived from: NODE-U0\n- Depends on: CANDIDATE-U2\n\n## Resources\n\n- None\n\n## Assumptions\n\n- The source already describes the intended outcome.\n\n## Metadata\n\nNone.\n",
+  "task-decomposition/runs/RUN-U4/run.json": {
+    "schemaVersion": 1,
+    "runId": "RUN-U4",
+    "sessionId": "SESSION-U5",
+    "requestId": "REQUEST-U6",
+    "agentSessionId": null,
+    "agentSessionMode": "persistent",
+    "sourceNodeId": "NODE-U0",
+    "intention": "understanding",
+    "motion": "unspecified",
+    "operation": "propose",
+    "status": "proposal",
+    "transport": "codex-cli",
+    "profile": {
+      "agent": "codex",
+      "model": "",
+      "effort": ""
+    },
+    "harness": {
+      "id": "praxis.task-decomposition",
+      "revision": 8
+    },
+    "input": {
+      "userInputPath": "input/user-input.md",
+      "moduleInstructionsState": "cleared",
+      "resourcePaths": [
+        "task-decomposition/runs/RUN-U4/context/input/user-input.md",
+        "task-graph/nodes/NODE-U0/resources/user-input.md"
+      ],
+      "requestArtifact": "request.json"
+    },
+    "inputFingerprint": "H0",
+    "startedAt": "T",
+    "updatedAt": "T",
+    "endedAt": "T",
+    "usage": null,
+    "sessionUsage": null,
+    "activity": [
+      {
+        "at": "T",
+        "summary": "Decomposing the selected scope."
+      }
+    ],
+    "result": {
+      "schemaVersion": 1,
+      "harness": {
+        "id": "praxis.task-decomposition",
+        "revision": 8
+      },
+      "request": {
+        "sessionId": "SESSION-U5",
+        "requestId": "REQUEST-U6",
+        "inputFingerprint": "H0"
+      },
+      "impactReview": {
+        "reviewedNodeIds": ["NODE-U0"],
+        "affectedNodeIds": [],
+        "notes": []
+      },
+      "outcome": "proposal",
+      "candidates": [
+        {
+          "candidateId": "CANDIDATE-U1",
+          "revision": 1,
+          "type": "module",
+          "title": "Capture the source",
+          "summary": "Capture the source stated as one bounded unit of work.",
+          "derivedFrom": ["NODE-U0"],
+          "dependsOn": [],
+          "resources": [],
+          "typeTemplateRef": null,
+          "metadata": {},
+          "presentation": {},
+          "assumptions": ["The source already describes the intended outcome."],
+          "uid": "U1",
+          "relations": {
+            "derivedFrom": ["U0"],
+            "dependsOn": []
+          }
+        },
+        {
+          "candidateId": "CANDIDATE-U2",
+          "revision": 1,
+          "type": "module",
+          "title": "Render the page",
+          "summary": "Render the page stated as one bounded unit of work.",
+          "derivedFrom": ["NODE-U0"],
+          "dependsOn": ["CANDIDATE-U1"],
+          "resources": [],
+          "typeTemplateRef": null,
+          "metadata": {},
+          "presentation": {},
+          "assumptions": ["The source already describes the intended outcome."],
+          "uid": "U2",
+          "relations": {
+            "derivedFrom": ["U0"],
+            "dependsOn": ["U1"]
+          }
+        },
+        {
+          "candidateId": "CANDIDATE-U3",
+          "revision": 1,
+          "type": "module",
+          "title": "Publish the site",
+          "summary": "Publish the site stated as one bounded unit of work.",
+          "derivedFrom": ["NODE-U0"],
+          "dependsOn": ["CANDIDATE-U2"],
+          "resources": [],
+          "typeTemplateRef": null,
+          "metadata": {},
+          "presentation": {},
+          "assumptions": ["The source already describes the intended outcome."],
+          "uid": "U3",
+          "relations": {
+            "derivedFrom": ["U0"],
+            "dependsOn": ["U2"]
+          }
+        }
+      ],
+      "candidateAliases": {
+        "CANDIDATE-0001": "CANDIDATE-U1",
+        "CANDIDATE-0002": "CANDIDATE-U2",
+        "CANDIDATE-0003": "CANDIDATE-U3"
+      }
+    },
+    "error": null,
+    "logRef": "task-decomposition/runs/RUN-U4/run.log",
+    "hostPid": 0,
+    "response": {
+      "status": "completed",
+      "title": "Review",
+      "detail": "3 Candidates proposed for NODE-U0. Review them on the graph.",
+      "supplementaryWarnings": [],
+      "recovery": ["log", "continue"]
+    }
+  },
+  "task-decomposition/runs/RUN-U9/candidates/CANDIDATE-U7/output.md": "# Render the shell\n\nRender the shell stated as one bounded unit of work.\n\n## Candidate\n\n- ID: `CANDIDATE-U7`\n- Revision: 1\n- Type: module\n\n## Relationships\n\n- Derived from: NODE-U0\n- Depends on: CANDIDATE-U1\n\n## Resources\n\n- None\n\n## Assumptions\n\n- The source already describes the intended outcome.\n\n## Metadata\n\nNone.\n",
+  "task-decomposition/runs/RUN-U9/candidates/CANDIDATE-U8/output.md": "# Render the content\n\nRender the content stated as one bounded unit of work.\n\n## Candidate\n\n- ID: `CANDIDATE-U8`\n- Revision: 1\n- Type: module\n\n## Relationships\n\n- Derived from: NODE-U0\n- Depends on: CANDIDATE-U7\n\n## Resources\n\n- None\n\n## Assumptions\n\n- The source already describes the intended outcome.\n\n## Metadata\n\nNone.\n",
+  "task-decomposition/runs/RUN-U9/run.json": {
+    "schemaVersion": 1,
+    "runId": "RUN-U9",
+    "sessionId": "SESSION-U10",
+    "requestId": "REQUEST-U11",
+    "agentSessionId": null,
+    "agentSessionMode": "persistent",
+    "sourceNodeId": "NODE-U0",
+    "intention": "understanding",
+    "motion": "unspecified",
+    "operation": "recompose-candidates",
+    "recomposeCandidateIds": ["CANDIDATE-U1", "CANDIDATE-U2", "CANDIDATE-U3"],
+    "status": "proposal",
+    "transport": "codex-cli",
+    "profile": {
+      "agent": "codex",
+      "model": "",
+      "effort": ""
+    },
+    "harness": {
+      "id": "praxis.task-decomposition",
+      "revision": 8
+    },
+    "input": {
+      "userInputPath": "input/user-input.md",
+      "moduleInstructionsState": "cleared",
+      "resourcePaths": [
+        "task-decomposition/runs/RUN-U4/candidates/CANDIDATE-U1/output.md",
+        "task-decomposition/runs/RUN-U4/candidates/CANDIDATE-U2/output.md",
+        "task-decomposition/runs/RUN-U4/candidates/CANDIDATE-U3/output.md",
+        "task-decomposition/runs/RUN-U9/context/input/user-input.md",
+        "task-graph/nodes/NODE-U0/resources/user-input.md"
+      ],
+      "requestArtifact": "request.json"
+    },
+    "inputFingerprint": "H1",
+    "startedAt": "T",
+    "updatedAt": "T",
+    "endedAt": "T",
+    "usage": null,
+    "sessionUsage": null,
+    "activity": [
+      {
+        "at": "T",
+        "summary": "Decomposing the selected scope."
+      }
+    ],
+    "result": {
+      "schemaVersion": 1,
+      "harness": {
+        "id": "praxis.task-decomposition",
+        "revision": 8
+      },
+      "request": {
+        "sessionId": "SESSION-U10",
+        "requestId": "REQUEST-U11",
+        "inputFingerprint": "H1"
+      },
+      "impactReview": {
+        "reviewedNodeIds": ["NODE-U0"],
+        "affectedNodeIds": [],
+        "notes": []
+      },
+      "outcome": "proposal",
+      "candidates": [
+        {
+          "candidateId": "CANDIDATE-U7",
+          "revision": 1,
+          "type": "module",
+          "title": "Render the shell",
+          "summary": "Render the shell stated as one bounded unit of work.",
+          "derivedFrom": ["NODE-U0"],
+          "dependsOn": ["CANDIDATE-U1"],
+          "resources": [],
+          "typeTemplateRef": null,
+          "metadata": {},
+          "presentation": {},
+          "assumptions": ["The source already describes the intended outcome."],
+          "uid": "U7",
+          "relations": {
+            "derivedFrom": ["U0"],
+            "dependsOn": ["U1"]
+          }
+        },
+        {
+          "candidateId": "CANDIDATE-U8",
+          "revision": 1,
+          "type": "module",
+          "title": "Render the content",
+          "summary": "Render the content stated as one bounded unit of work.",
+          "derivedFrom": ["NODE-U0"],
+          "dependsOn": ["CANDIDATE-U7"],
+          "resources": [],
+          "typeTemplateRef": null,
+          "metadata": {},
+          "presentation": {},
+          "assumptions": ["The source already describes the intended outcome."],
+          "uid": "U8",
+          "relations": {
+            "derivedFrom": ["U0"],
+            "dependsOn": ["U7"]
+          }
+        }
+      ],
+      "recomposition": {
+        "effects": [
+          {
+            "kind": "retain",
+            "from": ["CANDIDATE-U1"],
+            "to": ["CANDIDATE-U1"]
+          },
+          {
+            "kind": "split",
+            "from": ["CANDIDATE-U2"],
+            "to": ["CANDIDATE-U7", "CANDIDATE-U8"]
+          },
+          {
+            "kind": "remove",
+            "from": ["CANDIDATE-U3"],
+            "to": []
+          }
+        ]
+      },
+      "candidateAliases": {
+        "CANDIDATE-0010": "CANDIDATE-U7",
+        "CANDIDATE-0011": "CANDIDATE-U8"
+      }
+    },
+    "error": null,
+    "logRef": "task-decomposition/runs/RUN-U9/run.log",
+    "hostPid": 0,
+    "response": {
+      "status": "completed",
+      "title": "Review",
+      "detail": "2 Candidates proposed for NODE-U0. Review them on the graph.",
+      "supplementaryWarnings": [],
+      "recovery": ["log", "continue"]
+    }
+  },
+  "task-graph/identities.json": {
+    "schemaVersion": 1,
+    "aliases": {
+      "NODE-U0": "U0",
+      "CANDIDATE-U1": "U1",
+      "CANDIDATE-U2": "U2",
+      "CANDIDATE-U3": "U3",
+      "CANDIDATE-U7": "U7",
+      "CANDIDATE-U8": "U8"
+    },
+    "formalAliases": ["NODE-U0"]
+  },
+  "task-graph/nodes/NODE-U0/node.json": {
+    "schemaVersion": 1,
+    "id": "NODE-U0",
+    "uid": "U0",
+    "relations": {
+      "derivedFrom": [],
+      "dependsOn": []
+    },
+    "role": "start",
+    "type": "source",
+    "title": "Build my local website",
+    "status": "captured",
+    "createdAt": "T",
+    "updatedAt": "T",
+    "resources": [
+      {
+        "kind": "idea",
+        "path": "task-graph/nodes/NODE-U0/resources/user-input.md"
+      }
+    ],
+    "dependsOn": [],
+    "typeTemplateRef": "NODE-U0",
+    "metadata": {},
+    "presentation": {
+      "color": "#525252"
+    }
+  }
+}

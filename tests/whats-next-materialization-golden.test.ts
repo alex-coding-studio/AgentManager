@@ -13,7 +13,7 @@ import {
   WHATS_NEXT_HARNESS_REVISION,
 } from '../lib/modules/product-discovery/harness.ts';
 import {
-  captureWhatsNextState,
+  captureGraphState,
   createCanonicalizer,
   createGoldenProject,
   deferredLaunch,
@@ -161,7 +161,7 @@ void test('an explored proposal materializes the same Candidates and identities'
   );
   const settled = await settledRun(project, started.runId);
   assert.equal(settled.status, 'proposal', settled.error ?? undefined);
-  await assertGolden('explore', await captureWhatsNextState(project));
+  await assertGolden('explore', await captureGraphState(project));
 });
 
 void test('dependency-ordered acceptance promotes Candidates to formal Nodes', async (t) => {
@@ -191,7 +191,7 @@ void test('dependency-ordered acceptance promotes Candidates to formal Nodes', a
   );
   await acceptWhatsNextCandidate(project, started.runId, prerequisite);
   await acceptWhatsNextCandidate(project, started.runId, dependent);
-  await assertGolden('accept', await captureWhatsNextState(project));
+  await assertGolden('accept', await captureGraphState(project));
 });
 
 void test('a no-change response leaves the graph untouched', async (t) => {
@@ -220,7 +220,7 @@ void test('a no-change response leaves the graph untouched', async (t) => {
   );
   const settled = await settledRun(project, started.runId);
   assert.equal(settled.status, 'no-change', settled.error ?? undefined);
-  await assertGolden('no-change', await captureWhatsNextState(project));
+  await assertGolden('no-change', await captureGraphState(project));
 });
 
 void test('a clarification response creates no Candidate', async (t) => {
@@ -265,7 +265,7 @@ void test('a clarification response creates no Candidate', async (t) => {
   );
   const settled = await settledRun(project, started.runId);
   assert.equal(settled.status, 'clarification', settled.error ?? undefined);
-  await assertGolden('clarification', await captureWhatsNextState(project));
+  await assertGolden('clarification', await captureGraphState(project));
 });
 
 void test('the canonicalizer removes every volatile identifier', () => {
@@ -336,7 +336,7 @@ void test('a refined Candidate keeps its identity and advances one revision', as
   assert.equal(result.candidates[0]!.candidateId, target.candidateId);
   assert.equal(result.candidates[0]!.uid, target.uid);
   assert.equal(result.candidates[0]!.revision, 2);
-  await assertGolden('refine', await captureWhatsNextState(project));
+  await assertGolden('refine', await captureGraphState(project));
 });
 
 void test('a Product Design Candidate keeps its Layer and artifact kind through acceptance', async (t) => {
@@ -366,7 +366,7 @@ void test('a Product Design Candidate keeps its Layer and artifact kind through 
   assert.equal(accepted.node.layer, 'product-design');
   assert.equal(accepted.node.artifactKind, 'feature');
   assert.equal(accepted.node.uid, result.candidates[0]!.uid);
-  await assertGolden('product-design', await captureWhatsNextState(project));
+  await assertGolden('product-design', await captureGraphState(project));
 });
 
 void test('a redone proposal supersedes the unaccepted Candidates and publishes new identities', async (t) => {
@@ -409,5 +409,5 @@ void test('a redone proposal supersedes the unaccepted Candidates and publishes 
   );
   const settled = await settledRun(project, replaced.runId);
   assert.equal(settled.status, 'proposal', settled.error ?? undefined);
-  await assertGolden('redo', await captureWhatsNextState(project));
+  await assertGolden('redo', await captureGraphState(project));
 });

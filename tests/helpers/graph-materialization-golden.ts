@@ -4,6 +4,7 @@ import path from 'node:path';
 import type test from 'node:test';
 import { createStartNode } from '../../lib/graph/task/model.ts';
 import { readWhatsNextRun } from '../../lib/modules/product-discovery/runs.ts';
+import { readTaskDecompositionRun } from '../../lib/modules/scope-decomposition/runs.ts';
 import { listActiveRuns } from '../../lib/execution-observability/active-runs.ts';
 import type { RegisteredProject } from '../../lib/project-registry.ts';
 
@@ -60,6 +61,7 @@ export function createCanonicalizer(): GoldenCanonicalizer {
 export async function createGoldenProject(
   t: test.TestContext,
   title = 'Build my local website',
+  scope: 'whats-next' | 'task-graph' = 'whats-next',
 ) {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'graph-golden-'));
   t.after(() => rm(rootPath, { recursive: true, force: true }));
@@ -77,7 +79,7 @@ export async function createGoldenProject(
   const created = await createStartNode(
     project,
     { title, idea: 'Build it', contextRefs: [], files: [] },
-    'whats-next',
+    scope,
   );
   return { project, source: created.node };
 }
@@ -107,9 +109,13 @@ export function deferredLaunch() {
   };
 }
 
-export async function settledRun(project: RegisteredProject, runId: string) {
+async function settledGraphRun<T extends { status: string }>(
+  project: RegisteredProject,
+  runId: string,
+  read: (project: RegisteredProject, runId: string) => Promise<T>,
+): Promise<T> {
   for (let attempt = 0; attempt < 300; attempt += 1) {
-    const value = await readWhatsNextRun(project, runId);
+    const value = await read(project, runId);
     if (!['running', 'validating'].includes(value.status)) {
       const active = listActiveRuns(project.planningPath).find(
         (candidate) => candidate.runId === runId,
@@ -120,6 +126,17 @@ export async function settledRun(project: RegisteredProject, runId: string) {
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
   throw new Error('The fixture Run did not settle.');
+}
+
+export function settledRun(project: RegisteredProject, runId: string) {
+  return settledGraphRun(project, runId, readWhatsNextRun);
+}
+
+export function settledTaskDecompositionRun(
+  project: RegisteredProject,
+  runId: string,
+) {
+  return settledGraphRun(project, runId, readTaskDecompositionRun);
 }
 
 async function readTree(root: string, relative = ''): Promise<string[]> {
@@ -173,12 +190,12 @@ function seedOrder(files: CapturedFile[]) {
   return seeds;
 }
 
-export async function captureWhatsNextState(
+export async function captureGraphState(
   project: RegisteredProject,
   canonicalize: GoldenCanonicalizer = createCanonicalizer(),
 ) {
   const files: CapturedFile[] = [];
-  for (const scope of ['whats-next', 'task-graph']) {
+  for (const scope of ['whats-next', 'task-graph', 'task-decomposition']) {
     const root = path.join(project.planningPath, scope);
     for (const relative of await readTree(root)) {
       if (!CAPTURED.test(relative)) continue;
