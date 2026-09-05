@@ -428,7 +428,6 @@ export function WhatToDoWorkspace({
                 <LatestResponseActions
                   responseLabel={t('Response')}
                   summaryLabel={t('Summary')}
-                  logLabel={t('Log')}
                   onOpenResponse={() =>
                     void openResource(
                       t('Latest Response'),
@@ -441,7 +440,6 @@ export function WhatToDoWorkspace({
                       `what-to-do/runs/${latestTerminal.id}/summary.md`,
                     )
                   }
-                  logHref={`/projects/${projectId}/logs/what-to-do/${latestTerminal.id}`}
                 />
               </div>
             ) : null}

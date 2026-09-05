@@ -1395,7 +1395,6 @@ export function TaskDecompositionWorkspace({
                 <LatestResponseActions
                   responseLabel={t('Response')}
                   summaryLabel={t('Summary')}
-                  logLabel={t('Log')}
                   onOpenResponse={() =>
                     latestRun.result
                       ? void previewResource(
@@ -1420,7 +1419,6 @@ export function TaskDecompositionWorkspace({
                           markdown: `# ${t('Summary')}\n\n${t(latestRunPresentation.summary)}\n`,
                         })
                   }
-                  logHref={`/projects/${projectId}/logs/task-decomposition/${latestRun.runId}`}
                 />
               ) : null}
             </LatestResponseCard>

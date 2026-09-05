@@ -1243,7 +1243,6 @@ function WhatsNextCanvas({
             <LatestResponseActions
               responseLabel={t('Response')}
               summaryLabel={t('Summary')}
-              logLabel={t('Log')}
               onOpenResponse={() =>
                 setPreview({
                   title: t('Latest Response'),
@@ -1259,7 +1258,6 @@ function WhatsNextCanvas({
                   t('Summary'),
                 )
               }
-              logHref={`/projects/${projectId}/logs/whats-next/${latestResponse.runId}`}
             />
           ) : null}
         </LatestResponseCard>

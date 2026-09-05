@@ -516,10 +516,7 @@ void test('Domain Modeling separates the current answer, compact summary and cha
   );
   assert.match(source, /renderDomainModelResponse\(run, model, t\)/);
   assert.match(source, /renderDomainModelSummary\(run, model, t\)/);
-  assert.match(
-    source,
-    /logHref=\{`\/projects\/\$\{projectId\}\/logs\/domain-model\/\$\{run\.id\}`\}/,
-  );
+  assert.match(source, /<LatestResponseCard/);
   assert.doesNotMatch(source, /renderDomainModelLog/);
   const relationshipInspector = source.slice(
     source.indexOf(') : relationship ? ('),

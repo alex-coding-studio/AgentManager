@@ -256,7 +256,6 @@ function handleOf(reservation: ActiveRunReservation) {
 }
 
 export async function beginRun<T>(input: BeginRunInput<T>) {
-  const validated = await input.validate();
   const key = ownerKey(input.owner);
   const existing = registry.get(key);
   if (existing)
@@ -267,6 +266,13 @@ export async function beginRun<T>(input: BeginRunInput<T>) {
     );
   const reservation = running(input, new Date().toISOString());
   registry.set(key, reservation);
+  let validated: T;
+  try {
+    validated = await input.validate();
+  } catch (error) {
+    releaseRun(reservation);
+    throw error;
+  }
   const rollbacks: Array<() => Promise<void>> = [];
   let logCreated = false;
   try {

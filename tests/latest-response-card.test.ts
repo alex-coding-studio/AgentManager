@@ -41,7 +41,7 @@ function document(
 
 function render(element: React.ReactElement, language: 'en' | 'zh-CN' = 'en') {
   return renderToStaticMarkup(
-    createElement(UiLanguageProvider, { language, children: element }),
+    createElement(UiLanguageProvider, { language } as never, element),
   );
 }
 

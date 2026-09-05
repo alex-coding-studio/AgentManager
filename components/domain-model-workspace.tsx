@@ -331,7 +331,6 @@ export function DomainModelWorkspace({
             latest.status !== 'running' &&
             latest.id === moduleResponse.document.runId ? (
               <LatestDomainResponse
-                projectId={projectId}
                 run={latest}
                 model={model}
                 canUndo={canUndo}
@@ -497,14 +496,12 @@ export function DomainModelWorkspace({
 }
 
 function LatestDomainResponse({
-  projectId,
   run,
   model,
   canUndo,
   onUndo,
   onPreview,
 }: {
-  projectId: string;
   run: DomainModelRunRecord;
   model: DomainModel;
   canUndo: boolean;
@@ -556,7 +553,6 @@ function LatestDomainResponse({
           <LatestResponseActions
             responseLabel={t('Response')}
             summaryLabel={t('Summary')}
-            logLabel={t('Log')}
             onOpenResponse={() =>
               onPreview({
                 title: t('Latest Response'),
@@ -571,7 +567,6 @@ function LatestDomainResponse({
                 markdown: renderDomainModelSummary(run, model, t),
               })
             }
-            logHref={`/projects/${projectId}/logs/domain-model/${run.id}`}
           />
           {canUndo ? (
             <Button
