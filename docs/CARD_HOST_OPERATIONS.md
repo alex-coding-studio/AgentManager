@@ -25,9 +25,7 @@ verifies the required bot identity; initializes a missing private repository; pu
 Action-scoped branch; and creates or updates that Action's Draft PR. It restores the caller's
 GitHub account after success or failure. Repeating the same Action and HEAD is idempotent.
 
-Codex, Claude and DeepSeek Workers receive the same operation as `publish_candidate`. A
-Worker may make several local commits, then call the Host once. It does not run individual
-account, permission, push, PR-create or PR-query commands.
+Codex, Claude and DeepSeek Workers receive `publish_candidate` with Draft-only capability. They submit every implementation commit, then hand off the exact HEAD, PR and evidence to Coordinator. Coordinator receives `finalize_delivery`; its Host operation checks clean local and pushed remote state and turns the existing Draft Ready without committing or pushing. Only Coordinator completion after that confirmation records Action Delivered. All GitHub calls still use the single serialized publication script.
 
 ### Publication recovery
 

@@ -302,6 +302,36 @@ void test('Candidate Publisher handles multiple commits as one idempotent HEAD',
   const repeated = await publishCardCandidate(request, intercepted);
   assert.equal(repeated.candidateId, publication.candidateId);
   assert.equal(repeated.pullRequest.number, 7);
+  let promotions = 0;
+  const finalized = await publishCardCandidate(
+    { ...request, finalizeOnly: true, draft: false },
+    async (command, args, options) => {
+      if (command === 'git')
+        assert.ok(
+          !args.includes('push') &&
+            !args.includes('commit') &&
+            !args.includes('add'),
+        );
+      if (command === 'gh' && args[1] === 'ready') {
+        promotions++;
+        return '';
+      }
+      if (command === 'gh') assert.notEqual(args[1], 'create');
+      return intercepted(command, args, options);
+    },
+  );
+  assert.equal(finalized.pullRequest.draft, false);
+  assert.equal(promotions, 1);
+  const publishedHead = state.remoteHead;
+  state.remoteHead = f.baseSha;
+  await assert.rejects(
+    publishCardCandidate(
+      { ...request, finalizeOnly: true, draft: false },
+      intercepted,
+    ),
+    /not fully pushed/,
+  );
+  state.remoteHead = publishedHead;
   const actionBranches: string[] = [];
   const secondState: { headSha?: string; created?: boolean } = {
     headSha: state.headSha,

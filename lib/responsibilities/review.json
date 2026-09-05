@@ -1,0 +1,12 @@
+{
+  "id": "review",
+  "roles": ["reviewer"],
+  "assignment": "Review the assigned evidence and return actionable findings.",
+  "overrides": [],
+  "rules": [
+    {
+      "id": "reviewer-scope",
+      "instruction": "Review only the assigned code, tests or UI evidence. State findings and evidence limits. Do not change implementation, publish, merge or record user acceptance without a separate assignment."
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "id": "github-delivery",
+  "roles": ["coordinator"],
+  "assignment": "Verify the Worker handoff and complete GitHub delivery.",
+  "overrides": [],
+  "rules": [
+    {
+      "id": "coordinator-github-delivery",
+      "instruction": "Receive the Worker's Draft PR, final HEAD and validation evidence. Check delivery readiness without re-reviewing code or repeating successful tests. Call finalize_delivery to verify the exact clean, pushed candidate and turn its existing Draft PR Ready. Host scripts own account switching, status convergence and GitHub writes. Resolve routine GitHub delivery issues within the current authorization; dispatch the Worker only when code or Draft changes are needed. Do not ask the user to approve a routine technical recovery. Seek user input only for a concrete product choice, destructive tradeoff or missing external access. Keep the Action incomplete until Host confirms Ready. Do not merge or accept without separate authorization."
+    }
+  ]
+}

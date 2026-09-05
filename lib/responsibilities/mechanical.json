@@ -1,9 +1,6 @@
 {
   "id": "mechanical",
-  "inherits": {
-    "id": "general",
-    "path": "./general.json"
-  },
+  "roles": ["worker"],
   "assignment": "A declared script or tool owns at least one result.",
   "overrides": [],
   "rules": [

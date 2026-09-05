@@ -1,0 +1,12 @@
+{
+  "id": "coordination",
+  "roles": ["coordinator"],
+  "assignment": "Understand the task, assign Worker responsibilities, dispatch and manage recovery.",
+  "overrides": [],
+  "rules": [
+    {
+      "id": "coordinator-dispatch",
+      "instruction": "Understand the current packet at a high level, assign responsibilities compatible with the Worker role, then dispatch bounded work. Read Skill entrypoints only. Wait for the Worker result before taking further action. Preserve passing evidence; add missing responsibilities only when the Worker reports a responsibility gap. Responsibilities are composed capabilities, not role inheritance."
+    }
+  ]
+}

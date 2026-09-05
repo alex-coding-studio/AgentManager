@@ -1,9 +1,6 @@
 {
   "id": "ios-development",
-  "inherits": {
-    "id": "general",
-    "path": "./general.json"
-  },
+  "roles": ["worker"],
   "assignment": "The Worker changes iOS product code.",
   "overrides": [],
   "rules": [
