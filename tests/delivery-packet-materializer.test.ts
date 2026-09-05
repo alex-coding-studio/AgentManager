@@ -51,8 +51,9 @@ void test('materialization creates a complete ordered packet', async (t) => {
   const manifest = await readFile(result.manifestPath, 'utf8');
   assert.match(
     manifest,
-    /Skip a file only when you can point to having read that exact filename earlier in this session/,
+    /Skip an immutable referenced file only when you can point to having read that exact filename earlier in this session/,
   );
+  assert.match(manifest, /Never apply the skip rule to Manifest.md itself/);
   assert.ok(
     manifest.indexOf('UserInput.md') < manifest.indexOf('Resources.md'),
   );
