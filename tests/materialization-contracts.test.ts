@@ -252,3 +252,53 @@ void test('materializationLogEntry accepts an explicit level', () => {
   );
   assert.equal(entry.level, 'WARN');
 });
+
+const MODULE_CONTRACTS = [
+  {
+    expectedId: 'praxis.product-exploration.result',
+    load: () => import('../lib/modules/product-discovery/contract.ts'),
+    pick: (m: typeof import('../lib/modules/product-discovery/contract.ts')) =>
+      [
+        m.PRODUCT_EXPLORATION_RESULT_CONTRACT,
+        m.PRODUCT_EXPLORATION_MINIMAL_EXAMPLE,
+      ] as const,
+  },
+  {
+    expectedId: 'praxis.scope-decomposition.result',
+    load: () => import('../lib/modules/scope-decomposition/contract.ts'),
+    pick: (
+      m: typeof import('../lib/modules/scope-decomposition/contract.ts'),
+    ) =>
+      [
+        m.SCOPE_DECOMPOSITION_RESULT_CONTRACT,
+        m.SCOPE_DECOMPOSITION_MINIMAL_EXAMPLE,
+      ] as const,
+  },
+  {
+    expectedId: 'praxis.domain-model.result',
+    load: () => import('../lib/modules/domain-modeling/contract.ts'),
+    pick: (m: typeof import('../lib/modules/domain-modeling/contract.ts')) =>
+      [m.DOMAIN_MODEL_RESULT_CONTRACT, m.DOMAIN_MODEL_MINIMAL_EXAMPLE] as const,
+  },
+  {
+    expectedId: 'praxis.delivery-map.result',
+    load: () => import('../lib/modules/delivery-planning/contract.ts'),
+    pick: (m: typeof import('../lib/modules/delivery-planning/contract.ts')) =>
+      [m.DELIVERY_MAP_RESULT_CONTRACT, m.DELIVERY_MAP_MINIMAL_EXAMPLE] as const,
+  },
+];
+
+void test('every module Result Contract has a versioned identity and validates its minimal example', async () => {
+  const hashes = new Set<string>();
+  for (const entry of MODULE_CONTRACTS) {
+    const loaded = await entry.load();
+    const [contract, example] = entry.pick(loaded as never);
+    assert.equal(contract.id, entry.expectedId);
+    assert.equal(contract.version, 1);
+    assert.match(contract.hash, /^[0-9a-f]{64}$/);
+    hashes.add(contract.hash);
+    assert.doesNotThrow(() => contract.validateStructure(example));
+    assert.throws(() => contract.validateStructure({ outcome: 'unknown' }));
+  }
+  assert.equal(hashes.size, MODULE_CONTRACTS.length);
+});

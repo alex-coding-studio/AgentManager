@@ -1,12 +1,11 @@
 import { createHash } from 'node:crypto';
 import type {
-  DomainConstraint,
   DomainEntity,
   DomainModel,
-  DomainRelationship,
   ProposedDomainModel,
 } from './model.ts';
 import type { AgentGraphContentPacket } from '../../graph/agent/context-workspace.ts';
+import type { DomainModelPatch } from './contract.ts';
 
 export const domainModelHarnessVersion = 2;
 export type DomainModelRequest = {
@@ -49,15 +48,7 @@ export type DomainModelAgentResult =
       reason: string;
     };
 
-export type DomainModelPatch = {
-  upsertEntities: DomainEntity[];
-  removeEntityIds: string[];
-  removeFieldIds: string[];
-  upsertRelationships: DomainRelationship[];
-  removeRelationshipIds: string[];
-  upsertConstraints: DomainConstraint[];
-  removeConstraintIds: string[];
-};
+export type { DomainModelPatch };
 
 export function createDomainModelRequest(input: {
   requestId: string;

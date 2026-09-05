@@ -77,7 +77,7 @@ import { readWhatsNextAttachment, readWhatsNextContext } from './context.ts';
 import {
   candidateDependencyBlockers,
   resolveCandidateDependencies,
-} from '../scope-decomposition/dependencies.ts';
+} from '../../graph/proposal/dependencies.ts';
 import {
   primarySourceResourcePaths,
   relatedContextNodeIds,
