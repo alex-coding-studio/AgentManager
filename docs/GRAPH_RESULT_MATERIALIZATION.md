@@ -380,11 +380,13 @@ Do not test by deleting a correct validation rule, altering a valid identifier, 
 Deliver the implementation as an ordered series of pull requests, each of which leaves the product self-consistent after merge:
 
 1. This document.
-2. Part 1: contracts, shared core, producer adapters, and the dependency-direction test. No runtime behavior change.
+2. Part 1, delivered as four pull requests: the materialization core and graph reference model; the per-module Result Contracts with the Harness schemas composed from their fragments; the producer adapters, shared graph proposal validator and Domain Model parse split; and the dependency-direction gate with its self-test fixtures.
 3. Part 2a: shared graph proposal primitives and the Product Exploration migration, with parity goldens captured from the existing path before the refactor.
 4. Part 2b: the Scope Decomposition migration and removal of the duplicated identity and Node-construction path.
 5. Part 3: Domain Modeling.
 6. Part 4: Delivery Planning.
+
+Part 1 is split because each pull request establishes one reviewable boundary that the next builds on, and a single change would have been too large to review against the ownership rules above.
 
 Part 2 is split because the two module run services are each close to two thousand lines and duplicate one another; the shared primitives and the first migration are one review unit, and the second migration is then a mirror whose diff is dominated by deletions.
 
@@ -395,6 +397,8 @@ Part 2 is split because the two module run services are each close to two thousa
 - add producer adapters from existing Agent results;
 - add dependency-direction tests preventing Materializers from importing Harness or transport code;
 - keep existing orchestration and storage behavior unchanged.
+
+The dependency-direction gate guards two tiers. Materializer and Contract modules may reach neither Agent transport nor a Harness, a prompt, a Context assembler or a Run service. Producer adapters may read their Harness, because translating its result is their purpose, but may reach neither Agent transport nor a Run service. Both tiers follow runtime and type-only imports transitively, reject a computed import specifier that would hide its target, and assert that every guarded path exists and was analyzed so a rename cannot empty the guarded set. Synthetic fixtures prove the gate reports a direct Harness import, transport reached through a helper, a provider Session reached through a type-only import, and a computed specifier.
 
 ### Part 2a: Shared graph primitives and Product Exploration
 

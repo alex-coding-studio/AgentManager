@@ -53,6 +53,7 @@
     "test:appserver-code-smoke": "node --experimental-strip-types scripts/smoke-app-server-code.ts",
     "format:check": "oxfmt --check .",
     "audit:runtime-dependencies": "node --experimental-strip-types scripts/audit-runtime-dependencies.ts",
+    "audit:materialization-boundary": "node --experimental-strip-types scripts/audit-materialization-boundary.ts",
     "test:decomposition-concurrency": "node --experimental-strip-types --experimental-test-module-mocks --test-timeout=20000 --test tests/task-decomposition-acceptance-concurrency.test.ts",
     "test:task-graph-concurrency": "node --experimental-strip-types --experimental-test-module-mocks --import ./tests/helpers/register-alias.mjs --test-timeout=20000 --test tests/task-graph-concurrency.test.ts",
     "test:task-graph-failures": "node --experimental-strip-types --experimental-test-module-mocks --import ./tests/helpers/register-alias.mjs --test-timeout=20000 --test tests/task-graph-failure-boundary.test.ts",
