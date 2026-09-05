@@ -1,7 +1,7 @@
 'use client';
 
 import { Check, Copy, ExternalLink } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useUiText } from '@/components/ui-language-provider';
 import type {
@@ -33,33 +33,53 @@ export function LogViewer({
   const [now, setNow] = useState(() => Date.now());
   const offset = useRef(initialChunk.next);
   const busy = useRef(false);
+  const [behind, setBehind] = useState(initialChunk.next < initialChunk.size);
+
+  const fetchChunk = useCallback(async () => {
+    if (busy.current) return null;
+    busy.current = true;
+    try {
+      const response = await fetch(`${apiPath}?offset=${offset.current}`, {
+        cache: 'no-store',
+      });
+      if (!response.ok) return null;
+      const chunk = (await response.json()) as LogChunk & {
+        meta: LogTargetMeta;
+      };
+      if (chunk.offset < offset.current) setText(chunk.text);
+      else if (chunk.text) setText((current) => current + chunk.text);
+      offset.current = chunk.next;
+      setMeta(chunk.meta);
+      setLive(chunk.live);
+      setBehind(chunk.next < chunk.size);
+      setNow(Date.now());
+      return chunk;
+    } catch {
+      return null;
+    } finally {
+      busy.current = false;
+    }
+  }, [apiPath]);
+
+  useEffect(() => {
+    if (!behind) return;
+    let cancelled = false;
+    void (async () => {
+      while (!cancelled) {
+        const chunk = await fetchChunk();
+        if (!chunk || chunk.next >= chunk.size) break;
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [behind, fetchChunk]);
 
   useEffect(() => {
     if (!live) return;
-    const timer = setInterval(async () => {
-      if (busy.current) return;
-      busy.current = true;
-      try {
-        const response = await fetch(`${apiPath}?offset=${offset.current}`, {
-          cache: 'no-store',
-        });
-        if (!response.ok) return;
-        const chunk = (await response.json()) as LogChunk & {
-          meta: LogTargetMeta;
-        };
-        if (chunk.offset < offset.current) setText(chunk.text);
-        else if (chunk.text) setText((current) => current + chunk.text);
-        offset.current = chunk.next;
-        setMeta(chunk.meta);
-        setLive(chunk.live);
-        setNow(Date.now());
-      } catch {
-      } finally {
-        busy.current = false;
-      }
-    }, POLL_INTERVAL_MS);
+    const timer = setInterval(() => void fetchChunk(), POLL_INTERVAL_MS);
     return () => clearInterval(timer);
-  }, [apiPath, live]);
+  }, [live, fetchChunk]);
 
   useEffect(() => {
     if (!live) return;

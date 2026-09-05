@@ -19,10 +19,12 @@ import {
 } from './legacy-log-adapters.ts';
 import { renderRunLogText } from './run-log-format.ts';
 import { RUN_LOG_READ_LIMIT, readRunLogTail } from './run-log.ts';
+import { classifyResponse, type ClassificationFacts } from './status.ts';
 import {
   isResponseModule,
   type JobLogReference,
   type LatestResponseDocument,
+  type ResponseClassification,
   type ResponseModule,
   type ResponseOwner,
   type RetainedEffects,
@@ -120,11 +122,47 @@ function moduleStatus(status: string, outcome?: string): SurfaceStatus {
   return 'completed';
 }
 
-function cardStatus(status: ActionRun['status']): SurfaceStatus {
-  if (status === 'running') return 'running';
-  if (status === 'succeeded') return 'completed';
-  if (status === 'failed') return 'fail';
-  return 'warning';
+function countChecks(checks: Array<{ status: string }> | undefined) {
+  const total = checks?.length ?? 0;
+  const passed =
+    checks?.filter((check) => check.status === 'passed').length ?? 0;
+  const failed =
+    checks?.filter((check) => check.status === 'failed').length ?? 0;
+  return { total, passed, failed, notRun: total - passed - failed };
+}
+
+export function cardRunClassification(
+  run: ActionRun,
+  accepted = false,
+): ResponseClassification | null {
+  if (run.status === 'running') return null;
+  if (run.response) return run.response;
+  const facts: ClassificationFacts = {
+    surface: 'card',
+    runState: run.status === 'canceled' ? 'canceled' : 'settled',
+    summary: run.result?.summary ?? null,
+    accepted,
+  };
+  if (run.result) {
+    facts.outcome =
+      run.result.outcome === 'delivered'
+        ? 'delivered'
+        : run.result.outcome === 'blocked'
+          ? 'blocked'
+          : 'failed';
+    facts.requiredChecks = countChecks(run.result.checks);
+    facts.additionalFindings = run.result.additionalChecks
+      ?.filter((check) => check.status !== 'passed')
+      .map((check) => check.summary);
+    if (run.status === 'failed' && run.evidenceErrors?.length)
+      facts.failure = {
+        kind: 'host-verification',
+        message: run.evidenceErrors.join('\n'),
+      };
+  } else if (run.status === 'failed') {
+    facts.failure = { kind: 'unknown', message: run.error ?? '' };
+  }
+  return classifyResponse(facts);
 }
 
 function applyDocument(
@@ -264,6 +302,10 @@ async function cardTarget(
   const index = card.actions.findIndex((item) => item.id === run.actionId);
   const document = await readLatestResponse(owner);
   const pullRequests = run.github?.pullRequests?.map((item) => item.url) ?? [];
+  const classification = cardRunClassification(
+    run,
+    card.execution?.acceptedActionIds.includes(run.actionId) ?? false,
+  );
   const meta = applyDocument(
     {
       kind: 'card',
@@ -274,12 +316,16 @@ async function cardTarget(
         ? `Action ${index + 1}/${card.actions.length} · ${action.title}`
         : `Action ${run.actionId.slice(0, 8)}`,
       id: runId,
-      status: cardStatus(run.status),
+      status: classification?.status ?? 'running',
       agentProfile: run.profile,
       startedAt: run.startedAt,
       endedAt: run.endedAt,
-      title: null,
-      detail: run.error?.trim() || run.result?.summary?.trim() || null,
+      title: classification?.title ?? null,
+      detail:
+        run.error?.trim() ||
+        classification?.detail ||
+        run.result?.summary?.trim() ||
+        null,
       jobLogs: run.jobs ?? [],
       retained: null,
       pullRequests,

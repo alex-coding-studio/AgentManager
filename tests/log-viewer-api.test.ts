@@ -17,7 +17,7 @@ const { runHostOperation } =
   await import('../lib/execution-observability/host-operations.ts');
 const { publishLatestResponse } =
   await import('../lib/execution-observability/latest-response-store.ts');
-const { resolveLogTarget } =
+const { cardRunClassification, resolveLogTarget } =
   await import('../lib/execution-observability/log-targets.ts');
 
 const CARD_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -338,6 +338,135 @@ void test('Card Runs resolve through the Card record, legacy activity.json and j
   assert.equal(jobMeta.json.meta.kind, 'job');
   assert.equal(jobMeta.json.meta.status, 'fail');
   assert.equal(jobMeta.json.meta.detail, 'Exited 1');
+});
+
+void test('historical Card Runs are classified from their results, not transport success', async () => {
+  const base = {
+    id: RUN_UUID,
+    actionId: ACTION_ID,
+    input: 'do it',
+    profile: { agent: 'claude', model: 'sonnet', effort: '' },
+    startedAt: '2026-09-01T00:00:00.000Z',
+    endedAt: '2026-09-01T00:05:00.000Z',
+    hostPid: process.pid,
+    agentSessionId: null,
+    usage: null,
+    error: null,
+    observedRefs: [],
+    outputRef: null,
+  } as const;
+  const report = (
+    outcome: 'delivered' | 'blocked' | 'error',
+    checks: Array<'passed' | 'failed' | 'not-run'>,
+  ) => ({
+    stage: 'execution' as const,
+    actionId: ACTION_ID,
+    outcome,
+    summary: 'LocusKit tests failed and execution stopped.',
+    artifactRefs: [],
+    checks: checks.map((status, index) => ({
+      criterionId: `AC-0${index + 1}`,
+      summary: `Check ${index + 1}`,
+      status,
+      evidenceRefs: [],
+    })),
+    remaining: [],
+    handoffSummary: '',
+    harnessRevision: 1,
+    requestId: RUN_UUID,
+    cardId: CARD_ID,
+    contextRevision: 1,
+    inputFingerprint: 'sha256:x',
+  });
+  const blocked = cardRunClassification({
+    ...base,
+    status: 'succeeded',
+    result: report('blocked', ['passed', 'failed']),
+  } as never);
+  assert.equal(blocked?.status, 'fail');
+  const notRun = cardRunClassification({
+    ...base,
+    status: 'succeeded',
+    result: report('delivered', ['passed', 'not-run']),
+  } as never);
+  assert.equal(notRun?.status, 'warning');
+  assert.equal(notRun?.title, 'Required checks incomplete');
+  const delivered = cardRunClassification(
+    {
+      ...base,
+      status: 'succeeded',
+      result: report('delivered', ['passed']),
+    } as never,
+    true,
+  );
+  assert.equal(delivered?.status, 'completed');
+  assert.equal(delivered?.title, 'Accepted');
+  const failed = cardRunClassification({
+    ...base,
+    status: 'failed',
+    result: null,
+    error: 'Worker did not return a valid report.',
+  } as never);
+  assert.equal(failed?.status, 'fail');
+  assert.equal(failed?.title, 'Execution failed');
+  const saved = cardRunClassification({
+    ...base,
+    status: 'succeeded',
+    result: report('delivered', ['passed']),
+    response: {
+      status: 'warning',
+      title: 'Pending',
+      detail: 'PR review pending.',
+      supplementaryWarnings: [],
+      recovery: ['log'],
+    },
+  } as never);
+  assert.equal(saved?.title, 'Pending');
+});
+
+void test('large completed logs are served in bounded chunks that report their remaining size', async (t) => {
+  const { project, get } = await fixture(t);
+  const directory = await writeModuleRun(project.planningPath, RUN_ID, {});
+  const log = await createRunLog(path.join(directory, 'run.log'), {
+    level: 'INFO',
+    actor: 'HOST',
+    phase: 'RUN',
+    event: 'run.started',
+    message: 'started',
+  });
+  for (let index = 0; index < 400; index += 1)
+    log.append({
+      level: 'INFO',
+      actor: 'WORKER',
+      phase: 'EXECUTE',
+      event: 'worker.progress',
+      message: `line ${index} ${'x'.repeat(900)}\ncontinuation ${index}`,
+    });
+  log.append({
+    level: 'ERROR',
+    actor: 'HOST',
+    phase: 'RUN',
+    event: 'run.failed',
+    message: 'final failure detail',
+  });
+  await log.close();
+  const first = await get(['whats-next', RUN_ID]);
+  assert.ok(first.json.next < first.json.size);
+  assert.equal(first.json.live, false);
+  assert.doesNotMatch(first.json.text, /final failure detail/);
+  let cursor = first.json.next;
+  let text = first.json.text as string;
+  for (let round = 0; round < 10 && cursor < first.json.size; round += 1) {
+    const chunk = await get(['whats-next', RUN_ID], `?offset=${cursor}`);
+    text += chunk.json.text;
+    cursor = chunk.json.next;
+  }
+  assert.equal(cursor, first.json.size);
+  assert.match(text, /run\.failed — final failure detail\n$/);
+  assert.equal(
+    text.split('\n').filter((line) => /^\d{6} /.test(line)).length,
+    402,
+  );
 });
 
 void test('Host operation logs resolve by operation id', async (t) => {
