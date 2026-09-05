@@ -117,6 +117,11 @@ import type {
   RunPhase,
 } from '../../execution-observability/types.ts';
 import {
+  runHostOperation,
+  type HostOperationKind,
+} from '../../execution-observability/host-operations.ts';
+import type { CardHostOperation } from './execution-types.ts';
+import {
   cardOwner,
   cardResponseDocument,
   cardRunLogPaths,
@@ -175,6 +180,31 @@ function jobReference(
       ? path.relative(project.planningPath, job.logRef)
       : job.logRef,
   };
+}
+
+async function loggedCardOperation<T>(
+  project: Project,
+  input: { kind: HostOperationKind; label: string; cardId: string },
+  work: (operation: CardHostOperation) => Promise<T>,
+) {
+  const outcome = await runHostOperation(project, input, async (context) => {
+    context.log.append({
+      level: 'INFO',
+      actor: 'HOST',
+      phase: 'RECOVERY',
+      event: 'operation.card',
+      message: `Card ${input.cardId}`,
+    });
+    return work({
+      id: context.operationId,
+      kind: input.kind,
+      label: input.label,
+      status: 'completed',
+      logUrlPath: context.logUrlPath,
+      endedAt: new Date().toISOString(),
+    });
+  });
+  return outcome.result;
 }
 
 async function recordOwnershipLoss(
@@ -1860,7 +1890,7 @@ export function createExecutionService(
     );
   }
 
-  async function refreshGitHub(
+  function refreshGitHub(
     project: Project,
     cardId: string,
     expectedRevision: number,
@@ -1868,6 +1898,27 @@ export function createExecutionService(
   ) {
     assertCardUuid(cardId);
     assertCardUuid(outputId);
+    return loggedCardOperation(
+      project,
+      { kind: 'github-refresh', label: 'Refresh pull request state', cardId },
+      (operation) =>
+        refreshGitHubLogged(
+          project,
+          cardId,
+          expectedRevision,
+          outputId,
+          operation,
+        ),
+    );
+  }
+
+  async function refreshGitHubLogged(
+    project: Project,
+    cardId: string,
+    expectedRevision: number,
+    outputId: string,
+    operation: CardHostOperation,
+  ) {
     const card = await store.read(project, cardId);
     if (card.revision !== expectedRevision)
       throw new PublicApiError(
@@ -1895,6 +1946,7 @@ export function createExecutionService(
           runs: card.execution!.runs.map((item) =>
             item.id === run.id ? { ...run, github } : item,
           ),
+          lastOperation: operation,
         },
       },
       {
@@ -2155,7 +2207,7 @@ export function createExecutionService(
     );
   }
 
-  async function restartFromBase(
+  function restartFromBase(
     project: Project,
     cardId: string,
     expectedRevision: number,
@@ -2163,6 +2215,42 @@ export function createExecutionService(
     reopenPlan: boolean,
   ) {
     assertCardUuid(cardId);
+    if (confirmation === undefined)
+      return restartFromBaseLogged(
+        project,
+        cardId,
+        expectedRevision,
+        confirmation,
+        reopenPlan,
+        undefined,
+      );
+    return loggedCardOperation(
+      project,
+      {
+        kind: reopenPlan ? 'reopen-plan' : 'restart-from-base',
+        label: reopenPlan ? 'Reopen the Plan' : 'Reset the workspace',
+        cardId,
+      },
+      (operation) =>
+        restartFromBaseLogged(
+          project,
+          cardId,
+          expectedRevision,
+          confirmation,
+          reopenPlan,
+          operation,
+        ),
+    );
+  }
+
+  async function restartFromBaseLogged(
+    project: Project,
+    cardId: string,
+    expectedRevision: number,
+    confirmation: string | undefined,
+    reopenPlan: boolean,
+    operation: CardHostOperation | undefined,
+  ) {
     if (active.has(cardKey(project, cardId)))
       throw new PublicApiError('Stop this Card before resetting it.', 400);
     const reservation: Active = {
@@ -2257,6 +2345,7 @@ export function createExecutionService(
                 ...(card.execution?.workspaceBackups ?? []),
                 restarted.backup,
               ],
+              lastOperation: operation,
             },
           },
           {
@@ -2287,7 +2376,7 @@ export function createExecutionService(
     }
   }
 
-  async function undoAction(
+  function undoAction(
     project: Project,
     cardId: string,
     actionId: string,
@@ -2295,6 +2384,31 @@ export function createExecutionService(
   ) {
     assertCardUuid(cardId);
     assertCardUuid(actionId);
+    return loggedCardOperation(
+      project,
+      {
+        kind: 'undo-action',
+        label: `Undo Action ${actionId.slice(0, 8)}`,
+        cardId,
+      },
+      (operation) =>
+        undoActionLogged(
+          project,
+          cardId,
+          actionId,
+          expectedRevision,
+          operation,
+        ),
+    );
+  }
+
+  async function undoActionLogged(
+    project: Project,
+    cardId: string,
+    actionId: string,
+    expectedRevision: number,
+    operation: CardHostOperation,
+  ) {
     if (active.has(cardKey(project, cardId)))
       throw new PublicApiError('Stop this Card before undoing.', 400);
     const reservation: Active = {
@@ -2433,6 +2547,7 @@ export function createExecutionService(
               acceptanceOverrides,
               verification,
               environment: undefined,
+              lastOperation: operation,
             },
           },
           {
