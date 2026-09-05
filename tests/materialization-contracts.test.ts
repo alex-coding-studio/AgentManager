@@ -302,3 +302,46 @@ void test('every module Result Contract has a versioned identity and validates i
   }
   assert.equal(hashes.size, MODULE_CONTRACTS.length);
 });
+
+void test('the Delivery Map contract rejects producer-supplied identity, revision and evidence hashes', async () => {
+  const { DELIVERY_MAP_RESULT_CONTRACT, DELIVERY_MAP_MINIMAL_EXAMPLE } =
+    await import('../lib/modules/delivery-planning/contract.ts');
+  const example = DELIVERY_MAP_MINIMAL_EXAMPLE as Extract<
+    typeof DELIVERY_MAP_MINIMAL_EXAMPLE,
+    { outcome: 'map-proposal' }
+  >;
+  const withCandidateIdentity = {
+    ...example,
+    contracts: [
+      { ...example.contracts[0]!, candidateId: 'CANDIDATE-0001', revision: 1 },
+    ],
+  };
+  assert.throws(() =>
+    DELIVERY_MAP_RESULT_CONTRACT.validateStructure(withCandidateIdentity),
+  );
+  const withSourceHash = {
+    ...example,
+    sourceClaims: [
+      { ...example.sourceClaims[0]!, sourceSha256: '0'.repeat(64) },
+    ],
+  };
+  assert.throws(() =>
+    DELIVERY_MAP_RESULT_CONTRACT.validateStructure(withSourceHash),
+  );
+  const withUserInputEvidence = {
+    ...example,
+    sourceClaims: [
+      {
+        ...example.sourceClaims[0]!,
+        exclusionAuthority: {
+          userInputPath: 'input/user-input.md',
+          userInputSha256: '0'.repeat(64),
+          anchor: 'Example anchor text',
+        },
+      },
+    ],
+  };
+  assert.throws(() =>
+    DELIVERY_MAP_RESULT_CONTRACT.validateStructure(withUserInputEvidence),
+  );
+});

@@ -1,9 +1,11 @@
 import { defineResultContract } from '../../materialization/contract.ts';
 import {
+  agentGraphRecomposeEffects,
   recomposeEffectSchema,
   type AgentGraphRecomposeEffect,
 } from '../../graph/agent/recompose.ts';
 import { CANDIDATE_ALIAS_PATTERN } from '../../graph/identity.ts';
+import { LOCAL_KEY_SCHEMA } from '../../graph/proposal/reference.ts';
 
 export const DELIVERY_MAP_RESULT_CONTRACT_ID = 'praxis.delivery-map.result';
 export const DELIVERY_MAP_RESULT_CONTRACT_VERSION = 1;
@@ -90,14 +92,79 @@ export type WhatToDoClarification = {
   }>;
 };
 
+export type WhatToDoLegacyMapProposal = {
+  outcome: 'map-proposal';
+  candidates: WhatToDoContractCandidate[];
+  sourceClaims: WhatToDoSourceClaim[];
+  sourceClaimUpdates?: WhatToDoSourceClaimUpdate[];
+  contractDependencyUpdates?: WhatToDoContractDependencyUpdate[];
+  recomposition?: { effects: AgentGraphRecomposeEffect[] };
+};
+
+export type DeliveryContractReference =
+  | { kind: 'contract'; id: string }
+  | { kind: 'proposal'; localKey: string };
+
+export type DeliverySourceReference = { kind: 'source'; path: string };
+
+export type DeliveryMapContract = {
+  localKey: string;
+  title: string;
+  summary: string;
+  outcome: string;
+  includedScope: string[];
+  excludedScope: string[];
+  productRules: string[];
+  domainImpact: WhatToDoDomainImpact;
+  requiredExperienceStates: string[];
+  repositoryConstraints: string[];
+  dependsOn: DeliveryContractReference[];
+  acceptanceCriteria: WhatToDoAcceptanceCriterion[];
+  validationExpectations: string[];
+  sourceClaimIds: string[];
+  openDecisions: string[];
+  deliveryStrategy: WhatToDoDeliveryStrategy;
+};
+
+export type DeliveryMapSourceClaim = {
+  claimId: string;
+  source: DeliverySourceReference;
+  anchor: string;
+  summary: string;
+  disposition: 'in-scope' | 'out-of-scope';
+  contracts: DeliveryContractReference[];
+  exclusionReason: string | null;
+  exclusionAuthority: { anchor: string } | null;
+};
+
+export type DeliveryMapSourceClaimUpdate = Pick<
+  DeliveryMapSourceClaim,
+  | 'claimId'
+  | 'disposition'
+  | 'contracts'
+  | 'exclusionReason'
+  | 'exclusionAuthority'
+>;
+
+export type DeliveryMapContractDependencyUpdate = {
+  contract: DeliveryContractReference;
+  dependsOn: DeliveryContractReference[];
+};
+
+export type DeliveryMapRecomposeEffect = {
+  kind: (typeof agentGraphRecomposeEffects)[number];
+  from: DeliveryContractReference[];
+  to: DeliveryContractReference[];
+};
+
 export type DeliveryMapResult =
   | {
       outcome: 'map-proposal';
-      candidates: WhatToDoContractCandidate[];
-      sourceClaims: WhatToDoSourceClaim[];
-      sourceClaimUpdates?: WhatToDoSourceClaimUpdate[];
-      contractDependencyUpdates?: WhatToDoContractDependencyUpdate[];
-      recomposition?: { effects: AgentGraphRecomposeEffect[] };
+      contracts: DeliveryMapContract[];
+      sourceClaims: DeliveryMapSourceClaim[];
+      sourceClaimUpdates?: DeliveryMapSourceClaimUpdate[];
+      contractDependencyUpdates?: DeliveryMapContractDependencyUpdate[];
+      recomposition?: { effects: DeliveryMapRecomposeEffect[] };
     }
   | { outcome: 'clarification'; clarification: WhatToDoClarification }
   | { outcome: 'insufficient-evidence'; missingEvidence: string[] }
@@ -245,19 +312,6 @@ export const whatToDoRecomposition = whatToDoObject({
   },
 });
 
-const mapProposalProperties = {
-  candidates: {
-    type: 'array',
-    maxItems: 200,
-    items: whatToDoContractCandidate,
-  },
-  sourceClaims: {
-    type: 'array',
-    maxItems: 1_000,
-    items: whatToDoSourceClaim,
-  },
-};
-
 export const whatToDoMapProposalOptionalProperties = {
   recomposition: whatToDoRecomposition,
   sourceClaimUpdates: {
@@ -274,9 +328,99 @@ export const whatToDoMapProposalOptionalProperties = {
   },
 };
 
-const mapProposal = whatToDoObject({
+const contractReference = {
+  oneOf: [
+    whatToDoObject({
+      kind: { const: 'contract' },
+      id: whatToDoCandidateId,
+    }),
+    whatToDoObject({
+      kind: { const: 'proposal' },
+      localKey: LOCAL_KEY_SCHEMA,
+    }),
+  ],
+};
+
+const contractReferenceArray = {
+  type: 'array',
+  uniqueItems: true,
+  items: contractReference,
+};
+
+const sourceReference = whatToDoObject({
+  kind: { const: 'source' },
+  path: whatToDoText,
+});
+
+const deliveryMapContract = whatToDoObject({
+  localKey: LOCAL_KEY_SCHEMA,
+  title: { ...whatToDoText, maxLength: 160 },
+  summary: { ...whatToDoText, maxLength: 600 },
+  outcome: whatToDoText,
+  includedScope: { ...whatToDoStrings, minItems: 1 },
+  excludedScope: whatToDoStrings,
+  productRules: { ...whatToDoStrings, minItems: 1 },
+  domainImpact: whatToDoDomainImpact,
+  requiredExperienceStates: whatToDoStrings,
+  repositoryConstraints: whatToDoStrings,
+  dependsOn: contractReferenceArray,
+  acceptanceCriteria: {
+    type: 'array',
+    minItems: 1,
+    maxItems: 60,
+    items: whatToDoAcceptanceCriterion,
+  },
+  validationExpectations: { ...whatToDoStrings, minItems: 1 },
+  sourceClaimIds: { ...whatToDoStrings, minItems: 1 },
+  openDecisions: whatToDoStrings,
+  deliveryStrategy: whatToDoDeliveryStrategy,
+});
+
+const deliveryMapExclusionAuthority = {
+  oneOf: [whatToDoObject({ anchor: whatToDoAnchor }), { type: 'null' }],
+};
+
+const deliveryMapSourceClaim = whatToDoObject({
+  claimId: whatToDoText,
+  source: sourceReference,
+  anchor: whatToDoAnchor,
+  summary: whatToDoText,
+  disposition: { enum: ['in-scope', 'out-of-scope'] },
+  contracts: contractReferenceArray,
+  exclusionReason: { oneOf: [whatToDoText, { type: 'null' }] },
+  exclusionAuthority: deliveryMapExclusionAuthority,
+});
+
+const deliveryMapSourceClaimUpdate = whatToDoObject({
+  claimId: whatToDoText,
+  disposition: { enum: ['in-scope', 'out-of-scope'] },
+  contracts: contractReferenceArray,
+  exclusionReason: { oneOf: [whatToDoText, { type: 'null' }] },
+  exclusionAuthority: deliveryMapExclusionAuthority,
+});
+
+const deliveryMapContractDependencyUpdate = whatToDoObject({
+  contract: contractReference,
+  dependsOn: contractReferenceArray,
+});
+
+const deliveryMapRecomposition = whatToDoObject({
+  effects: {
+    type: 'array',
+    minItems: 1,
+    maxItems: 400,
+    items: recomposeEffectSchema(contractReferenceArray),
+  },
+});
+
+const deliveryMapProposal = whatToDoObject({
   outcome: { const: 'map-proposal' },
-  ...mapProposalProperties,
+  contracts: { type: 'array', maxItems: 200, items: deliveryMapContract },
+  sourceClaims: {
+    type: 'array',
+    maxItems: 1_000,
+    items: deliveryMapSourceClaim,
+  },
 });
 
 export const DELIVERY_MAP_RESULT_SCHEMA = {
@@ -284,10 +428,22 @@ export const DELIVERY_MAP_RESULT_SCHEMA = {
   title: 'Delivery Map Result',
   oneOf: [
     {
-      ...mapProposal,
+      ...deliveryMapProposal,
       properties: {
-        ...mapProposal.properties,
-        ...whatToDoMapProposalOptionalProperties,
+        ...deliveryMapProposal.properties,
+        recomposition: deliveryMapRecomposition,
+        sourceClaimUpdates: {
+          type: 'array',
+          maxItems: 1_000,
+          uniqueItems: true,
+          items: deliveryMapSourceClaimUpdate,
+        },
+        contractDependencyUpdates: {
+          type: 'array',
+          maxItems: 200,
+          uniqueItems: true,
+          items: deliveryMapContractDependencyUpdate,
+        },
       },
     },
     whatToDoObject({
@@ -314,10 +470,9 @@ export const DELIVERY_MAP_RESULT_CONTRACT =
 
 export const DELIVERY_MAP_MINIMAL_EXAMPLE: DeliveryMapResult = {
   outcome: 'map-proposal',
-  candidates: [
+  contracts: [
     {
-      candidateId: 'CANDIDATE-0001',
-      revision: 1,
+      localKey: 'example-contract',
       title: 'Example contract',
       summary: 'One sentence describing the delivery contract.',
       outcome: 'The example capability exists.',
@@ -352,13 +507,11 @@ export const DELIVERY_MAP_MINIMAL_EXAMPLE: DeliveryMapResult = {
   sourceClaims: [
     {
       claimId: 'claim-1',
-      sourcePath: 'docs/example.md',
-      sourceSha256:
-        '0000000000000000000000000000000000000000000000000000000000000000',
+      source: { kind: 'source', path: 'docs/example.md' },
       anchor: 'Example anchor text',
       summary: 'The source asks for the example capability.',
       disposition: 'in-scope',
-      contractCandidateIds: ['CANDIDATE-0001'],
+      contracts: [{ kind: 'proposal', localKey: 'example-contract' }],
       exclusionReason: null,
       exclusionAuthority: null,
     },
