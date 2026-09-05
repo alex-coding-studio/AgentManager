@@ -1031,6 +1031,7 @@ async function finishTaskDecompositionRun(
         previousCandidateRevisions: revisionTarget
           ? { [revisionTarget.candidateId]: revisionTarget.revision }
           : undefined,
+        revisionCandidateId: revisionTarget?.candidateId,
         reservedCandidateIds,
         knownCandidates,
       },

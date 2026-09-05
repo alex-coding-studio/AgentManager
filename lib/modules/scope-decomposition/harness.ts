@@ -15,6 +15,11 @@ import {
   type ScopeDecompositionCandidateInput,
   type ScopeDecompositionResourceReference,
 } from './contract.ts';
+import {
+  validateGraphProposal,
+  type GraphProposalDependencyState,
+} from '../../graph/proposal/validate.ts';
+import { toScopeDecompositionSemanticResult } from './producer-adapter.ts';
 
 export const TASK_DECOMPOSITION_HARNESS_ID = 'praxis.task-decomposition';
 export const TASK_DECOMPOSITION_HARNESS_REVISION = 8;
@@ -97,6 +102,7 @@ export type HarnessValidationContext = {
   availableNodeContentIds: Iterable<string>;
   knownResourcePaths: Iterable<string>;
   previousCandidateRevisions?: Readonly<Record<string, number>>;
+  revisionCandidateId?: string;
   reservedCandidateIds?: Iterable<string>;
   acceptedCandidateIds?: Iterable<string>;
   knownCandidates?: Iterable<
@@ -287,7 +293,8 @@ export function validateTaskDecompositionHarnessResult(
   if (result.outcome === 'proposal') {
     if (result.candidates.length === 0 && !result.recomposition)
       fail('A normal proposal requires at least one Candidate.');
-    validateCandidates(result.candidates, context, knownNodeIds);
+    validateCandidateRevisions(result.candidates, context);
+    validateSemanticResult(result, context);
   } else if (result.outcome === 'clarification') {
     requireUnique(
       result.clarification.options.map((option) => option.id),
@@ -316,103 +323,59 @@ function validateRequest(
   }
 }
 
-function validateCandidates(
+function validateCandidateRevisions(
   candidates: HarnessCandidate[],
   context: HarnessValidationContext,
-  knownNodeIds: Set<string>,
 ) {
-  requireUnique(
-    candidates.map((candidate) => candidate.candidateId),
-    'Candidate identifiers must be unique in one proposal.',
-  );
-  const proposalCandidateIds = new Set(
-    candidates.map((candidate) => candidate.candidateId),
-  );
-  const knownCandidates = new Map(
-    [...(context.knownCandidates ?? [])].map((candidate) => [
-      candidate.candidateId,
-      candidate,
-    ]),
-  );
-  const acceptedCandidateIds = new Set(context.acceptedCandidateIds ?? []);
-  const knownResourcePaths = new Set(context.knownResourcePaths);
-  const reservedCandidateIds = new Set(context.reservedCandidateIds ?? []);
   for (const candidate of candidates) {
     const previousRevision =
       context.previousCandidateRevisions?.[candidate.candidateId];
     const expectedRevision =
       previousRevision === undefined ? 1 : previousRevision + 1;
-    if (
-      previousRevision === undefined &&
-      reservedCandidateIds.has(candidate.candidateId)
-    ) {
-      fail(`Candidate ${candidate.candidateId} already exists.`);
-    }
     if (candidate.revision !== expectedRevision) {
       fail(
         `Candidate ${candidate.candidateId} must use revision ${expectedRevision}.`,
       );
     }
-    requireKnownNodes(candidate.derivedFrom, knownNodeIds);
-    for (const dependencyId of candidate.dependsOn) {
-      if (dependencyId === candidate.candidateId) {
-        fail(`Candidate ${candidate.candidateId} cannot depend on itself.`);
-      }
-      if (
-        !knownNodeIds.has(dependencyId) &&
-        !proposalCandidateIds.has(dependencyId) &&
-        !knownCandidates.has(dependencyId) &&
-        !acceptedCandidateIds.has(dependencyId)
-      ) {
-        fail('A Candidate depends on an unknown Node or Candidate.');
-      }
-    }
-    if (
-      candidate.typeTemplateRef !== null &&
-      !knownNodeIds.has(candidate.typeTemplateRef)
-    ) {
-      fail('A Candidate type template references an unknown Node.');
-    }
-    for (const resource of candidate.resources) {
-      if (!knownResourcePaths.has(resource.path)) {
-        fail('A Candidate references an unknown Resource.');
-      }
-    }
   }
-  assertCandidateDependenciesAreAcyclic([
-    ...knownCandidates.values(),
-    ...candidates,
-  ]);
 }
 
-function assertCandidateDependenciesAreAcyclic(
-  candidates: Iterable<Pick<HarnessCandidate, 'candidateId' | 'dependsOn'>>,
+function validateSemanticResult(
+  result: TaskDecompositionHarnessResult,
+  context: HarnessValidationContext,
 ) {
-  const dependencies = new Map(
-    [...candidates].map((candidate) => [
-      candidate.candidateId,
-      candidate.dependsOn.filter((dependencyId) =>
-        dependencyId.startsWith('CANDIDATE-'),
-      ),
-    ]),
-  );
-  const visiting = new Set<string>();
-  const visited = new Set<string>();
-
-  function visit(candidateId: string) {
-    if (visiting.has(candidateId)) {
-      fail('Candidate dependencies must not contain a cycle.');
-    }
-    if (visited.has(candidateId)) return;
-    visiting.add(candidateId);
-    for (const dependencyId of dependencies.get(candidateId) ?? []) {
-      if (dependencies.has(dependencyId)) visit(dependencyId);
-    }
-    visiting.delete(candidateId);
-    visited.add(candidateId);
+  const semantic = toScopeDecompositionSemanticResult(result);
+  if (semantic.outcome !== 'proposal') return;
+  try {
+    validateGraphProposal(
+      scopeDecompositionProposalState(context),
+      semantic.candidates,
+    );
+  } catch (error) {
+    fail(
+      error instanceof Error ? error.message : 'The Harness result is invalid.',
+    );
   }
+}
 
-  for (const candidateId of dependencies.keys()) visit(candidateId);
+function scopeDecompositionProposalState(
+  context: HarnessValidationContext,
+): GraphProposalDependencyState {
+  return {
+    knownNodeIds: [...context.knownNodeIds],
+    acceptedCandidateIds: [...(context.acceptedCandidateIds ?? [])],
+    knownResourcePaths: [...context.knownResourcePaths],
+    reservedCandidateIds: [...(context.reservedCandidateIds ?? [])],
+    currentCandidates: [...(context.knownCandidates ?? [])].map(
+      (candidate) => ({
+        candidateId: candidate.candidateId,
+        dependsOn: candidate.dependsOn,
+      }),
+    ),
+    revisionTarget: context.revisionCandidateId
+      ? { candidateId: context.revisionCandidateId }
+      : null,
+  };
 }
 
 function requireKnownNodes(values: string[], knownNodeIds: Set<string>) {
