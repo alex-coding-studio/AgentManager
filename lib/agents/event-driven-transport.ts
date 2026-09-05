@@ -138,6 +138,14 @@ export function startEventDrivenWorkerRun(
                 event.status === 'running'
                   ? `Running job: ${event.label}`
                   : `Finished: ${event.command} (exit ${event.exitCode ?? 'none'})`,
+              job: {
+                jobId: event.jobId,
+                label: event.label,
+                command: event.command,
+                status: event.status,
+                exitCode: event.exitCode,
+                logRef: event.logRef,
+              },
             }),
           (progress) =>
             input.onActivity?.({
@@ -294,6 +302,14 @@ function startClaudeWorkerRun(input: LocalAgentRunInput): LocalAgentRun {
               event.status === 'running'
                 ? `Running job: ${event.label}`
                 : `Finished: ${event.command} (exit ${event.exitCode ?? 'none'})`,
+            job: {
+              jobId: event.jobId,
+              label: event.label,
+              command: event.command,
+              status: event.status,
+              exitCode: event.exitCode,
+              logRef: event.logRef,
+            },
           }),
         (progress) =>
           input.onActivity?.({
@@ -373,6 +389,14 @@ function startDeepseekWorkerRun(input: LocalAgentRunInput): LocalAgentRun {
               event.status === 'running'
                 ? `Running job: ${event.label}`
                 : `Finished: ${event.command} (exit ${event.exitCode ?? 'none'})`,
+            job: {
+              jobId: event.jobId,
+              label: event.label,
+              command: event.command,
+              status: event.status,
+              exitCode: event.exitCode,
+              logRef: event.logRef,
+            },
           }),
         (progress) =>
           input.onActivity?.({

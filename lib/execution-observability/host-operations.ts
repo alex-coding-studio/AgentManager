@@ -56,10 +56,17 @@ async function writeRecord(file: string, record: HostOperationRecord) {
   await writeFileAtomically(file, `${JSON.stringify(record, null, 2)}\n`);
 }
 
+export type HostOperationContext = {
+  log: RunLogWriter;
+  operationId: string;
+  logRef: string;
+  logUrlPath: string;
+};
+
 export async function runHostOperation<T>(
   project: { id: string; planningPath: string },
   input: { kind: HostOperationKind; label: string; cardId?: string },
-  work: (log: RunLogWriter) => Promise<T>,
+  work: (context: HostOperationContext) => Promise<T>,
 ): Promise<HostOperationOutcome<T>> {
   const operationId = `OP-${randomUUID()}`;
   const paths = hostOperationPaths(project.planningPath, operationId);
@@ -86,8 +93,14 @@ export async function runHostOperation<T>(
     message: `${input.kind}: ${input.label}`,
   });
   await writeRecord(paths.json, record);
+  const logUrlPath = hostOperationLogUrlPath(project.id, operationId);
   try {
-    const result = await work(log);
+    const result = await work({
+      log,
+      operationId,
+      logRef: paths.logRef,
+      logUrlPath,
+    });
     log.append({
       level: 'INFO',
       actor: 'HOST',
@@ -102,12 +115,7 @@ export async function runHostOperation<T>(
       status: 'completed',
       detail: `${input.label} completed`,
     });
-    return {
-      operationId,
-      logRef: paths.logRef,
-      logUrlPath: hostOperationLogUrlPath(project.id, operationId),
-      result,
-    };
+    return { operationId, logRef: paths.logRef, logUrlPath, result };
   } catch (error) {
     const message = redactRecord(
       error instanceof Error ? error.message : String(error),

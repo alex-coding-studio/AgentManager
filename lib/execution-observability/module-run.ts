@@ -177,7 +177,21 @@ export async function readModuleResponse(
   module: ResponseModule,
   options: ReadModuleResponseOptions = {},
 ): Promise<LatestResponseDocument | null> {
-  const owner = moduleOwner(project, module);
+  return readOwnerResponse(moduleOwner(project, module), {
+    ...options,
+    logFileFor: (document) =>
+      moduleRunLogPaths(project, module, document.runId).logFile,
+  });
+}
+
+export type ReadOwnerResponseOptions = ReadModuleResponseOptions & {
+  logFileFor: (document: LatestResponseDocument) => string;
+};
+
+export async function readOwnerResponse(
+  owner: ResponseOwner,
+  options: ReadOwnerResponseOptions,
+): Promise<LatestResponseDocument | null> {
   const current = await readLatestResponse(owner);
   if (!current) return (await options.fallback?.()) ?? null;
   if (current.status !== 'running') return current;
@@ -185,19 +199,16 @@ export async function readModuleResponse(
   if (active?.runId === current.runId) return active.document();
   if (current.hostPid !== process.pid && hostProcessAlive(current.hostPid))
     return current;
-  return recoverLostRun(project, module, current, options);
+  return recoverLostRun(owner, current, options);
 }
 
 async function recoverLostRun(
-  project: RegisteredProject,
-  module: ResponseModule,
+  owner: ResponseOwner,
   current: LatestResponseDocument,
-  options: ReadModuleResponseOptions,
+  options: ReadOwnerResponseOptions,
 ) {
-  const owner = moduleOwner(project, module);
-  const paths = moduleRunLogPaths(project, module, current.runId);
   try {
-    const log = await openRunLog(paths.logFile);
+    const log = await openRunLog(options.logFileFor(current));
     log.append({
       level: 'ERROR',
       actor: 'HOST',
@@ -208,7 +219,7 @@ async function recoverLostRun(
     await log.close();
   } catch {}
   const classification = classifyResponse({
-    surface: 'module',
+    surface: owner.kind,
     runState: 'ownership-lost',
   });
   const failed: LatestResponseDocument = {

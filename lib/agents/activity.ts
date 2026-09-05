@@ -1,7 +1,16 @@
+export type LocalAgentJobActivity = {
+  jobId: string;
+  label: string;
+  command: string;
+  status: 'running' | 'completed' | 'failed' | 'canceled';
+  exitCode: number | null;
+  logRef: string;
+};
 export type LocalAgentActivity = {
   kind: 'message' | 'tool' | 'result';
   phase?: 'started' | 'completed';
   summary: string;
+  job?: LocalAgentJobActivity;
 };
 export function redactRecord(text: string) {
   return text

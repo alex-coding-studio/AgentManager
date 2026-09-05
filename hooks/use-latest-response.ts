@@ -9,19 +9,27 @@ import type {
 const RUNNING_INTERVAL_MS = 1_500;
 const IDLE_INTERVAL_MS = 5_000;
 
+export type LatestResponseTarget = ResponseModule | { card: string } | null;
+
 export function useLatestResponse(
   projectId: string,
-  module: ResponseModule,
+  target: LatestResponseTarget,
   initial: LatestResponseDocument | null = null,
 ) {
   const [document, setDocument] = useState(initial);
   const busy = useRef(false);
+  const query =
+    target === null
+      ? null
+      : typeof target === 'string'
+        ? `module=${target}`
+        : `card=${target.card}`;
   const refresh = useCallback(async () => {
-    if (busy.current) return document;
+    if (busy.current || !query) return document;
     busy.current = true;
     try {
       const response = await fetch(
-        `/api/projects/${projectId}/latest-response?module=${module}`,
+        `/api/projects/${projectId}/latest-response?${query}`,
         { cache: 'no-store' },
       );
       if (!response.ok) return document;
@@ -35,14 +43,15 @@ export function useLatestResponse(
     } finally {
       busy.current = false;
     }
-  }, [document, module, projectId]);
+  }, [document, query, projectId]);
   const running = document?.status === 'running';
   useEffect(() => {
+    if (!query) return;
     const timer = setInterval(
       () => void refresh(),
       running ? RUNNING_INTERVAL_MS : IDLE_INTERVAL_MS,
     );
     return () => clearInterval(timer);
-  }, [refresh, running]);
+  }, [query, refresh, running]);
   return { document, running, refresh, setDocument };
 }

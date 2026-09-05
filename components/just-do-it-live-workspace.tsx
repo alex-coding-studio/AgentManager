@@ -555,6 +555,14 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
                           : 'bg-secondary text-muted-foreground',
                       )}
                     >
+                      {item.run?.status === 'running' ||
+                      item.execution?.runs.at(-1)?.status === 'running' ? (
+                        <span
+                          aria-hidden="true"
+                          data-running-marker="true"
+                          className="mr-1 inline-block size-1.5 animate-pulse rounded-full bg-sky-500 align-middle"
+                        />
+                      ) : null}
                       {t(
                         item.run?.status === 'running' ||
                           item.execution?.runs.at(-1)?.status === 'running'
@@ -810,25 +818,24 @@ export function JustDoItLiveWorkspace({ projectId }: { projectId: string }) {
                     planHeaderStuck ? 'rounded-b-xl border-t-0' : 'rounded-xl',
                   )}
                 >
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-medium">
-                        {t(finalized ? 'Plan finalized' : 'Plan preview')}
-                      </span>
-                      {finalized ? (
-                        <div
-                          ref={setActionHeaderStatusTarget}
-                          className="flex items-center gap-2"
-                        />
-                      ) : null}
-                    </div>
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      {t(
-                        finalized
-                          ? 'Select the current Action to start. Later Actions unlock after acceptance.'
-                          : 'Review each step, then confirm the entire plan to create Actions.',
-                      )}
-                    </p>
+                  <div className="min-w-0 flex-1">
+                    {finalized ? (
+                      <div
+                        ref={setActionHeaderStatusTarget}
+                        className="min-w-0"
+                      />
+                    ) : (
+                      <>
+                        <span className="text-sm font-medium">
+                          {t('Plan preview')}
+                        </span>
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          {t(
+                            'Review each step, then confirm the entire plan to create Actions.',
+                          )}
+                        </p>
+                      </>
+                    )}
                   </div>
                   <div
                     className={cn(

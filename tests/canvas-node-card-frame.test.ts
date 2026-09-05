@@ -1002,7 +1002,8 @@ void test('Just Do It separates the Task coordinator from the Action Composer', 
   assert.match(action, /contextRefs/);
   assert.match(action, /files: await Promise\.all/);
   assert.match(action, /label="Execution profile"/);
-  assert.match(action, /<AgentGraphRunningCard/);
+  assert.doesNotMatch(action, /<AgentGraphRunningCard/);
+  assert.match(action, /<ExecutionHeaderStatus/);
   assert.match(action, /coordination: \{ profile: coordinatorProfile \}/);
   assert.match(action, /createPortal/);
   assert.match(action, /\{t\('Roll back'\)\}/);

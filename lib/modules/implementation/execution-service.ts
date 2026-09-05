@@ -96,6 +96,42 @@ import type { ActionRun, ExecuteActionInput } from './execution-types.ts';
 import { prepareCardEnvironment } from '../../card-host-operations.ts';
 import { resolveProductContextReferences } from '../product-context/resource.ts';
 import { workerPacketPrompt } from './delivery-packet.ts';
+import {
+  beginRun,
+  listActiveRuns,
+  requestStop,
+  settleRun,
+  type ActiveRunReservation,
+} from '../../execution-observability/active-runs.ts';
+import {
+  clearLatestResponse,
+  publishLatestResponse,
+} from '../../execution-observability/latest-response-store.ts';
+import { openRunLog } from '../../execution-observability/run-log.ts';
+import {
+  classifyResponse,
+  type ClassificationFacts,
+} from '../../execution-observability/status.ts';
+import type {
+  JobLogReference,
+  LogActor,
+  LogPhase,
+  ResponseClassification,
+  RunPhase,
+} from '../../execution-observability/types.ts';
+import {
+  runHostOperation,
+  type HostOperationKind,
+} from '../../execution-observability/host-operations.ts';
+import type { CardHostOperation } from './execution-types.ts';
+import type { CheckOverride } from './checklist.ts';
+import {
+  cardOwner,
+  cardResponseDocument,
+  cardRunLogPaths,
+  cardRunSubject,
+  retainedEffectsOf,
+} from './execution-response.ts';
 
 const exec = promisify(execFile);
 
@@ -108,7 +144,227 @@ type Active = {
   timeoutError?: Error;
   progress?: CoordinationProgress;
   activity?: CoordinationProgress[];
+  reservation?: ActiveRunReservation | null;
+  jobs?: JobLogReference[];
 };
+
+function actorForProgress(progress: CoordinationProgress): LogActor {
+  if (progress.actor) return progress.actor;
+  if (/^Running job: |^Finished: /.test(progress.summary)) return 'JOB';
+  return ['prepare', 'dispatch', 'qualify', 'complete'].includes(progress.phase)
+    ? 'COORDINATOR'
+    : 'WORKER';
+}
+
+function runPhaseForProgress(progress: CoordinationProgress): RunPhase {
+  if (progress.job?.status === 'running') return 'verifying';
+  if (progress.phase === 'complete') return 'finalizing';
+  return ['prepare', 'dispatch', 'qualify'].includes(progress.phase)
+    ? 'coordinating'
+    : 'executing';
+}
+
+function logPhaseForProgress(progress: CoordinationProgress): LogPhase {
+  if (progress.job || actorForProgress(progress) === 'JOB') return 'VERIFY';
+  if (progress.phase === 'prepare' || progress.phase === 'dispatch')
+    return 'PREPARE';
+  if (progress.phase === 'qualify' || progress.phase === 'complete')
+    return 'FINALIZE';
+  return 'EXECUTE';
+}
+
+function jobReference(
+  project: Project,
+  job: NonNullable<CoordinationProgress['job']>,
+): JobLogReference {
+  return {
+    jobId: job.jobId,
+    label: job.label,
+    ref: path.isAbsolute(job.logRef)
+      ? path.relative(project.planningPath, job.logRef)
+      : job.logRef,
+  };
+}
+
+async function loggedCardOperation<T>(
+  project: Project,
+  input: { kind: HostOperationKind; label: string; cardId: string },
+  work: (operation: CardHostOperation) => Promise<T>,
+) {
+  const outcome = await runHostOperation(project, input, async (context) => {
+    context.log.append({
+      level: 'INFO',
+      actor: 'HOST',
+      phase: 'RECOVERY',
+      event: 'operation.card',
+      message: `Card ${input.cardId}`,
+    });
+    return work({
+      id: context.operationId,
+      kind: input.kind,
+      label: input.label,
+      status: 'completed',
+      logUrlPath: context.logUrlPath,
+      endedAt: new Date().toISOString(),
+    });
+  });
+  return outcome.result;
+}
+
+async function recordOwnershipLoss(
+  project: Project,
+  card: PlanningCard,
+  run: ActionRun,
+  classification: ResponseClassification,
+) {
+  if (run.logRef) {
+    try {
+      const log = await openRunLog(path.join(project.planningPath, run.logRef));
+      log.append({
+        level: 'ERROR',
+        actor: 'HOST',
+        phase: 'RECOVERY',
+        event: 'recovery.ownership-lost',
+        message: `Host process ${run.hostPid} no longer owns this Run; closing it as Fail`,
+      });
+      await log.close();
+    } catch {}
+  }
+  await publishLatestResponse(
+    cardOwner(project, card.id),
+    cardResponseDocument(project, card, run, classification, {
+      retained: retainedEffectsOf(run, run.observedRefs.length),
+      jobLogs: run.jobs,
+    }),
+  ).catch(() => undefined);
+}
+
+async function publishRecheck(
+  project: Project,
+  card: PlanningCard,
+  run: ActionRun,
+  classification: ResponseClassification,
+  event: 'recovery.reread' | 'recovery.override' = 'recovery.reread',
+) {
+  if (run.logRef) {
+    try {
+      const log = await openRunLog(path.join(project.planningPath, run.logRef));
+      log.append({
+        level: classification.status === 'completed' ? 'INFO' : 'WARN',
+        actor: 'HOST',
+        phase: 'RECOVERY',
+        event,
+        message:
+          event === 'recovery.reread'
+            ? `Re-read the saved result without starting an Agent: ${classification.title}`
+            : `User override satisfied the required checklist: ${classification.title}`,
+      });
+      await log.close();
+    } catch {}
+  }
+  await publishLatestResponse(
+    cardOwner(project, card.id),
+    cardResponseDocument(project, card, run, classification, {
+      retained: retainedEffectsOf(run, run.observedRefs.length),
+      jobLogs: run.jobs,
+    }),
+    { allowTerminalReplace: true },
+  ).catch(() => undefined);
+}
+
+export function classifyActionRun(
+  run: ActionRun,
+  input: {
+    runState?: ClassificationFacts['runState'];
+    failure?: ClassificationFacts['failure'];
+    accepted?: boolean;
+    retained?: ClassificationFacts['retained'];
+    interruptedPhase?: RunPhase | null;
+    interruptedActor?: LogActor | null;
+    overrides?: Record<string, CheckOverride>;
+  } = {},
+): ResponseClassification {
+  const result = run.result;
+  const decision = run.coordination?.decisions.at(-1);
+  const effective =
+    result && run.acceptanceChecklist
+      ? assessRequiredChecks(
+          run.acceptanceChecklist,
+          result.checks,
+          input.overrides,
+        )
+      : null;
+  const overridden = effective?.passed
+    ? (result?.checks ?? []).filter((check) => check.status !== 'passed')
+    : [];
+  const satisfied = new Set([
+    ...(result?.checks ?? [])
+      .filter((check) => check.status === 'passed' && check.criterionId)
+      .map((check) => check.criterionId!),
+    ...Object.keys(input.overrides ?? {}),
+  ]);
+  const decisionResolved =
+    Boolean(effective?.passed) &&
+    (decision?.verificationPlan ?? [])
+      .filter((item) => item.mode === 'needs-user-decision')
+      .every((item) => satisfied.has(item.criterionId));
+  const activeDecision = decisionResolved ? null : decision;
+  const semantic =
+    activeDecision &&
+    (activeDecision.decision === 'needs-user' ||
+      activeDecision.decision === 'blocked') &&
+    activeDecision.title &&
+    activeDecision.detail
+      ? { title: activeDecision.title, detail: activeDecision.detail }
+      : null;
+  const checks = result?.checks ?? [];
+  return classifyResponse({
+    surface: 'card',
+    runState: input.runState ?? 'settled',
+    outcome: result
+      ? result.outcome === 'delivered' ||
+        (result.outcome === 'blocked' && effective?.passed)
+        ? 'delivered'
+        : result.outcome === 'blocked'
+          ? 'blocked'
+          : 'failed'
+      : null,
+    coordinatorDecision:
+      activeDecision?.decision === 'needs-user' ||
+      activeDecision?.decision === 'blocked'
+        ? activeDecision.decision
+        : null,
+    requiredChecks: result
+      ? effective?.passed
+        ? { total: checks.length, passed: checks.length, failed: 0, notRun: 0 }
+        : {
+            total: checks.length,
+            passed: checks.filter((check) => check.status === 'passed').length,
+            failed: checks.filter((check) => check.status === 'failed').length,
+            notRun: checks.filter((check) => check.status === 'not-run').length,
+          }
+      : null,
+    additionalFindings: [
+      ...overridden.map(
+        (check) =>
+          `Accepted by user override: ${check.summary} (${check.status})`,
+      ),
+      ...(result?.additionalChecks ?? [])
+        .filter((check) => check.status !== 'passed')
+        .map((check) => check.summary),
+      ...(run.evidenceErrors ?? []).filter(() => run.status === 'succeeded'),
+    ],
+    failure: input.failure ?? null,
+    interruptedPhase: input.interruptedPhase ?? null,
+    interruptedActor: input.interruptedActor ?? null,
+    retained: input.retained ?? null,
+    accepted: input.accepted ?? false,
+    semantic,
+    summary: overridden.length
+      ? `User overrides satisfied the remaining required ${overridden.length === 1 ? 'check' : 'checks'} (${overridden.map((check) => check.summary).join(', ')}). The original report and its findings remain in the Run Log.`
+      : (result?.summary ?? null),
+  });
+}
 const runtime = globalThis as typeof globalThis & {
   jdiExecutionActive?: Map<string, Active>;
 };
@@ -116,6 +372,8 @@ const sharedActive = (runtime.jdiExecutionActive ??= new Map());
 const root = (project: Parameters<typeof planningService.read>[0]) =>
   path.join(project.planningPath, 'implementation/cards');
 type Project = Parameters<typeof planningService.read>[0];
+const cardKey = (project: Project, cardId: string) =>
+  `card:${path.resolve(project.planningPath)}:${cardId}`;
 const reference = (card: PlanningCard, file: string) =>
   `implementation/cards/${card.id}/${String(card.revision + 1).padStart(8, '0')}/${file}`;
 
@@ -325,12 +583,12 @@ export function createExecutionService(
     card: PlanningCard,
   ): Promise<PlanningCard> {
     const run = card.execution?.runs.at(-1);
-    const live = active.get(project.rootPath);
+    const live = active.get(cardKey(project, card.id));
     if (run?.status === 'running' && live?.id === run.id && live.progress)
       return replaceRun(card, { ...run, progress: live.progress });
     if (
       run?.status !== 'running' ||
-      active.get(project.rootPath)?.id === run.id
+      active.get(cardKey(project, card.id))?.id === run.id
     )
       return card;
     if (run.hostPid !== process.pid) {
@@ -343,14 +601,18 @@ export function createExecutionService(
     }
     const error =
       'Execution was interrupted. Files may have changed; nothing was rolled back. Inspect the workspace before retrying.';
+    const classification = classifyActionRun(run, {
+      runState: 'ownership-lost',
+    });
     const next = replaceRun(card, {
       ...run,
       status: 'failed',
       endedAt: new Date().toISOString(),
       error,
+      response: classification,
     });
     try {
-      return await commit(project, next, {
+      const committed = await commit(project, next, {
         kind: 'system-event',
         stage: 'execution',
         actionId: run.actionId,
@@ -358,6 +620,13 @@ export function createExecutionService(
         text: error,
         refs: [],
       });
+      await recordOwnershipLoss(
+        project,
+        committed,
+        committed.execution!.runs.at(-1)!,
+        classification,
+      );
+      return committed;
     } catch (error) {
       if (/revision conflict/.test(String(error)))
         return store.read(project, card.id);
@@ -372,6 +641,8 @@ export function createExecutionService(
     outcome: Awaited<LocalAgentRun['completion']> | Error,
   ) {
     try {
+      const canceling = active.get(cardKey(project, request.context.cardId));
+      if (canceling?.id === request.requestId && canceling.canceling) return;
       const card = await store.read(project, request.context.cardId);
       const run = card.execution?.runs.at(-1);
       if (
@@ -416,7 +687,14 @@ export function createExecutionService(
         ))
           files[`coordination-${name}`] = text;
       }
-      const activity = active.get(project.rootPath)?.activity ?? [];
+      const live = active.get(cardKey(project, request.context.cardId));
+      const owner = live?.id === request.requestId ? live.reservation : null;
+      const jobLogs = live?.jobs ?? [];
+      const activity = live?.activity ?? [];
+      if (jobLogs.length) nextRun.jobs = jobLogs;
+      if (owner) nextRun.logRef = owner.logRef;
+      const timedOut =
+        outcome instanceof Error && /timed out/i.test(outcome.message);
       if (activity.length) {
         nextRun.activityRef = reference(card, 'activity.json');
         nextRun.progress = activity.at(-1);
@@ -517,6 +795,10 @@ export function createExecutionService(
           ...(nextRun.verifiedExternalRefs ?? []),
           ...(nextRun.verifiedVersionRefs ?? []),
         ]);
+        nextRun.response = classifyActionRun(nextRun, {
+          retained: retainedEffectsOf(nextRun, refs.length),
+          overrides: card.execution?.acceptanceOverrides?.[run.actionId],
+        });
         files['result.json'] = JSON.stringify(result);
         files['output.md'] =
           `# Action output\n\n${result.summary}\n\nOutcome: ${result.outcome}\n\n## Observed changes\n${refs.map((ref) => `- ${ref}`).join('\n')}\n\n## Required self-checks\n${result.checks.map((check) => `- ${check.status}: ${check.summary}`).join('\n')}\n\n## Additional checks (non-blocker)\n${(result.additionalChecks ?? []).map((check) => `- ${check.status}: ${check.summary}`).join('\n')}\n\n## Remaining\n${result.remaining.map((item) => `- ${item}`).join('\n')}`;
@@ -537,6 +819,13 @@ export function createExecutionService(
           },
           files,
         );
+        if (owner)
+          await settleRun(owner, {
+            classification: nextRun.response!,
+            retained: retainedEffectsOf(nextRun, refs.length),
+            jobLogs,
+            endedAt: nextRun.endedAt ?? undefined,
+          }).catch(() => undefined);
       } catch (error) {
         const message =
           error instanceof Error ? error.message : 'Execution failed.';
@@ -588,6 +877,28 @@ export function createExecutionService(
           );
           files['github-delivery.json'] = JSON.stringify(nextRun.github);
         }
+        owner?.record({
+          level: 'ERROR',
+          actor: 'HOST',
+          phase: 'FINALIZE',
+          event: advisoryOnly ? 'result.advisory' : 'result.rejected',
+          message,
+        });
+        nextRun.response = classifyActionRun(nextRun, {
+          runState: timedOut ? 'timed-out' : 'settled',
+          retained: retainedEffectsOf(nextRun, refs.length),
+          overrides: card.execution?.acceptanceOverrides?.[run.actionId],
+          failure:
+            advisoryOnly || timedOut
+              ? null
+              : error instanceof ExecutionEvidenceError
+                ? { kind: 'host-verification', message }
+                : nextRun.result
+                  ? null
+                  : /valid report|parse|schema|JSON/i.test(message)
+                    ? { kind: 'parse', message }
+                    : { kind: 'unknown', message },
+        });
         await commit(
           project,
           replaceRun(card, nextRun),
@@ -603,12 +914,19 @@ export function createExecutionService(
           },
           files,
         );
+        if (owner)
+          await settleRun(owner, {
+            classification: nextRun.response,
+            retained: retainedEffectsOf(nextRun, refs.length),
+            jobLogs,
+            endedAt: nextRun.endedAt ?? undefined,
+          }).catch(() => undefined);
       }
     } finally {
-      const running = active.get(project.rootPath);
+      const running = active.get(cardKey(project, request.context.cardId));
       if (running?.id === request.requestId && !running.canceling) {
         if (running.timer) clearTimeout(running.timer);
-        active.delete(project.rootPath);
+        active.delete(cardKey(project, request.context.cardId));
       }
     }
   }
@@ -628,29 +946,35 @@ export function createExecutionService(
       input.instruction.length > 20000
     )
       throw new PublicApiError('Invalid execution input.', 400);
-    if (active.has(project.rootPath))
-      throw new PublicApiError(
-        'This project already has a running Action.',
-        400,
-      );
+    const settling = active.get(cardKey(project, input.cardId));
+    if (
+      settling?.reservation?.settled &&
+      settling.reservation.stopResult !== 'unconfirmed'
+    ) {
+      await settling.reservation.released;
+      if (active.get(cardKey(project, input.cardId)) === settling)
+        active.delete(cardKey(project, input.cardId));
+    }
+    if (active.has(cardKey(project, input.cardId)))
+      throw new PublicApiError('This Card already has a running Action.', 409);
     const reservation: Active = {
       id: randomUUID(),
       cardId: input.cardId,
       handle: null,
       timer: null,
     };
-    active.set(project.rootPath, reservation);
+    active.set(cardKey(project, input.cardId), reservation);
     try {
       const cards = await store.list(project);
-      for (const item of cards) {
-        const current = await refresh(project, item);
-        if (current.execution?.runs.at(-1)?.status === 'running')
-          throw new PublicApiError(
-            'This project already has a running Action.',
-            400,
-          );
-      }
       let card = await store.read(project, input.cardId);
+      if (
+        (await refresh(project, card)).execution?.runs.at(-1)?.status ===
+        'running'
+      )
+        throw new PublicApiError(
+          'This Card already has a running Action.',
+          409,
+        );
       await assertCurrentPlanningCardSource(project, card);
       if (card.revision !== input.expectedRevision)
         throw new PublicApiError(
@@ -900,39 +1224,80 @@ export function createExecutionService(
             includeHandoff: false,
             includeSkills: false,
           })}\n\nExecution runtime: ${runtimeInstructions}`;
-      const saved = await commit(
-        project,
-        {
-          ...card,
-          execution: {
-            ...card.execution,
-            profile: input.profile,
-            coordinationSettings,
-            workspace,
-            environment,
-            runs: [...(card.execution?.runs ?? []), run],
-            acceptedActionIds: card.execution?.acceptedActionIds ?? [],
-            git,
-            retryInputs,
-          },
+      if (
+        !workspace &&
+        listActiveRuns(project.planningPath).some(
+          (other) => other.owner.kind === 'card' && other.sharedCheckout,
+        )
+      )
+        throw new PublicApiError(
+          'Another Card is running in the shared checkout. Wait for it to finish.',
+          409,
+        );
+      let saved!: PlanningCard;
+      const subject = cardRunSubject(card, input.actionId);
+      const logPaths = cardRunLogPaths(project, card.id, request.requestId);
+      const { reservation: owner } = await beginRun({
+        owner: cardOwner(project, card.id),
+        runId: request.requestId,
+        logFile: logPaths.logFile,
+        logRef: logPaths.logRef,
+        subject,
+        actionId: input.actionId,
+        agentProfile: input.profile,
+        sharedCheckout: !workspace,
+        startMessage: `${subject.label} started with ${input.profile.agent}${input.profile.model ? ` ${input.profile.model}` : ''}${input.profile.effort ? ` ${input.profile.effort}` : ''}`,
+        conflictMessage: 'This Card already has a running Action.',
+        phase: 'coordinating',
+        actor: 'COORDINATOR',
+        validate: async () => undefined,
+        persist: async (started) => {
+          run.logRef = started.logRef;
+          saved = await commit(
+            project,
+            {
+              ...card,
+              execution: {
+                ...card.execution,
+                profile: input.profile,
+                coordinationSettings,
+                workspace,
+                environment,
+                runs: [...(card.execution?.runs ?? []), run],
+                acceptedActionIds: card.execution?.acceptedActionIds ?? [],
+                git,
+                retryInputs,
+              },
+            },
+            {
+              kind: 'user-input',
+              stage: 'execution',
+              actionId: input.actionId,
+              text: input.instruction || 'User started this Action.',
+            },
+            {
+              ...uploadedDocuments,
+              'request.json': JSON.stringify(request),
+              'baseline.json': JSON.stringify(baseline),
+              'prompt.txt': prompt,
+            },
+          );
+          return async () => {
+            await finish(
+              project,
+              request,
+              baseline,
+              new Error('The Running response could not be published.'),
+            );
+          };
         },
-        {
-          kind: 'user-input',
-          stage: 'execution',
-          actionId: input.actionId,
-          text: input.instruction || 'User started this Action.',
-        },
-        {
-          ...uploadedDocuments,
-          'request.json': JSON.stringify(request),
-          'baseline.json': JSON.stringify(baseline),
-          'prompt.txt': prompt,
-        },
-      );
+      });
+      reservation.reservation = owner;
+      reservation.jobs = [];
       try {
         const recordProgress = (progress: CoordinationProgress) => {
           if (
-            active.get(project.rootPath) !== reservation ||
+            active.get(cardKey(project, input.cardId)) !== reservation ||
             reservation.canceling
           )
             return;
@@ -944,6 +1309,40 @@ export function createExecutionService(
           reservation.activity = [...(reservation.activity ?? []), entry].slice(
             -300,
           );
+          const actor = actorForProgress(entry);
+          const job = entry.job;
+          if (job) {
+            const known = reservation.jobs!.findIndex(
+              (item) => item.jobId === job.jobId,
+            );
+            const ref = jobReference(project, job);
+            if (known >= 0) reservation.jobs![known] = ref;
+            else reservation.jobs!.push(ref);
+          }
+          const failedJob =
+            job && job.status !== 'running' && job.exitCode !== 0;
+          owner.record({
+            level: failedJob ? 'ERROR' : 'INFO',
+            actor,
+            phase: logPhaseForProgress(entry),
+            event: job
+              ? job.status === 'running'
+                ? 'job.started'
+                : 'job.finished'
+              : actor === 'JOB'
+                ? 'job.progress'
+                : actor === 'COORDINATOR'
+                  ? 'coordinator.progress'
+                  : 'worker.progress',
+            message: job
+              ? job.status === 'running'
+                ? `${job.label} — ${job.command}`
+                : `${job.label} exited ${job.exitCode ?? job.status}; job log ${job.jobId}`
+              : entry.summary,
+          });
+          const nextPhase = runPhaseForProgress(entry);
+          if (owner.phase !== nextPhase && !owner.canceling)
+            owner.setPhase(nextPhase, actor === 'JOB' ? 'WORKER' : actor);
         };
         const options: Parameters<typeof transport>[1] = {
           workingDirectory: baseline.root,
@@ -969,6 +1368,8 @@ export function createExecutionService(
               summary: activity.summary,
               updatedAt: new Date().toISOString(),
               attempts: 1,
+              actor: activity.job ? 'JOB' : 'WORKER',
+              job: activity.job,
             }),
         };
         recordProgress({
@@ -1025,6 +1426,7 @@ export function createExecutionService(
             packetDir: usesDeliveryPacket ? packetDir : undefined,
             runtimeInstructions,
           });
+          owner.attach(reservation.handle);
         }
       } catch (error) {
         await finish(
@@ -1073,8 +1475,8 @@ export function createExecutionService(
         .catch(() => undefined);
       return saved;
     } catch (error) {
-      if (active.get(project.rootPath) === reservation)
-        active.delete(project.rootPath);
+      if (active.get(cardKey(project, input.cardId)) === reservation)
+        active.delete(cardKey(project, input.cardId));
       throw error;
     }
   }
@@ -1100,16 +1502,100 @@ export function createExecutionService(
     if (action === 'cancel') {
       if (run.status !== 'running')
         throw new PublicApiError('No execution is running.', 400);
-      const handle = active.get(project.rootPath);
+      const handle = active.get(cardKey(project, cardId));
       if (handle?.id !== run.id)
         throw new Error('Execution is owned by another server.');
+      const owner = handle.reservation ?? null;
+      const interruptedPhase = owner?.phase ?? 'executing';
+      const interruptedActor = owner?.actor ?? 'WORKER';
+      if (handle.timer) clearTimeout(handle.timer);
+      handle.canceling = true;
+      let stop: 'confirmed' | 'unconfirmed' = 'confirmed';
+      if (owner) stop = await requestStop(owner);
+      else handle.handle?.cancel();
+      const termination =
+        stop === 'confirmed'
+          ? await handle.handle?.completion.catch((error: unknown) => error)
+          : null;
+      const canceledFiles: Record<string, string> = {};
+      const salvage = (target: ActionRun, base: PlanningCard) => {
+        if (termination instanceof CoordinationRunError) {
+          target.coordination = {
+            ...termination.coordination,
+            logRef: reference(base, 'coordination.json'),
+          };
+          target.usage = totalCoordinationUsage(termination.coordination);
+          canceledFiles['coordination.json'] = JSON.stringify(
+            target.coordination,
+          );
+          for (const [name, text] of Object.entries(
+            termination.coordinationRecords,
+          ))
+            canceledFiles[`coordination-${name}`] = text;
+        }
+        if (handle.activity?.length) {
+          target.activityRef = reference(base, 'activity.json');
+          canceledFiles['activity.json'] = JSON.stringify(handle.activity);
+        }
+        target.jobs = handle.jobs?.length ? handle.jobs : target.jobs;
+        target.logRef = owner?.logRef ?? target.logRef;
+      };
+      if (stop === 'unconfirmed') {
+        const classification = classifyActionRun(run, {
+          runState: 'termination-unconfirmed',
+          interruptedPhase,
+          interruptedActor,
+        });
+        const failed: ActionRun = {
+          ...run,
+          status: 'failed',
+          endedAt: new Date().toISOString(),
+          stopResult: 'unconfirmed',
+          error: classification.detail,
+          response: classification,
+        };
+        salvage(failed, card);
+        const saved = await commit(
+          project,
+          replaceRun(card, failed),
+          {
+            kind: 'system-event',
+            stage: 'execution',
+            actionId: run.actionId,
+            event: 'run-ended',
+            text: `${classification.title}. ${classification.detail}`,
+            refs: [],
+          },
+          canceledFiles,
+        );
+        if (owner)
+          await settleRun(owner, {
+            classification,
+            jobLogs: handle.jobs,
+          }).catch(() => undefined);
+        void handle.handle?.completion
+          .catch(() => undefined)
+          .finally(() => {
+            if (active.get(cardKey(project, cardId)) === handle)
+              active.delete(cardKey(project, cardId));
+          });
+        return saved;
+      }
+      const provisional = classifyActionRun(run, {
+        runState: 'canceled',
+        interruptedPhase,
+        interruptedActor,
+      });
       const saved = await commit(
         project,
         replaceRun(card, {
           ...run,
           status: 'canceled',
           endedAt: new Date().toISOString(),
+          stopResult: 'confirmed',
           error: 'Canceled by user. Existing changes were not reverted.',
+          response: provisional,
+          logRef: owner?.logRef ?? run.logRef,
         }),
         {
           kind: 'system-event',
@@ -1120,32 +1606,8 @@ export function createExecutionService(
           refs: [],
         },
       );
-      if (handle.timer) clearTimeout(handle.timer);
-      handle.canceling = true;
-      handle.handle?.cancel();
-      const termination = await handle.handle?.completion.catch(
-        (error: unknown) => error,
-      );
-      const canceledFiles: Record<string, string> = {};
       const canceledRun = { ...saved.execution!.runs.at(-1)! };
-      if (termination instanceof CoordinationRunError) {
-        canceledRun.coordination = {
-          ...termination.coordination,
-          logRef: reference(saved, 'coordination.json'),
-        };
-        canceledRun.usage = totalCoordinationUsage(termination.coordination);
-        canceledFiles['coordination.json'] = JSON.stringify(
-          canceledRun.coordination,
-        );
-        for (const [name, text] of Object.entries(
-          termination.coordinationRecords,
-        ))
-          canceledFiles[`coordination-${name}`] = text;
-      }
-      if (handle.activity?.length) {
-        canceledRun.activityRef = reference(saved, 'activity.json');
-        canceledFiles['activity.json'] = JSON.stringify(handle.activity);
-      }
+      salvage(canceledRun, saved);
       try {
         const snapshot = await snapshotWorkspace(
           workspaceProject(project, card.execution?.workspace),
@@ -1158,9 +1620,30 @@ export function createExecutionService(
           run.id,
           `Canceled Action ${run.actionId}\nRound ${run.id}`,
         );
-        return await commit(
+        let changedFiles = 0;
+        try {
+          changedFiles = observedChanges(
+            await readActionBaseline(project, saved, run),
+            snapshot,
+          ).length;
+        } catch {}
+        const retained = retainedEffectsOf(
+          { ...canceledRun, commit: hash },
+          changedFiles,
+        );
+        const classification = classifyActionRun(canceledRun, {
+          runState: 'canceled',
+          interruptedPhase,
+          interruptedActor,
+          retained,
+        });
+        const result = await commit(
           project,
-          replaceRun(saved, { ...canceledRun, commit: hash }),
+          replaceRun(saved, {
+            ...canceledRun,
+            commit: hash,
+            response: classification,
+          }),
           {
             kind: 'system-event',
             stage: 'execution',
@@ -1171,11 +1654,24 @@ export function createExecutionService(
           },
           canceledFiles,
         );
+        if (owner)
+          await settleRun(owner, {
+            classification,
+            retained,
+            jobLogs: handle.jobs,
+          }).catch(() => undefined);
+        return result;
       } catch (error) {
-        return await commit(
+        const classification = classifyActionRun(canceledRun, {
+          runState: 'canceled',
+          interruptedPhase,
+          interruptedActor,
+        });
+        const result = await commit(
           project,
           replaceRun(saved, {
             ...canceledRun,
+            response: classification,
             error: `Canceled; changes remain. Git checkpoint failed: ${error instanceof Error ? error.message : 'unknown error'}`,
           }),
           {
@@ -1188,9 +1684,15 @@ export function createExecutionService(
           },
           canceledFiles,
         );
+        if (owner)
+          await settleRun(owner, {
+            classification,
+            jobLogs: handle.jobs,
+          }).catch(() => undefined);
+        return result;
       } finally {
-        if (active.get(project.rootPath)?.id === run.id)
-          active.delete(project.rootPath);
+        if (active.get(cardKey(project, cardId))?.id === run.id)
+          active.delete(cardKey(project, cardId));
       }
     }
     if (action !== 'accept' || !hasReviewableReport(run) || !run.result)
@@ -1302,7 +1804,7 @@ export function createExecutionService(
       card.plan?.status !== 'finalized' ||
       !action ||
       action.acceptanceCriteria?.length ||
-      active.has(project.rootPath) ||
+      active.has(cardKey(project, cardId)) ||
       card.execution?.runs.at(-1)?.status === 'running' ||
       card.execution?.acceptedActionIds.includes(actionId)
     )
@@ -1400,7 +1902,7 @@ export function createExecutionService(
     if (
       !run?.acceptanceChecklist ||
       run.status === 'running' ||
-      active.has(project.rootPath) ||
+      active.has(cardKey(project, cardId)) ||
       card.execution!.acceptedActionIds.includes(run.actionId)
     )
       throw new PublicApiError(
@@ -1422,18 +1924,26 @@ export function createExecutionService(
       recordedAt: new Date().toISOString(),
       checklistVersion: run.acceptanceChecklist.version,
     };
-    return commit(
+    const overrides = {
+      ...card.execution?.acceptanceOverrides?.[run.actionId],
+      [criterionId]: decision,
+    };
+    const classification = classifyActionRun(run, {
+      retained: retainedEffectsOf(run, run.observedRefs.length),
+      overrides,
+    });
+    const updated = await commit(
       project,
       {
         ...card,
         execution: {
           ...card.execution!,
+          runs: card.execution!.runs.map((item) =>
+            item.id === run.id ? { ...item, response: classification } : item,
+          ),
           acceptanceOverrides: {
             ...card.execution?.acceptanceOverrides,
-            [run.actionId]: {
-              ...card.execution?.acceptanceOverrides?.[run.actionId],
-              [criterionId]: decision,
-            },
+            [run.actionId]: overrides,
           },
         },
       },
@@ -1444,9 +1954,17 @@ export function createExecutionService(
         text: `User accepts required criterion ${criterionId} as passed for checklist ${decision.checklistVersion}. ${note} Actual check results remain unchanged.`,
       },
     );
+    await publishRecheck(
+      project,
+      updated,
+      { ...run, response: classification },
+      classification,
+      'recovery.override',
+    );
+    return updated;
   }
 
-  async function refreshGitHub(
+  function refreshGitHub(
     project: Project,
     cardId: string,
     expectedRevision: number,
@@ -1454,6 +1972,27 @@ export function createExecutionService(
   ) {
     assertCardUuid(cardId);
     assertCardUuid(outputId);
+    return loggedCardOperation(
+      project,
+      { kind: 'github-refresh', label: 'Refresh pull request state', cardId },
+      (operation) =>
+        refreshGitHubLogged(
+          project,
+          cardId,
+          expectedRevision,
+          outputId,
+          operation,
+        ),
+    );
+  }
+
+  async function refreshGitHubLogged(
+    project: Project,
+    cardId: string,
+    expectedRevision: number,
+    outputId: string,
+    operation: CardHostOperation,
+  ) {
     const card = await store.read(project, cardId);
     if (card.revision !== expectedRevision)
       throw new PublicApiError(
@@ -1481,6 +2020,7 @@ export function createExecutionService(
           runs: card.execution!.runs.map((item) =>
             item.id === run.id ? { ...run, github } : item,
           ),
+          lastOperation: operation,
         },
       },
       {
@@ -1505,9 +2045,9 @@ export function createExecutionService(
   ) {
     assertCardUuid(cardId);
     assertCardUuid(outputId);
-    if (active.has(project.rootPath))
+    if (active.has(cardKey(project, cardId)))
       throw new PublicApiError(
-        'Wait for project execution to finish before rechecking.',
+        'Wait for this Card to finish before rechecking.',
         400,
       );
     const reservation: Active = {
@@ -1516,7 +2056,7 @@ export function createExecutionService(
       handle: null,
       timer: null,
     };
-    active.set(project.rootPath, reservation);
+    active.set(cardKey(project, cardId), reservation);
     try {
       const card = await store.read(project, cardId);
       if (card.revision !== expectedRevision)
@@ -1673,7 +2213,11 @@ export function createExecutionService(
           ...versions,
         ]),
       };
-      return commit(
+      nextRun.response = classifyActionRun(nextRun, {
+        retained: retainedEffectsOf(nextRun, nextRun.observedRefs.length),
+        overrides: card.execution?.acceptanceOverrides?.[run.actionId],
+      });
+      const rechecked = await commit(
         project,
         replaceRun(card, nextRun),
         {
@@ -1695,9 +2239,16 @@ export function createExecutionService(
           'output.md': `# Rechecked Action output\n\n${result.summary}\n\nOutcome: ${result.outcome}\n\nNo Agent commands were rerun. Reported checks and remaining limitations are unchanged.\n\n## Required self-checks\n${result.checks.map((check) => `- ${check.status}: ${check.summary}`).join('\n')}\n\n## Additional checks (non-blocker)\n${(result.additionalChecks ?? []).map((check) => `- ${check.status}: ${check.summary}`).join('\n')}\n\n## Remaining\n${result.remaining.map((item) => `- ${item}`).join('\n')}`,
         },
       );
+      await publishRecheck(
+        project,
+        rechecked,
+        rechecked.execution!.runs.at(-1)!,
+        nextRun.response,
+      );
+      return rechecked;
     } finally {
-      if (active.get(project.rootPath) === reservation)
-        active.delete(project.rootPath);
+      if (active.get(cardKey(project, cardId)) === reservation)
+        active.delete(cardKey(project, cardId));
     }
   }
 
@@ -1731,7 +2282,7 @@ export function createExecutionService(
     );
   }
 
-  async function restartFromBase(
+  function restartFromBase(
     project: Project,
     cardId: string,
     expectedRevision: number,
@@ -1739,18 +2290,51 @@ export function createExecutionService(
     reopenPlan: boolean,
   ) {
     assertCardUuid(cardId);
-    if (active.has(project.rootPath))
-      throw new PublicApiError(
-        'Stop project execution before resetting a Card.',
-        400,
+    if (confirmation === undefined)
+      return restartFromBaseLogged(
+        project,
+        cardId,
+        expectedRevision,
+        confirmation,
+        reopenPlan,
+        undefined,
       );
+    return loggedCardOperation(
+      project,
+      {
+        kind: reopenPlan ? 'reopen-plan' : 'restart-from-base',
+        label: reopenPlan ? 'Reopen the Plan' : 'Reset the workspace',
+        cardId,
+      },
+      (operation) =>
+        restartFromBaseLogged(
+          project,
+          cardId,
+          expectedRevision,
+          confirmation,
+          reopenPlan,
+          operation,
+        ),
+    );
+  }
+
+  async function restartFromBaseLogged(
+    project: Project,
+    cardId: string,
+    expectedRevision: number,
+    confirmation: string | undefined,
+    reopenPlan: boolean,
+    operation: CardHostOperation | undefined,
+  ) {
+    if (active.has(cardKey(project, cardId)))
+      throw new PublicApiError('Stop this Card before resetting it.', 400);
     const reservation: Active = {
       id: randomUUID(),
       cardId,
       handle: null,
       timer: null,
     };
-    active.set(project.rootPath, reservation);
+    active.set(cardKey(project, cardId), reservation);
     try {
       const card = await store.read(project, cardId);
       if (card.revision !== expectedRevision)
@@ -1836,6 +2420,7 @@ export function createExecutionService(
                 ...(card.execution?.workspaceBackups ?? []),
                 restarted.backup,
               ],
+              lastOperation: operation,
             },
           },
           {
@@ -1861,12 +2446,12 @@ export function createExecutionService(
         throw error;
       }
     } finally {
-      if (active.get(project.rootPath) === reservation)
-        active.delete(project.rootPath);
+      if (active.get(cardKey(project, cardId)) === reservation)
+        active.delete(cardKey(project, cardId));
     }
   }
 
-  async function undoAction(
+  function undoAction(
     project: Project,
     cardId: string,
     actionId: string,
@@ -1874,15 +2459,40 @@ export function createExecutionService(
   ) {
     assertCardUuid(cardId);
     assertCardUuid(actionId);
-    if (active.has(project.rootPath))
-      throw new PublicApiError('Stop project execution before undoing.', 400);
+    return loggedCardOperation(
+      project,
+      {
+        kind: 'undo-action',
+        label: `Undo Action ${actionId.slice(0, 8)}`,
+        cardId,
+      },
+      (operation) =>
+        undoActionLogged(
+          project,
+          cardId,
+          actionId,
+          expectedRevision,
+          operation,
+        ),
+    );
+  }
+
+  async function undoActionLogged(
+    project: Project,
+    cardId: string,
+    actionId: string,
+    expectedRevision: number,
+    operation: CardHostOperation,
+  ) {
+    if (active.has(cardKey(project, cardId)))
+      throw new PublicApiError('Stop this Card before undoing.', 400);
     const reservation: Active = {
       id: randomUUID(),
       cardId,
       handle: null,
       timer: null,
     };
-    active.set(project.rootPath, reservation);
+    active.set(cardKey(project, cardId), reservation);
     try {
       const card = await store.read(project, cardId);
       if (card.revision !== expectedRevision)
@@ -1990,7 +2600,7 @@ export function createExecutionService(
         delete acceptanceOverrides[actionId];
         const verification = { ...card.execution?.verification };
         delete verification[actionId];
-        return await commit(
+        const undone = await commit(
           project,
           {
             ...card,
@@ -2012,6 +2622,7 @@ export function createExecutionService(
               acceptanceOverrides,
               verification,
               environment: undefined,
+              lastOperation: operation,
             },
           },
           {
@@ -2023,6 +2634,10 @@ export function createExecutionService(
             refs: [],
           },
         );
+        await clearLatestResponse(cardOwner(project, cardId)).catch(
+          () => undefined,
+        );
+        return undone;
       } catch (error) {
         await undoWorkspaceRestart(
           project,
@@ -2035,8 +2650,8 @@ export function createExecutionService(
         throw error;
       }
     } finally {
-      if (active.get(project.rootPath) === reservation)
-        active.delete(project.rootPath);
+      if (active.get(cardKey(project, cardId)) === reservation)
+        active.delete(cardKey(project, cardId));
     }
   }
 
