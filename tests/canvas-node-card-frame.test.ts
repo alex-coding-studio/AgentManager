@@ -620,7 +620,12 @@ void test('Graph and Flow modules run inside Latest Response while Just Do It st
     );
     assert.match(
       source,
-      /\) : moduleResponse\.running \? \(\s*<AgentGraphComposerCard title="" running \/>/,
+      /<\/AgentGraphComposerCard>\s*\) : moduleResponse\.running \? \(\s*<AgentGraphComposerCard title="" running \/>\s*\) : null\}/,
+      file,
+    );
+    assert.equal(
+      (source.match(/moduleResponse\.running \? \(/g) ?? []).length,
+      1,
       file,
     );
   }
