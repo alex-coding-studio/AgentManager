@@ -1,0 +1,17 @@
+{
+  "name": "praxis-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local Praxis desktop shell",
+  "author": "Alex Coding Studio",
+  "type": "module",
+  "main": "main.mjs",
+  "scripts": {
+    "start": "node launch.mjs",
+    "package": "node launch.mjs --package"
+  },
+  "devDependencies": {
+    "electron": "44.2.0",
+    "@electron/packager": "20.3.0"
+  }
+}
