@@ -30,7 +30,7 @@ export function LogViewer({
   const [text, setText] = useState(initialChunk.text);
   const [live, setLive] = useState(initialChunk.live);
   const [copied, setCopied] = useState(false);
-  const [now, setNow] = useState(() => Date.now());
+  const [now, setNow] = useState<number | null>(null);
   const offset = useRef(initialChunk.next);
   const busy = useRef(false);
   const [behind, setBehind] = useState(initialChunk.next < initialChunk.size);
@@ -163,7 +163,11 @@ export function LogViewer({
           {meta.startedAt ? (
             <Field
               label={t(meta.endedAt ? 'Duration' : 'Elapsed time')}
-              value={formatElapsed(meta.startedAt, meta.endedAt, now)}
+              value={
+                now === null && !meta.endedAt
+                  ? '—'
+                  : formatElapsed(meta.startedAt, meta.endedAt, now ?? 0)
+              }
               mono
             />
           ) : null}

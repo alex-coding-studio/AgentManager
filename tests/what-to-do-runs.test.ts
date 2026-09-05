@@ -324,7 +324,18 @@ function replacementResult(
 async function settled(project: RegisteredProject, runId: string) {
   for (let index = 0; index < 100; index += 1) {
     const run = await readWhatToDoRun(project, runId);
-    if (run.status !== 'running') return run;
+    if (run.status !== 'running') {
+      const { getActiveRun } =
+        await import('../lib/execution-observability/active-runs.ts');
+      const active = getActiveRun({
+        kind: 'module',
+        projectId: project.id,
+        planningPath: project.planningPath,
+        module: 'what-to-do',
+      });
+      if (active?.runId === runId) await active.released;
+      return run;
+    }
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
   throw new Error('What to Do Run did not settle.');
