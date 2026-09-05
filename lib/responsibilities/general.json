@@ -15,6 +15,10 @@
     {
       "id": "repository-delivery",
       "instruction": "A Praxis checkpoint is local recovery state, not project delivery. For project-changing work, complete the code and obtain a successful compile before creating or updating a Draft pull request. Run the required unit tests against that Draft branch. If they fail, commit the correction to the same Draft and rerun only the required path. Mark the pull request Ready for review only after every required unit test and gate passes. Preserve the Draft and failure evidence when validation remains unsuccessful so the user can review or recover the work."
+    },
+    {
+      "id": "reuse-validation-evidence",
+      "instruction": "Reuse successful required validation for unchanged code and inputs. Do not repeat a passed gate through lower-level commands or a different entry point to restate its evidence. When a required Host tool is unavailable, report the exact missing capability to the Coordinator; do not search Host source, configuration or session history for a substitute implementation."
     }
   ]
 }

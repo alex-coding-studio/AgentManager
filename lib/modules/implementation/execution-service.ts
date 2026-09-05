@@ -302,11 +302,14 @@ export function classifyActionRun(
       .map((check) => check.criterionId!),
     ...Object.keys(input.overrides ?? {}),
   ]);
+  const userDecisions = (decision?.verificationPlan ?? []).filter(
+    (item) => item.mode === 'needs-user-decision',
+  );
   const decisionResolved =
+    decision?.decision === 'needs-user' &&
+    userDecisions.length > 0 &&
     Boolean(effective?.passed) &&
-    (decision?.verificationPlan ?? [])
-      .filter((item) => item.mode === 'needs-user-decision')
-      .every((item) => satisfied.has(item.criterionId));
+    userDecisions.every((item) => satisfied.has(item.criterionId));
   const activeDecision = decisionResolved ? null : decision;
   const semantic =
     activeDecision &&
@@ -322,7 +325,8 @@ export function classifyActionRun(
     runState: input.runState ?? 'settled',
     outcome: result
       ? result.outcome === 'delivered' ||
-        (result.outcome === 'blocked' && effective?.passed)
+        (result.outcome === 'blocked' &&
+          (decisionResolved || (!decision && overridden.length > 0)))
         ? 'delivered'
         : result.outcome === 'blocked'
           ? 'blocked'
@@ -382,6 +386,17 @@ export function resumableWorkerSession(
   profile: AgentProfile,
 ) {
   const latest = runs?.findLast((run) => run.actionId === actionId);
+  const sessionId = latest?.agentSessionId;
+  if (
+    sessionId &&
+    runs?.some((run) =>
+      run.coordination?.attempts.some(
+        (attempt) =>
+          attempt.role === 'coordinator' && attempt.sessionId === sessionId,
+      ),
+    )
+  )
+    return undefined;
   return latest &&
     (latest.status === 'succeeded' || latest.status === 'failed') &&
     latest.agentSessionId &&

@@ -28,6 +28,22 @@ const run = (patch: Partial<ActionRun> = {}): ActionRun => ({
   ...patch,
 });
 
+void test('a coordinator session cannot resume as a Worker, including a contaminated later run', () => {
+  const coordinatorRun = run({
+    coordination: {
+      attempts: [{ role: 'coordinator', sessionId: 'session-1' }],
+    } as ActionRun['coordination'],
+  });
+  assert.equal(
+    resumableWorkerSession([coordinatorRun], 'action-1', profile),
+    undefined,
+  );
+  assert.equal(
+    resumableWorkerSession([coordinatorRun, run()], 'action-1', profile),
+    undefined,
+  );
+});
+
 void test('the latest succeeded run of the same Action supplies the session', () => {
   assert.equal(
     resumableWorkerSession(
