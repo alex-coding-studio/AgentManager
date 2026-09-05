@@ -30,6 +30,18 @@ import path from 'node:path';
 import trash from 'trash';
 import type { RegisteredProject } from '../../project-registry.ts';
 import {
+  isCurrentRun,
+  settleRun,
+  type ActiveRunReservation,
+} from '../../execution-observability/active-runs.ts';
+import {
+  agentActivityEntry,
+  beginModuleRun,
+  classifyModuleRun,
+  stopModuleRun,
+} from '../../execution-observability/module-run.ts';
+import type { ResponseClassification } from '../../execution-observability/types.ts';
+import {
   WHATS_NEXT_HARNESS_ID,
   WHATS_NEXT_HARNESS_REVISION,
   canReuseWhatsNextSession,
@@ -158,6 +170,10 @@ export type WhatsNextRunRecord = {
   activity: AgentGraphActivity[];
   result: WhatsNextHarnessResult | null;
   error: string | null;
+  logRef?: string;
+  hostPid?: number;
+  cancelRequestedAt?: string;
+  response?: ResponseClassification;
 };
 
 export type WhatsNextFeedbackAnchor = {
@@ -191,22 +207,26 @@ type ActiveRun = {
   record: WhatsNextRunRecord;
   agent: LocalAgentRun;
   activityRecorder: AgentGraphActivityRecorder;
+  reservation: ActiveRunReservation | null;
 };
+const WHATS_NEXT_RETAINED = 'The graph was not changed.';
 
 const activeRuns = getActiveRuns();
 
 export async function startWhatsNextRun(
   project: RegisteredProject,
   input: RunRequest,
+  launch: typeof startLocalAgentRun = startLocalAgentRun,
 ) {
   return mutateWhatsNext(project, () =>
-    startWhatsNextRunUnlocked(project, input),
+    startWhatsNextRunUnlocked(project, input, launch),
   );
 }
 
 async function startWhatsNextRunUnlocked(
   project: RegisteredProject,
   input: RunRequest,
+  launch: typeof startLocalAgentRun,
 ) {
   validateRunRequest(input);
   const intention = input.intention ?? 'mvp-exploration';
@@ -273,19 +293,6 @@ async function startWhatsNextRunUnlocked(
       : null;
   const continuesExistingSession = Boolean(coordinatorRun?.agentSessionId);
   const reservedCandidateIds = await collectReservedCandidateIds(project);
-  if (
-    [...activeRuns.values()].some(
-      (active) =>
-        active.record.sourceNodeIds.some((nodeId) =>
-          input.sourceNodeIds.includes(nodeId),
-        ) && ['running', 'validating'].includes(active.record.status),
-    )
-  ) {
-    throw new PublicApiError(
-      "A selected Node already has an active What's next Run.",
-      409,
-    );
-  }
   const productContextResources = await resolveProductContextReferences(
     project,
     input.contextRefs,
@@ -295,263 +302,311 @@ async function startWhatsNextRunUnlocked(
   const sessionId = coordinatorRun?.sessionId ?? `SESSION-${randomUUID()}`;
   const requestId = `REQUEST-${randomUUID()}`;
   const runPath = whatsNextRunPath(project, runId);
-  const resourcesPath = path.join(runPath, 'resources');
-  await mkdir(resourcesPath, { recursive: true });
-
-  const uploadedResources = await saveUploadedResources(
+  let record!: WhatsNextRunRecord;
+  let prompt!: string;
+  let resources!: ContextWorkspaceEntry[];
+  let preflightFailure: string | null = null;
+  const layer = intentionDestination(intention).layer;
+  const layerLabel =
+    layer === 'discovery' ? 'Product Discovery' : 'Product Design';
+  const { reservation } = await beginModuleRun(project, 'whats-next', {
     runId,
-    resourcesPath,
-    input.files,
-  );
-  if (redo) {
-    const priorPaths = new Set(
-      redo.targets.flatMap(({ candidate }) =>
-        candidate.resources.map((resource) => resource.path),
-      ),
-    );
-    for (const [index, resourcePath] of [...priorPaths].entries()) {
-      const resource = await readTaskGraphMarkdownResource(
-        project,
-        resourcePath,
+    subject: { kind: 'layer', label: layerLabel },
+    layer: layer,
+    agentProfile: profile,
+    startMessage: `${layerLabel} Run started with ${input.agent}`,
+    validate: async () => undefined,
+    persist: async (reservation) => {
+      const resourcesPath = path.join(runPath, 'resources');
+      await mkdir(resourcesPath, { recursive: true });
+
+      const uploadedResources = await saveUploadedResources(
+        runId,
+        resourcesPath,
+        input.files,
       );
-      const name = `prior-resource-${index + 1}.md`;
-      await writeFile(path.join(resourcesPath, name), resource.markdown, {
-        flag: 'wx',
-      });
-      uploadedResources.push({
-        logicalPath: `whats-next/runs/${runId}/resources/${name}`,
-        kind: 'prior-context',
-        role: 'primary',
-        content: resource.markdown,
-      });
-    }
-    const previousRun = redoProposalInputRun(redo);
-    const previousUserInput = previousRun?.input?.userInputPath
-      ? await readFile(
-          path.join(
-            whatsNextRunPath(project, previousRun.runId),
-            'context',
-            previousRun.input.userInputPath,
+      if (redo) {
+        const priorPaths = new Set(
+          redo.targets.flatMap(({ candidate }) =>
+            candidate.resources.map((resource) => resource.path),
           ),
-          'utf8',
-        )
-      : undefined;
-    const priorMarkdown = redoProposalContext(redo, previousUserInput).markdown;
-    await writeFile(
-      path.join(resourcesPath, 'previous-proposal.md'),
-      priorMarkdown,
-      { flag: 'wx' },
-    );
-    uploadedResources.push({
-      logicalPath: `whats-next/runs/${runId}/resources/previous-proposal.md`,
-      kind: 'previous-proposal',
-      role: 'primary',
-      content: priorMarkdown,
-    });
-  }
-  const featureContext = await readWhatsNextContext(project);
-  const implicitProductDesignContext =
-    intention === 'product-design-completion'
-      ? nodes.filter(
-          (node) => node.role === 'start' || node.layer === 'product-design',
-        )
-      : [];
-  const contextInputs = await collectContextWorkspaceInputs(
-    project,
-    sourceNodes,
-    nodes,
-    productContextResources,
-    uploadedResources,
-    featureContext.attachments.map((attachment) => attachment.fileName),
-    redo ? false : continuesExistingSession,
-    implicitProductDesignContext,
-    revisionTarget
-      ? {
-          outputPath: `whats-next/runs/${revisionTarget.run.runId}/candidates/${revisionTarget.candidate.candidateId}/output.md`,
-          resourcePaths: revisionTarget.candidate.resources.map(
-            (resource) => resource.path,
-          ),
+        );
+        for (const [index, resourcePath] of [...priorPaths].entries()) {
+          const resource = await readTaskGraphMarkdownResource(
+            project,
+            resourcePath,
+          );
+          const name = `prior-resource-${index + 1}.md`;
+          await writeFile(path.join(resourcesPath, name), resource.markdown, {
+            flag: 'wx',
+          });
+          uploadedResources.push({
+            logicalPath: `whats-next/runs/${runId}/resources/${name}`,
+            kind: 'prior-context',
+            role: 'primary',
+            content: resource.markdown,
+          });
         }
-      : undefined,
-  );
-  const userInput = userInputWorkspaceInput(
-    `whats-next/runs/${runId}/context/input/user-input.md`,
-    renderWhatsNextUserInput(input.instruction, input.feedback ?? []),
-  );
-  const moduleInstructions = featureContext.instructions.trim()
-    ? {
-        role: 'primary' as const,
-        kind: 'module-instructions',
-        logicalPath: 'whats-next/instructions.md',
-        content: featureContext.instructions,
+        const previousRun = redoProposalInputRun(redo);
+        const previousUserInput = previousRun?.input?.userInputPath
+          ? await readFile(
+              path.join(
+                whatsNextRunPath(project, previousRun.runId),
+                'context',
+                previousRun.input.userInputPath,
+              ),
+              'utf8',
+            )
+          : undefined;
+        const priorMarkdown = redoProposalContext(
+          redo,
+          previousUserInput,
+        ).markdown;
+        await writeFile(
+          path.join(resourcesPath, 'previous-proposal.md'),
+          priorMarkdown,
+          { flag: 'wx' },
+        );
+        uploadedResources.push({
+          logicalPath: `whats-next/runs/${runId}/resources/previous-proposal.md`,
+          kind: 'previous-proposal',
+          role: 'primary',
+          content: priorMarkdown,
+        });
       }
-    : null;
-  if (redo) {
-    for (const [index, resource] of contextInputs.entries()) {
-      if (
-        !redo.runIds.some((id) =>
-          resource.logicalPath.startsWith(`whats-next/runs/${id}/`),
-        )
-      )
-        continue;
-      const name = `retained-context-${index}.md`;
-      await writeFile(path.join(resourcesPath, name), resource.content, {
-        flag: 'wx',
-      });
-      resource.logicalPath = `whats-next/runs/${runId}/resources/${name}`;
-    }
-  }
-  const contextWorkspace = await writeAgentGraphContextWorkspace(
-    runPath,
-    assembleAgentGraphWorkspaceInputs(userInput, [
-      ...(moduleInstructions ? [moduleInstructions] : []),
-      ...contextInputs,
-    ]),
-  );
-  const content = agentGraphContentPacket(contextWorkspace.manifest);
-  const resources = [
-    ...contextWorkspace.manifest.primary,
-    ...contextWorkspace.manifest.related,
-  ];
-  const requestIdentity = { sessionId, requestId, inputFingerprint: '' };
-  const packet = {
-    request: requestIdentity,
-    operation,
-    intention,
-    motion,
-    destination: intentionDestination(intention),
-    implicitProductDesignContext:
-      intention === 'product-design-completion'
+      const featureContext = await readWhatsNextContext(project);
+      const implicitProductDesignContext =
+        intention === 'product-design-completion'
+          ? nodes.filter(
+              (node) =>
+                node.role === 'start' || node.layer === 'product-design',
+            )
+          : [];
+      const contextInputs = await collectContextWorkspaceInputs(
+        project,
+        sourceNodes,
+        nodes,
+        productContextResources,
+        uploadedResources,
+        featureContext.attachments.map((attachment) => attachment.fileName),
+        redo ? false : continuesExistingSession,
+        implicitProductDesignContext,
+        revisionTarget
+          ? {
+              outputPath: `whats-next/runs/${revisionTarget.run.runId}/candidates/${revisionTarget.candidate.candidateId}/output.md`,
+              resourcePaths: revisionTarget.candidate.resources.map(
+                (resource) => resource.path,
+              ),
+            }
+          : undefined,
+      );
+      const userInput = userInputWorkspaceInput(
+        `whats-next/runs/${runId}/context/input/user-input.md`,
+        renderWhatsNextUserInput(input.instruction, input.feedback ?? []),
+      );
+      const moduleInstructions = featureContext.instructions.trim()
         ? {
-            sourceNodeId:
-              implicitProductDesignContext.find((node) => node.role === 'start')
-                ?.id ?? null,
-            featureNodeIds: implicitProductDesignContext
-              .filter((node) => node.layer === 'product-design')
-              .map((node) => node.id),
+            role: 'primary' as const,
+            kind: 'module-instructions',
+            logicalPath: 'whats-next/instructions.md',
+            content: featureContext.instructions,
           }
-        : undefined,
-    proposalCorrection: redo
-      ? {
-          intent:
-            'Redo the entire unaccepted proposal from these origins using the current User Input as feedback. The previous proposal is evidence of what the user is correcting, not a direction to preserve. Return a new proposal, not single-card refinement. Do not modify the parent or other branches.',
-          previousCandidateIds: redo.candidateIds,
-        }
-      : undefined,
-    content,
-    continuationFocus:
-      coordinatorRun?.result?.reflection.continuationAdvice.recommendedFocus ??
-      null,
-    moduleInstructionsState: moduleInstructions ? 'present' : 'cleared',
-    graphMap: continuesExistingSession ? undefined : nodes.map(graphMapEntry),
-    origins: sourceNodes.map(graphMapEntry),
-    contextWorkspace: {
-      root: contextWorkspace.root,
-      indexPath: contextWorkspace.indexPath,
-    },
-    revisionTarget: revisionTarget
-      ? createWhatsNextRevisionTarget(revisionTarget.candidate)
-      : null,
-    feedbackAnchors: (input.feedback ?? []).map(feedbackAnchorReference),
-    previousProposalAliases: coordinatorRun?.result?.candidateAliases ?? {},
-    reservedCandidateIds: reservedCandidateIds.filter(
-      (candidateId) => candidateId !== revisionTarget?.candidate.candidateId,
-    ),
-  };
-  requestIdentity.inputFingerprint = createHash('sha256')
-    .update(JSON.stringify(packet))
-    .digest('hex');
-  const prompt =
-    continuesExistingSession &&
-    coordinatorRun?.harness.revision === WHATS_NEXT_HARNESS_REVISION
-      ? buildWhatsNextContinuationPrompt(packet, intention, motion)
-      : buildWhatsNextPrompt(packet, intention, motion);
-  const timestamp = new Date().toISOString();
-  await writeFile(
-    path.join(runPath, 'request.json'),
-    `${JSON.stringify(
-      { schemaVersion: 1, createdAt: timestamp, profile, packet, prompt },
-      null,
-      2,
-    )}\n`,
-    { flag: 'wx' },
-  );
-  const record: WhatsNextRunRecord = {
-    schemaVersion: 1,
-    runId,
-    sessionId,
-    requestId,
-    agentSessionId: null,
-    agentSessionMode: 'persistent',
-    sourceNodeIds: input.sourceNodeIds,
-    operation,
-    intention,
-    motion,
-    parentRunId: coordinatorCandidate?.runId,
-    revisionOf: revisionTarget?.candidate.candidateId,
-    replacement: redo
-      ? {
-          state: 'applied',
-          candidateIds: redo.candidateIds,
-          runIds: redo.runIds,
-        }
-      : undefined,
-    status: 'running',
-    transport,
-    profile,
-    harness: {
-      id: WHATS_NEXT_HARNESS_ID,
-      revision: WHATS_NEXT_HARNESS_REVISION,
-    },
-    input: {
-      userInputPath: content.input?.workspacePath ?? null,
-      moduleInstructionsState: moduleInstructions ? 'present' : 'cleared',
-      resourcePaths: resources.map((resource) => resource.logicalPath),
-      feedbackAnchors: (input.feedback ?? []).map(feedbackAnchorReference),
-      requestArtifact: 'request.json',
-      intention,
-      motion,
-    },
-    inputFingerprint: requestIdentity.inputFingerprint,
-    startedAt: timestamp,
-    updatedAt: timestamp,
-    endedAt: null,
-    usage: null,
-    sessionUsage: null,
-    activity: initialAgentGraphActivity(
-      'Exploring the selected direction.',
-      timestamp,
-    ),
-    result: null,
-    error: null,
-  };
-  await writeRunRecord(project, record);
-  await initializeAgentGraphActivity(runPath, record.activity);
-
-  if (redo) {
-    try {
-      const obsoletePaths: string[] = [];
-      for (const id of redo.runIds) {
-        const folder = whatsNextRunPath(project, id);
-        try {
-          await access(folder);
-          obsoletePaths.push(folder);
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+        : null;
+      if (redo) {
+        for (const [index, resource] of contextInputs.entries()) {
+          if (
+            !redo.runIds.some((id) =>
+              resource.logicalPath.startsWith(`whats-next/runs/${id}/`),
+            )
+          )
+            continue;
+          const name = `retained-context-${index}.md`;
+          await writeFile(path.join(resourcesPath, name), resource.content, {
+            flag: 'wx',
+          });
+          resource.logicalPath = `whats-next/runs/${runId}/resources/${name}`;
         }
       }
-      if (obsoletePaths.length) await trash(obsoletePaths);
-    } catch {
-      record.status = 'failed';
-      record.error =
-        'Could not move all abandoned proposal files to system Trash. No Agent was started; abandoned directions remain hidden.';
-      record.endedAt = new Date().toISOString();
-      record.updatedAt = record.endedAt;
+      const contextWorkspace = await writeAgentGraphContextWorkspace(
+        runPath,
+        assembleAgentGraphWorkspaceInputs(userInput, [
+          ...(moduleInstructions ? [moduleInstructions] : []),
+          ...contextInputs,
+        ]),
+      );
+      const content = agentGraphContentPacket(contextWorkspace.manifest);
+      resources = [
+        ...contextWorkspace.manifest.primary,
+        ...contextWorkspace.manifest.related,
+      ];
+      const requestIdentity = { sessionId, requestId, inputFingerprint: '' };
+      const packet = {
+        request: requestIdentity,
+        operation,
+        intention,
+        motion,
+        destination: intentionDestination(intention),
+        implicitProductDesignContext:
+          intention === 'product-design-completion'
+            ? {
+                sourceNodeId:
+                  implicitProductDesignContext.find(
+                    (node) => node.role === 'start',
+                  )?.id ?? null,
+                featureNodeIds: implicitProductDesignContext
+                  .filter((node) => node.layer === 'product-design')
+                  .map((node) => node.id),
+              }
+            : undefined,
+        proposalCorrection: redo
+          ? {
+              intent:
+                'Redo the entire unaccepted proposal from these origins using the current User Input as feedback. The previous proposal is evidence of what the user is correcting, not a direction to preserve. Return a new proposal, not single-card refinement. Do not modify the parent or other branches.',
+              previousCandidateIds: redo.candidateIds,
+            }
+          : undefined,
+        content,
+        continuationFocus:
+          coordinatorRun?.result?.reflection.continuationAdvice
+            .recommendedFocus ?? null,
+        moduleInstructionsState: moduleInstructions ? 'present' : 'cleared',
+        graphMap: continuesExistingSession
+          ? undefined
+          : nodes.map(graphMapEntry),
+        origins: sourceNodes.map(graphMapEntry),
+        contextWorkspace: {
+          root: contextWorkspace.root,
+          indexPath: contextWorkspace.indexPath,
+        },
+        revisionTarget: revisionTarget
+          ? createWhatsNextRevisionTarget(revisionTarget.candidate)
+          : null,
+        feedbackAnchors: (input.feedback ?? []).map(feedbackAnchorReference),
+        previousProposalAliases: coordinatorRun?.result?.candidateAliases ?? {},
+        reservedCandidateIds: reservedCandidateIds.filter(
+          (candidateId) =>
+            candidateId !== revisionTarget?.candidate.candidateId,
+        ),
+      };
+      requestIdentity.inputFingerprint = createHash('sha256')
+        .update(JSON.stringify(packet))
+        .digest('hex');
+      prompt =
+        continuesExistingSession &&
+        coordinatorRun?.harness.revision === WHATS_NEXT_HARNESS_REVISION
+          ? buildWhatsNextContinuationPrompt(packet, intention, motion)
+          : buildWhatsNextPrompt(packet, intention, motion);
+      const timestamp = new Date().toISOString();
+      await writeFile(
+        path.join(runPath, 'request.json'),
+        `${JSON.stringify(
+          { schemaVersion: 1, createdAt: timestamp, profile, packet, prompt },
+          null,
+          2,
+        )}\n`,
+        { flag: 'wx' },
+      );
+      record = {
+        schemaVersion: 1,
+        runId,
+        sessionId,
+        requestId,
+        agentSessionId: null,
+        agentSessionMode: 'persistent',
+        sourceNodeIds: input.sourceNodeIds,
+        operation,
+        intention,
+        motion,
+        parentRunId: coordinatorCandidate?.runId,
+        revisionOf: revisionTarget?.candidate.candidateId,
+        replacement: redo
+          ? {
+              state: 'applied',
+              candidateIds: redo.candidateIds,
+              runIds: redo.runIds,
+            }
+          : undefined,
+        status: 'running',
+        transport,
+        profile,
+        harness: {
+          id: WHATS_NEXT_HARNESS_ID,
+          revision: WHATS_NEXT_HARNESS_REVISION,
+        },
+        input: {
+          userInputPath: content.input?.workspacePath ?? null,
+          moduleInstructionsState: moduleInstructions ? 'present' : 'cleared',
+          resourcePaths: resources.map((resource) => resource.logicalPath),
+          feedbackAnchors: (input.feedback ?? []).map(feedbackAnchorReference),
+          requestArtifact: 'request.json',
+          intention,
+          motion,
+        },
+        inputFingerprint: requestIdentity.inputFingerprint,
+        startedAt: timestamp,
+        updatedAt: timestamp,
+        endedAt: null,
+        usage: null,
+        sessionUsage: null,
+        activity: initialAgentGraphActivity(
+          'Exploring the selected direction.',
+          timestamp,
+        ),
+        result: null,
+        error: null,
+      };
+      record.logRef = reservation.logRef;
+      record.hostPid = process.pid;
       await writeRunRecord(project, record);
-      return record;
-    }
-  }
+      await initializeAgentGraphActivity(runPath, record.activity);
 
+      if (redo) {
+        try {
+          const obsoletePaths: string[] = [];
+          for (const id of redo.runIds) {
+            const folder = whatsNextRunPath(project, id);
+            try {
+              await access(folder);
+              obsoletePaths.push(folder);
+            } catch (error) {
+              if ((error as NodeJS.ErrnoException).code !== 'ENOENT')
+                throw error;
+            }
+          }
+          if (obsoletePaths.length) await trash(obsoletePaths);
+        } catch {
+          preflightFailure =
+            'Could not move all abandoned proposal files to system Trash. No Agent was started; abandoned directions remain hidden.';
+        }
+      }
+      return async () => {
+        await rm(runPath, { recursive: true, force: true }).catch(
+          () => undefined,
+        );
+      };
+    },
+  });
+  if (preflightFailure) {
+    const classification = classifyModuleRun({
+      runState: 'settled',
+      failure: { kind: 'persistence', message: preflightFailure },
+    });
+    record.status = 'failed';
+    record.error = preflightFailure;
+    record.endedAt = new Date().toISOString();
+    record.updatedAt = record.endedAt;
+    record.response = classification;
+    await writeRunRecord(project, record);
+    reservation.record({
+      level: 'ERROR',
+      actor: 'HOST',
+      phase: 'PREPARE',
+      event: 'preflight.failed',
+      message: preflightFailure,
+    });
+    await settleRun(reservation, { classification });
+    return record;
+  }
   const activityRecorder = createAgentGraphActivityRecorder(
     runPath,
     record.activity,
@@ -559,7 +614,7 @@ async function startWhatsNextRunUnlocked(
       record.updatedAt = item.at;
     },
   );
-  const agent = startLocalAgentRun(input.agent, {
+  const agent = launch(input.agent, {
     workingDirectory: runPath,
     prompt,
     resumeSessionId: coordinatorRun?.agentSessionId ?? undefined,
@@ -567,17 +622,23 @@ async function startWhatsNextRunUnlocked(
       coordinatorRun?.sessionUsage ?? coordinatorRun?.usage ?? undefined,
     model: profile.model || undefined,
     effort: profile.effort || undefined,
-    onActivity: activityRecorder.onActivity,
+    onActivity: (event) => {
+      activityRecorder.onActivity(event);
+      reservation.record(agentActivityEntry(event));
+    },
   });
+  reservation.attach(agent);
   activeRuns.set(runKey(project, runId), {
     record,
     agent,
     activityRecorder,
+    reservation,
   });
   void finishWhatsNextRun(
     project,
     record,
     agent,
+    reservation,
     nodes,
     resources,
     revisionTarget?.candidate,
@@ -746,22 +807,36 @@ export async function cancelWhatsNextRun(
   if (!['running', 'validating'].includes(record.status)) return record;
 
   const active = activeRuns.get(runKey(project, runId));
+  const reservation = active?.reservation ?? null;
+  const interruptedPhase = reservation?.phase ?? 'executing';
+  const stop = reservation ? await stopModuleRun(reservation) : 'confirmed';
+  if (!reservation) active?.agent.cancel();
+  const classification = classifyModuleRun(
+    stop === 'confirmed'
+      ? {
+          runState: 'canceled',
+          interruptedPhase,
+          interruptedActor: 'AGENT',
+          retainedNote: WHATS_NEXT_RETAINED,
+        }
+      : { runState: 'termination-unconfirmed', interruptedActor: 'AGENT' },
+  );
   const timestamp = new Date().toISOString();
   const canceledRecord = active?.record ?? record;
-  canceledRecord.status = 'canceled';
+  canceledRecord.status = stop === 'confirmed' ? 'canceled' : 'failed';
   canceledRecord.updatedAt = timestamp;
   canceledRecord.endedAt = timestamp;
-  canceledRecord.error = null;
+  canceledRecord.error = stop === 'confirmed' ? null : classification.detail;
+  canceledRecord.response = classification;
   await active?.activityRecorder.flush();
+  const document = `# ${classification.title}\n\n${classification.detail}\n`;
   await writeAgentGraphRunEvidence(whatsNextRunPath(project, runId), {
     activity: canceledRecord.activity,
-    summary:
-      '# Canceled\n\nThe Agent Run was canceled. The graph was not changed.\n',
-    response:
-      '# Latest Response\n\nThe Agent Run was canceled. The graph was not changed.\n',
+    summary: document,
+    response: document,
   });
   await writeRunRecord(project, canceledRecord);
-  active?.agent.cancel();
+  if (reservation) await settleRun(reservation, { classification });
   return canceledRecord;
 }
 
@@ -1017,15 +1092,17 @@ async function finishWhatsNextRun(
   project: RegisteredProject,
   record: WhatsNextRunRecord,
   agent: LocalAgentRun,
+  reservation: ActiveRunReservation,
   nodes: TaskGraphNode[],
   resources: ContextWorkspaceEntry[],
   revisionTarget?: WhatsNextCandidate,
   reservedCandidateIds: string[] = [],
 ) {
   let agentOutput: string | null = null;
+  const superseded = () => reservation.canceling || !isCurrentRun(reservation);
   try {
     const agentResult = await agent.completion;
-    if (isRunCanceled(record)) return;
+    if (superseded()) return;
     agentOutput = agentResult.finalOutput;
     const active = activeRuns.get(runKey(project, record.runId));
     await active?.activityRecorder.flush();
@@ -1038,8 +1115,9 @@ async function finishWhatsNextRun(
     record.usage = agentResult.usage;
     record.sessionUsage = agentResult.sessionUsage ?? agentResult.usage;
     record.updatedAt = new Date().toISOString();
+    reservation.setPhase('finalizing', 'HOST');
     await writeRunRecord(project, record);
-    if (isRunCanceled(record)) return;
+    if (superseded()) return;
 
     const result = await parseIdentifiedResult(
       project.planningPath,
@@ -1094,25 +1172,73 @@ async function finishWhatsNextRun(
     record.result = result;
     record.updatedAt = endedAt;
     record.endedAt = endedAt;
+    const classification = classifyModuleRun(
+      result.outcome === 'proposal'
+        ? {
+            runState: 'settled',
+            outcome: 'proposal',
+            summary: plainSummary(result.reflection.markdown),
+          }
+        : result.outcome === 'clarification'
+          ? {
+              runState: 'settled',
+              outcome: 'clarification',
+              question: result.clarification.question,
+            }
+          : {
+              runState: 'settled',
+              outcome: 'no-change',
+              reason: result.reason,
+            },
+    );
+    record.response = classification;
     await ensureCandidateArtifacts(project, record);
     await writeWhatsNextCheckpoint(project, record);
     await writeRunRecord(project, record);
+    await settleRun(reservation, { classification, endedAt });
   } catch (error) {
-    if (isRunCanceled(record)) return;
+    if (superseded()) return;
     const endedAt = new Date().toISOString();
+    const original = agentGraphErrorMessage(
+      error,
+      "The What's next Run failed.",
+    );
+    reservation.record({
+      level: 'ERROR',
+      actor: 'HOST',
+      phase: 'FINALIZE',
+      event: agentOutput ? 'result.rejected' : 'agent.failed',
+      message: original,
+    });
+    const classification = classifyModuleRun({
+      runState: 'settled',
+      failure: {
+        kind:
+          error instanceof PublicApiError && error.status === 409
+            ? 'persistence'
+            : agentOutput
+              ? 'parse'
+              : 'transport',
+        message: original,
+      },
+    });
     record.status = 'failed';
-    record.error = agentGraphErrorMessage(error, "The What's next Run failed.");
+    record.error = original;
+    record.response = classification;
     const active = activeRuns.get(runKey(project, record.runId));
     await active?.activityRecorder.flush();
     await writeAgentGraphRunEvidence(whatsNextRunPath(project, record.runId), {
       activity: record.activity,
       agentOutput,
-      summary: `# Failed\n\n${record.error}\n`,
-      response: `# Latest Response\n\n## Failed\n\n${record.error}\n`,
+      summary: `# ${classification.title}\n\n${classification.detail}\n\n${record.error}\n`,
+      response: `# ${classification.title}\n\n${classification.detail}\n`,
     });
     record.updatedAt = endedAt;
     record.endedAt = endedAt;
     await writeRunRecord(project, record);
+    await settleRun(reservation, { classification, endedAt }).catch(
+      () => undefined,
+    );
   } finally {
     activeRuns.delete(runKey(project, record.runId));
   }
@@ -1611,6 +1737,16 @@ function whatsNextRunPath(project: RegisteredProject, runId: string) {
   return path.join(project.planningPath, 'whats-next', 'runs', runId);
 }
 
+function plainSummary(markdown: string) {
+  const text = markdown
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/[*_`>#-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return text.length > 400 ? `${text.slice(0, 399)}…` : text;
+}
+
 function validateRunId(runId: string) {
   if (!/^RUN-[0-9a-f-]{36}$/i.test(runId)) {
     throw new PublicApiError("The What's next Run identifier is invalid.", 400);
@@ -1765,8 +1901,4 @@ ${candidate.summary}
 ## Assumptions
 
 ${assumptions}`;
-}
-
-function isRunCanceled(record: WhatsNextRunRecord) {
-  return record.status === ('canceled' as WhatsNextRunStatus);
 }
