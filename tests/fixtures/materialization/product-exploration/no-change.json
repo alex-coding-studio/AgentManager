@@ -1,0 +1,121 @@
+{
+  "whats-next/identities.json": {
+    "schemaVersion": 1,
+    "aliases": {
+      "NODE-U0": "U0"
+    },
+    "formalAliases": ["NODE-U0"]
+  },
+  "whats-next/nodes/NODE-U0/node.json": {
+    "schemaVersion": 1,
+    "id": "NODE-U0",
+    "uid": "U0",
+    "relations": {
+      "derivedFrom": [],
+      "dependsOn": []
+    },
+    "role": "start",
+    "type": "source",
+    "title": "Build my local website",
+    "status": "captured",
+    "createdAt": "T",
+    "updatedAt": "T",
+    "resources": [
+      {
+        "kind": "idea",
+        "path": "whats-next/nodes/NODE-U0/resources/user-input.md"
+      }
+    ],
+    "dependsOn": [],
+    "typeTemplateRef": "NODE-U0",
+    "metadata": {},
+    "layer": "discovery",
+    "artifactKind": "source",
+    "presentation": {
+      "color": "#525252"
+    }
+  },
+  "whats-next/runs/RUN-U1/run.json": {
+    "schemaVersion": 1,
+    "runId": "RUN-U1",
+    "sessionId": "SESSION-U2",
+    "requestId": "REQUEST-U3",
+    "agentSessionId": null,
+    "agentSessionMode": "persistent",
+    "sourceNodeIds": ["NODE-U0"],
+    "operation": "explore",
+    "intention": "mvp-exploration",
+    "motion": "unspecified",
+    "status": "no-change",
+    "transport": "codex-cli",
+    "profile": {
+      "agent": "codex",
+      "model": "",
+      "effort": ""
+    },
+    "harness": {
+      "id": "praxis.whats-next",
+      "revision": 8
+    },
+    "input": {
+      "userInputPath": "input/user-input.md",
+      "moduleInstructionsState": "cleared",
+      "resourcePaths": [
+        "whats-next/nodes/NODE-U0/resources/user-input.md",
+        "whats-next/runs/RUN-U1/context/input/user-input.md"
+      ],
+      "feedbackAnchors": [],
+      "requestArtifact": "request.json",
+      "intention": "mvp-exploration",
+      "motion": "unspecified"
+    },
+    "inputFingerprint": "H0",
+    "startedAt": "T",
+    "updatedAt": "T",
+    "endedAt": "T",
+    "usage": null,
+    "sessionUsage": null,
+    "activity": [
+      {
+        "at": "T",
+        "summary": "Exploring the selected direction."
+      }
+    ],
+    "result": {
+      "schemaVersion": 1,
+      "harness": {
+        "id": "praxis.whats-next",
+        "revision": 8
+      },
+      "request": {
+        "sessionId": "SESSION-U2",
+        "requestId": "REQUEST-U3",
+        "inputFingerprint": "H0"
+      },
+      "reflection": {
+        "markdown": "The current direction already covers this request.",
+        "continuationAdvice": {
+          "action": "consider-closing",
+          "recommendedFocus": "close",
+          "reason": "Nothing further is needed here."
+        }
+      },
+      "exploration": {
+        "consideredNodeIds": ["NODE-U0"],
+        "notes": []
+      },
+      "outcome": "no-change",
+      "reason": "The current direction already covers this request."
+    },
+    "error": null,
+    "logRef": "whats-next/runs/RUN-U1/run.log",
+    "hostPid": 0,
+    "response": {
+      "status": "completed",
+      "title": "No change",
+      "detail": "The current direction already covers this request.",
+      "supplementaryWarnings": [],
+      "recovery": ["log", "continue"]
+    }
+  }
+}
