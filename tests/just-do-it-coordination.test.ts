@@ -1702,6 +1702,8 @@ void test('a resumed packet Worker receives the current response identity', asyn
   await f.run.completion;
   assert.deepEqual(f.workerResumes, ['previous-round-session']);
   assert.match(f.workerCalls[0], /Read .*\/Manifest\.md/);
+  assert.match(f.workerCalls[0], /every round; never skip this mutable index/);
+  assert.match(f.workerCalls[0], /read new Amendments/);
   assert.doesNotMatch(f.workerCalls[0], /COORDINATOR ASSIGNMENT/);
   assert.ok(f.workerCalls[0].length < 900);
   assert.match(f.workerCalls[0], /supersedes every prior response identity/);

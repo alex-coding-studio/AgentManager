@@ -589,5 +589,5 @@ export function workerPacketPrompt(
     inputFingerprint: request.inputFingerprint,
     actionId: request.actionId,
   });
-  return `Read ${manifestPath}; follow Origin order and its exact-filename skip rule. Resolve all Responsibility pointers by id under ${path.dirname(executionResponsibilitySource('general'))}/<id>.json, ignoring legacy source paths. Execute the finalized Action; return required JSON. This turn supersedes every prior response identity, including one remembered by a resumed session. Echo these current values exactly: ${responseIdentity}`;
+  return `Read ${manifestPath} every round; never skip this mutable index. Follow Origin order, read new Amendments, skip only immutable references already read this session. Complete and report the current User Input and Assignment; old passing checks do not satisfy new work. Resolve Responsibility IDs under ${path.dirname(executionResponsibilitySource('general'))}/<id>.json; ignore legacy paths. Return execution JSON. This turn supersedes every prior response identity: ${responseIdentity}`;
 }

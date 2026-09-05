@@ -12,6 +12,8 @@ On failure, the script returns a nonzero exit and the original failure message. 
 
 ## Responsibility and evidence boundaries
 
+Manifest.md is a mutable index and must be read on every assignment, including resumed Worker sessions. Exact-filename skipping applies only to immutable Origin files already read in the same session. Newly listed amendments must be read and applied. A previous passing checklist does not complete a new user-requested change; the Worker summary must address the current delta, including a specific evidence-backed explanation when no change is necessary.
+
 Responsibility history is append-only. Manifest Origin lists the active pointer files explicitly. The effective set is either General alone or specialized responsibilities inheriting General, never both. Continuation and repair preserve existing specialized capabilities; adding General to that set is a no-op. The Coordinator receives the existing effective set and returns a complete assignment. Override conflicts fail during packet materialization.
 
 VerificationPlan includes the previous output alongside selected evidence references. New Worker sessions read the required files, but should not rediscover supplied facts through broad Memory or historical directory searches. Repair retains the confirmed task and successful evidence, names a concrete changed approach, and targets the unresolved blocker.

@@ -6,9 +6,13 @@ Context revision: {{contextRevision}}
 
 ## Origin
 
-Read these in order. Skip a file only when you can point to having read that exact filename earlier in this session; if you are unsure, read it. An absent file has nothing for this round.
+Read Manifest.md on every assignment, including resumed sessions. This index changes when amendments are added; its filename is not evidence that its current contents were read. Never apply the skip rule to Manifest.md itself.
+
+Read the referenced files below in order. Skip an immutable referenced file only when you can point to having read that exact filename earlier in this session; if you are unsure, read it. Every newly listed Amendment must be read. An absent file has nothing for this round.
 
 An Amendment file supplements its named source. Apply the later file only where its explicit content changes or adds to the earlier one.
+
+Complete the current User Input and Assignment amendments before reporting delivered. Prior passing checks prove the earlier result, not completion of new requested work. State the outcome of this round's requested change in the final summary. An unchanged HEAD alone is not a reason to skip requested changes; if no change is needed, explain why the current request is already satisfied using current evidence.
 
 For an Origin directory, read its numbered files in order. Apply the same exact-filename skip rule to each file inside it.
 
