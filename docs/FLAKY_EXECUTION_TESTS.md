@@ -8,12 +8,12 @@ Observed while delivering unrelated materialization work on branches that change
 
 ## Measured rate
 
-| How it is run | Failures |
-|---|---|
-| The file alone, `node --experimental-strip-types --test tests/just-do-it-execution.test.ts` | 0 of 2 |
-| The suite, `npm run test:implementation-execution` (7 files, 122 tests) | 3 of 22 |
-| The full chain, `npm test` | 2 of 3 |
-| CI, run 33986130044 | 1 of 1 |
+| How it is run                                                                               | Failures |
+| ------------------------------------------------------------------------------------------- | -------- |
+| The file alone, `node --experimental-strip-types --test tests/just-do-it-execution.test.ts` | 0 of 2   |
+| The suite, `npm run test:implementation-execution` (7 files, 122 tests)                     | 3 of 22  |
+| The full chain, `npm test`                                                                  | 2 of 3   |
+| CI, run 33986130044                                                                         | 1 of 1   |
 
 The file passes in isolation and fails as part of the suite, and the full chain fails more often than the suite alone. That ordering is consistent with machine load widening the window, but the samples are small and I am not claiming it as the mechanism.
 
