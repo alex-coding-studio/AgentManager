@@ -23,7 +23,10 @@ import {
   type RunPhase,
 } from './types.ts';
 
-export const STOP_GRACE_MS = 15_000;
+export const STOP_GRACE_MS =
+  Number(process.env.PRAXIS_STOP_GRACE_MS) > 0
+    ? Number(process.env.PRAXIS_STOP_GRACE_MS)
+    : 15_000;
 const RUNNING_PUBLISH_THROTTLE_MS = 1_000;
 
 export type StopResult = 'confirmed' | 'unconfirmed';
@@ -52,6 +55,7 @@ export type ActiveRunReservation = {
   canceling: boolean;
   stopResult: StopResult | null;
   settled: boolean;
+  released: Promise<void>;
   attach: (handle: ActiveRunHandle) => void;
   setPhase: (phase: RunPhase, actor?: LogActor) => void;
   record: (input: RunLogInput) => RunLogEntry;
@@ -87,9 +91,12 @@ export function isCurrentRun(reservation: ActiveRunReservation) {
   return registry.get(reservation.key) === reservation;
 }
 
+const releases = new WeakMap<ActiveRunReservation, () => void>();
+
 export function releaseRun(reservation: ActiveRunReservation) {
   if (registry.get(reservation.key) === reservation)
     registry.delete(reservation.key);
+  releases.get(reservation)?.();
 }
 
 export function hostProcessAlive(pid: number) {
@@ -117,6 +124,10 @@ export type BeginRunInput<T> = {
   phase?: RunPhase;
   actor?: LogActor;
   validate: () => Promise<T>;
+  prepare?: (
+    reservation: ActiveRunReservation,
+    validated: T,
+  ) => Promise<() => Promise<void>>;
   persist: (
     reservation: ActiveRunReservation,
     validated: T,
@@ -124,12 +135,16 @@ export type BeginRunInput<T> = {
 };
 
 function running(
-  input: Omit<BeginRunInput<unknown>, 'validate' | 'persist'>,
+  input: Omit<BeginRunInput<unknown>, 'validate' | 'prepare' | 'persist'>,
   startedAt: string,
 ): ActiveRunReservation {
   const key = ownerKey(input.owner);
   let timer: ReturnType<typeof setTimeout> | null = null;
   let publishing: Promise<void> = Promise.resolve();
+  let markReleased: () => void = () => undefined;
+  const released = new Promise<void>((resolve) => {
+    markReleased = resolve;
+  });
   const reservation: ActiveRunReservation = {
     key,
     owner: input.owner,
@@ -149,6 +164,7 @@ function running(
     canceling: false,
     stopResult: null,
     settled: false,
+    released,
     attach(next) {
       handles.set(reservation, next);
     },
@@ -233,6 +249,7 @@ function running(
       return publishing;
     },
   };
+  releases.set(reservation, markReleased);
   function schedule() {
     if (timer) return;
     timer = setTimeout(() => {
@@ -249,8 +266,10 @@ function handleOf(reservation: ActiveRunReservation) {
 }
 
 export async function beginRun<T>(input: BeginRunInput<T>) {
-  const validated = await input.validate();
   const key = ownerKey(input.owner);
+  const settling = registry.get(key);
+  if (settling?.settled && settling.stopResult !== 'unconfirmed')
+    await settling.released;
   const existing = registry.get(key);
   if (existing)
     throw new ActiveRunConflictError(
@@ -260,9 +279,18 @@ export async function beginRun<T>(input: BeginRunInput<T>) {
     );
   const reservation = running(input, new Date().toISOString());
   registry.set(key, reservation);
-  let rollback: (() => Promise<void>) | null = null;
+  let validated: T;
+  try {
+    validated = await input.validate();
+  } catch (error) {
+    releaseRun(reservation);
+    throw error;
+  }
+  const rollbacks: Array<() => Promise<void>> = [];
   let logCreated = false;
   try {
+    if (input.prepare)
+      rollbacks.push(await input.prepare(reservation, validated));
     reservation.log = await createRunLog(input.logFile, {
       level: 'INFO',
       actor: 'HOST',
@@ -271,13 +299,14 @@ export async function beginRun<T>(input: BeginRunInput<T>) {
       message: input.startMessage,
     });
     logCreated = true;
-    rollback = await input.persist(reservation, validated);
+    rollbacks.push(await input.persist(reservation, validated));
     await publishLatestResponse(input.owner, reservation.document());
   } catch (error) {
     releaseRun(reservation);
-    if (rollback) await rollback().catch(() => undefined);
     if (logCreated)
       await rm(input.logFile, { force: true }).catch(() => undefined);
+    for (const rollback of rollbacks.reverse())
+      await rollback().catch(() => undefined);
     throw error;
   }
   return { reservation, validated };

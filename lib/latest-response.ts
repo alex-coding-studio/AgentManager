@@ -3,7 +3,13 @@ import type { DomainModelRunRecord } from './modules/domain-modeling/runs.ts';
 import type { TaskDecompositionRunRecord } from './modules/scope-decomposition/runs.ts';
 import type { WhatToDoRunRecord } from './modules/delivery-planning/runs.ts';
 
-export type LatestResponseTone = 'neutral' | 'attention' | 'warning' | 'error';
+import type {
+  RecoveryAction,
+  ResponseClassification,
+  ResponseStatus,
+} from './execution-observability/types.ts';
+
+export type LatestResponseTone = ResponseStatus;
 
 export type LatestResponseAttention =
   | 'none'
@@ -16,8 +22,25 @@ export type LatestResponsePresentation = {
   attention: LatestResponseAttention;
   statusLabel: string;
   summary: string;
-  icon: 'success' | 'neutral' | 'attention' | 'warning' | 'error';
+  icon: 'success' | 'warning' | 'error';
 };
+
+export function legacyClassification(
+  presentation: LatestResponsePresentation,
+): ResponseClassification {
+  const recovery: RecoveryAction[] =
+    presentation.tone === 'warning' &&
+    presentation.attention === 'action-required'
+      ? ['log', 'answer']
+      : ['log', 'continue'];
+  return {
+    status: presentation.tone,
+    title: presentation.statusLabel,
+    detail: presentation.summary,
+    supplementaryWarnings: [],
+    recovery,
+  };
+}
 
 export function renderLatestResponseActivityLog(
   activity: Array<{ at: string; summary: string }>,
@@ -48,7 +71,7 @@ export function latestWhatsNextResponse(
 ): LatestResponsePresentation {
   if (run.status === 'failed')
     return {
-      tone: 'error',
+      tone: 'fail',
       attention: 'action-required',
       statusLabel: 'Failed',
       summary: run.error?.trim() || 'The Agent Run failed.',
@@ -56,30 +79,30 @@ export function latestWhatsNextResponse(
     };
   if (run.status === 'canceled')
     return {
-      tone: 'neutral',
+      tone: 'warning',
       attention: 'none',
       statusLabel: 'Canceled',
       summary: 'The Agent Run was canceled. The graph was not changed.',
-      icon: 'neutral',
+      icon: 'warning',
     };
   if (run.result?.outcome === 'clarification')
     return {
-      tone: 'attention',
+      tone: 'warning',
       attention: 'action-required',
       statusLabel: 'Answer needed',
       summary: run.result.clarification.question,
-      icon: 'attention',
+      icon: 'warning',
     };
   if (run.result?.outcome === 'no-change')
     return {
-      tone: 'neutral',
+      tone: 'completed',
       attention: 'none',
       statusLabel: 'No change',
       summary: run.result.reason,
-      icon: 'neutral',
+      icon: 'success',
     };
   return {
-    tone: 'neutral',
+    tone: 'completed',
     attention: 'none',
     statusLabel: continuationLabel(
       run.result?.reflection.continuationAdvice.action,
@@ -94,7 +117,7 @@ export function latestDomainModelResponse(
 ): LatestResponsePresentation {
   if (run.status === 'failed')
     return {
-      tone: 'error',
+      tone: 'fail',
       attention: 'action-required',
       statusLabel: 'Failed',
       summary: run.error?.trim() || 'The Domain Model Agent failed.',
@@ -102,30 +125,30 @@ export function latestDomainModelResponse(
     };
   if (run.status === 'canceled')
     return {
-      tone: 'neutral',
+      tone: 'warning',
       attention: 'none',
       statusLabel: 'Canceled',
       summary: 'The Agent Run was canceled. The Domain Model was not changed.',
-      icon: 'neutral',
+      icon: 'warning',
     };
   if (run.result?.outcome === 'clarification')
     return {
-      tone: 'attention',
+      tone: 'warning',
       attention: 'action-required',
       statusLabel: 'Answer needed',
       summary: run.result.question,
-      icon: 'attention',
+      icon: 'warning',
     };
   if (run.result?.outcome === 'no-change')
     return {
-      tone: 'neutral',
+      tone: 'completed',
       attention: 'none',
       statusLabel: 'No change',
       summary: run.result.reason,
-      icon: 'neutral',
+      icon: 'success',
     };
   return {
-    tone: 'neutral',
+    tone: 'completed',
     attention: 'none',
     statusLabel: 'Applied',
     summary: run.result?.summary ?? 'The current Domain Model was updated.',
@@ -138,7 +161,7 @@ export function latestTaskDecompositionResponse(
 ): LatestResponsePresentation {
   if (run.status === 'failed')
     return {
-      tone: 'error',
+      tone: 'fail',
       attention: 'action-required',
       statusLabel: 'Failed',
       summary: run.error?.trim() || 'The Agent Run failed.',
@@ -146,38 +169,38 @@ export function latestTaskDecompositionResponse(
     };
   if (run.status === 'canceled')
     return {
-      tone: 'neutral',
+      tone: 'warning',
       attention: 'none',
       statusLabel: 'Canceled',
       summary: 'The Agent Run was canceled. The graph was not changed.',
-      icon: 'neutral',
+      icon: 'warning',
     };
   if (run.result?.outcome === 'clarification')
     return {
-      tone: 'attention',
+      tone: 'warning',
       attention: 'action-required',
       statusLabel: 'Answer needed',
       summary: run.result.clarification.question,
-      icon: 'attention',
+      icon: 'warning',
     };
   if (run.result?.outcome === 'insufficient-evidence')
     return {
-      tone: 'attention',
+      tone: 'warning',
       attention: 'action-required',
       statusLabel: 'More evidence needed',
       summary: run.result.missingEvidence.join(' · '),
-      icon: 'attention',
+      icon: 'warning',
     };
   if (run.result?.outcome === 'no-change')
     return {
-      tone: 'neutral',
+      tone: 'completed',
       attention: 'none',
       statusLabel: 'No change',
       summary: run.result.reason,
-      icon: 'neutral',
+      icon: 'success',
     };
   return {
-    tone: 'neutral',
+    tone: 'completed',
     attention: 'none',
     statusLabel: 'Review',
     summary:
@@ -194,7 +217,7 @@ export function latestWhatToDoResponse(
 ): LatestResponsePresentation {
   if (run.status === 'failed')
     return {
-      tone: 'error',
+      tone: 'fail',
       attention: 'action-required',
       statusLabel: 'Failed',
       summary: run.error?.trim() || 'The What to Do Agent Run failed.',
@@ -202,38 +225,38 @@ export function latestWhatToDoResponse(
     };
   if (run.status === 'canceled')
     return {
-      tone: 'neutral',
+      tone: 'warning',
       attention: 'none',
       statusLabel: 'Canceled',
       summary: 'The Agent Run was canceled. The Delivery Map was not changed.',
-      icon: 'neutral',
+      icon: 'warning',
     };
   if (run.result?.outcome === 'clarification')
     return {
-      tone: 'attention',
+      tone: 'warning',
       attention: 'action-required',
       statusLabel: 'Answer needed',
       summary: run.result.clarification.question,
-      icon: 'attention',
+      icon: 'warning',
     };
   if (run.result?.outcome === 'insufficient-evidence')
     return {
-      tone: 'attention',
+      tone: 'warning',
       attention: 'action-required',
       statusLabel: 'More evidence needed',
       summary: run.result.missingEvidence.join(' · '),
-      icon: 'attention',
+      icon: 'warning',
     };
   if (run.result?.outcome === 'no-change')
     return {
-      tone: 'neutral',
+      tone: 'completed',
       attention: 'none',
       statusLabel: 'No change',
       summary: run.result.reason,
-      icon: 'neutral',
+      icon: 'success',
     };
   return {
-    tone: 'neutral',
+    tone: 'completed',
     attention: 'none',
     statusLabel: 'Applied',
     summary: 'The Delivery Map was updated.',

@@ -84,6 +84,7 @@ function controlled() {
     }) => void;
     reject: (error: Error) => void;
     canceled: boolean;
+    lateOutput: string | null;
   }> = [];
   const transport = (
     agent: 'codex' | 'claude' | 'deepseek',
@@ -103,12 +104,26 @@ function controlled() {
       resolve = yes;
       reject = no;
     });
-    const call = { agent, input, resolve, reject, canceled: false };
+    const call = {
+      agent,
+      input,
+      resolve,
+      reject,
+      canceled: false,
+      lateOutput: null as string | null,
+    };
     calls.push(call);
     return {
       completion,
       cancel() {
         call.canceled = true;
+        if (call.lateOutput)
+          resolve({
+            agentSessionId: null,
+            finalOutput: call.lateOutput,
+            usage: null,
+          });
+        else reject(new Error('canceled'));
       },
     };
   };
@@ -930,6 +945,7 @@ void test('cancel releases the project and rejects late completion', async (t) =
   const { project, planningPath } = await fixture(t);
   const control = controlled();
   const run = await startWhatToDoRun(project, input(), control.transport);
+  control.calls[0]!.lateOutput = JSON.stringify(result(run));
   const canceled = await cancelWhatToDoRun(project, run.id);
   assert.equal(canceled.status, 'canceled');
   assert.match(
@@ -940,13 +956,9 @@ void test('cancel releases the project and rejects late completion', async (t) =
     /canceled/,
   );
   assert.equal(control.calls[0]!.canceled, true);
-  control.calls[0]!.resolve({
-    agentSessionId: null,
-    finalOutput: JSON.stringify(result(run)),
-    usage: null,
-  });
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal((await readWhatToDoRun(project, run.id)).status, 'canceled');
+  assert.equal(await readWhatToDoCurrentMap(project), null);
   const retry = await startWhatToDoRun(project, input(), control.transport);
   assert.equal(retry.status, 'running');
   await cancelWhatToDoRun(project, retry.id);

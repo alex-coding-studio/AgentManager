@@ -46,6 +46,17 @@ import {
 } from '../../agents/activity.ts';
 import type { RegisteredProject } from '../../project-registry.ts';
 import {
+  settleRun,
+  type ActiveRunReservation,
+} from '../../execution-observability/active-runs.ts';
+import {
+  agentActivityEntry,
+  beginModuleRun,
+  classifyModuleRun,
+  stopModuleRun,
+} from '../../execution-observability/module-run.ts';
+import type { ResponseClassification } from '../../execution-observability/types.ts';
+import {
   agentGraphContentPacket,
   userInputWorkspaceInput,
   writeAgentGraphContextWorkspace,
@@ -72,6 +83,10 @@ export type DomainModelRunRecord = {
   result: DomainModelAgentResult | null;
   change: DomainChange | null;
   error: string | null;
+  logRef?: string;
+  hostPid?: number;
+  cancelRequestedAt?: string;
+  response?: ResponseClassification;
 };
 type ActiveRun = {
   runId: string;
@@ -81,7 +96,9 @@ type ActiveRun = {
   terminal: DomainModelRunRecord | null;
   agentOutput: string | null;
   activity: Array<{ at: string; summary: string }>;
+  reservation: ActiveRunReservation | null;
 };
+const DOMAIN_MODEL_RETAINED = 'The Domain Model was not changed.';
 const runtime = globalThis as typeof globalThis & {
   domainModelRuns?: Map<string, ActiveRun>;
 };
@@ -116,11 +133,6 @@ export async function startDomainModelRun(
     ['domain-model'],
   );
   const key = project.planningPath;
-  if (activeRuns.has(key))
-    throw new PublicApiError(
-      'A Domain Model Agent Run is already active.',
-      409,
-    );
   const runId = `RUN-${randomUUID()}`;
   const startedAt = new Date().toISOString();
   const activity: ActiveRun['activity'] = [
@@ -134,27 +146,40 @@ export async function startDomainModelRun(
     terminal: null,
     agentOutput: null,
     activity,
+    reservation: null,
   };
-  activeRuns.set(key, active);
-  try {
-    const model = await readDomainModel(project);
-    const available = new Set([
-      ...model.entities.map((item) => item.id),
-      ...model.relationships.map((item) => item.id),
-    ]);
-    const selectedIds = [...new Set(input.selectedIds)];
-    if (selectedIds.some((id) => !available.has(id)))
-      throw new PublicApiError(
-        'A selected Domain element is no longer available.',
-        409,
+  let run!: DomainModelRunRecord;
+  let request!: DomainModelRequest;
+  let coordinatorRun: DomainModelRunRecord | undefined;
+  const { reservation } = await beginModuleRun(project, 'domain-model', {
+    runId,
+    subject: { kind: 'module', label: 'Domain Model' },
+    agentProfile: input.profile,
+    startMessage: `Domain Modeling Run started with ${input.profile.agent}`,
+    validate: async () => {
+      const model = await readDomainModel(project);
+      const available = new Set([
+        ...model.entities.map((item) => item.id),
+        ...model.relationships.map((item) => item.id),
+      ]);
+      const selectedIds = [...new Set(input.selectedIds)];
+      if (selectedIds.some((id) => !available.has(id)))
+        throw new PublicApiError(
+          'A selected Domain element is no longer available.',
+          409,
+        );
+      const previousSummary = await latestSummary(project);
+      coordinatorRun = (await listLatestDomainModelRuns(project, 20)).find(
+        (candidate) =>
+          canContinueDomainModelSession(candidate, model, input.profile),
       );
-    const previousSummary = await latestSummary(project);
-    const coordinatorRun = (await listLatestDomainModelRuns(project, 20)).find(
-      (run) => canContinueDomainModelSession(run, model, input.profile),
-    );
-    const savedInstructions = await readDomainModelInstructions(project);
-    const contextPath = path.join(await runPath(project, runId), 'context');
-    try {
+      const savedInstructions = await readDomainModelInstructions(project);
+      return { model, selectedIds, previousSummary, savedInstructions };
+    },
+    persist: async (reservation, validated) => {
+      const { model, selectedIds, previousSummary, savedInstructions } =
+        validated;
+      const contextPath = path.join(await runPath(project, runId), 'context');
       const userInput = userInputWorkspaceInput(
         `domain-model/runs/${runId}/context/input/user-input.md`,
         instruction,
@@ -177,7 +202,7 @@ export async function startDomainModelRun(
         ],
       );
       const content = agentGraphContentPacket(workspace.manifest);
-      const request = createDomainModelRequest({
+      request = createDomainModelRequest({
         requestId: runId,
         content,
         selectedIds,
@@ -185,7 +210,7 @@ export async function startDomainModelRun(
         previousSummary,
         contextRoot: await relativeContextRoot(project, contextPath),
       });
-      const run: DomainModelRunRecord = {
+      run = {
         schemaVersion: 1,
         id: runId,
         status: 'running',
@@ -204,46 +229,51 @@ export async function startDomainModelRun(
         result: null,
         change: null,
         error: null,
+        logRef: reservation.logRef,
+        hostPid: process.pid,
       };
       await writeRun(project, run, {
         'request.json': JSON.stringify(request),
       });
-      const agentRun = transport(input.profile.agent, {
-        workingDirectory: project.rootPath,
-        protectedPath: project.planningPath,
-        prompt: domainModelPrompt(request, {
-          continuesExistingSession: Boolean(coordinatorRun),
-        }),
-        model: input.profile.model || undefined,
-        effort: input.profile.effort || undefined,
-        resumeSessionId: coordinatorRun?.agentSessionId ?? undefined,
-        sessionUsageBaseline:
-          coordinatorRun?.sessionUsage ?? coordinatorRun?.usage ?? undefined,
-        access: 'read-only',
-        disableDelegation: true,
-        isolatedProcessGroup: true,
-        onActivity: (event) => recordActivity(activity, event),
-      });
-      active.cancel = agentRun.cancel;
-      void agentRun.completion
-        .then((result) => settle(project, request, run, active, result))
-        .catch((error: unknown) => fail(project, run, active, error))
-        .finally(() => {
-          if (!active.canceled && activeRuns.get(key) === active)
-            activeRuns.delete(key);
-        });
-      return run;
-    } catch (error) {
-      await rm(await runPath(project, runId, false), {
-        recursive: true,
-        force: true,
-      }).catch(() => undefined);
-      throw error;
-    }
-  } catch (error) {
-    if (activeRuns.get(key) === active) activeRuns.delete(key);
-    throw error;
-  }
+      return async () => {
+        await rm(await runPath(project, runId, false), {
+          recursive: true,
+          force: true,
+        }).catch(() => undefined);
+      };
+    },
+  });
+  active.reservation = reservation;
+  activeRuns.set(key, active);
+  const agentRun = transport(input.profile.agent, {
+    workingDirectory: project.rootPath,
+    protectedPath: project.planningPath,
+    prompt: domainModelPrompt(request, {
+      continuesExistingSession: Boolean(coordinatorRun),
+    }),
+    model: input.profile.model || undefined,
+    effort: input.profile.effort || undefined,
+    resumeSessionId: coordinatorRun?.agentSessionId ?? undefined,
+    sessionUsageBaseline:
+      coordinatorRun?.sessionUsage ?? coordinatorRun?.usage ?? undefined,
+    access: 'read-only',
+    disableDelegation: true,
+    isolatedProcessGroup: true,
+    onActivity: (event) => {
+      recordActivity(activity, event);
+      reservation.record(agentActivityEntry(event));
+    },
+  });
+  active.cancel = agentRun.cancel;
+  reservation.attach(agentRun);
+  void agentRun.completion
+    .then((result) => settle(project, request, run, active, result))
+    .catch((error: unknown) => fail(project, run, active, error))
+    .finally(() => {
+      if (!active.canceled && activeRuns.get(key) === active)
+        activeRuns.delete(key);
+    });
+  return run;
 }
 
 export function canContinueDomainModelSession(
@@ -274,21 +304,35 @@ export async function cancelDomainModelRun(
   if (active.settling)
     throw new PublicApiError('The Domain Model Run is already finishing.', 409);
   active.canceled = true;
-  active.cancel();
+  const reservation = active.reservation;
+  const interruptedPhase = reservation?.phase ?? 'executing';
+  const stop = reservation ? await stopModuleRun(reservation) : 'confirmed';
+  if (!reservation) active.cancel();
   const run = await readDomainModelRun(project, runId);
+  const classification = classifyModuleRun(
+    stop === 'confirmed'
+      ? {
+          runState: 'canceled',
+          interruptedPhase,
+          interruptedActor: 'AGENT',
+          retainedNote: DOMAIN_MODEL_RETAINED,
+        }
+      : { runState: 'termination-unconfirmed', interruptedActor: 'AGENT' },
+  );
   const canceled: DomainModelRunRecord = {
     ...run,
-    status: 'canceled',
+    status: stop === 'confirmed' ? 'canceled' : 'failed',
     endedAt: new Date().toISOString(),
     activity: [...active.activity],
-    error: null,
+    error: stop === 'confirmed' ? null : classification.detail,
+    response: classification,
   };
   active.terminal = canceled;
   await writeRun(project, canceled, {
     'activity.jsonl': activityJsonl(canceled.activity),
-    'summary.md':
-      '# Canceled\n\nThe Agent Run was canceled. The Domain Model was not changed.\n',
+    'summary.md': `# ${classification.title}\n\n${classification.detail}\n`,
   });
+  if (reservation) await settleRun(reservation, { classification });
   if (activeRuns.get(project.planningPath) === active)
     activeRuns.delete(project.planningPath);
   return canceled;
@@ -378,6 +422,7 @@ async function settle(
   if (active.canceled) return;
   active.settling = true;
   active.agentOutput = agent.finalOutput;
+  active.reservation?.setPhase('finalizing', 'HOST');
   let result = parseDomainModelResult(agent.finalOutput, request);
   let change: DomainChange | null = null;
   if (result.outcome === 'applied') {
@@ -400,6 +445,23 @@ async function settle(
         reason: 'The current Domain Model already represents this request.',
       };
   }
+  const classification = classifyModuleRun(
+    result.outcome === 'applied'
+      ? { runState: 'settled', outcome: 'applied', summary: result.summary }
+      : result.outcome === 'no-change'
+        ? {
+            runState: 'settled',
+            outcome: 'no-change',
+            summary: result.summary,
+            reason: result.reason,
+          }
+        : {
+            runState: 'settled',
+            outcome: 'clarification',
+            question: result.question,
+            summary: result.summary,
+          },
+  );
   const run: DomainModelRunRecord = {
     ...original,
     status: 'succeeded',
@@ -411,6 +473,7 @@ async function settle(
     result,
     change,
     error: null,
+    response: classification,
   };
   active.terminal = run;
   await writeRun(project, run, {
@@ -419,6 +482,11 @@ async function settle(
     'change.json': JSON.stringify(change),
     'summary.md': summaryMarkdown(result, change),
   });
+  if (active.reservation)
+    await settleRun(active.reservation, {
+      classification,
+      endedAt: run.endedAt ?? undefined,
+    });
 }
 
 async function fail(
@@ -439,19 +507,39 @@ async function fail(
     }).catch(() => undefined);
     return;
   }
+  const message = error instanceof Error ? error.message : String(error);
+  active.reservation?.record({
+    level: 'ERROR',
+    actor: 'HOST',
+    phase: 'FINALIZE',
+    event: active.agentOutput ? 'result.rejected' : 'agent.failed',
+    message,
+  });
+  const classification = classifyModuleRun({
+    runState: 'settled',
+    failure: {
+      kind:
+        error instanceof PublicApiError && error.status === 409
+          ? 'persistence'
+          : active.agentOutput
+            ? 'parse'
+            : 'transport',
+      message,
+    },
+  });
   const run: DomainModelRunRecord = {
     ...original,
     status: 'failed',
     endedAt: new Date().toISOString(),
     activity: [...active.activity],
-    error:
-      'The Domain Model Agent did not complete. The current model was not changed.',
+    error: `${classification.detail} ${DOMAIN_MODEL_RETAINED}`,
+    response: classification,
   };
   active.terminal = run;
   const files: Record<string, string> = {
     'activity.jsonl': activityJsonl(run.activity),
     'failure.txt': redactActivity(String(error)).slice(0, 100_000),
-    'summary.md': `# Failed\n\n${run.error}\n`,
+    'summary.md': `# ${classification.title}\n\n${run.error}\n`,
   };
   if (active.agentOutput)
     files['agent-output.txt'] = redactRecord(active.agentOutput).slice(
@@ -459,6 +547,10 @@ async function fail(
       1_500_000,
     );
   await writeRun(project, run, files).catch(() => undefined);
+  if (active.reservation)
+    await settleRun(active.reservation, { classification }).catch(
+      () => undefined,
+    );
 }
 
 async function domainModelContextInputs(

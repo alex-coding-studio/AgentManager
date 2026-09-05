@@ -15,6 +15,9 @@ export function AgentGraphComposerCard({
   collapsedIcon,
   collapsedLabel,
   descriptionClassName,
+  running = false,
+  collapsed: controlledCollapsed,
+  onCollapsedChange,
 }: {
   title: ReactNode;
   description?: ReactNode;
@@ -24,9 +27,33 @@ export function AgentGraphComposerCard({
   collapsedIcon?: ReactNode;
   collapsedLabel?: string;
   descriptionClassName?: string;
+  running?: boolean;
+  collapsed?: boolean;
+  onCollapsedChange?: (collapsed: boolean) => void;
 }) {
   const { t } = useUiText();
-  const [collapsed, setCollapsed] = useState(false);
+  const [localCollapsed, setLocalCollapsed] = useState(false);
+  const collapsed = controlledCollapsed ?? localCollapsed;
+  const setCollapsed = (next: boolean) => {
+    if (onCollapsedChange) onCollapsedChange(next);
+    else setLocalCollapsed(next);
+  };
+  if (running)
+    return (
+      <output
+        aria-label={t('Running')}
+        data-running="true"
+        className={cn(
+          'absolute right-5 bottom-5 z-10 flex size-10 items-center justify-center rounded-xl border border-sky-500/40 bg-background shadow-[0_12px_35px_rgb(15_23_42/12%)]',
+          className,
+        )}
+      >
+        <span className="relative flex size-3">
+          <span className="absolute inline-flex size-full animate-ping rounded-full bg-sky-400 opacity-75 motion-reduce:animate-none" />
+          <span className="relative inline-flex size-3 rounded-full bg-sky-500" />
+        </span>
+      </output>
+    );
   return (
     <>
       <Button

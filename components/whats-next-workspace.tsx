@@ -20,6 +20,10 @@ import {
 } from '@/components/agent-composer-shell';
 import { AgentRunControls } from '@/components/agent-run-controls';
 import { AgentGraphComposerCard } from '@/components/agent-graph-composer-card';
+import { LatestResponseCard } from '@/components/latest-response-card';
+import { useLatestResponse } from '@/hooks/use-latest-response';
+import { useSurfacePreference } from '@/hooks/use-surface-preference';
+import type { LatestResponseDocument } from '@/lib/execution-observability/types';
 import { AgentGraphIntentionSelect } from '@/components/agent-graph-intention-select';
 import { AgentGraphMotionSelect } from '@/components/agent-graph-motion-select';
 import { sameModelSelection, type AgentProfile } from '@/lib/agents/profile';
@@ -80,14 +84,8 @@ import {
   whatsNextMotionRegistry,
 } from '@/lib/modules/product-discovery/intention';
 import { toggleWhatsNextSelection } from '@/lib/modules/product-discovery/selection';
-import {
-  LatestResponse,
-  LatestResponseActions,
-} from '@/components/latest-response';
-import {
-  latestWhatsNextResponse,
-  renderLatestResponseActivityLog,
-} from '@/lib/latest-response';
+import { LatestResponseActions } from '@/components/latest-response';
+import { latestWhatsNextResponse } from '@/lib/latest-response';
 import {
   proposalFocusNodeIds,
   reconcileProposalRuns,
@@ -143,11 +141,13 @@ function WhatsNextCanvas({
   folders,
   initialNodes,
   initialRuns = [],
+  initialResponse = null,
   developmentPreview = false,
   developmentTransitionRun,
   developmentCompletionRun,
 }: {
   projectId: string;
+  initialResponse?: LatestResponseDocument | null;
   folders: ContextBrowserFolder[];
   initialNodes: TaskGraphNode[];
   initialRuns?: WhatsNextRunRecord[];
@@ -367,6 +367,21 @@ function WhatsNextCanvas({
         : item,
     );
   const hasGraph = nodes.length > 0;
+  const moduleResponse = useLatestResponse(
+    projectId,
+    'whats-next',
+    initialResponse,
+  );
+  const [responseCollapsed, setResponseCollapsed] = useSurfacePreference(
+    projectId,
+    'whats-next',
+    'latest-response',
+  );
+  const [composerCollapsed, setComposerCollapsed] = useSurfacePreference(
+    projectId,
+    'whats-next',
+    'composer',
+  );
   const latestResponse = [...runs]
     .reverse()
     .find(
@@ -1214,50 +1229,38 @@ function WhatsNextCanvas({
         }
       />
 
-      {latestResponse && latestResponsePresentation ? (
-        <LatestResponse
-          key={latestResponse.runId}
-          className="absolute top-4 left-4 z-10 w-[min(320px,calc(100%-2rem))]"
-          title={t('Latest Response')}
-          statusLabel={t(latestResponsePresentation.statusLabel)}
-          summary={t(latestResponsePresentation.summary)}
-          tone={latestResponsePresentation.tone}
-          attention={latestResponsePresentation.attention}
-          icon={latestResponsePresentation.icon}
+      {moduleResponse.document ? (
+        <LatestResponseCard
+          document={moduleResponse.document}
+          collapsed={responseCollapsed}
+          onCollapsedChange={setResponseCollapsed}
+          onCancel={() => void cancelRun(moduleResponse.document!.runId)}
+          className="w-[min(320px,calc(100%-2rem))]"
         >
-          <LatestResponseActions
-            responseLabel={t('Response')}
-            summaryLabel={t('Summary')}
-            logLabel={t('Log')}
-            onOpenResponse={() =>
-              setPreview({
-                title: t('Latest Response'),
-                path: `whats-next/runs/${latestResponse.runId}/response.md`,
-                markdown: latestResponse.result
-                  ? renderWhatsNextResponseMarkdown(latestResponse.result)
-                  : `# ${t('Response')}\n\n${t(latestResponsePresentation.summary)}\n`,
-              })
-            }
-            onOpenSummary={() =>
-              void openMarkdown(
-                `whats-next/runs/${latestResponse.runId}/summary.md`,
-                t('Summary'),
-              )
-            }
-            onOpenLog={() =>
-              setPreview({
-                title: t('Activity Log'),
-                path: `whats-next/runs/${latestResponse.runId}/activity.jsonl`,
-                markdown: renderLatestResponseActivityLog(
-                  latestResponse.activity ?? [],
-                  t('Activity Log'),
-                  t('No recorded activity.'),
-                  t,
-                ),
-              })
-            }
-          />
-        </LatestResponse>
+          {latestResponse &&
+          latestResponsePresentation &&
+          latestResponse.runId === moduleResponse.document.runId ? (
+            <LatestResponseActions
+              responseLabel={t('Response')}
+              summaryLabel={t('Summary')}
+              onOpenResponse={() =>
+                setPreview({
+                  title: t('Latest Response'),
+                  path: `whats-next/runs/${latestResponse.runId}/response.md`,
+                  markdown: latestResponse.result
+                    ? renderWhatsNextResponseMarkdown(latestResponse.result)
+                    : `# ${t('Response')}\n\n${t(latestResponsePresentation.summary)}\n`,
+                })
+              }
+              onOpenSummary={() =>
+                void openMarkdown(
+                  `whats-next/runs/${latestResponse.runId}/summary.md`,
+                  t('Summary'),
+                )
+              }
+            />
+          ) : null}
+        </LatestResponseCard>
       ) : null}
 
       <div className="pointer-events-none absolute top-4 left-1/2 -translate-x-1/2">
@@ -1271,6 +1274,9 @@ function WhatsNextCanvas({
       {combineIds.length >= 1 ? (
         <AgentGraphComposerCard
           title={`${combineIds.length} ${combineIds.length === 1 ? t('card') : t('cards')} ${t('selected')}`}
+          running={moduleResponse.running}
+          collapsed={composerCollapsed}
+          onCollapsedChange={setComposerCollapsed}
         >
           <div className="grid grid-cols-2 gap-2">
             <AgentGraphIntentionSelect
@@ -1413,6 +1419,8 @@ function WhatsNextCanvas({
             />
           </AgentComposerShell>
         </AgentGraphComposerCard>
+      ) : moduleResponse.running ? (
+        <AgentGraphComposerCard title="" running />
       ) : null}
 
       <Dialog

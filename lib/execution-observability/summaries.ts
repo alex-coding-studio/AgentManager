@@ -17,6 +17,7 @@ export type HostSummaryContext = {
   interruptedPhase?: RunPhase | null;
   interruptedActor?: LogActor | null;
   retained?: RetainedEffects | null;
+  retainedNote?: string | null;
 };
 
 export const COORDINATOR_FALLBACK = {
@@ -25,14 +26,22 @@ export const COORDINATOR_FALLBACK = {
     'Praxis preserved the original error and current effects but could not produce a reliable summary.',
 };
 
-const phaseDescriptions: Record<RunPhase, string> = {
-  coordinating: 'Coordinator preparation',
-  executing: 'Worker execution',
-  verifying: 'verification',
-  publishing: 'publishing',
-  finalizing: 'finalization',
-  stopping: 'stopping',
-};
+function describePhase(phase: RunPhase, actor: LogActor | null | undefined) {
+  switch (phase) {
+    case 'coordinating':
+      return 'Coordinator preparation';
+    case 'executing':
+      return actor === 'AGENT' ? 'Agent execution' : 'Worker execution';
+    case 'verifying':
+      return 'verification';
+    case 'publishing':
+      return 'publishing';
+    case 'finalizing':
+      return 'finalization';
+    default:
+      return 'stopping';
+  }
+}
 
 export function retainedEffectsSentence(
   retained: RetainedEffects | null | undefined,
@@ -80,18 +89,20 @@ export function hostSummary(
   context: HostSummaryContext = {},
 ) {
   const phase = context.interruptedPhase
-    ? phaseDescriptions[context.interruptedPhase]
+    ? describePhase(context.interruptedPhase, context.interruptedActor)
     : null;
+  const retained =
+    context.retainedNote ?? retainedEffectsSentence(context.retained);
   switch (kind) {
     case 'canceled':
       return {
         title: 'Canceled',
-        detail: `You canceled this Run${phase ? ` during ${phase}` : ''}. ${retainedEffectsSentence(context.retained)}`,
+        detail: `You canceled this Run${phase ? ` during ${phase}` : ''}. ${retained}`,
       };
     case 'timed-out':
       return {
         title: 'Execution timed out',
-        detail: `The Run exceeded its time limit${phase ? ` during ${phase}` : ''} and was stopped. ${retainedEffectsSentence(context.retained)}`,
+        detail: `The Run exceeded its time limit${phase ? ` during ${phase}` : ''} and was stopped. ${retained}`,
       };
     case 'ownership-lost':
       return {

@@ -24,11 +24,24 @@ import {
   readdir,
   readFile,
   rename,
+  rm,
   writeFile,
 } from 'node:fs/promises';
 import path from 'node:path';
 import trash from 'trash';
 import type { RegisteredProject } from '../../project-registry.ts';
+import {
+  isCurrentRun,
+  settleRun,
+  type ActiveRunReservation,
+} from '../../execution-observability/active-runs.ts';
+import {
+  agentActivityEntry,
+  beginModuleRun,
+  classifyModuleRun,
+  stopModuleRun,
+} from '../../execution-observability/module-run.ts';
+import type { ResponseClassification } from '../../execution-observability/types.ts';
 import {
   TASK_DECOMPOSITION_HARNESS_ID,
   TASK_DECOMPOSITION_HARNESS_REVISION,
@@ -160,6 +173,10 @@ export type TaskDecompositionRunRecord = {
   activity: AgentGraphActivity[];
   result: TaskDecompositionHarnessResult | null;
   error: string | null;
+  logRef?: string;
+  hostPid?: number;
+  cancelRequestedAt?: string;
+  response?: ResponseClassification;
 };
 
 type RunRequest = {
@@ -182,22 +199,26 @@ type ActiveRun = {
   record: TaskDecompositionRunRecord;
   agent: LocalAgentRun;
   activityRecorder: AgentGraphActivityRecorder;
+  reservation: ActiveRunReservation | null;
 };
+const TASK_DECOMPOSITION_RETAINED = 'No Candidate or Formal Node was changed.';
 
 const activeRuns = getActiveRuns();
 
 export async function startTaskDecompositionRun(
   project: RegisteredProject,
   input: RunRequest,
+  launch: typeof startLocalAgentRun = startLocalAgentRun,
 ) {
   return mutateTaskDecomposition(project, () =>
-    startTaskDecompositionRunUnlocked(project, input),
+    startTaskDecompositionRunUnlocked(project, input, launch),
   );
 }
 
 async function startTaskDecompositionRunUnlocked(
   project: RegisteredProject,
   input: RunRequest,
+  launch: typeof startLocalAgentRun,
 ) {
   validateRunRequest(input);
   const profile: AgentProfile = {
@@ -293,15 +314,6 @@ async function startTaskDecompositionRunUnlocked(
     node.derivedFrom?.includes(sourceNode.id),
   );
   if (
-    [...activeRuns.values()].some(
-      (active) =>
-        active.record.sourceNodeId === sourceNode.id &&
-        ['running', 'validating'].includes(active.record.status),
-    )
-  ) {
-    throw new PublicApiError('This Node already has an active Agent Run.', 409);
-  }
-  if (
     input.recomposeCandidateIds?.length &&
     (input.operation !== undefined ||
       input.revisionRunId !== undefined ||
@@ -333,175 +345,205 @@ async function startTaskDecompositionRunUnlocked(
   const sessionId = coordinatorRun?.sessionId ?? `SESSION-${randomUUID()}`;
   const requestId = `REQUEST-${randomUUID()}`;
   const runPath = taskDecompositionRunPath(project, runId);
-  const resourcesPath = path.join(runPath, 'resources');
-  await mkdir(resourcesPath, { recursive: true });
-
-  const uploadedResources = await saveUploadedResources(
+  let record!: TaskDecompositionRunRecord;
+  let prompt!: string;
+  let resources!: ContextWorkspaceEntry[];
+  let activity!: AgentGraphActivity[];
+  const { reservation } = await beginModuleRun(project, 'task-decomposition', {
     runId,
-    resourcesPath,
-    input.files,
-  );
-  const featureContext = await readTaskDecompositionContext(project);
-  const recomposeContexts = await recomposeCandidateContexts(
-    project,
-    recomposeWorkingSet,
-  );
-  const contextInputs = await collectContextWorkspaceInputs(
-    project,
-    sourceNode,
-    nodes,
-    productContextResources,
-    uploadedResources,
-    featureContext.attachments.map((attachment) => attachment.fileName),
-    revisionTarget
-      ? {
-          outputPath: `task-decomposition/runs/${revisionTarget.run.runId}/candidates/${revisionTarget.candidate.candidateId}/output.md`,
-          resourcePaths: revisionTarget.candidate.resources.map(
-            (resource) => resource.path,
-          ),
-        }
-      : undefined,
-    recomposeContexts,
-  );
-  const userInput = userInputWorkspaceInput(
-    `task-decomposition/runs/${runId}/context/input/user-input.md`,
-    input.instruction,
-  );
-  const moduleInstructions = featureContext.instructions.trim()
-    ? {
-        role: 'primary' as const,
-        kind: 'module-instructions',
-        logicalPath: 'task-decomposition/instructions.md',
-        content: featureContext.instructions,
-      }
-    : null;
-  const contextWorkspace = await writeAgentGraphContextWorkspace(
-    runPath,
-    assembleAgentGraphWorkspaceInputs(userInput, [
-      ...(moduleInstructions ? [moduleInstructions] : []),
-      ...contextInputs,
-    ]),
-  );
-  const content = agentGraphContentPacket(contextWorkspace.manifest);
-  const resources = [
-    ...contextWorkspace.manifest.primary,
-    ...contextWorkspace.manifest.related,
-  ];
-  const requestIdentity = {
-    sessionId,
-    requestId,
-    inputFingerprint: '',
-  };
-  const packetWithoutFingerprint = {
-    request: requestIdentity,
-    operation,
-    intention,
-    motion,
-    content,
-    moduleInstructionsState: moduleInstructions ? 'present' : 'cleared',
-    graphMap: continuesExistingSession ? undefined : nodes.map(graphMapEntry),
-    currentNode: continuesExistingSession ? undefined : sourceNode,
-    contextWorkspace: {
-      root: contextWorkspace.root,
-      indexPath: contextWorkspace.indexPath,
-    },
-    revisionTarget: revisionTarget
-      ? candidatePromptView(revisionTarget.candidate)
-      : null,
-    workingSet:
-      operation === 'recompose-candidates'
-        ? recomposeWorkingSet.map(candidatePromptView)
-        : undefined,
-    reservedCandidateIds: reservedCandidateIds.filter(
-      (candidateId) => candidateId !== revisionTarget?.candidate.candidateId,
-    ),
-    previousProposalAliases: coordinatorRun?.result?.candidateAliases ?? {},
-    existingChildren:
-      operation === 'append-candidates'
-        ? continuesExistingSession
-          ? [
-              ...formalChildren.map((node) => ({
-                id: node.id,
-                updatedAt: node.updatedAt,
-                acceptedFromCandidateId: node.provenance?.candidateId ?? null,
-              })),
-              ...existingCandidateChildren.map((candidate) => ({
-                candidateId: candidate.candidateId,
-                revision: candidate.revision,
-              })),
-            ]
-          : [...formalChildren.map(graphMapEntry), ...existingCandidateChildren]
-        : undefined,
-  };
-  requestIdentity.inputFingerprint = createHash('sha256')
-    .update(JSON.stringify(packetWithoutFingerprint))
-    .digest('hex');
-  const prompt = continuesExistingSession
-    ? buildTaskDecompositionContinuationPrompt(packetWithoutFingerprint)
-    : buildTaskDecompositionPrompt(packetWithoutFingerprint, intention, motion);
-  const timestamp = new Date().toISOString();
-  const activity = initialAgentGraphActivity(
-    'Decomposing the selected scope.',
-    timestamp,
-  );
-  await writeFile(
-    path.join(runPath, 'request.json'),
-    `${JSON.stringify(
-      {
+    subject: { kind: 'node', label: sourceNode.title, id: sourceNode.id },
+    agentProfile: profile,
+    startMessage: `Scope Decomposition Run started for ${sourceNode.title} with ${input.agent}`,
+    validate: async () => undefined,
+    persist: async (reservation) => {
+      const resourcesPath = path.join(runPath, 'resources');
+      await mkdir(resourcesPath, { recursive: true });
+
+      const uploadedResources = await saveUploadedResources(
+        runId,
+        resourcesPath,
+        input.files,
+      );
+      const featureContext = await readTaskDecompositionContext(project);
+      const recomposeContexts = await recomposeCandidateContexts(
+        project,
+        recomposeWorkingSet,
+      );
+      const contextInputs = await collectContextWorkspaceInputs(
+        project,
+        sourceNode,
+        nodes,
+        productContextResources,
+        uploadedResources,
+        featureContext.attachments.map((attachment) => attachment.fileName),
+        revisionTarget
+          ? {
+              outputPath: `task-decomposition/runs/${revisionTarget.run.runId}/candidates/${revisionTarget.candidate.candidateId}/output.md`,
+              resourcePaths: revisionTarget.candidate.resources.map(
+                (resource) => resource.path,
+              ),
+            }
+          : undefined,
+        recomposeContexts,
+      );
+      const userInput = userInputWorkspaceInput(
+        `task-decomposition/runs/${runId}/context/input/user-input.md`,
+        input.instruction,
+      );
+      const moduleInstructions = featureContext.instructions.trim()
+        ? {
+            role: 'primary' as const,
+            kind: 'module-instructions',
+            logicalPath: 'task-decomposition/instructions.md',
+            content: featureContext.instructions,
+          }
+        : null;
+      const contextWorkspace = await writeAgentGraphContextWorkspace(
+        runPath,
+        assembleAgentGraphWorkspaceInputs(userInput, [
+          ...(moduleInstructions ? [moduleInstructions] : []),
+          ...contextInputs,
+        ]),
+      );
+      const content = agentGraphContentPacket(contextWorkspace.manifest);
+      resources = [
+        ...contextWorkspace.manifest.primary,
+        ...contextWorkspace.manifest.related,
+      ];
+      const requestIdentity = {
+        sessionId,
+        requestId,
+        inputFingerprint: '',
+      };
+      const packetWithoutFingerprint = {
+        request: requestIdentity,
+        operation,
+        intention,
+        motion,
+        content,
+        moduleInstructionsState: moduleInstructions ? 'present' : 'cleared',
+        graphMap: continuesExistingSession
+          ? undefined
+          : nodes.map(graphMapEntry),
+        currentNode: continuesExistingSession ? undefined : sourceNode,
+        contextWorkspace: {
+          root: contextWorkspace.root,
+          indexPath: contextWorkspace.indexPath,
+        },
+        revisionTarget: revisionTarget
+          ? candidatePromptView(revisionTarget.candidate)
+          : null,
+        workingSet:
+          operation === 'recompose-candidates'
+            ? recomposeWorkingSet.map(candidatePromptView)
+            : undefined,
+        reservedCandidateIds: reservedCandidateIds.filter(
+          (candidateId) =>
+            candidateId !== revisionTarget?.candidate.candidateId,
+        ),
+        previousProposalAliases: coordinatorRun?.result?.candidateAliases ?? {},
+        existingChildren:
+          operation === 'append-candidates'
+            ? continuesExistingSession
+              ? [
+                  ...formalChildren.map((node) => ({
+                    id: node.id,
+                    updatedAt: node.updatedAt,
+                    acceptedFromCandidateId:
+                      node.provenance?.candidateId ?? null,
+                  })),
+                  ...existingCandidateChildren.map((candidate) => ({
+                    candidateId: candidate.candidateId,
+                    revision: candidate.revision,
+                  })),
+                ]
+              : [
+                  ...formalChildren.map(graphMapEntry),
+                  ...existingCandidateChildren,
+                ]
+            : undefined,
+      };
+      requestIdentity.inputFingerprint = createHash('sha256')
+        .update(JSON.stringify(packetWithoutFingerprint))
+        .digest('hex');
+      prompt = continuesExistingSession
+        ? buildTaskDecompositionContinuationPrompt(packetWithoutFingerprint)
+        : buildTaskDecompositionPrompt(
+            packetWithoutFingerprint,
+            intention,
+            motion,
+          );
+      const timestamp = new Date().toISOString();
+      activity = initialAgentGraphActivity(
+        'Decomposing the selected scope.',
+        timestamp,
+      );
+      await writeFile(
+        path.join(runPath, 'request.json'),
+        `${JSON.stringify(
+          {
+            schemaVersion: 1,
+            createdAt: timestamp,
+            profile,
+            packet: packetWithoutFingerprint,
+            prompt,
+          },
+          null,
+          2,
+        )}\n`,
+        { flag: 'wx' },
+      );
+      record = {
         schemaVersion: 1,
-        createdAt: timestamp,
+        runId,
+        sessionId,
+        requestId,
+        agentSessionId: null,
+        agentSessionMode: 'persistent',
+        sourceNodeId: sourceNode.id,
+        intention,
+        motion,
+        operation,
+        recomposeCandidateIds:
+          operation === 'recompose-candidates'
+            ? recomposeWorkingSet.map((candidate) => candidate.candidateId)
+            : undefined,
+        parentRunId: coordinatorCandidate?.runId,
+        revisionOf: revisionTarget?.candidate.candidateId,
+        status: 'running',
+        transport,
         profile,
-        packet: packetWithoutFingerprint,
-        prompt,
-      },
-      null,
-      2,
-    )}\n`,
-    { flag: 'wx' },
-  );
-  const record: TaskDecompositionRunRecord = {
-    schemaVersion: 1,
-    runId,
-    sessionId,
-    requestId,
-    agentSessionId: null,
-    agentSessionMode: 'persistent',
-    sourceNodeId: sourceNode.id,
-    intention,
-    motion,
-    operation,
-    recomposeCandidateIds:
-      operation === 'recompose-candidates'
-        ? recomposeWorkingSet.map((candidate) => candidate.candidateId)
-        : undefined,
-    parentRunId: coordinatorCandidate?.runId,
-    revisionOf: revisionTarget?.candidate.candidateId,
-    status: 'running',
-    transport,
-    profile,
-    harness: {
-      id: TASK_DECOMPOSITION_HARNESS_ID,
-      revision: TASK_DECOMPOSITION_HARNESS_REVISION,
+        harness: {
+          id: TASK_DECOMPOSITION_HARNESS_ID,
+          revision: TASK_DECOMPOSITION_HARNESS_REVISION,
+        },
+        input: {
+          userInputPath: content.input?.workspacePath ?? null,
+          moduleInstructionsState: moduleInstructions ? 'present' : 'cleared',
+          resourcePaths: resources.map((resource) => resource.logicalPath),
+          requestArtifact: 'request.json',
+        },
+        inputFingerprint: requestIdentity.inputFingerprint,
+        startedAt: timestamp,
+        updatedAt: timestamp,
+        endedAt: null,
+        usage: null,
+        sessionUsage: null,
+        activity,
+        result: null,
+        error: null,
+      };
+      record.logRef = reservation.logRef;
+      record.hostPid = process.pid;
+      await writeRunRecord(project, record);
+      await initializeAgentGraphActivity(runPath, activity);
+      return async () => {
+        await rm(runPath, { recursive: true, force: true }).catch(
+          () => undefined,
+        );
+      };
     },
-    input: {
-      userInputPath: content.input?.workspacePath ?? null,
-      moduleInstructionsState: moduleInstructions ? 'present' : 'cleared',
-      resourcePaths: resources.map((resource) => resource.logicalPath),
-      requestArtifact: 'request.json',
-    },
-    inputFingerprint: requestIdentity.inputFingerprint,
-    startedAt: timestamp,
-    updatedAt: timestamp,
-    endedAt: null,
-    usage: null,
-    sessionUsage: null,
-    activity,
-    result: null,
-    error: null,
-  };
-  await writeRunRecord(project, record);
-  await initializeAgentGraphActivity(runPath, activity);
-
+  });
   const activityRecorder = createAgentGraphActivityRecorder(
     runPath,
     activity,
@@ -509,7 +551,7 @@ async function startTaskDecompositionRunUnlocked(
       record.updatedAt = item.at;
     },
   );
-  const agent = startLocalAgentRun(input.agent, {
+  const agent = launch(input.agent, {
     workingDirectory: runPath,
     prompt,
     resumeSessionId: coordinatorRun?.agentSessionId ?? undefined,
@@ -517,17 +559,23 @@ async function startTaskDecompositionRunUnlocked(
       coordinatorRun?.sessionUsage ?? coordinatorRun?.usage ?? undefined,
     model: profile.model || undefined,
     effort: profile.effort || undefined,
-    onActivity: activityRecorder.onActivity,
+    onActivity: (event) => {
+      activityRecorder.onActivity(event);
+      reservation.record(agentActivityEntry(event));
+    },
   });
+  reservation.attach(agent);
   activeRuns.set(runKey(project, runId), {
     record,
     agent,
     activityRecorder,
+    reservation,
   });
   void finishTaskDecompositionRun(
     project,
     record,
     agent,
+    reservation,
     nodes,
     resources,
     existingCandidateChildren,
@@ -614,22 +662,36 @@ export async function cancelTaskDecompositionRun(
   if (!['running', 'validating'].includes(record.status)) return record;
 
   const active = activeRuns.get(runKey(project, runId));
+  const reservation = active?.reservation ?? null;
+  const interruptedPhase = reservation?.phase ?? 'executing';
+  const stop = reservation ? await stopModuleRun(reservation) : 'confirmed';
+  if (!reservation) active?.agent.cancel();
+  const classification = classifyModuleRun(
+    stop === 'confirmed'
+      ? {
+          runState: 'canceled',
+          interruptedPhase,
+          interruptedActor: 'AGENT',
+          retainedNote: TASK_DECOMPOSITION_RETAINED,
+        }
+      : { runState: 'termination-unconfirmed', interruptedActor: 'AGENT' },
+  );
   const timestamp = new Date().toISOString();
   const canceledRecord = active?.record ?? record;
-  canceledRecord.status = 'canceled';
+  canceledRecord.status = stop === 'confirmed' ? 'canceled' : 'failed';
   canceledRecord.updatedAt = timestamp;
   canceledRecord.endedAt = timestamp;
-  canceledRecord.error = null;
+  canceledRecord.error = stop === 'confirmed' ? null : classification.detail;
+  canceledRecord.response = classification;
   await active?.activityRecorder.flush();
+  const document = `# ${classification.title}\n\n${classification.detail}\n`;
   await writeAgentGraphRunEvidence(taskDecompositionRunPath(project, runId), {
     activity: canceledRecord.activity,
-    summary:
-      '# Canceled\n\nThe Agent Run was canceled. No Candidate or Formal Node was changed.\n',
-    response:
-      '# Decomposition Response\n\nThe Agent Run was canceled. No Candidate or Formal Node was changed.\n',
+    summary: document,
+    response: document,
   });
   await writeRunRecord(project, canceledRecord);
-  active?.agent.cancel();
+  if (reservation) await settleRun(reservation, { classification });
   return canceledRecord;
 }
 
@@ -906,6 +968,7 @@ async function finishTaskDecompositionRun(
   project: RegisteredProject,
   record: TaskDecompositionRunRecord,
   agent: LocalAgentRun,
+  reservation: ActiveRunReservation,
   nodes: TaskGraphNode[],
   resources: ContextWorkspaceEntry[],
   knownCandidates: Array<
@@ -921,9 +984,10 @@ async function finishTaskDecompositionRun(
   reservedCandidateIds: string[] = [],
 ) {
   let agentOutput: string | null = null;
+  const superseded = () => reservation.canceling || !isCurrentRun(reservation);
   try {
     const agentResult = await agent.completion;
-    if (isRunCanceled(record)) return;
+    if (superseded()) return;
     agentOutput = agentResult.finalOutput;
     const active = activeRuns.get(runKey(project, record.runId));
     await active?.activityRecorder.flush();
@@ -939,8 +1003,9 @@ async function finishTaskDecompositionRun(
     record.usage = agentResult.usage;
     record.sessionUsage = agentResult.sessionUsage ?? agentResult.usage;
     record.updatedAt = new Date().toISOString();
+    reservation.setPhase('finalizing', 'HOST');
     await writeRunRecord(project, record);
-    if (isRunCanceled(record)) return;
+    if (superseded()) return;
 
     const result = await parseIdentifiedResult(
       project.planningPath,
@@ -1010,15 +1075,63 @@ async function finishTaskDecompositionRun(
     const endedAt = new Date().toISOString();
     record.status = result.outcome;
     record.result = result;
+    const classification = classifyModuleRun(
+      result.outcome === 'proposal'
+        ? {
+            runState: 'settled',
+            outcome: 'proposal',
+            summary: `${result.candidates.length} ${result.candidates.length === 1 ? 'Candidate' : 'Candidates'} proposed for ${record.sourceNodeId}. Review them on the graph.`,
+          }
+        : result.outcome === 'clarification'
+          ? {
+              runState: 'settled',
+              outcome: 'clarification',
+              question: result.clarification.question,
+            }
+          : result.outcome === 'insufficient-evidence'
+            ? {
+                runState: 'settled',
+                outcome: 'insufficient-evidence',
+                missingEvidence: result.missingEvidence,
+              }
+            : {
+                runState: 'settled',
+                outcome: 'no-change',
+                reason: result.reason,
+              },
+    );
+    record.response = classification;
     await ensureCandidateArtifacts(project, record);
     record.updatedAt = endedAt;
     record.endedAt = endedAt;
     await writeRunRecord(project, record);
+    await settleRun(reservation, { classification, endedAt });
   } catch (error) {
-    if (isRunCanceled(record)) return;
+    if (superseded()) return;
     const endedAt = new Date().toISOString();
+    const original = agentGraphErrorMessage(error, 'The Agent Run failed.');
+    reservation.record({
+      level: 'ERROR',
+      actor: 'HOST',
+      phase: 'FINALIZE',
+      event: agentOutput ? 'result.rejected' : 'agent.failed',
+      message: original,
+    });
+    const classification = classifyModuleRun({
+      runState: 'settled',
+      failure: {
+        kind:
+          error instanceof PublicApiError && error.status === 409
+            ? 'persistence'
+            : agentOutput
+              ? 'parse'
+              : 'transport',
+        message: original,
+      },
+    });
     record.status = 'failed';
-    record.error = agentGraphErrorMessage(error, 'The Agent Run failed.');
+    record.error = original;
+    record.response = classification;
     const active = activeRuns.get(runKey(project, record.runId));
     await active?.activityRecorder.flush();
     await writeAgentGraphRunEvidence(
@@ -1026,13 +1139,16 @@ async function finishTaskDecompositionRun(
       {
         activity: record.activity,
         agentOutput,
-        summary: `# Failed\n\n${record.error}\n`,
-        response: `# Decomposition Response\n\n## Failed\n\n${record.error}\n`,
+        summary: `# ${classification.title}\n\n${classification.detail}\n\n${record.error}\n`,
+        response: `# ${classification.title}\n\n${classification.detail}\n`,
       },
     );
     record.updatedAt = endedAt;
     record.endedAt = endedAt;
     await writeRunRecord(project, record);
+    await settleRun(reservation, { classification, endedAt }).catch(
+      () => undefined,
+    );
   } finally {
     activeRuns.delete(runKey(project, record.runId));
   }
@@ -1643,8 +1759,4 @@ ${assumptions.join('\n')}
 ## Metadata
 ${metadata}
 `;
-}
-
-function isRunCanceled(record: TaskDecompositionRunRecord) {
-  return record.status === ('canceled' as TaskDecompositionRunStatus);
 }

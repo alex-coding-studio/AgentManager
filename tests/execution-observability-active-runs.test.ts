@@ -241,6 +241,24 @@ void test('a failed terminal publication still closes the log and releases the o
   assert.ok(isCurrentRun(next));
 });
 
+void test('a start that arrives while the previous Run is settling waits for its release', async (t) => {
+  const { owner, start } = await fixture(t);
+  const reservation = await start('RUN-1');
+  const settling = settleRun(reservation, {
+    classification: classifyResponse({
+      surface: 'module',
+      runState: 'settled',
+      outcome: 'proposal',
+    }),
+  });
+  assert.equal(reservation.settled, true);
+  const next = await start('RUN-2');
+  assert.ok(isCurrentRun(next));
+  const published = await settling;
+  assert.equal(published?.status, 'completed');
+  assert.equal((await readLatestResponse(owner))?.runId, 'RUN-2');
+});
+
 void test('confirmed cancellation passes through Stopping and settles as Warning Canceled', async (t) => {
   const { owner, start } = await fixture(t);
   const reservation = await start('RUN-1');

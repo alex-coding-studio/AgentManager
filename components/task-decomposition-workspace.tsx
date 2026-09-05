@@ -27,16 +27,17 @@ import {
 import { AgentRunControls } from '@/components/agent-run-controls';
 import { ModuleContextTrigger } from '@/components/module-context-trigger';
 import { AgentGraphComposerCard } from '@/components/agent-graph-composer-card';
+import { LatestResponseCard } from '@/components/latest-response-card';
+import { useLatestResponse } from '@/hooks/use-latest-response';
+import { useSurfacePreference } from '@/hooks/use-surface-preference';
+import type { LatestResponseDocument } from '@/lib/execution-observability/types';
 import { AgentGraphIntentionSelect } from '@/components/agent-graph-intention-select';
 import { AgentGraphMotionSelect } from '@/components/agent-graph-motion-select';
 import {
   ContextAttachmentPicker,
   contextAttachmentTitle,
 } from '@/components/context-attachment-picker';
-import {
-  LatestResponse,
-  LatestResponseActions,
-} from '@/components/latest-response';
+import { LatestResponseActions } from '@/components/latest-response';
 import {
   CandidateMetadataSections,
   CandidateResourceList,
@@ -87,7 +88,6 @@ import { replaceRunWithPreviewsInPlace } from '@/lib/graph/task/preview-state';
 import {
   latestTaskDecompositionResponse,
   latestTerminalTaskDecompositionRun,
-  renderLatestResponseActivityLog,
 } from '@/lib/latest-response';
 import { cn } from '@/lib/utils';
 import {
@@ -149,6 +149,7 @@ export function TaskDecompositionWorkspace({
   initialNodes,
   initialPreviews,
   initialRuns,
+  initialResponse = null,
   developmentPreview,
   developmentPreviewSequence,
 }: {
@@ -157,6 +158,7 @@ export function TaskDecompositionWorkspace({
   initialNodes: TaskGraphNode[];
   initialPreviews: TaskGraphPreview[];
   initialRuns: TaskDecompositionRunRecord[];
+  initialResponse?: LatestResponseDocument | null;
   developmentPreview: boolean;
   developmentPreviewSequence?: {
     running: TaskGraphPreview;
@@ -324,6 +326,21 @@ export function TaskDecompositionWorkspace({
     : [];
   const decomposeSource =
     nodes.find((node) => node.id === decomposeSourceId) ?? null;
+  const moduleResponse = useLatestResponse(
+    projectId,
+    'task-decomposition',
+    initialResponse,
+  );
+  const [responseCollapsed, setResponseCollapsed] = useSurfacePreference(
+    projectId,
+    'task-decomposition',
+    'latest-response',
+  );
+  const [composerCollapsed, setComposerCollapsed] = useSurfacePreference(
+    projectId,
+    'task-decomposition',
+    'composer',
+  );
   const latestRun = latestTerminalTaskDecompositionRun(runs);
   const latestRunPresentation = latestRun
     ? latestTaskDecompositionResponse(latestRun)
@@ -1364,59 +1381,47 @@ export function TaskDecompositionWorkspace({
             />
           )}
 
-          {latestRun && latestRunPresentation ? (
-            <LatestResponse
-              key={latestRun.runId}
-              className="absolute top-4 left-4 z-10 w-[min(320px,calc(100%-2rem))]"
-              title={t('Latest Response')}
-              statusLabel={t(latestRunPresentation.statusLabel)}
-              summary={t(latestRunPresentation.summary)}
-              tone={latestRunPresentation.tone}
-              attention={latestRunPresentation.attention}
-              icon={latestRunPresentation.icon}
+          {moduleResponse.document ? (
+            <LatestResponseCard
+              document={moduleResponse.document}
+              collapsed={responseCollapsed}
+              onCollapsedChange={setResponseCollapsed}
+              onCancel={() => void cancelRun(moduleResponse.document!.runId)}
+              className="w-[min(320px,calc(100%-2rem))]"
             >
-              <LatestResponseActions
-                responseLabel={t('Response')}
-                summaryLabel={t('Summary')}
-                logLabel={t('Log')}
-                onOpenResponse={() =>
-                  latestRun.result
-                    ? void previewResource(
-                        `task-decomposition/runs/${latestRun.runId}/response.md`,
-                        t('Latest Response'),
-                      )
-                    : setPreview({
-                        title: t('Latest Response'),
-                        path: latestRun.runId,
-                        markdown: `# ${t('Response')}\n\n${t(latestRunPresentation.summary)}\n`,
-                      })
-                }
-                onOpenSummary={() =>
-                  latestRun.result
-                    ? void previewResource(
-                        `task-decomposition/runs/${latestRun.runId}/summary.md`,
-                        t('Summary'),
-                      )
-                    : setPreview({
-                        title: t('Summary'),
-                        path: latestRun.runId,
-                        markdown: `# ${t('Summary')}\n\n${t(latestRunPresentation.summary)}\n`,
-                      })
-                }
-                onOpenLog={() =>
-                  setPreview({
-                    title: t('Activity Log'),
-                    path: latestRun.runId,
-                    markdown: renderLatestResponseActivityLog(
-                      latestRun.activity,
-                      t('Activity Log'),
-                      t('No recorded activity.'),
-                      t,
-                    ),
-                  })
-                }
-              />
-            </LatestResponse>
+              {latestRun &&
+              latestRunPresentation &&
+              latestRun.runId === moduleResponse.document.runId ? (
+                <LatestResponseActions
+                  responseLabel={t('Response')}
+                  summaryLabel={t('Summary')}
+                  onOpenResponse={() =>
+                    latestRun.result
+                      ? void previewResource(
+                          `task-decomposition/runs/${latestRun.runId}/response.md`,
+                          t('Latest Response'),
+                        )
+                      : setPreview({
+                          title: t('Latest Response'),
+                          path: latestRun.runId,
+                          markdown: `# ${t('Response')}\n\n${t(latestRunPresentation.summary)}\n`,
+                        })
+                  }
+                  onOpenSummary={() =>
+                    latestRun.result
+                      ? void previewResource(
+                          `task-decomposition/runs/${latestRun.runId}/summary.md`,
+                          t('Summary'),
+                        )
+                      : setPreview({
+                          title: t('Summary'),
+                          path: latestRun.runId,
+                          markdown: `# ${t('Summary')}\n\n${t(latestRunPresentation.summary)}\n`,
+                        })
+                  }
+                />
+              ) : null}
+            </LatestResponseCard>
           ) : null}
 
           {nodes.length > 0 ? (
@@ -1671,6 +1676,9 @@ export function TaskDecompositionWorkspace({
 
         {decomposeSource ? (
           <AgentGraphComposerCard
+            running={moduleResponse.running}
+            collapsed={composerCollapsed}
+            onCollapsedChange={setComposerCollapsed}
             title={
               revisionTarget
                 ? `Revise ${revisionTarget.candidateId}`
@@ -1831,6 +1839,8 @@ export function TaskDecompositionWorkspace({
               </AgentComposerShell>
             </form>
           </AgentGraphComposerCard>
+        ) : moduleResponse.running ? (
+          <AgentGraphComposerCard title="" running />
         ) : null}
       </div>
 

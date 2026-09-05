@@ -1,13 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import {
-  CheckCircle2,
-  CircleAlert,
-  CircleX,
-  MinusCircle,
-  TriangleAlert,
-} from 'lucide-react';
+import { CheckCircle2, CircleX, TriangleAlert } from 'lucide-react';
 import type {
   LatestResponseAttention,
   LatestResponseTone,
@@ -16,17 +10,15 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 
 const toneClasses: Record<LatestResponseTone, string> = {
-  neutral: 'border-border bg-background/95',
-  attention: 'border-amber-500/55 bg-amber-500/10',
-  warning: 'border-amber-500/45 bg-amber-500/8',
-  error: 'border-destructive/55 bg-destructive/10',
+  completed: 'border-emerald-500/45 bg-emerald-500/8',
+  warning: 'border-amber-500/55 bg-amber-500/10',
+  fail: 'border-destructive/55 bg-destructive/10',
 };
 
 const statusClasses: Record<LatestResponseTone, string> = {
-  neutral: 'bg-secondary text-muted-foreground',
-  attention: 'bg-amber-500/15 text-amber-700 dark:text-amber-300',
+  completed: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
   warning: 'bg-amber-500/15 text-amber-700 dark:text-amber-300',
-  error: 'bg-destructive/15 text-destructive',
+  fail: 'bg-destructive/15 text-destructive',
 };
 
 export function LatestResponse({
@@ -44,7 +36,7 @@ export function LatestResponse({
   summary: string;
   tone: LatestResponseTone;
   attention: LatestResponseAttention;
-  icon: 'success' | 'neutral' | 'attention' | 'warning' | 'error';
+  icon: 'success' | 'warning' | 'error';
   className?: string;
   children?: ReactNode;
 }) {
@@ -52,13 +44,9 @@ export function LatestResponse({
   const Icon =
     icon === 'success'
       ? CheckCircle2
-      : icon === 'attention'
-        ? CircleAlert
-        : icon === 'warning'
-          ? TriangleAlert
-          : icon === 'error'
-            ? CircleX
-            : MinusCircle;
+      : icon === 'warning'
+        ? TriangleAlert
+        : CircleX;
   return (
     <section
       data-tone={tone}
@@ -76,9 +64,8 @@ export function LatestResponse({
             className={cn(
               'size-3.5 shrink-0',
               icon === 'success' && 'text-emerald-500',
-              (icon === 'attention' || icon === 'warning') && 'text-amber-500',
+              icon === 'warning' && 'text-amber-500',
               icon === 'error' && 'text-destructive',
-              icon === 'neutral' && 'text-muted-foreground',
             )}
           />
           <span>{title}</span>
@@ -109,21 +96,25 @@ export function LatestResponseActions({
   responseLabel,
   summaryLabel,
   logLabel,
+  logHref,
   onOpenResponse,
   onOpenSummary,
   onOpenLog,
 }: {
   responseLabel: string;
   summaryLabel: string;
-  logLabel: string;
+  logLabel?: string;
+  logHref?: string;
   onOpenResponse: () => void;
   onOpenSummary: () => void;
-  onOpenLog: () => void;
+  onOpenLog?: () => void;
 }) {
   const actions = [
     { label: responseLabel, onSelect: onOpenResponse },
     { label: summaryLabel, onSelect: onOpenSummary },
-    { label: logLabel, onSelect: onOpenLog },
+    ...(logLabel && onOpenLog && !logHref
+      ? [{ label: logLabel, onSelect: onOpenLog }]
+      : []),
   ];
   return (
     <div className="flex flex-wrap gap-1.5">
@@ -138,6 +129,16 @@ export function LatestResponseActions({
           {action.label}
         </Button>
       ))}
+      {logLabel && logHref ? (
+        <a
+          href={logHref}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex h-6 items-center rounded-md border border-border px-2 text-xs font-medium hover:bg-secondary"
+        >
+          {logLabel}
+        </a>
+      ) : null}
     </div>
   );
 }

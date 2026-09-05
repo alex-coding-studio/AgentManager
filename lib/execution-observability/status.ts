@@ -49,6 +49,7 @@ export type ClassificationFacts = {
   interruptedPhase?: RunPhase | null;
   interruptedActor?: LogActor | null;
   retained?: RetainedEffects | null;
+  retainedNote?: string | null;
   accepted?: boolean;
   semantic?: { title: string; detail: string } | null;
   question?: string | null;
@@ -73,6 +74,7 @@ export function classifyResponse(
     interruptedPhase: facts.interruptedPhase,
     interruptedActor: facts.interruptedActor,
     retained: facts.retained,
+    retainedNote: facts.retainedNote,
   };
 
   if (facts.runState === 'termination-unconfirmed')

@@ -29,6 +29,17 @@ import {
   type LocalAgentUsage,
 } from '../../agents/transport.ts';
 import type { RegisteredProject } from '../../project-registry.ts';
+import {
+  settleRun,
+  type ActiveRunReservation,
+} from '../../execution-observability/active-runs.ts';
+import {
+  agentActivityEntry,
+  beginModuleRun,
+  classifyModuleRun,
+  stopModuleRun,
+} from '../../execution-observability/module-run.ts';
+import type { ResponseClassification } from '../../execution-observability/types.ts';
 import { prepareWhatToDoContext, type WhatToDoRunInput } from './context.ts';
 import {
   createWhatToDoHarnessRequest,
@@ -84,6 +95,10 @@ export type WhatToDoRunRecord = {
   result: WhatToDoHarnessResult | null;
   map: WhatToDoDeliveryMap | null;
   error: string | null;
+  logRef?: string;
+  hostPid?: number;
+  cancelRequestedAt?: string;
+  response?: ResponseClassification;
 };
 
 type ActiveRun = {
@@ -95,7 +110,9 @@ type ActiveRun = {
   activity: AgentGraphActivity[];
   recorder: AgentGraphActivityRecorder | null;
   agentOutput: string | null;
+  reservation: ActiveRunReservation | null;
 };
+const WHAT_TO_DO_RETAINED = 'The Delivery Map was not changed.';
 
 const runtime = globalThis as typeof globalThis & {
   whatToDoRuns?: Map<string, ActiveRun>;
@@ -110,8 +127,6 @@ export async function startWhatToDoRun(
   validateAgentProfile(input.profile);
   const key = project.planningPath;
   if (activeRuns.get(key)?.terminal) activeRuns.delete(key);
-  if (activeRuns.has(key))
-    throw new PublicApiError('A What to Do Agent Run is already active.', 409);
   const runId = `RUN-${randomUUID()}`;
   const startedAt = new Date().toISOString();
   const activity = initialAgentGraphActivity(
@@ -127,147 +142,176 @@ export async function startWhatToDoRun(
     activity,
     recorder: null,
     agentOutput: null,
+    reservation: null,
   };
-  activeRuns.set(key, active);
-  let preparedRun = false;
-  try {
-    const currentMap = await readWhatToDoCurrentMap(project);
-    const clarificationRun = await resolveClarificationRun(
-      project,
-      input.clarificationRunId,
-      currentMap,
-    );
-    const effectiveInput = clarificationRun
-      ? await amendClarificationInput(project, clarificationRun, input)
-      : input;
-    let coordinatorRun: WhatToDoRunRecord | null = null;
-    if (
-      clarificationRun?.agentSessionId &&
-      clarificationRun.request.harness.revision ===
-        WHAT_TO_DO_HARNESS_REVISION &&
-      clarificationRun.profile.agent === effectiveInput.profile.agent &&
-      sameModelSelection(clarificationRun.profile, effectiveInput.profile)
-    ) {
-      coordinatorRun = clarificationRun;
-    } else if (currentMap) {
-      const currentMapRun = await readWhatToDoRun(project, currentMap.runId);
+  let run!: WhatToDoRunRecord;
+  let prepared!: Awaited<ReturnType<typeof prepareWhatToDoContext>>;
+  let currentMap: WhatToDoDeliveryMap | null = null;
+  let coordinatorRun = null as WhatToDoRunRecord | null;
+  let effectiveInput: WhatToDoRunInput = input;
+  const { reservation } = await beginModuleRun(project, 'what-to-do', {
+    runId,
+    subject: { kind: 'module', label: 'Delivery Map' },
+    agentProfile: input.profile,
+    startMessage: `Delivery Planning Run started with ${input.profile.agent}`,
+    validate: async () => {
+      currentMap = await readWhatToDoCurrentMap(project);
+      const clarificationRun = await resolveClarificationRun(
+        project,
+        input.clarificationRunId,
+        currentMap,
+      );
+      effectiveInput = clarificationRun
+        ? await amendClarificationInput(project, clarificationRun, input)
+        : input;
       if (
-        currentMapRun.status !== 'succeeded' ||
-        currentMapRun.map?.runId !== currentMap.runId
-      )
-        throw new Error('The current What to Do Map has no committed Run.');
-      if (
-        currentMapRun.agentSessionId &&
-        currentMapRun.profile.agent === effectiveInput.profile.agent &&
-        sameModelSelection(currentMapRun.profile, effectiveInput.profile) &&
-        currentMapRun.request.harness.revision === WHAT_TO_DO_HARNESS_REVISION
-      )
-        coordinatorRun = currentMapRun;
-    }
-    const prepared = await prepareWhatToDoContext(project, runId, {
-      ...effectiveInput,
-      currentMap,
-    });
-    preparedRun = true;
-    const contextRoot = await relativeContextRoot(
-      project,
-      prepared.workspace.root,
-    );
-    const request = createWhatToDoHarnessRequest({
-      sessionId:
-        clarificationRun?.request.request.sessionId ??
-        coordinatorRun?.request.request.sessionId ??
-        `SESSION-${randomUUID()}`,
-      requestId: runId,
-      contextRoot,
-      content: prepared.packet,
-      operation: currentMap ? 'adjust-map' : 'create-map',
-      currentMapPath: currentMap ? 'what-to-do/current-map.json' : null,
-      focusCandidateIds: currentMap
-        ? (effectiveInput.focusContractIds ?? []).map((contractId) =>
-            whatToDoContractCandidateId(
-              currentMap.contracts.find(
-                (contract) => contract.id === contractId,
-              )!,
-            ),
-          )
-        : [],
-      sourceFeatures: prepared.sources,
-      repository: {
-        factsPath: 'what-to-do/repository-context/facts.json',
-        fingerprint: prepared.repositoryFacts.fingerprint,
-        reusable: prepared.repositoryFacts.reusable,
-        summaryPath: prepared.packet.references.some(
-          (entry) => entry.kind === 'repository-summary',
+        clarificationRun?.agentSessionId &&
+        clarificationRun.request.harness.revision ===
+          WHAT_TO_DO_HARNESS_REVISION &&
+        clarificationRun.profile.agent === effectiveInput.profile.agent &&
+        sameModelSelection(clarificationRun.profile, effectiveInput.profile)
+      ) {
+        coordinatorRun = clarificationRun;
+      } else if (currentMap) {
+        const currentMapRun = await readWhatToDoRun(project, currentMap.runId);
+        if (
+          currentMapRun.status !== 'succeeded' ||
+          currentMapRun.map?.runId !== currentMap.runId
         )
-          ? 'what-to-do/repository-context/summary.md'
-          : null,
-      },
-      domain: {
-        stateVersion: prepared.domainModel.stateVersion,
-        summaryPath: 'domain-model/domain-model-summary.md',
-        modelPath: 'domain-model/domain-model.json',
-      },
-    });
-    const run: WhatToDoRunRecord = {
-      schemaVersion: 1,
-      id: runId,
-      status: 'running' as const,
-      sourceUids: [...new Set(effectiveInput.sourceUids)],
-      contextRefs: [...new Set(effectiveInput.contextRefs ?? [])],
-      repositoryEvidencePaths: [
-        ...new Set(effectiveInput.repositoryEvidencePaths ?? []),
-      ],
-      focusContractIds: [...new Set(effectiveInput.focusContractIds ?? [])],
-      clarificationRunId: clarificationRun?.id ?? null,
-      attachmentNames: (effectiveInput.files ?? []).map((file) => file.name),
-      profile: structuredClone(effectiveInput.profile),
-      startedAt,
-      endedAt: null,
-      agentSessionId: null,
-      usage: null,
-      sessionUsage: null,
-      activity,
-      request,
-      result: null,
-      map: null,
-      error: null,
-    };
-    const runPath = await whatToDoRunDirectory(project, runId);
-    await initializeAgentGraphActivity(runPath, activity);
-    active.recorder = createAgentGraphActivityRecorder(runPath, activity);
-    await writeRunRecord(project, run);
-    await atomicWhatToDoText(
-      path.join(runPath, 'request.json'),
-      `${JSON.stringify(request, null, 2)}\n`,
-    );
-    const agentRun = transport(effectiveInput.profile.agent, {
-      workingDirectory: project.codePath ?? project.rootPath,
-      protectedPath: project.planningPath,
-      environment: whatToDoAgentEnvironment(),
-      prompt: whatToDoHarnessPrompt(request),
-      model: effectiveInput.profile.model || undefined,
-      effort: effectiveInput.profile.effort || undefined,
-      resumeSessionId: coordinatorRun?.agentSessionId ?? undefined,
-      sessionUsageBaseline:
-        coordinatorRun?.sessionUsage ?? coordinatorRun?.usage ?? undefined,
-      access: 'read-only',
-      disableDelegation: true,
-      isolatedProcessGroup: true,
-      onActivity: active.recorder.onActivity,
-    });
-    active.cancel = agentRun.cancel;
-    settleLater(project, run, active, agentRun, prepared, currentMap);
-    return run;
-  } catch (error) {
-    if (preparedRun)
-      await rm(await whatToDoRunDirectory(project, runId), {
-        recursive: true,
-        force: true,
-      }).catch(() => undefined);
-    if (activeRuns.get(key) === active) activeRuns.delete(key);
-    throw error;
-  }
+          throw new Error('The current What to Do Map has no committed Run.');
+        if (
+          currentMapRun.agentSessionId &&
+          currentMapRun.profile.agent === effectiveInput.profile.agent &&
+          sameModelSelection(currentMapRun.profile, effectiveInput.profile) &&
+          currentMapRun.request.harness.revision === WHAT_TO_DO_HARNESS_REVISION
+        )
+          coordinatorRun = currentMapRun;
+      }
+      return { clarificationRun };
+    },
+    prepare: async () => {
+      prepared = await prepareWhatToDoContext(project, runId, {
+        ...effectiveInput,
+        currentMap,
+      });
+      return async () => {
+        await rm(await whatToDoRunDirectory(project, runId), {
+          recursive: true,
+          force: true,
+        }).catch(() => undefined);
+      };
+    },
+    persist: async (reservation, { clarificationRun }) => {
+      const rollback = async () => undefined;
+      try {
+        const contextRoot = await relativeContextRoot(
+          project,
+          prepared.workspace.root,
+        );
+        const request = createWhatToDoHarnessRequest({
+          sessionId:
+            clarificationRun?.request.request.sessionId ??
+            coordinatorRun?.request.request.sessionId ??
+            `SESSION-${randomUUID()}`,
+          requestId: runId,
+          contextRoot,
+          content: prepared.packet,
+          operation: currentMap ? 'adjust-map' : 'create-map',
+          currentMapPath: currentMap ? 'what-to-do/current-map.json' : null,
+          focusCandidateIds: currentMap
+            ? (effectiveInput.focusContractIds ?? []).map((contractId) =>
+                whatToDoContractCandidateId(
+                  currentMap!.contracts.find(
+                    (contract) => contract.id === contractId,
+                  )!,
+                ),
+              )
+            : [],
+          sourceFeatures: prepared.sources,
+          repository: {
+            factsPath: 'what-to-do/repository-context/facts.json',
+            fingerprint: prepared.repositoryFacts.fingerprint,
+            reusable: prepared.repositoryFacts.reusable,
+            summaryPath: prepared.packet.references.some(
+              (entry) => entry.kind === 'repository-summary',
+            )
+              ? 'what-to-do/repository-context/summary.md'
+              : null,
+          },
+          domain: {
+            stateVersion: prepared.domainModel.stateVersion,
+            summaryPath: 'domain-model/domain-model-summary.md',
+            modelPath: 'domain-model/domain-model.json',
+          },
+        });
+        run = {
+          schemaVersion: 1,
+          id: runId,
+          status: 'running' as const,
+          sourceUids: [...new Set(effectiveInput.sourceUids)],
+          contextRefs: [...new Set(effectiveInput.contextRefs ?? [])],
+          repositoryEvidencePaths: [
+            ...new Set(effectiveInput.repositoryEvidencePaths ?? []),
+          ],
+          focusContractIds: [...new Set(effectiveInput.focusContractIds ?? [])],
+          clarificationRunId: clarificationRun?.id ?? null,
+          attachmentNames: (effectiveInput.files ?? []).map(
+            (file) => file.name,
+          ),
+          profile: structuredClone(effectiveInput.profile),
+          startedAt,
+          endedAt: null,
+          agentSessionId: null,
+          usage: null,
+          sessionUsage: null,
+          activity,
+          request,
+          result: null,
+          map: null,
+          error: null,
+          logRef: reservation.logRef,
+          hostPid: process.pid,
+        };
+        const runPath = await whatToDoRunDirectory(project, runId);
+        await initializeAgentGraphActivity(runPath, activity);
+        active.recorder = createAgentGraphActivityRecorder(runPath, activity);
+        await writeRunRecord(project, run);
+        await atomicWhatToDoText(
+          path.join(runPath, 'request.json'),
+          `${JSON.stringify(request, null, 2)}\n`,
+        );
+      } catch (error) {
+        await rollback();
+        throw error;
+      }
+      return rollback;
+    },
+  });
+  active.reservation = reservation;
+  activeRuns.set(key, active);
+  const recorder = active.recorder!;
+  const agentRun = transport(effectiveInput.profile.agent, {
+    workingDirectory: project.codePath ?? project.rootPath,
+    protectedPath: project.planningPath,
+    environment: whatToDoAgentEnvironment(),
+    prompt: whatToDoHarnessPrompt(run.request),
+    model: effectiveInput.profile.model || undefined,
+    effort: effectiveInput.profile.effort || undefined,
+    resumeSessionId: coordinatorRun?.agentSessionId ?? undefined,
+    sessionUsageBaseline:
+      coordinatorRun?.sessionUsage ?? coordinatorRun?.usage ?? undefined,
+    access: 'read-only',
+    disableDelegation: true,
+    isolatedProcessGroup: true,
+    onActivity: (event) => {
+      recorder.onActivity(event);
+      reservation.record(agentActivityEntry(event));
+    },
+  });
+  active.cancel = agentRun.cancel;
+  reservation.attach(agentRun);
+  settleLater(project, run, active, agentRun, prepared, currentMap);
+  return run;
 }
 
 async function resolveClarificationRun(
@@ -374,6 +418,7 @@ function settleLater(
       if (active.canceled) return;
       active.settling = true;
       active.agentOutput = agent.finalOutput;
+      active.reservation?.setPhase('finalizing', 'HOST');
       const result = parseWhatToDoHarnessResult(agent.finalOutput, {
         request: run.request.request,
         operation: run.request.operation,
@@ -405,6 +450,31 @@ function settleLater(
               sourceSnapshots: prepared.sourceSnapshots,
             })
           : null;
+      const classification = classifyModuleRun(
+        result.outcome === 'map-proposal'
+          ? {
+              runState: 'settled',
+              outcome: 'proposal',
+              summary: mapSummary(map),
+            }
+          : result.outcome === 'clarification'
+            ? {
+                runState: 'settled',
+                outcome: 'clarification',
+                question: result.clarification.question,
+              }
+            : result.outcome === 'insufficient-evidence'
+              ? {
+                  runState: 'settled',
+                  outcome: 'insufficient-evidence',
+                  missingEvidence: result.missingEvidence,
+                }
+              : {
+                  runState: 'settled',
+                  outcome: 'no-change',
+                  reason: result.reason,
+                },
+      );
       const terminal: WhatToDoRunRecord = {
         ...run,
         status: 'succeeded',
@@ -416,6 +486,7 @@ function settleLater(
         result,
         map,
         error: null,
+        response: classification,
       };
       const runPath = await whatToDoRunDirectory(project, run.id);
       await active.recorder?.flush();
@@ -455,14 +526,36 @@ function settleLater(
         run.request.repository.fingerprint,
       ).catch(() => undefined);
       active.terminal = terminal;
+      if (active.reservation)
+        await settleRun(active.reservation, { classification, endedAt });
     })
     .catch(async (error: unknown) => {
       if (active.canceled) return;
       active.settling = true;
+      const original = error instanceof Error ? error.message : String(error);
+      active.reservation?.record({
+        level: 'ERROR',
+        actor: 'HOST',
+        phase: 'FINALIZE',
+        event: active.agentOutput ? 'result.rejected' : 'agent.failed',
+        message: original,
+      });
+      const classification = classifyModuleRun({
+        runState: 'settled',
+        failure: {
+          kind:
+            error instanceof PublicApiError && error.status === 409
+              ? 'persistence'
+              : active.agentOutput
+                ? 'parse'
+                : 'transport',
+          message: original,
+        },
+      });
       const message =
         error instanceof PublicApiError
           ? error.message
-          : 'The What to Do Agent did not complete.';
+          : `${classification.detail} ${WHAT_TO_DO_RETAINED}`;
       const terminal: WhatToDoRunRecord = {
         ...run,
         status: 'failed',
@@ -471,6 +564,7 @@ function settleLater(
         result: null,
         map: null,
         error: message,
+        response: classification,
       };
       const runPath = await whatToDoRunDirectory(project, run.id);
       await rm(path.join(runPath, 'terminal.json'), { force: true }).catch(
@@ -485,6 +579,10 @@ function settleLater(
       }).catch(() => undefined);
       await writeRunRecord(project, terminal).catch(() => undefined);
       active.terminal = terminal;
+      if (active.reservation)
+        await settleRun(active.reservation, { classification }).catch(
+          () => undefined,
+        );
     })
     .finally(() => {
       if (activeRuns.get(project.planningPath) === active)
@@ -562,23 +660,39 @@ export async function cancelWhatToDoRun(
   if (active.settling)
     throw new PublicApiError('The What to Do Run is already finishing.', 409);
   active.canceled = true;
-  active.cancel();
+  const reservation = active.reservation;
+  const interruptedPhase = reservation?.phase ?? 'executing';
+  const stop = reservation ? await stopModuleRun(reservation) : 'confirmed';
+  if (!reservation) active.cancel();
   await active.recorder?.flush();
+  const classification = classifyModuleRun(
+    stop === 'confirmed'
+      ? {
+          runState: 'canceled',
+          interruptedPhase,
+          interruptedActor: 'AGENT',
+          retainedNote: WHAT_TO_DO_RETAINED,
+        }
+      : { runState: 'termination-unconfirmed', interruptedActor: 'AGENT' },
+  );
   const current = await readWhatToDoRun(project, runId);
   const canceled: WhatToDoRunRecord = {
     ...current,
-    status: 'canceled',
+    status: stop === 'confirmed' ? 'canceled' : 'failed',
     endedAt: new Date().toISOString(),
     activity: [...active.activity],
-    error: null,
+    error: stop === 'confirmed' ? null : classification.detail,
+    response: classification,
   };
   active.terminal = canceled;
+  const document = `# ${classification.title}\n\n${classification.detail}\n`;
   await writeAgentGraphRunEvidence(await whatToDoRunDirectory(project, runId), {
     activity: canceled.activity,
-    summary: '# Canceled\n\nThe What to Do Agent Run was canceled.\n',
-    response: '# Canceled\n\nThe What to Do Agent Run was canceled.\n',
+    summary: document,
+    response: document,
   });
   await writeRunRecord(project, canceled);
+  if (reservation) await settleRun(reservation, { classification });
   if (activeRuns.get(project.planningPath) === active)
     activeRuns.delete(project.planningPath);
   return canceled;
@@ -747,6 +861,12 @@ async function reconcileTerminalRunRecord(
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
     throw error;
   }
+}
+
+function mapSummary(map: WhatToDoDeliveryMap | null) {
+  if (!map) return 'The Delivery Map proposal is ready for review.';
+  const count = map.contracts.length;
+  return `${count} Delivery ${count === 1 ? 'Contract' : 'Contracts'} proposed. Review the Delivery Map to continue.`;
 }
 
 function renderRunSummary(result: WhatToDoHarnessResult) {

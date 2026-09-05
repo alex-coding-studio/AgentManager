@@ -16,7 +16,7 @@ function run(
   return { status, result, error } as WhatsNextRunRecord;
 }
 
-void test('ordinary proposal and no-change responses stay neutral', () => {
+void test('ordinary proposal and no-change responses are Completed', () => {
   const proposal = latestWhatsNextResponse(
     run('proposal', {
       outcome: 'proposal',
@@ -32,7 +32,7 @@ void test('ordinary proposal and no-change responses stay neutral', () => {
     } as never),
   );
   assert.deepEqual(proposal, {
-    tone: 'neutral',
+    tone: 'completed',
     attention: 'none',
     statusLabel: 'Continue',
     summary: 'A useful direction.',
@@ -45,7 +45,7 @@ void test('ordinary proposal and no-change responses stay neutral', () => {
       reason: 'Already covered.',
     } as never),
   );
-  assert.equal(noChange.tone, 'neutral');
+  assert.equal(noChange.tone, 'completed');
   assert.equal(noChange.statusLabel, 'No change');
   assert.equal(noChange.summary, 'Already covered.');
 });
@@ -57,24 +57,25 @@ void test('clarification requires attention without becoming an error', () => {
       clarification: { question: 'Which behavior should win?' },
     } as never),
   );
-  assert.equal(presentation.tone, 'attention');
+  assert.equal(presentation.tone, 'warning');
   assert.equal(presentation.attention, 'action-required');
   assert.equal(presentation.statusLabel, 'Answer needed');
-  assert.equal(presentation.icon, 'attention');
+  assert.equal(presentation.icon, 'warning');
 });
 
-void test('failure is prominent while cancellation remains neutral', () => {
+void test('failure is Fail while cancellation is a Warning', () => {
   const failed = latestWhatsNextResponse(
     run('failed', null, 'The response was invalid.'),
   );
-  assert.equal(failed.tone, 'error');
+  assert.equal(failed.tone, 'fail');
   assert.equal(failed.attention, 'action-required');
   assert.equal(failed.summary, 'The response was invalid.');
 
   const canceled = latestWhatsNextResponse(run('canceled'));
-  assert.equal(canceled.tone, 'neutral');
+  assert.equal(canceled.tone, 'warning');
   assert.equal(canceled.attention, 'none');
-  assert.equal(canceled.icon, 'neutral');
+  assert.equal(canceled.statusLabel, 'Canceled');
+  assert.equal(canceled.icon, 'warning');
 });
 
 void test('decomposition outcomes use the shared response tones', () => {
@@ -105,7 +106,7 @@ void test('decomposition outcomes use the shared response tones', () => {
     result: null,
     error: null,
   } as TaskDecompositionRunRecord);
-  assert.equal(canceled.tone, 'neutral');
+  assert.equal(canceled.tone, 'warning');
   assert.equal(canceled.statusLabel, 'Canceled');
 });
 
