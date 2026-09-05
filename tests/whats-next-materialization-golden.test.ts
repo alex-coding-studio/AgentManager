@@ -1,3 +1,4 @@
+import './helpers/register-redo-hooks.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile, writeFile } from 'node:fs/promises';
@@ -66,6 +67,7 @@ function candidate(
   title: string,
   sourceNodeId: string,
   dependsOn: string[] = [],
+  overrides: Record<string, unknown> = {},
 ) {
   return {
     candidateId,
@@ -95,7 +97,20 @@ function candidate(
     ].join('\n'),
     layer: 'discovery',
     artifactKind: 'mvp',
+    ...overrides,
   };
+}
+
+function designCandidate(
+  candidateId: string,
+  title: string,
+  sourceNodeId: string,
+) {
+  return candidate(candidateId, title, sourceNodeId, [], {
+    type: 'feature',
+    layer: 'product-design',
+    artifactKind: 'feature',
+  });
 }
 
 async function assertGolden(name: string, captured: Record<string, unknown>) {
@@ -261,4 +276,138 @@ void test('the canonicalizer removes every volatile identifier', () => {
   );
   assert.equal(text, 'U0 NODE-U0 CANDIDATE-U0 T H0 NODE-X0');
   assert.equal(canonicalize(uid), 'U0');
+});
+
+void test('a refined Candidate keeps its identity and advances one revision', async (t) => {
+  const { project, source } = await createGoldenProject(t);
+  const first = candidate('CANDIDATE-0001', 'Capture the item', source.id);
+  const explore = deferredLaunch();
+  const started = await startWhatsNextRun(
+    project,
+    request(source.id),
+    explore.launch,
+  );
+  explore.respond(JSON.stringify(envelope(started, source.id, [first])));
+  const proposal = await settledRun(project, started.runId);
+  assert.equal(proposal.status, 'proposal', proposal.error ?? undefined);
+  const original = proposal.result;
+  assert.ok(original && original.outcome === 'proposal');
+  const target = original.candidates[0]!;
+
+  const refine = deferredLaunch();
+  const refined = await startWhatsNextRun(
+    project,
+    request(source.id, {
+      instruction: 'Sharpen the outcome statement.',
+      revisionRunId: started.runId,
+      revisionCandidateId: target.candidateId,
+    }),
+    refine.launch,
+  );
+  refine.respond(
+    JSON.stringify(
+      envelope(refined, source.id, [
+        {
+          ...first,
+          candidateId: target.candidateId,
+          revision: 2,
+          summary: 'Capture the item with one stated outcome.',
+          outputMarkdown: [
+            '# Capture the item',
+            '',
+            '## Why this direction',
+            '',
+            '- It states the outcome the reader asked for.',
+            '- It remains judgeable without more evidence.',
+            '',
+            '## Assumptions',
+            '',
+            '- The reader already has the source material.',
+            '',
+          ].join('\n'),
+        },
+      ]),
+    ),
+  );
+  const settled = await settledRun(project, refined.runId);
+  assert.equal(settled.status, 'proposal', settled.error ?? undefined);
+  const result = settled.result;
+  assert.ok(result && result.outcome === 'proposal');
+  assert.equal(result.candidates[0]!.candidateId, target.candidateId);
+  assert.equal(result.candidates[0]!.uid, target.uid);
+  assert.equal(result.candidates[0]!.revision, 2);
+  await assertGolden('refine', await captureWhatsNextState(project));
+});
+
+void test('a Product Design Candidate keeps its Layer and artifact kind through acceptance', async (t) => {
+  const { project, source } = await createGoldenProject(t);
+  const agent = deferredLaunch();
+  const started = await startWhatsNextRun(
+    project,
+    request(source.id, { intention: 'product-design-completion' }),
+    agent.launch,
+  );
+  agent.respond(
+    JSON.stringify(
+      envelope(started, source.id, [
+        designCandidate('CANDIDATE-0001', 'Capture the item', source.id),
+      ]),
+    ),
+  );
+  const settled = await settledRun(project, started.runId);
+  assert.equal(settled.status, 'proposal', settled.error ?? undefined);
+  const result = settled.result;
+  assert.ok(result && result.outcome === 'proposal');
+  const accepted = await acceptWhatsNextCandidate(
+    project,
+    started.runId,
+    result.candidates[0]!.candidateId,
+  );
+  assert.equal(accepted.node.layer, 'product-design');
+  assert.equal(accepted.node.artifactKind, 'feature');
+  assert.equal(accepted.node.uid, result.candidates[0]!.uid);
+  await assertGolden('product-design', await captureWhatsNextState(project));
+});
+
+void test('a redone proposal supersedes the unaccepted Candidates and publishes new identities', async (t) => {
+  const { project, source } = await createGoldenProject(t);
+  process.env.REDO_TEST_ROOT = project.rootPath;
+  t.after(() => {
+    delete process.env.REDO_TEST_ROOT;
+  });
+  const explore = deferredLaunch();
+  const started = await startWhatsNextRun(
+    project,
+    request(source.id),
+    explore.launch,
+  );
+  explore.respond(
+    JSON.stringify(
+      envelope(started, source.id, [
+        candidate('CANDIDATE-0001', 'Capture the item', source.id),
+      ]),
+    ),
+  );
+  const proposal = await settledRun(project, started.runId);
+  assert.equal(proposal.status, 'proposal', proposal.error ?? undefined);
+
+  const redo = deferredLaunch();
+  const replaced = await startWhatsNextRun(
+    project,
+    request(source.id, {
+      instruction: 'Explore a different direction.',
+      redoProposal: true,
+    }),
+    redo.launch,
+  );
+  redo.respond(
+    JSON.stringify(
+      envelope(replaced, source.id, [
+        candidate('CANDIDATE-0001', 'Share the item', source.id),
+      ]),
+    ),
+  );
+  const settled = await settledRun(project, replaced.runId);
+  assert.equal(settled.status, 'proposal', settled.error ?? undefined);
+  await assertGolden('redo', await captureWhatsNextState(project));
 });

@@ -137,7 +137,8 @@ async function readTree(root: string, relative = ''): Promise<string[]> {
   return files;
 }
 
-const CAPTURED = /(?:run\.json|node\.json|identities\.json|output\.md)$/;
+const CAPTURED =
+  /(?:^|\/)(?:run\.json|node\.json|identities\.json|output\.md)$/;
 
 type CapturedFile = { key: string; text: string };
 
@@ -200,16 +201,25 @@ export async function captureWhatsNextState(
   return captured;
 }
 
+function sortStrings(value: unknown) {
+  return Array.isArray(value)
+    ? [...(value as string[])].sort((left, right) =>
+        String(left).localeCompare(String(right), 'en'),
+      )
+    : value;
+}
+
 function withSortedIdentitySet(value: unknown) {
-  if (
-    value &&
-    typeof value === 'object' &&
-    Array.isArray((value as { formalAliases?: unknown }).formalAliases)
-  ) {
-    const record = value as { formalAliases: string[] };
-    record.formalAliases = [...record.formalAliases].sort((left, right) =>
-      left.localeCompare(right, 'en'),
-    );
-  }
+  if (!value || typeof value !== 'object') return value;
+  const record = value as {
+    formalAliases?: unknown;
+    input?: { resourcePaths?: unknown };
+  };
+  if (Array.isArray(record.formalAliases))
+    record.formalAliases = sortStrings(record.formalAliases) as string[];
+  if (record.input && Array.isArray(record.input.resourcePaths))
+    record.input.resourcePaths = sortStrings(
+      record.input.resourcePaths,
+    ) as string[];
   return value;
 }
