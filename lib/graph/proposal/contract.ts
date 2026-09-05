@@ -1,4 +1,4 @@
-import type { GraphIdentityFields } from '../identity.ts';
+import type { GraphIdentityFields, StableRelations } from '../identity.ts';
 import {
   GRAPH_REFERENCE_SCHEMA,
   LOCAL_KEY_SCHEMA,
@@ -11,7 +11,6 @@ export type GraphResourceReference = { kind: string; path: string };
 
 export type GraphProposalCandidate = {
   localKey: string;
-  revision: number;
   type: string;
   title: string;
   summary: string;
@@ -24,7 +23,7 @@ export type GraphProposalCandidate = {
   assumptions: string[];
 };
 
-export type GraphCandidateRecord = GraphIdentityFields & {
+export type GraphCandidateFields = {
   candidateId: string;
   revision: number;
   type: string;
@@ -37,6 +36,13 @@ export type GraphCandidateRecord = GraphIdentityFields & {
   metadata: Record<string, unknown>;
   presentation: { color?: string };
   assumptions: string[];
+};
+
+export type GraphCandidateInput = GraphIdentityFields & GraphCandidateFields;
+
+export type GraphCandidateRecord = GraphCandidateFields & {
+  uid: string;
+  relations: StableRelations;
 };
 
 export type GraphProposalRevision = {
@@ -69,7 +75,6 @@ export const RESOURCE_REFERENCE_SCHEMA = {
 
 export const GRAPH_PROPOSAL_CANDIDATE_PROPERTIES = {
   localKey: LOCAL_KEY_SCHEMA,
-  revision: { type: 'integer', minimum: 1 },
   type: { ...nonEmptyString, maxLength: 80 },
   title: { ...nonEmptyString, maxLength: 160 },
   summary: { ...nonEmptyString, maxLength: 600 },

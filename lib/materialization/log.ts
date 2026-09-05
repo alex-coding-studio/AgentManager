@@ -2,7 +2,7 @@ import type {
   LogLevel,
   LogPhase,
   RunLogInput,
-} from '../execution-observability/types.ts';
+} from '../execution-observability/log-types.ts';
 
 export const MATERIALIZATION_LOG_EVENTS = {
   'materialization.basis.prepared': 'PREPARE',
