@@ -257,7 +257,15 @@ process.stdin.resume();process.stdin.on('end',()=>setTimeout(()=>{
 async function finished(project, run, reader = readWhatsNextRun) {
   for (let i = 0; i < 200; i++) {
     const value = await reader(project, run.runId);
-    if (!['running', 'validating'].includes(value.status)) return value;
+    if (!['running', 'validating'].includes(value.status)) {
+      const { listActiveRuns } =
+        await import('../lib/execution-observability/active-runs.ts');
+      const active = listActiveRuns(project.planningPath).find(
+        (candidate) => candidate.runId === run.runId,
+      );
+      if (active) await active.released;
+      return value;
+    }
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
   throw Error('Fixture Run did not finish');
