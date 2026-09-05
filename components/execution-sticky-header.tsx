@@ -1,6 +1,6 @@
 'use client';
 
-import { GitPullRequest } from 'lucide-react';
+import { FolderOpen, GitPullRequest } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useUiText } from '@/components/ui-language-provider';
 import type { LatestResponseDocument } from '@/lib/execution-observability/types';
@@ -81,6 +81,8 @@ export function ExecutionHeaderStatus({
   checks,
   pullRequests,
   staleGithub,
+  onOpenWorkspace,
+  openingWorkspace = false,
   accepted,
 }: {
   document: LatestResponseDocument | null;
@@ -90,6 +92,8 @@ export function ExecutionHeaderStatus({
   checks: { passed: number; total: number } | null;
   pullRequests: GitHubPullRequest[];
   staleGithub: boolean;
+  onOpenWorkspace?: () => void;
+  openingWorkspace?: boolean;
   accepted: boolean;
 }) {
   const { t } = useUiText();
@@ -182,14 +186,6 @@ export function ExecutionHeaderStatus({
             {t('{count} additional findings', { count: warnings })}
           </span>
         ) : null}
-        {pullRequests.map((pr) => (
-          <PullRequestChip
-            key={pr.url}
-            pr={pr}
-            stale={staleGithub}
-            className="h-6 rounded-md px-2 text-[11px]"
-          />
-        ))}
         {document ? (
           <a
             href={document.logUrlPath}
@@ -200,6 +196,25 @@ export function ExecutionHeaderStatus({
             {t('Log')}
           </a>
         ) : null}
+        {onOpenWorkspace ? (
+          <button
+            type="button"
+            className="inline-flex h-6 items-center gap-1 rounded-md border border-border px-2 text-[11px] font-medium text-foreground hover:bg-secondary disabled:opacity-50"
+            disabled={openingWorkspace}
+            onClick={onOpenWorkspace}
+          >
+            <FolderOpen className="size-3" />
+            {t('Open workspace folder')}
+          </button>
+        ) : null}
+        {pullRequests.map((pr) => (
+          <PullRequestChip
+            key={pr.url}
+            pr={pr}
+            stale={staleGithub}
+            className="h-6 rounded-md px-2 text-[11px]"
+          />
+        ))}
       </div>
     </div>
   );
