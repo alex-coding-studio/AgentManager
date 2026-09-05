@@ -96,6 +96,33 @@ import type { ActionRun, ExecuteActionInput } from './execution-types.ts';
 import { prepareCardEnvironment } from '../../card-host-operations.ts';
 import { resolveProductContextReferences } from '../product-context/resource.ts';
 import { workerPacketPrompt } from './delivery-packet.ts';
+import {
+  beginRun,
+  listActiveRuns,
+  requestStop,
+  settleRun,
+  type ActiveRunReservation,
+} from '../../execution-observability/active-runs.ts';
+import { publishLatestResponse } from '../../execution-observability/latest-response-store.ts';
+import { openRunLog } from '../../execution-observability/run-log.ts';
+import {
+  classifyResponse,
+  type ClassificationFacts,
+} from '../../execution-observability/status.ts';
+import type {
+  JobLogReference,
+  LogActor,
+  LogPhase,
+  ResponseClassification,
+  RunPhase,
+} from '../../execution-observability/types.ts';
+import {
+  cardOwner,
+  cardResponseDocument,
+  cardRunLogPaths,
+  cardRunSubject,
+  retainedEffectsOf,
+} from './execution-response.ts';
 
 const exec = promisify(execFile);
 
@@ -108,7 +135,106 @@ type Active = {
   timeoutError?: Error;
   progress?: CoordinationProgress;
   activity?: CoordinationProgress[];
+  reservation?: ActiveRunReservation | null;
+  jobs?: JobLogReference[];
 };
+
+function actorForProgress(progress: CoordinationProgress): LogActor {
+  if (progress.actor) return progress.actor;
+  if (/^Running job: |^Finished: /.test(progress.summary)) return 'JOB';
+  return ['prepare', 'dispatch', 'qualify', 'complete'].includes(progress.phase)
+    ? 'COORDINATOR'
+    : 'WORKER';
+}
+
+function runPhaseForProgress(progress: CoordinationProgress): RunPhase {
+  if (progress.job?.status === 'running') return 'verifying';
+  if (progress.phase === 'complete') return 'finalizing';
+  return ['prepare', 'dispatch', 'qualify'].includes(progress.phase)
+    ? 'coordinating'
+    : 'executing';
+}
+
+function logPhaseForProgress(progress: CoordinationProgress): LogPhase {
+  if (progress.job || actorForProgress(progress) === 'JOB') return 'VERIFY';
+  if (progress.phase === 'prepare' || progress.phase === 'dispatch')
+    return 'PREPARE';
+  if (progress.phase === 'qualify' || progress.phase === 'complete')
+    return 'FINALIZE';
+  return 'EXECUTE';
+}
+
+function jobReference(
+  project: Project,
+  job: NonNullable<CoordinationProgress['job']>,
+): JobLogReference {
+  return {
+    jobId: job.jobId,
+    label: job.label,
+    ref: path.isAbsolute(job.logRef)
+      ? path.relative(project.planningPath, job.logRef)
+      : job.logRef,
+  };
+}
+
+function classifyRun(
+  run: ActionRun,
+  input: {
+    runState?: ClassificationFacts['runState'];
+    failure?: ClassificationFacts['failure'];
+    accepted?: boolean;
+    retained?: ClassificationFacts['retained'];
+    interruptedPhase?: RunPhase | null;
+    interruptedActor?: LogActor | null;
+  } = {},
+): ResponseClassification {
+  const result = run.result;
+  const decision = run.coordination?.decisions.at(-1);
+  const semantic =
+    decision &&
+    (decision.decision === 'needs-user' || decision.decision === 'blocked') &&
+    decision.title &&
+    decision.detail
+      ? { title: decision.title, detail: decision.detail }
+      : null;
+  const checks = result?.checks ?? [];
+  return classifyResponse({
+    surface: 'card',
+    runState: input.runState ?? 'settled',
+    outcome: result
+      ? result.outcome === 'delivered'
+        ? 'delivered'
+        : result.outcome === 'blocked'
+          ? 'blocked'
+          : 'failed'
+      : null,
+    coordinatorDecision:
+      decision?.decision === 'needs-user' || decision?.decision === 'blocked'
+        ? decision.decision
+        : null,
+    requiredChecks: result
+      ? {
+          total: checks.length,
+          passed: checks.filter((check) => check.status === 'passed').length,
+          failed: checks.filter((check) => check.status === 'failed').length,
+          notRun: checks.filter((check) => check.status === 'not-run').length,
+        }
+      : null,
+    additionalFindings: [
+      ...(result?.additionalChecks ?? [])
+        .filter((check) => check.status !== 'passed')
+        .map((check) => check.summary),
+      ...(run.evidenceErrors ?? []).filter(() => run.status === 'succeeded'),
+    ],
+    failure: input.failure ?? null,
+    interruptedPhase: input.interruptedPhase ?? null,
+    interruptedActor: input.interruptedActor ?? null,
+    retained: input.retained ?? null,
+    accepted: input.accepted ?? false,
+    semantic,
+    summary: result?.summary ?? null,
+  });
+}
 const runtime = globalThis as typeof globalThis & {
   jdiExecutionActive?: Map<string, Active>;
 };
@@ -418,7 +544,14 @@ export function createExecutionService(
         ))
           files[`coordination-${name}`] = text;
       }
-      const activity = active.get(cardKey(project, request.context.cardId))?.activity ?? [];
+      const live = active.get(cardKey(project, request.context.cardId));
+      const owner = live?.id === request.requestId ? live.reservation : null;
+      const jobLogs = live?.jobs ?? [];
+      const activity = live?.activity ?? [];
+      if (jobLogs.length) nextRun.jobs = jobLogs;
+      if (owner) nextRun.logRef = owner.logRef;
+      const timedOut =
+        outcome instanceof Error && /timed out/i.test(outcome.message);
       if (activity.length) {
         nextRun.activityRef = reference(card, 'activity.json');
         nextRun.progress = activity.at(-1);
@@ -519,6 +652,9 @@ export function createExecutionService(
           ...(nextRun.verifiedExternalRefs ?? []),
           ...(nextRun.verifiedVersionRefs ?? []),
         ]);
+        nextRun.response = classifyRun(nextRun, {
+          retained: retainedEffectsOf(nextRun, refs.length),
+        });
         files['result.json'] = JSON.stringify(result);
         files['output.md'] =
           `# Action output\n\n${result.summary}\n\nOutcome: ${result.outcome}\n\n## Observed changes\n${refs.map((ref) => `- ${ref}`).join('\n')}\n\n## Required self-checks\n${result.checks.map((check) => `- ${check.status}: ${check.summary}`).join('\n')}\n\n## Additional checks (non-blocker)\n${(result.additionalChecks ?? []).map((check) => `- ${check.status}: ${check.summary}`).join('\n')}\n\n## Remaining\n${result.remaining.map((item) => `- ${item}`).join('\n')}`;
@@ -539,6 +675,13 @@ export function createExecutionService(
           },
           files,
         );
+        if (owner)
+          await settleRun(owner, {
+            classification: nextRun.response!,
+            retained: retainedEffectsOf(nextRun, refs.length),
+            jobLogs,
+            endedAt: nextRun.endedAt ?? undefined,
+          }).catch(() => undefined);
       } catch (error) {
         const message =
           error instanceof Error ? error.message : 'Execution failed.';
@@ -590,6 +733,27 @@ export function createExecutionService(
           );
           files['github-delivery.json'] = JSON.stringify(nextRun.github);
         }
+        owner?.record({
+          level: 'ERROR',
+          actor: 'HOST',
+          phase: 'FINALIZE',
+          event: advisoryOnly ? 'result.advisory' : 'result.rejected',
+          message,
+        });
+        nextRun.response = classifyRun(nextRun, {
+          runState: timedOut ? 'timed-out' : 'settled',
+          retained: retainedEffectsOf(nextRun, refs.length),
+          failure:
+            advisoryOnly || timedOut
+              ? null
+              : error instanceof ExecutionEvidenceError
+                ? { kind: 'host-verification', message }
+                : nextRun.result
+                  ? null
+                  : /valid report|parse|schema|JSON/i.test(message)
+                    ? { kind: 'parse', message }
+                    : { kind: 'unknown', message },
+        });
         await commit(
           project,
           replaceRun(card, nextRun),
@@ -605,6 +769,13 @@ export function createExecutionService(
           },
           files,
         );
+        if (owner)
+          await settleRun(owner, {
+            classification: nextRun.response,
+            retained: retainedEffectsOf(nextRun, refs.length),
+            jobLogs,
+            endedAt: nextRun.endedAt ?? undefined,
+          }).catch(() => undefined);
       }
     } finally {
       const running = active.get(cardKey(project, request.context.cardId));
@@ -631,10 +802,7 @@ export function createExecutionService(
     )
       throw new PublicApiError('Invalid execution input.', 400);
     if (active.has(cardKey(project, input.cardId)))
-      throw new PublicApiError(
-        'This Card already has a running Action.',
-        409,
-      );
+      throw new PublicApiError('This Card already has a running Action.', 409);
     const reservation: Active = {
       id: randomUUID(),
       cardId: input.cardId,
@@ -902,35 +1070,76 @@ export function createExecutionService(
             includeHandoff: false,
             includeSkills: false,
           })}\n\nExecution runtime: ${runtimeInstructions}`;
-      const saved = await commit(
-        project,
-        {
-          ...card,
-          execution: {
-            ...card.execution,
-            profile: input.profile,
-            coordinationSettings,
-            workspace,
-            environment,
-            runs: [...(card.execution?.runs ?? []), run],
-            acceptedActionIds: card.execution?.acceptedActionIds ?? [],
-            git,
-            retryInputs,
-          },
+      if (
+        !workspace &&
+        listActiveRuns(project.planningPath).some(
+          (other) => other.owner.kind === 'card' && other.sharedCheckout,
+        )
+      )
+        throw new PublicApiError(
+          'Another Card is running in the shared checkout. Wait for it to finish.',
+          409,
+        );
+      let saved!: PlanningCard;
+      const subject = cardRunSubject(card, input.actionId);
+      const logPaths = cardRunLogPaths(project, card.id, request.requestId);
+      const { reservation: owner } = await beginRun({
+        owner: cardOwner(project, card.id),
+        runId: request.requestId,
+        logFile: logPaths.logFile,
+        logRef: logPaths.logRef,
+        subject,
+        actionId: input.actionId,
+        agentProfile: input.profile,
+        sharedCheckout: !workspace,
+        startMessage: `${subject.label} started with ${input.profile.agent}${input.profile.model ? ` ${input.profile.model}` : ''}${input.profile.effort ? ` ${input.profile.effort}` : ''}`,
+        conflictMessage: 'This Card already has a running Action.',
+        phase: 'coordinating',
+        actor: 'COORDINATOR',
+        validate: async () => undefined,
+        persist: async (started) => {
+          run.logRef = started.logRef;
+          saved = await commit(
+            project,
+            {
+              ...card,
+              execution: {
+                ...card.execution,
+                profile: input.profile,
+                coordinationSettings,
+                workspace,
+                environment,
+                runs: [...(card.execution?.runs ?? []), run],
+                acceptedActionIds: card.execution?.acceptedActionIds ?? [],
+                git,
+                retryInputs,
+              },
+            },
+            {
+              kind: 'user-input',
+              stage: 'execution',
+              actionId: input.actionId,
+              text: input.instruction || 'User started this Action.',
+            },
+            {
+              ...uploadedDocuments,
+              'request.json': JSON.stringify(request),
+              'baseline.json': JSON.stringify(baseline),
+              'prompt.txt': prompt,
+            },
+          );
+          return async () => {
+            await finish(
+              project,
+              request,
+              baseline,
+              new Error('The Running response could not be published.'),
+            );
+          };
         },
-        {
-          kind: 'user-input',
-          stage: 'execution',
-          actionId: input.actionId,
-          text: input.instruction || 'User started this Action.',
-        },
-        {
-          ...uploadedDocuments,
-          'request.json': JSON.stringify(request),
-          'baseline.json': JSON.stringify(baseline),
-          'prompt.txt': prompt,
-        },
-      );
+      });
+      reservation.reservation = owner;
+      reservation.jobs = [];
       try {
         const recordProgress = (progress: CoordinationProgress) => {
           if (
@@ -946,6 +1155,40 @@ export function createExecutionService(
           reservation.activity = [...(reservation.activity ?? []), entry].slice(
             -300,
           );
+          const actor = actorForProgress(entry);
+          const job = entry.job;
+          if (job) {
+            const known = reservation.jobs!.findIndex(
+              (item) => item.jobId === job.jobId,
+            );
+            const ref = jobReference(project, job);
+            if (known >= 0) reservation.jobs![known] = ref;
+            else reservation.jobs!.push(ref);
+          }
+          const failedJob =
+            job && job.status !== 'running' && job.exitCode !== 0;
+          owner.record({
+            level: failedJob ? 'ERROR' : 'INFO',
+            actor,
+            phase: logPhaseForProgress(entry),
+            event: job
+              ? job.status === 'running'
+                ? 'job.started'
+                : 'job.finished'
+              : actor === 'JOB'
+                ? 'job.progress'
+                : actor === 'COORDINATOR'
+                  ? 'coordinator.progress'
+                  : 'worker.progress',
+            message: job
+              ? job.status === 'running'
+                ? `${job.label} — ${job.command}`
+                : `${job.label} exited ${job.exitCode ?? job.status}; job log ${job.jobId}`
+              : entry.summary,
+          });
+          const nextPhase = runPhaseForProgress(entry);
+          if (owner.phase !== nextPhase && !owner.canceling)
+            owner.setPhase(nextPhase, actor === 'JOB' ? 'WORKER' : actor);
         };
         const options: Parameters<typeof transport>[1] = {
           workingDirectory: baseline.root,
@@ -1742,10 +1985,7 @@ export function createExecutionService(
   ) {
     assertCardUuid(cardId);
     if (active.has(cardKey(project, cardId)))
-      throw new PublicApiError(
-        'Stop this Card before resetting it.',
-        400,
-      );
+      throw new PublicApiError('Stop this Card before resetting it.', 400);
     const reservation: Active = {
       id: randomUUID(),
       cardId,

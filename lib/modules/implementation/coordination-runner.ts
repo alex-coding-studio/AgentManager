@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import type { AgentProfile } from '../../agents/profile.ts';
-import { redactActivity, redactRecord } from '../../agents/activity.ts';
+import {
+  redactActivity,
+  redactRecord,
+  type LocalAgentJobActivity,
+} from '../../agents/activity.ts';
 import {
   parseCardHarnessResult,
   type CardHarnessRequest,
@@ -64,6 +68,8 @@ export type CoordinationProgress = {
   summary: string;
   updatedAt: string;
   attempts: number;
+  actor?: 'COORDINATOR' | 'WORKER' | 'JOB' | 'HOST';
+  job?: LocalAgentJobActivity;
 };
 export type CoordinatedResult = LocalAgentResult & {
   coordination: CoordinationTrace;
@@ -225,12 +231,17 @@ export function startCoordinatedExecution(input: {
   const assertActive = () => {
     if (stopped) throw new Error('Coordinated execution stopped.');
   };
-  const progress = (phase: string, summary: string) =>
+  const progress = (
+    phase: string,
+    summary: string,
+    extra: Pick<CoordinationProgress, 'actor' | 'job'> = {},
+  ) =>
     input.onProgress({
       phase,
       summary,
       updatedAt: new Date().toISOString(),
       attempts: trace.attempts.length,
+      ...extra,
     });
   async function call(
     role: 'coordinator' | 'worker',
@@ -290,6 +301,7 @@ export function startCoordinatedExecution(input: {
         role === 'coordinator'
           ? 'Coordinator is preparing or assessing the Action.'
           : 'Worker is executing the bounded assignment.',
+        { actor: role === 'coordinator' ? 'COORDINATOR' : 'WORKER' },
       );
     const options: Options = {
       ...input.workerOptions,
@@ -319,7 +331,14 @@ export function startCoordinatedExecution(input: {
           if (match) workerCommandOutcomes.set(match[1], Number(match[2]));
         }
         if (!stopped && publicProgress)
-          progress(phase, redactActivity(activity.summary));
+          progress(phase, redactActivity(activity.summary), {
+            actor: activity.job
+              ? 'JOB'
+              : role === 'coordinator'
+                ? 'COORDINATOR'
+                : 'WORKER',
+            job: activity.job,
+          });
       },
     };
     try {

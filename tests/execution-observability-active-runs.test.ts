@@ -340,7 +340,7 @@ void test('host operations get their own log and record without touching the Lat
   const outcome = await runHostOperation(
     project,
     { kind: 'sync-main', label: 'Sync Up' },
-    async (log) => {
+    async ({ log }) => {
       log.append({
         level: 'INFO',
         actor: 'HOST',

@@ -66,6 +66,15 @@ export type CardExecution = {
   git?: { baseline: string; head: string; firstTrackedRunId: string };
   environment?: CardEnvironmentManifest;
   retryInputs?: Record<string, string>;
+  lastOperation?: CardHostOperation;
+};
+export type CardHostOperation = {
+  id: string;
+  kind: string;
+  label: string;
+  status: 'completed' | 'fail';
+  logUrlPath: string;
+  endedAt: string;
 };
 export type ExecuteActionInput = {
   cardId: string;
