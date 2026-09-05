@@ -117,6 +117,10 @@ export type BeginRunInput<T> = {
   phase?: RunPhase;
   actor?: LogActor;
   validate: () => Promise<T>;
+  prepare?: (
+    reservation: ActiveRunReservation,
+    validated: T,
+  ) => Promise<() => Promise<void>>;
   persist: (
     reservation: ActiveRunReservation,
     validated: T,
@@ -124,7 +128,7 @@ export type BeginRunInput<T> = {
 };
 
 function running(
-  input: Omit<BeginRunInput<unknown>, 'validate' | 'persist'>,
+  input: Omit<BeginRunInput<unknown>, 'validate' | 'prepare' | 'persist'>,
   startedAt: string,
 ): ActiveRunReservation {
   const key = ownerKey(input.owner);
@@ -260,9 +264,11 @@ export async function beginRun<T>(input: BeginRunInput<T>) {
     );
   const reservation = running(input, new Date().toISOString());
   registry.set(key, reservation);
-  let rollback: (() => Promise<void>) | null = null;
+  const rollbacks: Array<() => Promise<void>> = [];
   let logCreated = false;
   try {
+    if (input.prepare)
+      rollbacks.push(await input.prepare(reservation, validated));
     reservation.log = await createRunLog(input.logFile, {
       level: 'INFO',
       actor: 'HOST',
@@ -271,13 +277,14 @@ export async function beginRun<T>(input: BeginRunInput<T>) {
       message: input.startMessage,
     });
     logCreated = true;
-    rollback = await input.persist(reservation, validated);
+    rollbacks.push(await input.persist(reservation, validated));
     await publishLatestResponse(input.owner, reservation.document());
   } catch (error) {
     releaseRun(reservation);
-    if (rollback) await rollback().catch(() => undefined);
     if (logCreated)
       await rm(input.logFile, { force: true }).catch(() => undefined);
+    for (const rollback of rollbacks.reverse())
+      await rollback().catch(() => undefined);
     throw error;
   }
   return { reservation, validated };
