@@ -2,8 +2,24 @@ import {
   siblingCandidateIds,
   toGraphProposalCandidate,
 } from '../../graph/proposal/classify.ts';
-import type { ProductExplorationResult } from './contract.ts';
+import type {
+  ProductExplorationCandidate,
+  ProductExplorationCandidateInput,
+  ProductExplorationResult,
+} from './contract.ts';
 import type { WhatsNextHarnessResult } from './harness.ts';
+
+export function toProductExplorationCandidate(
+  candidate: ProductExplorationCandidateInput,
+  siblings: ReadonlySet<string>,
+): ProductExplorationCandidate {
+  return {
+    ...toGraphProposalCandidate(candidate, siblings),
+    outputMarkdown: candidate.outputMarkdown,
+    layer: candidate.layer,
+    artifactKind: candidate.artifactKind,
+  };
+}
 
 export function toProductExplorationSemanticResult(
   envelope: WhatsNextHarnessResult,
@@ -15,11 +31,8 @@ export function toProductExplorationSemanticResult(
   const siblings = siblingCandidateIds(envelope.candidates);
   return {
     outcome: 'proposal',
-    candidates: envelope.candidates.map((candidate) => ({
-      ...toGraphProposalCandidate(candidate, siblings),
-      outputMarkdown: candidate.outputMarkdown,
-      layer: candidate.layer,
-      artifactKind: candidate.artifactKind,
-    })),
+    candidates: envelope.candidates.map((candidate) =>
+      toProductExplorationCandidate(candidate, siblings),
+    ),
   };
 }

@@ -1,7 +1,18 @@
 import { MaterializationError } from '../../materialization/receipt.ts';
-import type { GraphProposalBasis } from './basis.ts';
 import type { GraphProposalCandidate } from './contract.ts';
 import type { GraphReference } from './reference.ts';
+
+export type GraphProposalDependencyState = {
+  knownNodeIds: readonly string[];
+  acceptedCandidateIds: readonly string[];
+  knownResourcePaths: readonly string[];
+  reservedCandidateIds: readonly string[];
+  currentCandidates: ReadonlyArray<{
+    candidateId: string;
+    dependsOn: readonly string[];
+  }>;
+  revisionTarget: { candidateId: string } | null;
+};
 
 export class GraphProposalValidationError extends MaterializationError {
   constructor(message: string) {
@@ -15,7 +26,7 @@ function fail(message: string): never {
 }
 
 export function validateGraphProposal(
-  basis: GraphProposalBasis,
+  basis: GraphProposalDependencyState,
   candidates: GraphProposalCandidate[],
 ) {
   const localKeys = new Set<string>();
@@ -102,7 +113,7 @@ function assertDependencyResolves(
 }
 
 function assertAcyclic(
-  basis: GraphProposalBasis,
+  basis: GraphProposalDependencyState,
   candidates: GraphProposalCandidate[],
 ) {
   const edges = new Map<string, string[]>();

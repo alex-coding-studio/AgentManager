@@ -7,18 +7,28 @@ import {
 } from '../../graph/proposal/basis.ts';
 import type { GraphProposalRevision } from '../../graph/proposal/contract.ts';
 import { identitiesFingerprint } from '../../graph/identity-store.ts';
-import { PRODUCT_EXPLORATION_RESULT_CONTRACT } from './contract.ts';
+import {
+  PRODUCT_EXPLORATION_RESULT_CONTRACT,
+  type ProductExplorationCandidate,
+} from './contract.ts';
 import type { WhatsNextIntention, WhatsNextMotion } from './intention.ts';
 import type { RegisteredProject } from '../../project-registry.ts';
 
 export type ProductExplorationOperation = 'explore' | 'refine-candidate';
 
-export type ProductExplorationMaterializationBasis = GraphProposalBasis & {
-  operation: ProductExplorationOperation;
-  intention: WhatsNextIntention;
-  motion: WhatsNextMotion;
-  productSourceNodeId: string | null;
-};
+type GraphProposalState = Omit<
+  GraphProposalBasis,
+  keyof MaterializationBasisCore
+>;
+
+export type ProductExplorationMaterializationBasis = MaterializationBasisCore &
+  GraphProposalState & {
+    operation: ProductExplorationOperation;
+    intention: WhatsNextIntention;
+    motion: WhatsNextMotion;
+    productSourceNodeId: string | null;
+    revisionSource: ProductExplorationCandidate | null;
+  };
 
 export type ProductExplorationBasisInput = {
   operation: ProductExplorationOperation;
@@ -31,12 +41,8 @@ export type ProductExplorationBasisInput = {
   reservedCandidateIds: readonly string[];
   currentCandidates: readonly GraphProposalCurrentCandidate[];
   revisionTarget?: GraphProposalRevision | null;
+  revisionSource?: ProductExplorationCandidate | null;
 };
-
-type GraphProposalState = Omit<
-  GraphProposalBasis,
-  keyof MaterializationBasisCore
->;
 
 function frozenState(
   input: ProductExplorationBasisInput,
@@ -94,6 +100,9 @@ export async function prepareProductExplorationMaterializationBasis(
       input.intention === 'product-design-completion'
         ? (input.sourceNodeIds[0] ?? null)
         : null,
+    revisionSource: input.revisionSource
+      ? structuredClone(input.revisionSource)
+      : null,
   };
   return deepFreeze(basis);
 }

@@ -17,12 +17,19 @@ import {
   type ProductExplorationResourceReference,
 } from './contract.ts';
 import {
-  intentionDestination,
   whatsNextIntentionProfile,
   whatsNextMotionProfile,
   type WhatsNextIntention,
   type WhatsNextMotion,
 } from './intention.ts';
+import {
+  validateProductExplorationResult,
+  type ProductExplorationValidationState,
+} from './materializer.ts';
+import {
+  toProductExplorationCandidate,
+  toProductExplorationSemanticResult,
+} from './producer-adapter.ts';
 
 export const WHATS_NEXT_HARNESS_ID = 'praxis.whats-next';
 export const WHATS_NEXT_HARNESS_REVISION = 8;
@@ -322,8 +329,8 @@ export function validateWhatsNextHarnessResult(
   requireKnownNodes(result.exploration.consideredNodeIds, knownNodeIds);
 
   if (result.outcome === 'proposal') {
-    validateCandidates(result.candidates, context, knownNodeIds);
-    validateOperationCardinality(result.candidates, context);
+    validateCandidateRevisions(result.candidates, context);
+    validateSemanticResult(result, context);
   } else if (result.outcome === 'clarification') {
     requireUnique(
       result.clarification.options.map((option) => option.id),
@@ -377,211 +384,67 @@ function validateRequest(
   }
 }
 
-function validateCandidates(
+function validateCandidateRevisions(
   candidates: WhatsNextCandidate[],
   context: WhatsNextValidationContext,
-  knownNodeIds: Set<string>,
 ) {
-  requireUnique(
-    candidates.map((candidate) => candidate.candidateId),
-    'Candidate identifiers must be unique in one proposal.',
-  );
-  const proposalCandidateIds = new Set(
-    candidates.map((candidate) => candidate.candidateId),
-  );
-  const knownCandidates = new Map(
-    [...(context.knownCandidates ?? [])].map((candidate) => [
-      candidate.candidateId,
-      candidate,
-    ]),
-  );
-  const acceptedCandidateIds = new Set(context.acceptedCandidateIds ?? []);
-  const knownResourcePaths = new Set(context.knownResourcePaths);
-  const reservedCandidateIds = new Set(context.reservedCandidateIds ?? []);
   for (const candidate of candidates) {
     const previousRevision =
       context.previousCandidateRevisions?.[candidate.candidateId];
     const expectedRevision =
       previousRevision === undefined ? 1 : previousRevision + 1;
-    if (
-      previousRevision === undefined &&
-      reservedCandidateIds.has(candidate.candidateId)
-    ) {
-      fail(`Candidate ${candidate.candidateId} already exists.`);
-    }
     if (candidate.revision !== expectedRevision) {
       fail(
         `Candidate ${candidate.candidateId} must use revision ${expectedRevision}.`,
       );
     }
-    requireKnownNodes(candidate.derivedFrom, knownNodeIds);
-    for (const dependencyId of candidate.dependsOn) {
-      if (dependencyId === candidate.candidateId) {
-        fail(`Candidate ${candidate.candidateId} cannot depend on itself.`);
-      }
-      if (
-        !knownNodeIds.has(dependencyId) &&
-        !proposalCandidateIds.has(dependencyId) &&
-        !knownCandidates.has(dependencyId) &&
-        !acceptedCandidateIds.has(dependencyId)
-      ) {
-        fail('A Candidate depends on an unknown Node or Candidate.');
-      }
-    }
-    if (
-      candidate.typeTemplateRef !== null &&
-      !knownNodeIds.has(candidate.typeTemplateRef)
-    ) {
-      fail('A Candidate type template references an unknown Node.');
-    }
-    for (const resource of candidate.resources) {
-      if (!knownResourcePaths.has(resource.path)) {
-        fail('A Candidate references an unknown Resource.');
-      }
-    }
-    validateCandidateMarkdown(candidate);
-    const destination = intentionDestination(
-      context.intention ?? 'mvp-exploration',
-    );
-    if (
-      candidate.layer !== destination.layer ||
-      candidate.artifactKind !== destination.artifactKind
-    )
-      fail('A Candidate does not match the requested Intention destination.');
-    if (
-      context.intention === 'product-design-completion' &&
-      (context.operation ?? 'explore') === 'explore' &&
-      context.productSourceNodeId &&
-      (candidate.derivedFrom.length !== 1 ||
-        candidate.derivedFrom[0] !== context.productSourceNodeId)
-    )
-      fail(
-        'Product Design Completion must keep the Product Source as its only lineage parent.',
-      );
   }
-  assertCandidateDependenciesAreAcyclic([
-    ...knownCandidates.values(),
-    ...candidates,
-  ]);
 }
 
-function validateOperationCardinality(
-  candidates: WhatsNextCandidate[],
+function validateSemanticResult(
+  result: WhatsNextHarnessResult,
   context: WhatsNextValidationContext,
 ) {
-  if ((context.operation ?? 'explore') === 'explore') {
-    if ((context.motion ?? 'unspecified') === 'converge') {
-      if (candidates.length !== 1)
-        fail('Converge must return exactly one aggregate Candidate.');
-    } else if (
-      (context.motion ?? 'unspecified') === 'diverge' &&
-      (candidates.length < 2 || candidates.length > 5)
-    ) {
-      fail("A What's Next divergence must return two to five directions.");
-    }
-    return;
-  }
-  if (
-    candidates.length !== 1 ||
-    candidates[0]?.candidateId !== context.revisionCandidateId
-  ) {
-    fail('Refine must return exactly the requested Candidate identifier.');
-  }
-  const candidate = candidates[0];
-  if (candidate && context.revisionTarget) {
-    validateRefineBoundary(candidate, context.revisionTarget);
+  try {
+    validateProductExplorationResult(
+      productExplorationValidationState(context),
+      toProductExplorationSemanticResult(result),
+    );
+  } catch (error) {
+    fail(
+      error instanceof Error
+        ? error.message
+        : "The What's next result is invalid.",
+    );
   }
 }
 
-function validateRefineBoundary(
-  candidate: WhatsNextCandidate,
-  previous: WhatsNextCandidate,
-) {
-  const unchanged = [
-    ['type', candidate.type, previous.type],
-    ['derivedFrom', candidate.derivedFrom, previous.derivedFrom],
-    ['dependsOn', candidate.dependsOn, previous.dependsOn],
-    ['layer', [candidate.layer], [previous.layer]],
-    ['artifactKind', [candidate.artifactKind], [previous.artifactKind]],
-    ['resources', candidate.resources, previous.resources],
-    ['typeTemplateRef', candidate.typeTemplateRef, previous.typeTemplateRef],
-    ['metadata', candidate.metadata, previous.metadata],
-    ['presentation', candidate.presentation, previous.presentation],
-  ] as const;
-  for (const [field, current, prior] of unchanged) {
-    if (JSON.stringify(current) !== JSON.stringify(prior)) {
-      fail(`Refine cannot change Candidate ${field}.`);
-    }
-  }
-}
-
-function validateCandidateMarkdown(candidate: WhatsNextCandidate) {
-  const markdown = candidate.outputMarkdown.trim();
-  if (!markdown.startsWith(`# ${candidate.title}\n`)) {
-    fail('Candidate Markdown must start with its exact title.');
-  }
-  const rationale = markdown.match(
-    /(?:^|\n)## Why this direction\s*\n([\s\S]*?)(?=\n## |$)/,
-  )?.[1];
-  if (!rationale) {
-    fail('Candidate Markdown must contain a Why this direction section.');
-  }
-  const statements = rationale
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => /^(?:[-*]|\d+[.)])\s+/.test(line));
-  if (statements.length < 2 || statements.length > 4) {
-    fail('Why this direction must contain two to four short bullets.');
-  }
-  if (statements.some((statement) => statement.length > 242)) {
-    fail('Each Why this direction bullet must remain concise.');
-  }
-  const assumptionsSection = markdown.match(
-    /(?:^|\n)## Assumptions\s*\n([\s\S]*?)(?=\n## |$)/,
-  )?.[1];
-  if (!assumptionsSection) {
-    fail('Candidate Markdown must contain an Assumptions section.');
-  }
-  const markdownAssumptions = assumptionsSection
-    .split('\n')
-    .map((line) => line.trim().replace(/^[-*]\s+/, ''))
-    .filter((line) => line && line.toLowerCase() !== 'none');
-  if (
-    JSON.stringify(markdownAssumptions) !==
-    JSON.stringify(candidate.assumptions)
-  ) {
-    fail('Candidate assumptions must mirror its Markdown section.');
-  }
-}
-
-function assertCandidateDependenciesAreAcyclic(
-  candidates: Iterable<Pick<WhatsNextCandidate, 'candidateId' | 'dependsOn'>>,
-) {
-  const dependencies = new Map(
-    [...candidates].map((candidate) => [
-      candidate.candidateId,
-      candidate.dependsOn.filter((dependencyId) =>
-        dependencyId.startsWith('CANDIDATE-'),
-      ),
-    ]),
-  );
-  const visiting = new Set<string>();
-  const visited = new Set<string>();
-
-  function visit(candidateId: string) {
-    if (visiting.has(candidateId)) {
-      fail('Candidate dependencies must not contain a cycle.');
-    }
-    if (visited.has(candidateId)) return;
-    visiting.add(candidateId);
-    for (const dependencyId of dependencies.get(candidateId) ?? []) {
-      if (dependencies.has(dependencyId)) visit(dependencyId);
-    }
-    visiting.delete(candidateId);
-    visited.add(candidateId);
-  }
-
-  for (const candidateId of dependencies.keys()) visit(candidateId);
+function productExplorationValidationState(
+  context: WhatsNextValidationContext,
+): ProductExplorationValidationState {
+  const revisionTarget = context.revisionTarget;
+  return {
+    knownNodeIds: [...context.knownNodeIds],
+    acceptedCandidateIds: [...(context.acceptedCandidateIds ?? [])],
+    knownResourcePaths: [...context.knownResourcePaths],
+    reservedCandidateIds: [...(context.reservedCandidateIds ?? [])],
+    currentCandidates: [...(context.knownCandidates ?? [])].map(
+      (candidate) => ({
+        candidateId: candidate.candidateId,
+        dependsOn: candidate.dependsOn,
+      }),
+    ),
+    revisionTarget: revisionTarget
+      ? { candidateId: revisionTarget.candidateId }
+      : null,
+    operation: context.operation ?? 'explore',
+    intention: context.intention ?? 'mvp-exploration',
+    motion: context.motion ?? 'unspecified',
+    productSourceNodeId: context.productSourceNodeId ?? null,
+    revisionSource: revisionTarget
+      ? toProductExplorationCandidate(revisionTarget, new Set())
+      : null,
+  };
 }
 
 function requireKnownNodes(values: string[], knownNodeIds: Set<string>) {
