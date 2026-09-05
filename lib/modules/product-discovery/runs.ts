@@ -76,7 +76,10 @@ import {
   whatsNextValidationContext,
   type WhatsNextValidationContextInput,
 } from './validation-context.ts';
-import { MaterializationError } from '../../materialization/receipt.ts';
+import {
+  isStaleBasisError,
+  MaterializationError,
+} from '../../materialization/receipt.ts';
 import { prepareProductExplorationMaterializationBasis } from './basis.ts';
 import { materializeProductExplorationResult } from './materializer.ts';
 import {
@@ -1108,12 +1111,7 @@ async function finishWhatsNextRun(
     const classification = classifyModuleRun({
       runState: 'settled',
       failure: {
-        kind:
-          error instanceof PublicApiError && error.status === 409
-            ? 'persistence'
-            : agentOutput
-              ? 'parse'
-              : 'transport',
+        kind: whatsNextFailureKind(error, agentOutput),
         message: original,
       },
     });
@@ -1658,6 +1656,19 @@ function getActiveRuns() {
   };
   runtime.__praxisWhatsNextRuns ??= new Map<string, ActiveRun>();
   return runtime.__praxisWhatsNextRuns;
+}
+
+export function whatsNextFailureKind(
+  error: unknown,
+  agentOutput: string | null,
+): 'persistence' | 'parse' | 'transport' {
+  if (
+    isStaleBasisError(error) ||
+    (error instanceof PublicApiError && error.status === 409)
+  ) {
+    return 'persistence';
+  }
+  return agentOutput ? 'parse' : 'transport';
 }
 
 async function materializeWhatsNextOutput(

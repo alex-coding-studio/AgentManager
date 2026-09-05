@@ -7,7 +7,13 @@ import { createStartNode } from '../lib/graph/task/model.ts';
 import { prepareProductExplorationMaterializationBasis } from '../lib/modules/product-discovery/basis.ts';
 import { materializeProductExplorationResult } from '../lib/modules/product-discovery/materializer.ts';
 import type { ProductExplorationResult } from '../lib/modules/product-discovery/contract.ts';
-import { MaterializationError } from '../lib/materialization/receipt.ts';
+import {
+  isStaleBasisError,
+  MaterializationError,
+} from '../lib/materialization/receipt.ts';
+import { whatsNextFailureKind } from '../lib/modules/product-discovery/runs.ts';
+import { classifyModuleRun } from '../lib/execution-observability/module-run.ts';
+import { apiErrorResponse, PublicApiError } from '../lib/api-errors.ts';
 import type { RegisteredProject } from '../lib/project-registry.ts';
 
 async function fixture(t: test.TestContext) {
@@ -184,4 +190,73 @@ void test('materializing against a basis another allocation overtook is refused 
       error.boundary === 'stale-basis' &&
       error.status === 409,
   );
+});
+
+void test('a stale basis is a persistence conflict, not malformed Agent output', () => {
+  const stale = new MaterializationError(
+    'stale-basis',
+    'The graph identity index changed after this result was prepared.',
+  );
+  assert.equal(isStaleBasisError(stale), true);
+  assert.equal(
+    isStaleBasisError(new MaterializationError('validation', 'no')),
+    false,
+  );
+  assert.equal(
+    whatsNextFailureKind(stale, '{"outcome":"proposal"}'),
+    'persistence',
+  );
+  assert.equal(
+    whatsNextFailureKind(new PublicApiError('conflict', 409), 'output'),
+    'persistence',
+  );
+  assert.equal(
+    whatsNextFailureKind(
+      new MaterializationError('validation', 'no'),
+      'output',
+    ),
+    'parse',
+  );
+  assert.equal(whatsNextFailureKind(new Error('gone'), null), 'transport');
+});
+
+void test('the Run response for a stale basis describes the conflict, not a rejected result', () => {
+  const conflict = classifyModuleRun({
+    runState: 'settled',
+    failure: {
+      kind: whatsNextFailureKind(
+        new MaterializationError('stale-basis', 'The index moved.'),
+        '{"outcome":"proposal"}',
+      ),
+      message: 'The index moved.',
+    },
+  });
+  const rejected = classifyModuleRun({
+    runState: 'settled',
+    failure: { kind: 'parse', message: 'The index moved.' },
+  });
+  assert.notDeepEqual(conflict, rejected);
+  assert.deepEqual(
+    conflict,
+    classifyModuleRun({
+      runState: 'settled',
+      failure: { kind: 'persistence', message: 'The index moved.' },
+    }),
+  );
+});
+
+void test('a stale basis reaches the API as 409 rather than an unexpected failure', async () => {
+  const response = apiErrorResponse(
+    new MaterializationError('stale-basis', 'The index moved.'),
+    'Something went wrong.',
+    '/api/whats-next',
+  );
+  assert.equal(response.status, 409);
+  assert.deepEqual(await response.json(), { error: 'The index moved.' });
+  const validation = apiErrorResponse(
+    new MaterializationError('validation', 'Bad Candidate.'),
+    'Something went wrong.',
+    '/api/whats-next',
+  );
+  assert.equal(validation.status, 400);
 });

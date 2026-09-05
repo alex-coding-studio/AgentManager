@@ -1,3 +1,4 @@
+import { MaterializationError } from './materialization/receipt.ts';
 import { randomUUID } from 'node:crypto';
 import {
   RequestBoundaryError,
@@ -122,6 +123,8 @@ export function apiErrorResponse(
 ) {
   const boundary = boundaryErrorResponse(error);
   if (boundary) return boundary;
+  if (error instanceof MaterializationError)
+    return Response.json({ error: error.message }, { status: error.status });
   if (error instanceof PublicApiError)
     return Response.json(
       error.code
