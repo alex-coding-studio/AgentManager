@@ -838,11 +838,7 @@ The Coordinator-assigned responsibilities, responsibilityInstructions, Skills an
           lastWorkerReport.checks,
           input.request.context.acceptanceOverrides,
         );
-        if (required.passed) {
-          if (lastWorkerReport.outcome !== 'delivered')
-            throw new Error(
-              'Worker reported all required checks passed but did not deliver the Action.',
-            );
+        if (required.passed && lastWorkerReport.outcome === 'delivered') {
           return deliveredResult(lastWorkerReport, lastWorker);
         }
         req = createCoordinationRequest({

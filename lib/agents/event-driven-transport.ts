@@ -36,7 +36,7 @@ export type CoordinatorSession = {
 };
 
 const candidatePublicationInstructions =
-  '\n\nCandidate publication tool: call publish_candidate once with a title and body to deliver the current Action changes. One Host script owns allowed-file inspection, pending commit creation, bot identity selection and restoration, repository initialization, Action-scoped branch push, and PR creation or update. Treat it as a black box. Do not run GitHub account, permission, push, PR creation or PR lookup commands yourself. Set ready=true only after the required gates passed, including explicitly reused valid evidence. A later round in the same Action calls the same tool to update that Action PR.';
+  '\n\nCandidate publication tool: call publish_candidate with a title and body for each required Draft or Ready transition of this Action. One Host script owns commits, bot identity selection and restoration, repository initialization, Action-scoped push, and PR updates. Treat it as a black box. Do not run GitHub commands yourself. Set ready=true only with valid required evidence. A reported publication observation delay is a recoverable delivery operation, not a missing responsibility or user decision. Report it to the Coordinator for a bounded delivery-only continuation using this same tool. Do not repeat implementation or passed validation for an unchanged candidate. Subsequent rounds update the same Action PR.';
 
 export function codexWorkerAppServerArguments(
   catalog: SkillCatalog,
