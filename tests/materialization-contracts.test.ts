@@ -345,3 +345,44 @@ void test('the Delivery Map contract rejects producer-supplied identity, revisio
     DELIVERY_MAP_RESULT_CONTRACT.validateStructure(withUserInputEvidence),
   );
 });
+
+void test('the Delivery Map contract references an existing Contract by its formal identifier', async () => {
+  const { DELIVERY_MAP_RESULT_CONTRACT, DELIVERY_MAP_MINIMAL_EXAMPLE } =
+    await import('../lib/modules/delivery-planning/contract.ts');
+  const example = DELIVERY_MAP_MINIMAL_EXAMPLE as Extract<
+    typeof DELIVERY_MAP_MINIMAL_EXAMPLE,
+    { outcome: 'map-proposal' }
+  >;
+  const dependsOn = (id: string) => ({
+    ...example,
+    contracts: [
+      {
+        ...example.contracts[0]!,
+        dependsOn: [{ kind: 'contract' as const, id }],
+      },
+    ],
+  });
+  assert.doesNotThrow(() =>
+    DELIVERY_MAP_RESULT_CONTRACT.validateStructure(dependsOn('NODE-00000001')),
+  );
+  assert.throws(() =>
+    DELIVERY_MAP_RESULT_CONTRACT.validateStructure(dependsOn('CANDIDATE-0001')),
+  );
+});
+
+void test('the Domain Model contract names a pre-materialization outcome instead of the committed one', async () => {
+  const { DOMAIN_MODEL_RESULT_CONTRACT, DOMAIN_MODEL_MINIMAL_EXAMPLE } =
+    await import('../lib/modules/domain-modeling/contract.ts');
+  assert.equal(DOMAIN_MODEL_MINIMAL_EXAMPLE.outcome, 'model-change');
+  assert.doesNotThrow(() =>
+    DOMAIN_MODEL_RESULT_CONTRACT.validateStructure(
+      DOMAIN_MODEL_MINIMAL_EXAMPLE,
+    ),
+  );
+  assert.throws(() =>
+    DOMAIN_MODEL_RESULT_CONTRACT.validateStructure({
+      ...DOMAIN_MODEL_MINIMAL_EXAMPLE,
+      outcome: 'applied',
+    }),
+  );
+});

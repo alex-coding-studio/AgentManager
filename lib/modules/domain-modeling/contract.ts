@@ -24,7 +24,7 @@ export type DomainModelChange =
   | { kind: 'model'; model: ProposedDomainModel };
 
 export type DomainModelResult =
-  | { outcome: 'applied'; summary: string; change: DomainModelChange }
+  | { outcome: 'model-change'; summary: string; change: DomainModelChange }
   | { outcome: 'clarification'; summary: string; question: string }
   | { outcome: 'no-change'; summary: string; reason: string };
 
@@ -168,7 +168,7 @@ export const DOMAIN_MODEL_RESULT_SCHEMA = {
       additionalProperties: false,
       required: ['outcome', 'summary', 'change'],
       properties: {
-        outcome: { const: 'applied' },
+        outcome: { const: 'model-change' },
         summary: boundedText,
         change: {
           oneOf: [
@@ -225,7 +225,7 @@ export const DOMAIN_MODEL_RESULT_CONTRACT =
   });
 
 export const DOMAIN_MODEL_MINIMAL_EXAMPLE: DomainModelResult = {
-  outcome: 'applied',
+  outcome: 'model-change',
   summary: 'Adds one example entity.',
   change: {
     kind: 'patch',

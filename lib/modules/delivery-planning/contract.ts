@@ -4,7 +4,10 @@ import {
   recomposeEffectSchema,
   type AgentGraphRecomposeEffect,
 } from '../../graph/agent/recompose.ts';
-import { CANDIDATE_ALIAS_PATTERN } from '../../graph/identity.ts';
+import {
+  CANDIDATE_ALIAS_PATTERN,
+  NODE_ALIAS_PATTERN,
+} from '../../graph/identity.ts';
 import { LOCAL_KEY_SCHEMA } from '../../graph/proposal/reference.ts';
 
 export const DELIVERY_MAP_RESULT_CONTRACT_ID = 'praxis.delivery-map.result';
@@ -328,11 +331,16 @@ export const whatToDoMapProposalOptionalProperties = {
   },
 };
 
+const deliveryContractId = {
+  type: 'string',
+  pattern: NODE_ALIAS_PATTERN,
+} as const;
+
 const contractReference = {
   oneOf: [
     whatToDoObject({
       kind: { const: 'contract' },
-      id: whatToDoCandidateId,
+      id: deliveryContractId,
     }),
     whatToDoObject({
       kind: { const: 'proposal' },
