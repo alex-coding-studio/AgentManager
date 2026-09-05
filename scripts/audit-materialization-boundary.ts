@@ -31,6 +31,7 @@ const AGENT_GRAPH_IO = String.raw`lib/graph/agent/(?:run|input|context-workspace
 const MATERIALIZER_MEMBERS = [
   String.raw`lib/materialization/`,
   String.raw`lib/graph/proposal/`,
+  String.raw`lib/graph/task/nodes\.ts$`,
   String.raw`lib/modules/[^/]+/(?:contract|basis|materializer)\.tsx?$`,
 ];
 
@@ -49,6 +50,7 @@ export const MATERIALIZATION_REQUIRED_FILES = [
   'lib/graph/proposal/validate.ts',
   'lib/graph/proposal/classify.ts',
   'lib/graph/proposal/dependencies.ts',
+  'lib/graph/task/nodes.ts',
   'lib/modules/domain-modeling/materializer.ts',
   'lib/modules/product-discovery/contract.ts',
   'lib/modules/scope-decomposition/contract.ts',

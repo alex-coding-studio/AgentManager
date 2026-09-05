@@ -1,6 +1,6 @@
 import { getProject } from '@/lib/project-registry';
 import { apiErrorResponse } from '@/lib/api-errors';
-import { readTaskGraphMarkdownResource } from '@/lib/graph/task/model';
+import { readTaskGraphMarkdownResource } from '@/lib/graph/task/nodes';
 
 export const runtime = 'nodejs';
 
