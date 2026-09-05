@@ -1,4 +1,4 @@
-import type { TaskGraphNode } from '../../graph/task/model.ts';
+import type { TaskGraphNode } from '../../graph/task/nodes.ts';
 
 export function toggleWhatsNextSelection(
   nodes: Pick<TaskGraphNode, 'id' | 'role'>[],

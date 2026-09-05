@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 import {
   TASK_DECOMPOSITION_HARNESS_ID,
   TASK_DECOMPOSITION_HARNESS_OUTPUT_SCHEMA,
@@ -476,5 +477,23 @@ void test('rejects malformed Agent JSON before validation', () => {
   assert.throws(
     () => parseTaskDecompositionHarnessResult('{', context),
     /not valid JSON/,
+  );
+});
+
+void test('the composed Harness output schema is byte-identical to the schema before fragment extraction', () => {
+  const fixture = readFileSync(
+    new URL(
+      './fixtures/harness-schemas/task-decomposition.json',
+      import.meta.url,
+    ),
+    'utf8',
+  );
+  assert.deepEqual(
+    TASK_DECOMPOSITION_HARNESS_OUTPUT_SCHEMA,
+    JSON.parse(fixture),
+  );
+  assert.equal(
+    JSON.stringify(TASK_DECOMPOSITION_HARNESS_OUTPUT_SCHEMA),
+    JSON.stringify(JSON.parse(fixture)),
   );
 });

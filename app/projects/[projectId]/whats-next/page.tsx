@@ -8,7 +8,7 @@ import {
   getProject,
   listProjects,
 } from '@/lib/project-registry';
-import { listTaskGraphNodes } from '@/lib/graph/task/model';
+import { listTaskGraphNodes } from '@/lib/graph/task/nodes';
 import { findDemoSource } from '@/lib/modules/implementation/demo';
 import { JustDoItSourcePreview } from '@/components/just-do-it-source-preview';
 import {

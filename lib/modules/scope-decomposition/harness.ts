@@ -1,6 +1,20 @@
 import Ajv2020 from 'ajv/dist/2020.js';
-import type { GraphIdentityFields } from '../../graph/identity.ts';
 import type { AgentGraphRecomposeEffect } from '../../graph/agent/recompose.ts';
+import {
+  CLARIFICATION_SCHEMA,
+  GRAPH_CANDIDATE_RECORD_PROPERTIES,
+  GRAPH_CANDIDATE_RECORD_REQUIRED,
+  NODE_ID_ARRAY_SCHEMA,
+  NON_EMPTY_STRING_SCHEMA,
+  REQUEST_IDENTITY_SCHEMA,
+  RESOURCE_REFERENCE_SCHEMA,
+  STRING_ARRAY_SCHEMA,
+} from '../../graph/proposal/contract.ts';
+import {
+  SCOPE_DECOMPOSITION_HARNESS_RECOMPOSITION_SCHEMA,
+  type ScopeDecompositionCandidateInput,
+  type ScopeDecompositionResourceReference,
+} from './contract.ts';
 
 export const TASK_DECOMPOSITION_HARNESS_ID = 'praxis.task-decomposition';
 export const TASK_DECOMPOSITION_HARNESS_REVISION = 8;
@@ -33,25 +47,9 @@ export type HarnessRequestIdentity = {
   inputFingerprint: string;
 };
 
-export type HarnessResourceReference = {
-  kind: string;
-  path: string;
-};
+export type HarnessResourceReference = ScopeDecompositionResourceReference;
 
-export type HarnessCandidate = GraphIdentityFields & {
-  candidateId: string;
-  revision: number;
-  type: string;
-  title: string;
-  summary: string;
-  derivedFrom: string[];
-  dependsOn: string[];
-  resources: HarnessResourceReference[];
-  typeTemplateRef: string | null;
-  metadata: Record<string, unknown>;
-  presentation: { color?: string };
-  assumptions: string[];
-};
+export type HarnessCandidate = ScopeDecompositionCandidateInput;
 
 export type HarnessImpactReview = {
   reviewedNodeIds: string[];
@@ -106,27 +104,9 @@ export type HarnessValidationContext = {
   >;
 };
 
-const nonEmptyString = { type: 'string', minLength: 1, pattern: '\\S' };
-const nodeId = { type: 'string', pattern: '^NODE-[0-9a-f]{8,32}$' };
-const candidateId = {
-  type: 'string',
-  pattern: '^CANDIDATE-(?:[0-9]{4,}|[0-9a-f]{8,32})$',
-};
-const stringArray = {
-  type: 'array',
-  uniqueItems: true,
-  items: nonEmptyString,
-};
-const nodeIdArray = {
-  type: 'array',
-  uniqueItems: true,
-  items: nodeId,
-};
-const dependencyIdArray = {
-  type: 'array',
-  uniqueItems: true,
-  items: { oneOf: [nodeId, candidateId] },
-};
+const nonEmptyString = NON_EMPTY_STRING_SCHEMA;
+const stringArray = STRING_ARRAY_SCHEMA;
+const nodeIdArray = NODE_ID_ARRAY_SCHEMA;
 const baseProperties = {
   schemaVersion: { const: 1 },
   harness: { $ref: '#/$defs/harness' },
@@ -222,16 +202,7 @@ export const TASK_DECOMPOSITION_HARNESS_OUTPUT_SCHEMA = {
         revision: { const: TASK_DECOMPOSITION_HARNESS_REVISION },
       },
     },
-    request: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['sessionId', 'requestId', 'inputFingerprint'],
-      properties: {
-        sessionId: nonEmptyString,
-        requestId: nonEmptyString,
-        inputFingerprint: nonEmptyString,
-      },
-    },
+    request: REQUEST_IDENTITY_SCHEMA,
     impactReview: {
       type: 'object',
       additionalProperties: false,
@@ -242,104 +213,15 @@ export const TASK_DECOMPOSITION_HARNESS_OUTPUT_SCHEMA = {
         notes: stringArray,
       },
     },
-    resource: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['kind', 'path'],
-      properties: {
-        kind: { ...nonEmptyString, maxLength: 80 },
-        path: { ...nonEmptyString, maxLength: 500 },
-      },
-    },
+    resource: RESOURCE_REFERENCE_SCHEMA,
     candidate: {
       type: 'object',
       additionalProperties: false,
-      required: [
-        'candidateId',
-        'revision',
-        'type',
-        'title',
-        'summary',
-        'derivedFrom',
-        'dependsOn',
-        'resources',
-        'typeTemplateRef',
-        'metadata',
-        'presentation',
-        'assumptions',
-      ],
-      properties: {
-        candidateId,
-        revision: { type: 'integer', minimum: 1 },
-        type: { ...nonEmptyString, maxLength: 80 },
-        title: { ...nonEmptyString, maxLength: 160 },
-        summary: { ...nonEmptyString, maxLength: 600 },
-        derivedFrom: { ...nodeIdArray, minItems: 1 },
-        dependsOn: dependencyIdArray,
-        resources: {
-          type: 'array',
-          uniqueItems: true,
-          items: { $ref: '#/$defs/resource' },
-        },
-        typeTemplateRef: { oneOf: [nodeId, { type: 'null' }] },
-        metadata: { type: 'object' },
-        presentation: {
-          type: 'object',
-          additionalProperties: false,
-          properties: {
-            color: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$' },
-          },
-        },
-        assumptions: stringArray,
-      },
+      required: GRAPH_CANDIDATE_RECORD_REQUIRED,
+      properties: GRAPH_CANDIDATE_RECORD_PROPERTIES,
     },
-    recomposition: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['effects'],
-      properties: {
-        effects: {
-          type: 'array',
-          minItems: 1,
-          items: {
-            type: 'object',
-            additionalProperties: false,
-            required: ['kind', 'from', 'to'],
-            properties: {
-              kind: {
-                enum: ['retain', 'replace', 'split', 'merge', 'add', 'remove'],
-              },
-              from: { ...stringArray },
-              to: { ...stringArray },
-            },
-          },
-        },
-      },
-    },
-    clarification: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['question', 'options'],
-      properties: {
-        question: { ...nonEmptyString, maxLength: 600 },
-        options: {
-          type: 'array',
-          minItems: 2,
-          maxItems: 3,
-          items: {
-            type: 'object',
-            additionalProperties: false,
-            required: ['id', 'label', 'effect', 'recommended'],
-            properties: {
-              id: { ...nonEmptyString, maxLength: 80 },
-              label: { ...nonEmptyString, maxLength: 160 },
-              effect: { ...nonEmptyString, maxLength: 600 },
-              recommended: { type: 'boolean' },
-            },
-          },
-        },
-      },
-    },
+    recomposition: SCOPE_DECOMPOSITION_HARNESS_RECOMPOSITION_SCHEMA,
+    clarification: CLARIFICATION_SCHEMA,
   },
 } as const;
 

@@ -6,7 +6,7 @@ import type { RegisteredProject } from '../../project-registry.ts';
 import {
   readTaskGraphNodesSnapshot,
   type TaskGraphNode,
-} from '../../graph/task/model.ts';
+} from '../../graph/task/nodes.ts';
 
 export type WhatToDoFeatureSource = {
   nodeId: string;

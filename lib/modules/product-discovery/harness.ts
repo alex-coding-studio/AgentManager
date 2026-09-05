@@ -1,14 +1,26 @@
 import Ajv2020 from 'ajv/dist/2020.js';
+import { candidatePromptView } from '../../graph/identity.ts';
 import {
-  candidatePromptView,
-  type GraphIdentityFields,
-} from '../../graph/identity.ts';
+  CLARIFICATION_SCHEMA,
+  GRAPH_CANDIDATE_RECORD_PROPERTIES,
+  GRAPH_CANDIDATE_RECORD_REQUIRED,
+  NODE_ID_ARRAY_SCHEMA,
+  NON_EMPTY_STRING_SCHEMA,
+  REQUEST_IDENTITY_SCHEMA,
+  RESOURCE_REFERENCE_SCHEMA,
+  STRING_ARRAY_SCHEMA,
+} from '../../graph/proposal/contract.ts';
+import {
+  PRODUCT_EXPLORATION_CANDIDATE_EXTENSION_PROPERTIES,
+  PRODUCT_EXPLORATION_CANDIDATE_EXTENSION_REQUIRED,
+  type ProductExplorationCandidateInput,
+  type ProductExplorationResourceReference,
+} from './contract.ts';
 import {
   intentionDestination,
   whatsNextIntentionProfile,
   whatsNextMotionProfile,
   type WhatsNextIntention,
-  type WhatsNextLayer,
   type WhatsNextMotion,
 } from './intention.ts';
 
@@ -61,28 +73,9 @@ export function canReuseWhatsNextSession(
   );
 }
 
-export type WhatsNextResourceReference = {
-  kind: string;
-  path: string;
-};
+export type WhatsNextResourceReference = ProductExplorationResourceReference;
 
-export type WhatsNextCandidate = GraphIdentityFields & {
-  candidateId: string;
-  revision: number;
-  type: string;
-  title: string;
-  summary: string;
-  derivedFrom: string[];
-  dependsOn: string[];
-  resources: WhatsNextResourceReference[];
-  typeTemplateRef: string | null;
-  metadata: Record<string, unknown>;
-  presentation: { color?: string };
-  assumptions: string[];
-  outputMarkdown: string;
-  layer: WhatsNextLayer;
-  artifactKind: 'direction' | 'mvp' | 'feature';
-};
+export type WhatsNextCandidate = ProductExplorationCandidateInput;
 
 export function createWhatsNextRevisionTarget(candidate: WhatsNextCandidate) {
   return {
@@ -153,19 +146,9 @@ export type WhatsNextValidationContext = {
   >;
 };
 
-const nonEmptyString = { type: 'string', minLength: 1, pattern: '\\S' };
-const nodeId = { type: 'string', pattern: '^NODE-[0-9a-f]{8,32}$' };
-const candidateId = {
-  type: 'string',
-  pattern: '^CANDIDATE-(?:[0-9]{4,}|[0-9a-f]{8,32})$',
-};
-const stringArray = { type: 'array', uniqueItems: true, items: nonEmptyString };
-const nodeIdArray = { type: 'array', uniqueItems: true, items: nodeId };
-const dependencyIdArray = {
-  type: 'array',
-  uniqueItems: true,
-  items: { oneOf: [nodeId, candidateId] },
-};
+const nonEmptyString = NON_EMPTY_STRING_SCHEMA;
+const stringArray = STRING_ARRAY_SCHEMA;
+const nodeIdArray = NODE_ID_ARRAY_SCHEMA;
 const baseProperties = {
   schemaVersion: { const: 1 },
   harness: { $ref: '#/$defs/harness' },
@@ -247,16 +230,7 @@ export const WHATS_NEXT_HARNESS_OUTPUT_SCHEMA = {
         revision: { const: WHATS_NEXT_HARNESS_REVISION },
       },
     },
-    request: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['sessionId', 'requestId', 'inputFingerprint'],
-      properties: {
-        sessionId: nonEmptyString,
-        requestId: nonEmptyString,
-        inputFingerprint: nonEmptyString,
-      },
-    },
+    request: REQUEST_IDENTITY_SCHEMA,
     reflection: {
       type: 'object',
       additionalProperties: false,
@@ -288,87 +262,20 @@ export const WHATS_NEXT_HARNESS_OUTPUT_SCHEMA = {
         notes: stringArray,
       },
     },
-    resource: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['kind', 'path'],
-      properties: {
-        kind: { ...nonEmptyString, maxLength: 80 },
-        path: { ...nonEmptyString, maxLength: 500 },
-      },
-    },
+    resource: RESOURCE_REFERENCE_SCHEMA,
     candidate: {
       type: 'object',
       additionalProperties: false,
       required: [
-        'candidateId',
-        'revision',
-        'type',
-        'title',
-        'summary',
-        'derivedFrom',
-        'dependsOn',
-        'resources',
-        'typeTemplateRef',
-        'metadata',
-        'presentation',
-        'assumptions',
-        'outputMarkdown',
-        'layer',
-        'artifactKind',
+        ...GRAPH_CANDIDATE_RECORD_REQUIRED,
+        ...PRODUCT_EXPLORATION_CANDIDATE_EXTENSION_REQUIRED,
       ],
       properties: {
-        candidateId,
-        revision: { type: 'integer', minimum: 1 },
-        type: { ...nonEmptyString, maxLength: 80 },
-        title: { ...nonEmptyString, maxLength: 160 },
-        summary: { ...nonEmptyString, maxLength: 600 },
-        derivedFrom: { ...nodeIdArray, minItems: 1 },
-        dependsOn: dependencyIdArray,
-        resources: {
-          type: 'array',
-          uniqueItems: true,
-          items: { $ref: '#/$defs/resource' },
-        },
-        typeTemplateRef: { oneOf: [nodeId, { type: 'null' }] },
-        metadata: { type: 'object' },
-        presentation: {
-          type: 'object',
-          additionalProperties: false,
-          properties: {
-            color: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$' },
-          },
-        },
-        assumptions: stringArray,
-        outputMarkdown: { ...nonEmptyString, maxLength: 4_000 },
-        layer: { enum: ['discovery', 'product-design'] },
-        artifactKind: { enum: ['direction', 'mvp', 'feature'] },
+        ...GRAPH_CANDIDATE_RECORD_PROPERTIES,
+        ...PRODUCT_EXPLORATION_CANDIDATE_EXTENSION_PROPERTIES,
       },
     },
-    clarification: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['question', 'options'],
-      properties: {
-        question: { ...nonEmptyString, maxLength: 600 },
-        options: {
-          type: 'array',
-          minItems: 2,
-          maxItems: 3,
-          items: {
-            type: 'object',
-            additionalProperties: false,
-            required: ['id', 'label', 'effect', 'recommended'],
-            properties: {
-              id: { ...nonEmptyString, maxLength: 80 },
-              label: { ...nonEmptyString, maxLength: 160 },
-              effect: { ...nonEmptyString, maxLength: 600 },
-              recommended: { type: 'boolean' },
-            },
-          },
-        },
-      },
-    },
+    clarification: CLARIFICATION_SCHEMA,
   },
 } as const;
 

@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 import {
   WHAT_TO_DO_HARNESS_ID,
+  WHAT_TO_DO_HARNESS_OUTPUT_SCHEMA,
   WHAT_TO_DO_HARNESS_PROMPT,
   WHAT_TO_DO_HARNESS_REVISION,
   WhatToDoResultValidationError,
@@ -807,5 +809,17 @@ void test('accepts the bounded Context root as reviewed evidence', () => {
       context({ knownEvidencePaths: [sourcePath, evidencePath, '.'] }),
     ).outcome,
     'map-proposal',
+  );
+});
+
+void test('the composed Harness output schema is byte-identical to the schema before fragment extraction', () => {
+  const fixture = readFileSync(
+    new URL('./fixtures/harness-schemas/what-to-do.json', import.meta.url),
+    'utf8',
+  );
+  assert.deepEqual(WHAT_TO_DO_HARNESS_OUTPUT_SCHEMA, JSON.parse(fixture));
+  assert.equal(
+    JSON.stringify(WHAT_TO_DO_HARNESS_OUTPUT_SCHEMA),
+    JSON.stringify(JSON.parse(fixture)),
   );
 });

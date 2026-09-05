@@ -27,7 +27,7 @@ import {
   type GraphNodeCardData,
 } from '@/components/graph-node-card';
 import { cardResourceCounts } from '@/lib/graph/task/resources';
-import type { TaskGraphNode } from '@/lib/graph/task/model';
+import type { TaskGraphNode } from '@/lib/graph/task/nodes';
 import {
   buildTaskGraphLayout,
   TASK_GRAPH_NODE_MIN_HEIGHT,
