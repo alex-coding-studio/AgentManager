@@ -38,6 +38,43 @@ const reader: GitHubReader = {
   pullRequest: async (_, number) => pr(number),
   branchPullRequests: async () => [pr()],
 };
+
+void test('Action publication discovery does not inherit a previous Action PR from the report', async (t) => {
+  const { project, git } = await fixture(t);
+  git('init', '-b', 'card-branch');
+  git(
+    '-c',
+    'user.name=Fixture',
+    '-c',
+    'user.email=fixture@example.invalid',
+    'commit',
+    '--allow-empty',
+    '-m',
+    'fixture',
+  );
+  git('remote', 'add', 'origin', `${url}.git`);
+  const head = git('rev-parse', 'HEAD');
+  const branch = 'card-branch--action-two';
+  const delivery = await discoverGitHubDelivery(
+    project,
+    `${url}/pull/1`,
+    head,
+    {
+      repository: async () => 'main',
+      pullRequest: async () => {
+        throw new Error('Previous Action PR must not be read');
+      },
+      branchPullRequests: async (_repo, requestedBranch) => {
+        assert.equal(requestedBranch, branch);
+        return [{ ...pr(2, head), headRefName: branch }];
+      },
+    },
+    head,
+    branch,
+  );
+  assert.equal(delivery?.pullRequests[0]?.number, 2);
+  assert.equal(delivery?.error, null);
+});
 async function fixture(t: { after: (fn: () => Promise<void>) => void }) {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'jdi-github-'));
   t.after(() => rm(rootPath, { recursive: true, force: true }));

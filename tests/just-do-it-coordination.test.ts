@@ -589,7 +589,8 @@ void test('Coordinator Harness stays a coordinator rather than becoming a Review
 });
 void test('a coordinator-only reference decision does not start a coding worker', async () => {
   const f = setup((req) => decision(req, 'ready'));
-  await f.start().completion;
+  const output = await f.start().completion;
+  assert.equal(output.agentSessionId, null);
   assert.equal(f.calls.length, 1);
   assert.equal(f.calls[0].access, 'read-only');
 });

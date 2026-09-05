@@ -134,10 +134,11 @@ async function fixture(
   };
   const store = createPlanningService(undefined, new Map());
   let failResetPersistence = false;
+  const activeRuns = new Map();
   const service = createExecutionService(
     store,
     transport,
-    new Map(),
+    activeRuns,
     1800000,
     reader,
     undefined,
@@ -166,7 +167,11 @@ async function fixture(
   async function settled() {
     for (let i = 0; i < 200; i++) {
       const current = await store.read(project, card.id);
-      if (current.execution?.runs.at(-1)?.status !== 'running') return current;
+      if (
+        current.execution?.runs.at(-1)?.status !== 'running' &&
+        activeRuns.size === 0
+      )
+        return current;
       await new Promise((resolve) => setTimeout(resolve, 10));
     }
     throw new Error('Fixture did not settle');

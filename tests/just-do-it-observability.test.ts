@@ -602,6 +602,32 @@ void test('an override that resolves the Coordinator blocker reclassifies it, wh
     },
   } as unknown as ActionRun;
   const override = { note: 'iOS 26.1', recordedAt: '', checklistVersion: 'v1' };
+  const publicationBlocked = classifyActionRun({
+    ...base,
+    result: {
+      ...base.result!,
+      checks: base.result!.checks.map((check) => ({
+        ...check,
+        status: 'passed',
+        evidenceRefs: ['file:App.swift'],
+      })),
+    },
+    coordination: {
+      ...base.coordination!,
+      decisions: [
+        {
+          ...base.coordination!.decisions[0]!,
+          decision: 'blocked',
+          title: 'Publication unavailable',
+          detail: 'Host publication tool is missing.',
+          verificationPlan: [],
+        },
+      ],
+    },
+  });
+  assert.equal(publicationBlocked.status, 'warning');
+  assert.equal(publicationBlocked.title, 'Publication unavailable');
+  assert.equal(publicationBlocked.recovery.includes('pass'), false);
   const before = classifyActionRun(base);
   assert.equal(before.status, 'warning');
   assert.equal(before.title, 'Target needs confirmation');

@@ -14,6 +14,10 @@
     {
       "id": "ios-ui-test-boundary",
       "instruction": "When UI code is in scope, you may author UI tests and compile them, but do not run UI tests during Worker execution. Prioritize meaningful unit tests and successful compilation. Preserve authored UI tests as input for the separate Review flow or CI. Compilation is not a passing UI-test result and does not prove visual or interaction quality."
+    },
+    {
+      "id": "ios-runtime-validation-boundary",
+      "instruction": "During Worker execution, simulator or device boot, installation, app launch, screenshots and visual inspection require an explicit user request for those operations. A UI implementation task, a request for an operable preview, or available tools does not grant that scope. Leave runtime and visual validation to the user or separate Review flow by default; complete code, compilation and meaningful unit tests without adding those activities."
     }
   ]
 }
