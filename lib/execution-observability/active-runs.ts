@@ -55,6 +55,7 @@ export type ActiveRunReservation = {
   canceling: boolean;
   stopResult: StopResult | null;
   settled: boolean;
+  released: Promise<void>;
   attach: (handle: ActiveRunHandle) => void;
   setPhase: (phase: RunPhase, actor?: LogActor) => void;
   record: (input: RunLogInput) => RunLogEntry;
@@ -90,9 +91,12 @@ export function isCurrentRun(reservation: ActiveRunReservation) {
   return registry.get(reservation.key) === reservation;
 }
 
+const releases = new WeakMap<ActiveRunReservation, () => void>();
+
 export function releaseRun(reservation: ActiveRunReservation) {
   if (registry.get(reservation.key) === reservation)
     registry.delete(reservation.key);
+  releases.get(reservation)?.();
 }
 
 export function hostProcessAlive(pid: number) {
@@ -137,6 +141,10 @@ function running(
   const key = ownerKey(input.owner);
   let timer: ReturnType<typeof setTimeout> | null = null;
   let publishing: Promise<void> = Promise.resolve();
+  let markReleased: () => void = () => undefined;
+  const released = new Promise<void>((resolve) => {
+    markReleased = resolve;
+  });
   const reservation: ActiveRunReservation = {
     key,
     owner: input.owner,
@@ -156,6 +164,7 @@ function running(
     canceling: false,
     stopResult: null,
     settled: false,
+    released,
     attach(next) {
       handles.set(reservation, next);
     },
@@ -240,6 +249,7 @@ function running(
       return publishing;
     },
   };
+  releases.set(reservation, markReleased);
   function schedule() {
     if (timer) return;
     timer = setTimeout(() => {
@@ -257,6 +267,9 @@ function handleOf(reservation: ActiveRunReservation) {
 
 export async function beginRun<T>(input: BeginRunInput<T>) {
   const key = ownerKey(input.owner);
+  const settling = registry.get(key);
+  if (settling?.settled && settling.stopResult !== 'unconfirmed')
+    await settling.released;
   const existing = registry.get(key);
   if (existing)
     throw new ActiveRunConflictError(
