@@ -994,7 +994,10 @@ export function JustDoItAction({
                   {t('Undo')}
                 </Button>
               ) : null}
-              {!accepted && latest?.status !== 'running' && latest?.result ? (
+              {!accepted &&
+              latest?.status !== 'running' &&
+              latest?.result &&
+              (latestResponse.document?.recovery.includes('pass') ?? true) ? (
                 <Button
                   disabled={!enabled || preparingAcceptance}
                   onClick={() => void prepareAcceptance()}
