@@ -75,6 +75,7 @@ import { readWhatsNextAttachment, readWhatsNextContext } from './context.ts';
 import { candidateDependencyBlockers } from '../../graph/proposal/dependencies.ts';
 import { whatsNextValidationContext } from './validation-context.ts';
 import { promoteCandidateToNode } from '../../graph/proposal/promote.ts';
+import { stageCandidateDocuments } from '../../graph/proposal/stage.ts';
 import {
   primarySourceResourcePaths,
   relatedContextNodeIds,
@@ -1694,31 +1695,13 @@ async function ensureCandidateArtifacts(
     await rename(temporaryResponsePath, responsePath);
   }
   if (record.result.outcome !== 'proposal') return;
-  await Promise.all(
-    record.result.candidates.map(async (candidate) => {
-      const candidatePath = path.join(
-        whatsNextRunPath(project, record.runId),
-        'candidates',
-        candidate.candidateId,
-      );
-      const outputPath = path.join(candidatePath, 'output.md');
-      if (
-        await access(outputPath)
-          .then(() => true)
-          .catch(() => false)
-      )
-        return;
-      await mkdir(candidatePath, { recursive: true });
-      await writeFile(
-        outputPath,
-        `${(
-          candidate.outputMarkdown ?? renderLegacyCandidateMarkdown(candidate)
-        ).trim()}\n`,
-        {
-          flag: 'wx',
-        },
-      );
-    }),
+  await stageCandidateDocuments(
+    runPath,
+    record.result.candidates.map((candidate) => ({
+      candidateId: candidate.candidateId,
+      markdown:
+        candidate.outputMarkdown ?? renderLegacyCandidateMarkdown(candidate),
+    })),
   );
 }
 
