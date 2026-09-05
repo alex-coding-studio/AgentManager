@@ -10,30 +10,7 @@ import {
   type GraphProposalCandidate,
   type GraphResourceReference,
 } from '../../graph/proposal/contract.ts';
-import {
-  whatsNextLayers,
-  type WhatsNextIntention,
-  type WhatsNextLayer,
-  type WhatsNextMotion,
-} from './intention.ts';
-
-export type ProductExplorationRequestIdentity = {
-  sessionId: string;
-  requestId: string;
-  inputFingerprint: string;
-};
-
-export type ProductExplorationOperation = 'explore' | 'refine-candidate';
-
-export type ProductExplorationBasisRecord = {
-  sessionId: string;
-  requestId: string;
-  inputFingerprint: string;
-  operation?: ProductExplorationOperation;
-  intention?: WhatsNextIntention;
-  motion?: WhatsNextMotion;
-  sourceNodeIds: string[];
-};
+import { whatsNextLayers, type WhatsNextLayer } from './intention.ts';
 
 export const PRODUCT_EXPLORATION_RESULT_CONTRACT_ID =
   'praxis.product-exploration.result';

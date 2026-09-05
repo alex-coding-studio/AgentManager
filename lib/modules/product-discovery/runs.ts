@@ -73,7 +73,7 @@ import {
 } from './redo.ts';
 import { readWhatsNextAttachment, readWhatsNextContext } from './context.ts';
 import { candidateDependencyBlockers } from '../../graph/proposal/dependencies.ts';
-import { prepareProductExplorationBasis } from './basis.ts';
+import { whatsNextValidationContext } from './validation-context.ts';
 import { promoteCandidateToNode } from '../../graph/proposal/promote.ts';
 import {
   primarySourceResourcePaths,
@@ -752,7 +752,7 @@ export async function recoverWhatsNextRunResult(
     project.planningPath,
     GRAPH_ROOT,
     finalOutput,
-    prepareProductExplorationBasis({
+    whatsNextValidationContext({
       record,
       nodes,
       knownResourcePaths: record.input?.resourcePaths ?? [],
@@ -1036,7 +1036,7 @@ async function finishWhatsNextRun(
       project.planningPath,
       GRAPH_ROOT,
       agentResult.finalOutput,
-      prepareProductExplorationBasis({
+      whatsNextValidationContext({
         record,
         nodes,
         knownResourcePaths: resources.map((resource) => resource.logicalPath),
