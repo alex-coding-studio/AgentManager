@@ -1068,9 +1068,15 @@ export function JustDoItAction({
                     }
                   : null
               }
+              accepted={accepted}
               pullRequests={headerPullRequests}
               staleGithub={Boolean(latest?.github?.error)}
-              accepted={accepted}
+              openingWorkspace={pending}
+              onOpenWorkspace={
+                card.execution?.workspace
+                  ? () => void send('open-workspace')
+                  : undefined
+              }
             />,
             headerStatusTarget,
           )

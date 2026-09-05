@@ -44,7 +44,6 @@ import {
   lstat,
   mkdir,
   readFile,
-  readdir,
   realpath,
   rm,
 } from 'node:fs/promises';
@@ -1866,21 +1865,7 @@ export function createExecutionService(
         'Opening the system file manager is unsupported.',
         400,
       );
-    const xcodeProjects = (
-      await readdir(workspace.path, {
-        withFileTypes: true,
-      })
-    )
-      .filter(
-        (entry) => entry.isDirectory() && entry.name.endsWith('.xcodeproj'),
-      )
-      .map((entry) => entry.name)
-      .sort();
-    const arguments_ =
-      process.platform === 'darwin' && xcodeProjects.length === 1
-        ? ['-R', path.join(workspace.path, xcodeProjects[0])]
-        : [workspace.path];
-    await promisify(execFile)(command, arguments_, { timeout: 10000 });
+    await promisify(execFile)(command, [workspace.path], { timeout: 10000 });
     return card;
   }
 
