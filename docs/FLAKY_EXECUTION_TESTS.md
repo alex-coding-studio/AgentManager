@@ -1,6 +1,6 @@
 # Flaky Card lifecycle in the Development Execution tests
 
-Status: reported, not diagnosed. Remove this document when the cause is fixed.
+Status: cause identified, fix incomplete. Remove this document when the suite is stable.
 
 `tests/just-do-it-execution.test.ts` fails intermittently. Three different tests in that file have failed with two distinct signatures, all pointing at a Card's background work still running when the next assertion or the fixture teardown starts.
 
@@ -53,11 +53,24 @@ Tests: `host preserves worker checklist when coordination recovery fails` near l
 
 The fixture teardown is `t.after(() => rm(rootPath, { recursive: true, force: true }))` at line 54. `force: true` suppresses ENOENT but not ENOTEMPTY, and ENOTEMPTY is what you get when a file appears between the directory read and the `rmdir`. So the failure means a write landed after teardown began.
 
-## Hypothesis, not verified
+## Identified cause
 
-Some Card work started by the test body is not awaited before the test returns. Both signatures follow from that: an unawaited Card is still marked running when the next assertion reads it, and an unawaited write lands during teardown. The execution service is created per test through `createExecutionService`, so the handle a test would need to await may exist already, or may need to be exposed.
+The fixture helper `settled()` returns as soon as the persisted last Run is no longer `running`. In `execution-service.finish()` that terminal Run is committed **before** `settleRun` publishes the terminal Latest Response, closes the Run Log and releases the observability reservation, and before the outer `finally` removes the Card from the execution service's own active map.
 
-I did not diagnose which call is unawaited, and I did not attempt a fix.
+Both signatures follow from that ordering:
+
+- `recheckOutput` runs while the service active map still owns the Card, so the production guard correctly answers `Wait for this Card to finish before rechecking`;
+- teardown removes the Card directory while Latest Response or log finalization is still writing, producing `ENOTEMPTY`.
+
+This is a fixture settlement bug. The production service deliberately refuses follow-up operations during the finalization window, so the guard message is correct behavior, not a defect.
+
+Waiting on the observability reservation's `released` promise is not sufficient: `releaseRun` resolves it inside `settleRun`, which is before `finish` reaches its active-map cleanup.
+
+## The obvious fix is not sufficient on its own
+
+Each fixture was changed to keep the active map it passes to `createExecutionService`, and `settled()` was changed to require both a terminal persisted Run and release of the Card from that map. Measured over 15 suite runs afterwards, one still failed.
+
+So the ordering above is real and necessary, but something further is still unawaited. Whoever continues should start from that partial fix rather than repeat it, and should measure again over at least 15 runs before calling it fixed. One green run proves nothing at a 14 percent rate.
 
 ## What I checked and ruled out
 
@@ -67,6 +80,8 @@ I did not diagnose which call is unawaited, and I did not attempt a fix.
 
 ## Suggested direction
 
-Make the tests await the real settle signal. Please do not paper over it with a sleep, a retry, or a longer timeout, and do not weaken an assertion: the failure is telling us that a caller can observe a Card mid-write, which may matter outside the tests too.
+Make the fixture await the real settle signal. Do not paper over it with a sleep, a retry, or a longer timeout, and do not weaken an assertion.
+
+An earlier revision of this document suggested the failure might indicate a production problem, that a caller could observe a Card mid-write. That was wrong: the production guard exists precisely to refuse work during that window, and the tests were reading through it.
 
 One practical consequence in the meantime: the full chain uses `&&`, so this failure aborts every later script and makes an otherwise green run look like a broad breakage.
