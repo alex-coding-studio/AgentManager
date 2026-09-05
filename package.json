@@ -38,7 +38,7 @@
     "test:observability": "node --experimental-strip-types --test tests/execution-observability-status.test.ts tests/execution-observability-run-log.test.ts tests/execution-observability-latest-response.test.ts tests/execution-observability-active-runs.test.ts tests/module-run-lifecycle.test.ts",
     "test:log-viewer": "node --experimental-strip-types --import ./tests/helpers/register-alias.mjs --test tests/log-viewer-api.test.ts",
     "test:implementation-observability": "node --experimental-strip-types --import ./tests/helpers/register-alias.mjs --test tests/just-do-it-observability.test.ts",
-    "test:response-ui": "node --experimental-strip-types --import ./tests/helpers/register-alias.mjs --test tests/latest-response-card.test.ts",
+    "test:response-ui": "node --experimental-strip-types --import ./tests/helpers/register-alias.mjs --test tests/latest-response-card.test.ts tests/sticky-header.test.ts",
     "test:delivery-packet": "node --experimental-strip-types --test tests/delivery-packet-manifest.test.ts tests/delivery-packet-materializer.test.ts",
     "publish:execution-candidate": "node --experimental-strip-types scripts/publish-execution-candidate.ts",
     "handoff:execution-packet": "node --experimental-strip-types scripts/handoff-execution-packet.ts",

@@ -16,11 +16,11 @@ import {
   LoaderCircle,
   Check,
   ChevronRight,
-  GitPullRequest,
   RefreshCw,
   FolderOpen,
   GitBranch,
   RotateCcw,
+  Square,
   Undo2,
 } from 'lucide-react';
 import {
@@ -28,7 +28,12 @@ import {
   AgentComposerShell,
 } from '@/components/agent-composer-shell';
 import { AgentGraphComposerCard } from '@/components/agent-graph-composer-card';
-import { AgentGraphRunningCard } from '@/components/agent-graph-running-card';
+import {
+  ExecutionHeaderStatus,
+  PullRequestChip,
+} from '@/components/execution-sticky-header';
+import { useLatestResponse } from '@/hooks/use-latest-response';
+import { useSurfacePreference } from '@/hooks/use-surface-preference';
 import { AgentRunControls } from '@/components/agent-run-controls';
 import {
   ContextAttachmentPicker,
@@ -47,20 +52,9 @@ import { useUiText } from '@/components/ui-language-provider';
 import type { PlanningCard } from '@/lib/modules/implementation/planning-service';
 import type { ActionContract } from '@/lib/modules/implementation/harness';
 import type { AgentProfile } from '@/lib/agents/profile';
-import type { GitHubPullRequest } from '@/lib/github-delivery';
 import type { ContextBrowserFolder } from '@/lib/modules/product-context/catalog';
 
 const justDoItAgents = ['codex', 'claude', 'deepseek'] as const;
-
-function actionStatusPillTone(status: string) {
-  if (status === 'Verified')
-    return 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400';
-  if (status === 'Agent running' || status === 'Ready to verify')
-    return 'bg-blue-500/10 text-blue-700 dark:text-blue-300';
-  if (status === 'Needs your input' || status === 'Execution failed')
-    return 'bg-amber-500/10 text-amber-800 dark:text-amber-300';
-  return 'bg-secondary text-secondary-foreground';
-}
 
 export function JustDoItAction({
   projectId,
@@ -100,6 +94,12 @@ export function JustDoItAction({
     runId: string;
     revision: number;
   } | null>(null);
+  const latestResponse = useLatestResponse(projectId, { card: card.id });
+  const [composerCollapsed, setComposerCollapsed] = useSurfacePreference(
+    projectId,
+    `card:${card.id}`,
+    'composer',
+  );
   const [stopPreview, setStopPreview] = useState<{
     runId: string;
     revision: number;
@@ -193,6 +193,7 @@ export function JustDoItAction({
       }
       if (operation === 'accept') setAcceptancePreview(null);
       if (operation === 'cancel') setStopPreview(null);
+      void latestResponse.refresh();
       if (operation === 'undo-action') {
         setUndoOpen(false);
         setInstruction(
@@ -855,29 +856,12 @@ export function JustDoItAction({
           ))}
         </div>
       )}
-      {!accepted &&
-      current?.id === action.id &&
-      latest?.status === 'running' ? (
-        <AgentGraphRunningCard
-          className="fixed z-30"
-          agent={latest.profile.agent}
-          startedAt={latest.startedAt}
-          activity={
-            latest.progress ? [{ summary: latest.progress.summary }] : []
-          }
-          fallback="Preparing coordinated execution."
-          cancelDisabled={pending}
-          onCancel={() => {
-            setError('');
-            setStopPreview({
-              runId: latest.id,
-              revision: card.revision,
-            });
-          }}
-        />
-      ) : !accepted && current?.id === action.id ? (
+      {!accepted && current?.id === action.id ? (
         <AgentGraphComposerCard
           className="fixed z-30"
+          running={latest?.status === 'running' || latestResponse.running}
+          collapsed={composerCollapsed}
+          onCollapsedChange={setComposerCollapsed}
           title={t(history.length ? 'Modify or clarify' : 'Start this Action')}
         >
           {error ? (
@@ -1023,38 +1007,55 @@ export function JustDoItAction({
                   {t('Pass')}
                 </Button>
               ) : null}
-              {headerPullRequests.map((pr) => (
-                <PullRequestChip
-                  key={pr.url}
-                  pr={pr}
-                  stale={Boolean(latest?.github?.error)}
-                  className="h-8 rounded-lg px-2.5 text-sm"
-                />
-              ))}
+              {latest?.status === 'running' ? (
+                <Button
+                  variant="outline"
+                  disabled={
+                    pending || latestResponse.document?.phase === 'stopping'
+                  }
+                  onClick={() => {
+                    setError('');
+                    setStopPreview({
+                      runId: latest.id,
+                      revision: card.revision,
+                    });
+                  }}
+                >
+                  <Square />
+                  {t(
+                    latestResponse.document?.phase === 'stopping'
+                      ? 'Stopping'
+                      : 'Cancel',
+                  )}
+                </Button>
+              ) : null}
             </div>,
             headerActionsTarget,
           )
         : null}
       {headerStatusTarget
         ? createPortal(
-            <>
-              <span
-                className={`rounded-full px-2 py-1 text-[10px] font-medium ${actionStatusPillTone(currentStatus)}`}
-              >
-                {t(currentStatus)}
-              </span>
-              {latest?.acceptanceChecklist ? (
-                <span className="text-[10px] text-muted-foreground">
-                  {t('Required checks')} ·{' '}
-                  {
-                    requiredAssessment.items.filter(
-                      (item) => item.status === 'passed',
-                    ).length
-                  }
-                  /{requiredAssessment.items.length}
-                </span>
-              ) : null}
-            </>,
+            <ExecutionHeaderStatus
+              document={latestResponse.document}
+              actionIndex={card.actions.findIndex(
+                (item) => item.id === action.id,
+              )}
+              actionTotal={card.actions.length}
+              actionTitle={action.title}
+              checks={
+                latest?.acceptanceChecklist
+                  ? {
+                      passed: requiredAssessment.items.filter(
+                        (item) => item.status === 'passed',
+                      ).length,
+                      total: requiredAssessment.items.length,
+                    }
+                  : null
+              }
+              pullRequests={headerPullRequests}
+              staleGithub={Boolean(latest?.github?.error)}
+              accepted={accepted}
+            />,
             headerStatusTarget,
           )
         : null}
@@ -1341,31 +1342,5 @@ export function JustDoItAction({
         </p>
       )}
     </section>
-  );
-}
-
-function PullRequestChip({
-  pr,
-  stale,
-  className = '',
-}: {
-  pr: GitHubPullRequest;
-  stale: boolean;
-  className?: string;
-}) {
-  const { t } = useUiText();
-  return (
-    <a
-      href={pr.url}
-      target="_blank"
-      rel="noreferrer"
-      onClick={(event) => event.stopPropagation()}
-      title={pr.title}
-      className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring ${stale ? 'border-amber-500/40 text-amber-500' : pr.state === 'MERGED' ? 'border-purple-500/30 text-purple-500' : pr.isDraft || pr.state === 'CLOSED' ? 'border-border text-muted-foreground' : 'border-blue-500/30 text-blue-500'} ${className}`}
-    >
-      <GitPullRequest aria-hidden="true" className="size-3.5" />#{pr.number} ·{' '}
-      {t(pr.isDraft && pr.state === 'OPEN' ? 'Draft' : pr.state)}
-      {stale && ` · ${t('Stale status')}`}
-    </a>
   );
 }
