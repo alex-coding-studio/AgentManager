@@ -13,12 +13,10 @@ import {
   ensureGraphIdentities,
   parseIdentifiedResult,
   readIdentifiedEntities,
-  reserveNodeIdentity,
   reservedCandidateAliases,
 } from '../../graph/identity-store.ts';
 import {
   access,
-  copyFile,
   mkdir,
   readdir,
   readFile,
@@ -74,10 +72,9 @@ import {
   type ProposalReplacement,
 } from './redo.ts';
 import { readWhatsNextAttachment, readWhatsNextContext } from './context.ts';
-import {
-  candidateDependencyBlockers,
-  resolveCandidateDependencies,
-} from '../scope-decomposition/dependencies.ts';
+import { candidateDependencyBlockers } from '../../graph/proposal/dependencies.ts';
+import { whatsNextValidationContext } from './validation-context.ts';
+import { promoteCandidateToNode } from '../../graph/proposal/promote.ts';
 import {
   primarySourceResourcePaths,
   relatedContextNodeIds,
@@ -98,7 +95,7 @@ import {
   listTaskGraphNodes,
   readTaskGraphMarkdownResource,
   type TaskGraphNode,
-} from '../../graph/task/model.ts';
+} from '../../graph/task/nodes.ts';
 import {
   assertWhatsNextIntention,
   assertWhatsNextMotion,
@@ -755,35 +752,17 @@ export async function recoverWhatsNextRunResult(
     project.planningPath,
     GRAPH_ROOT,
     finalOutput,
-    {
-      request: {
-        sessionId: record.sessionId,
-        requestId: record.requestId,
-        inputFingerprint: record.inputFingerprint,
-      },
-      operation: record.operation,
-      revisionCandidateId: revisionTarget?.candidateId,
-      revisionTarget: revisionTarget ?? undefined,
-      knownNodeIds: nodes.map((node) => node.id),
+    whatsNextValidationContext({
+      record,
+      nodes,
       knownResourcePaths: record.input?.resourcePaths ?? [],
-      acceptedCandidateIds: nodes.flatMap((node) =>
-        node.provenance?.candidateId ? [node.provenance.candidateId] : [],
-      ),
-      previousCandidateRevisions: revisionTarget
-        ? { [revisionTarget.candidateId]: revisionTarget.revision }
-        : undefined,
       reservedCandidateIds:
         record.operation === 'refine-candidate'
           ? []
           : await collectReservedCandidateIds(project),
       knownCandidates: await collectLatestUnacceptedCandidates(project),
-      intention: record.intention,
-      motion: record.motion,
-      productSourceNodeId:
-        record.intention === 'product-design-completion'
-          ? record.sourceNodeIds[0]
-          : undefined,
-    },
+      revisionTarget: revisionTarget ?? undefined,
+    }),
     parseWhatsNextHarnessResult,
     revisionTarget ?? undefined,
   );
@@ -883,86 +862,20 @@ async function acceptWhatsNextCandidateUnlocked(
   );
   if (!candidate)
     throw new PublicApiError('The Candidate could not be found.', 400);
+  if (!candidate.uid || !candidate.relations)
+    throw new PublicApiError('The Candidate has no stable identity.', 409);
 
-  const existingNodes = await listTaskGraphNodes(project, GRAPH_ROOT);
-  const accepted = existingNodes.find((node) => node.uid === candidate.uid);
-  if (accepted) return { node: accepted, nodes: existingNodes };
-
-  const resolvedDependencies = resolveCandidateDependencies(
-    candidate.candidateId,
-    candidate.dependsOn,
-    existingNodes,
-  );
-
-  if (!candidate.uid) throw new Error('Candidate stable identity is missing.');
-  const { id: nodeId } = await reserveNodeIdentity(
-    project.planningPath,
-    GRAPH_ROOT,
-    candidate.uid,
-  );
-  const nodesPath = path.join(project.planningPath, GRAPH_ROOT, 'nodes');
-  const nodePath = path.join(nodesPath, nodeId);
-  const temporaryPath = path.join(nodesPath, `.${nodeId}-${randomUUID()}.tmp`);
-  const candidateOutput = path.join(
-    whatsNextRunPath(project, runId),
-    'candidates',
-    candidateId,
-    'output.md',
-  );
-  await mkdir(temporaryPath, { recursive: true });
-
-  try {
-    await copyFile(candidateOutput, path.join(temporaryPath, 'output.md'));
-    const timestamp = new Date().toISOString();
-    const matchingType = existingNodes.find(
-      (node) => node.type === candidate.type,
-    );
-    const node: TaskGraphNode = {
-      schemaVersion: 1,
-      id: nodeId,
+  return promoteCandidateToNode(project, {
+    scope: GRAPH_ROOT,
+    runId,
+    candidate: {
+      ...candidate,
       uid: candidate.uid,
       relations: candidate.relations,
-      role: 'node',
-      type: candidate.type,
-      layer: candidate.layer,
-      artifactKind: candidate.artifactKind,
-      title: candidate.title,
-      summary: candidate.summary,
-      status: 'accepted',
-      createdAt: timestamp,
-      updatedAt: timestamp,
-      resources: [
-        ...candidate.resources,
-        { kind: 'output', path: `${GRAPH_ROOT}/nodes/${nodeId}/output.md` },
-      ],
-      derivedFrom: candidate.derivedFrom,
-      dependsOn: resolvedDependencies,
-      typeTemplateRef:
-        candidate.typeTemplateRef ??
-        matchingType?.typeTemplateRef ??
-        matchingType?.id ??
-        nodeId,
-      metadata: candidate.metadata,
-      presentation: candidate.presentation,
-      provenance: {
-        feature: 'whats-next',
-        runId,
-        candidateId,
-        revision: candidate.revision,
-      },
-    };
-    await writeFile(
-      path.join(temporaryPath, 'node.json'),
-      `${JSON.stringify(node, null, 2)}\n`,
-      { flag: 'wx' },
-    );
-    await mkdir(nodesPath, { recursive: true });
-    await rename(temporaryPath, nodePath);
-    return { node, nodes: await listTaskGraphNodes(project, GRAPH_ROOT) };
-  } catch (error) {
-    await rm(temporaryPath, { recursive: true, force: true });
-    throw error;
-  }
+    },
+    extension: { layer: candidate.layer, artifactKind: candidate.artifactKind },
+    provenanceFeature: 'whats-next',
+  });
 }
 
 export async function discardWhatsNextCandidate(
@@ -1123,20 +1036,10 @@ async function finishWhatsNextRun(
       project.planningPath,
       GRAPH_ROOT,
       agentResult.finalOutput,
-      {
-        request: {
-          sessionId: record.sessionId,
-          requestId: record.requestId,
-          inputFingerprint: record.inputFingerprint,
-        },
-        knownNodeIds: nodes.map((node) => node.id),
+      whatsNextValidationContext({
+        record,
+        nodes,
         knownResourcePaths: resources.map((resource) => resource.logicalPath),
-        acceptedCandidateIds: nodes.flatMap((node) =>
-          node.provenance?.candidateId ? [node.provenance.candidateId] : [],
-        ),
-        previousCandidateRevisions: revisionTarget
-          ? { [revisionTarget.candidateId]: revisionTarget.revision }
-          : undefined,
         reservedCandidateIds,
         knownCandidates: (
           await collectLatestUnacceptedCandidates(project)
@@ -1144,16 +1047,8 @@ async function finishWhatsNextRun(
           (candidate) =>
             !record.replacement?.candidateIds.includes(candidate.candidateId),
         ),
-        operation: record.operation,
-        revisionCandidateId: revisionTarget?.candidateId,
         revisionTarget,
-        intention: record.intention,
-        motion: record.motion,
-        productSourceNodeId:
-          record.intention === 'product-design-completion'
-            ? record.sourceNodeIds[0]
-            : undefined,
-      },
+      }),
       parseWhatsNextHarnessResult,
       revisionTarget,
     );

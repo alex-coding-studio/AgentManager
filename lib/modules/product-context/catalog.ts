@@ -13,7 +13,7 @@ import {
   readCardWorklog,
 } from '../implementation/worklog.ts';
 import type { RegisteredProject } from '../../project-registry.ts';
-import { listTaskGraphNodes } from '../../graph/task/model.ts';
+import { listTaskGraphNodes } from '../../graph/task/nodes.ts';
 import { readWhatToDoCurrentMap } from '../delivery-planning/storage.ts';
 
 export type ContextSection = {

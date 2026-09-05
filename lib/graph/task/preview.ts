@@ -1,6 +1,6 @@
-import type { TaskGraphNode } from '@/lib/graph/task/model';
+import type { TaskGraphNode } from '@/lib/graph/task/nodes';
 import type { TaskGraphPreview } from '@/lib/graph/task/layout';
-import type { HarnessCandidate } from '@/lib/modules/scope-decomposition/harness';
+import type { GraphCandidateInput } from '@/lib/graph/proposal/contract';
 
 const timestamp = '2026-08-28T00:00:00.000Z';
 
@@ -122,7 +122,7 @@ function previewCandidate(
   revision: number,
   title: string,
 ): TaskGraphPreview {
-  const candidate: HarnessCandidate = {
+  const candidate: GraphCandidateInput = {
     candidateId,
     revision,
     type: 'module',
