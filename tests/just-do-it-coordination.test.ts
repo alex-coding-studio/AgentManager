@@ -947,6 +947,58 @@ void test('coordinator filters ignored diagnostics, surfaces material extras, an
   assert.equal(output.coordination.decisions.length, 1);
 });
 
+void test('Coordinator can recover delivery after required checks pass without inventing a failed criterion', () => {
+  const req = createCoordinationRequest({
+    phase: 'qualify',
+    task: task(),
+    availableSkills: [],
+    basis: 'same',
+    priorEvidence: [],
+    previousContext: '',
+    previousDecision: null,
+    repairsRemaining: 1,
+    workerReport: {
+      outcome: 'blocked',
+      summary: 'Push succeeded; PR state has not caught up.',
+      artifactRefs: ['git:head'],
+      checks: [
+        {
+          criterionId: 'C1',
+          summary: 'Code verified',
+          status: 'passed',
+          evidenceRefs: ['log:green'],
+        },
+      ],
+    },
+  });
+  const retry = decision(req, 'repair');
+  retry.repairAssessment!.criterionIds = [];
+  retry.repairAssessment!.cause =
+    'Published branch matches the candidate but PR observation is pending.';
+  retry.repairAssessment!.changedApproach =
+    'Resume publication confirmation for the same candidate using the Host tool.';
+  const parsed = parseCoordinationDecision(JSON.stringify(retry), req);
+  assert.equal(parsed.decision, 'repair');
+  assert.match(parsed.instructions, /Delivery recovery only/);
+  assert.equal(req.workerReport!.checks[0].status, 'passed');
+  assert.throws(
+    () =>
+      parseCoordinationDecision(JSON.stringify(retry), {
+        ...req,
+        repairsRemaining: 0,
+      }),
+    /budget exhausted/,
+  );
+  assert.throws(
+    () =>
+      parseCoordinationDecision(JSON.stringify(retry), {
+        ...req,
+        workerReport: { ...req.workerReport!, outcome: 'delivered' },
+      }),
+    /blocked delivery report/,
+  );
+});
+
 void test('repair without a supported actionable remedy stops before another worker call', async () => {
   for (const fixability of ['unavailable', 'uncertain', 'missing'] as const) {
     const f = setup(
@@ -1261,6 +1313,7 @@ function pushSetup(
     | 'passed'
     | 'failed'
     | 'delivered-failed'
+    | 'publication-pending'
     | 'responsibility-gap'
     | 'invalid'
     | 'hang'
@@ -1310,7 +1363,13 @@ function pushSetup(
                 ...JSON.parse(worker(request, 'failed').finalOutput),
                 outcome: 'delivered',
               })
-            : worker(request, kind);
+            : kind === 'publication-pending'
+              ? result({
+                  ...JSON.parse(worker(request, 'passed').finalOutput),
+                  outcome: 'blocked',
+                  summary: 'Candidate pushed; PR observation pending.',
+                })
+              : worker(request, kind);
     return { completion: Promise.resolve(value), cancel: () => canceled++ };
   };
   const progress: string[] = [];
@@ -1477,6 +1536,38 @@ void test('WORKER_FAILED lets the coordinator return blocked with honest checks'
     output.coordination.attempts.map((a) => `${a.role}:${a.phase}`),
     ['coordinator:prepare', 'worker:execute', 'coordinator:qualify'],
   );
+});
+
+void test('publication-only recovery finishes within the coordinated run without requesting a user decision', async () => {
+  const f = pushSetup(
+    (req, turn) => {
+      const value = decision(req, turn === 1 ? 'dispatch' : 'repair');
+      if (value.repairAssessment) {
+        value.repairAssessment.criterionIds = [];
+        value.repairAssessment.cause =
+          'The pushed candidate is awaiting PR observation.';
+        value.repairAssessment.changedApproach =
+          'Confirm the same published HEAD and complete Ready using the Host tool.';
+      }
+      return value;
+    },
+    ['publication-pending', 'passed'],
+  );
+  const output = (await f.run.completion) as Coordinated;
+  assert.equal(JSON.parse(output.finalOutput).outcome, 'delivered');
+  assert.deepEqual(
+    output.coordination.attempts.map(
+      (attempt) => `${attempt.role}:${attempt.phase}`,
+    ),
+    [
+      'coordinator:prepare',
+      'worker:execute',
+      'coordinator:qualify',
+      'worker:repair',
+    ],
+  );
+  assert.match(f.workerCalls[1], /Delivery recovery only/);
+  assert.equal(JSON.parse(output.finalOutput).checks[0].status, 'passed');
 });
 
 void test('a blocked worker report becomes WORKER_ATTENTION_REQUIRED and the coordinator may ask the user', async () => {
