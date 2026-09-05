@@ -7,21 +7,31 @@ import {
 } from '../../graph/proposal/basis.ts';
 import type { GraphProposalRevision } from '../../graph/proposal/contract.ts';
 import { identitiesFingerprint } from '../../graph/identity-store.ts';
-import { PRODUCT_EXPLORATION_RESULT_CONTRACT } from './contract.ts';
+import { MaterializationError } from '../../materialization/receipt.ts';
+import {
+  PRODUCT_EXPLORATION_RESULT_CONTRACT,
+  type ProductExplorationCandidate,
+} from './contract.ts';
 import type { WhatsNextIntention, WhatsNextMotion } from './intention.ts';
 import type { RegisteredProject } from '../../project-registry.ts';
 
 export type ProductExplorationOperation = 'explore' | 'refine-candidate';
 
-export type ProductExplorationMaterializationBasis = GraphProposalBasis & {
-  operation: ProductExplorationOperation;
-  intention: WhatsNextIntention;
-  motion: WhatsNextMotion;
-  productSourceNodeId: string | null;
-};
+type GraphProposalState = Omit<
+  GraphProposalBasis,
+  keyof MaterializationBasisCore
+>;
 
-export type ProductExplorationBasisInput = {
-  operation: ProductExplorationOperation;
+export type ProductExplorationMaterializationBasis = MaterializationBasisCore &
+  GraphProposalState & {
+    operation: ProductExplorationOperation;
+    intention: WhatsNextIntention;
+    motion: WhatsNextMotion;
+    productSourceNodeId: string | null;
+    revisionSource: ProductExplorationCandidate | null;
+  };
+
+type ProductExplorationBasisSubject = {
   intention: WhatsNextIntention;
   motion: WhatsNextMotion;
   sourceNodeIds: readonly string[];
@@ -30,13 +40,17 @@ export type ProductExplorationBasisInput = {
   knownResourcePaths: readonly string[];
   reservedCandidateIds: readonly string[];
   currentCandidates: readonly GraphProposalCurrentCandidate[];
-  revisionTarget?: GraphProposalRevision | null;
 };
 
-type GraphProposalState = Omit<
-  GraphProposalBasis,
-  keyof MaterializationBasisCore
->;
+export type ProductExplorationBasisInput = ProductExplorationBasisSubject &
+  (
+    | { operation: 'explore'; revisionTarget?: never; revisionSource?: never }
+    | {
+        operation: 'refine-candidate';
+        revisionTarget: GraphProposalRevision;
+        revisionSource: ProductExplorationCandidate;
+      }
+  );
 
 function frozenState(
   input: ProductExplorationBasisInput,
@@ -75,6 +89,15 @@ export async function prepareProductExplorationMaterializationBasis(
   input: ProductExplorationBasisInput,
   now: () => string = () => new Date().toISOString(),
 ): Promise<ProductExplorationMaterializationBasis> {
+  if (
+    input.operation === 'refine-candidate' &&
+    input.revisionSource.localKey !== input.revisionTarget.candidateId
+  ) {
+    throw new MaterializationError(
+      'validation',
+      'A refine basis must carry the Candidate it is revising.',
+    );
+  }
   const identityFingerprint = await identitiesFingerprint(
     project.planningPath,
     'whats-next',
@@ -94,6 +117,9 @@ export async function prepareProductExplorationMaterializationBasis(
       input.intention === 'product-design-completion'
         ? (input.sourceNodeIds[0] ?? null)
         : null,
+    revisionSource: input.revisionSource
+      ? structuredClone(input.revisionSource)
+      : null,
   };
   return deepFreeze(basis);
 }
