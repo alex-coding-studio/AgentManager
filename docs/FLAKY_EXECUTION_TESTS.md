@@ -1,6 +1,6 @@
 # Flaky Card lifecycle in the Development Execution tests
 
-Status: cause identified, fix incomplete. Remove this document when the suite is stable.
+Status: fixed. Remove this document once the fix has survived a few weeks of ordinary use.
 
 `tests/just-do-it-execution.test.ts` fails intermittently. Three different tests in that file have failed with two distinct signatures, all pointing at a Card's background work still running when the next assertion or the fixture teardown starts.
 
@@ -66,15 +66,26 @@ This is a fixture settlement bug. The production service deliberately refuses fo
 
 Waiting on the observability reservation's `released` promise is not sufficient: `releaseRun` resolves it inside `settleRun`, which is before `finish` reaches its active-map cleanup.
 
-## The obvious fix is not sufficient on its own
+## The fix
 
-Each fixture now keeps the active map it passes to `createExecutionService`, and `settled()` requires both a terminal persisted Run and release of the Card from that map.
+Each fixture keeps the active map it passes to `createExecutionService`, and `settled()` requires both a terminal persisted Run and `active.size === 0`. The map is a required parameter, so omitting it is a compile error rather than a silent loss of the wait. Waiting on size rather than a key avoids copying the service's private key format into the tests.
 
-A first attempt queried that map with the bare Card UUID while the service stores entries under `card:${path.resolve(project.planningPath)}:${cardId}`, so the added condition was always false and the measurement that followed it tested the unchanged code. That is corrected; the helper now builds the service key.
+Measured after the correction:
 
-With the correct key the condition genuinely applies, and the failure still occurs: `host preserves worker checklist when coordination recovery fails` failed on the third of a fresh run series. So the ordering above is real and necessary but not sufficient, and this is now a measured result rather than an artifact of a broken experiment.
+| Scope                                       | Result     |
+| ------------------------------------------- | ---------- |
+| Single file, 30 rounds                      | 0 failures |
+| `implementation-execution` suite, 15 rounds | 0 failures |
 
-Whoever continues should start from this partial fix rather than repeat it, and should measure over at least 15 runs before calling it fixed. One green run proves nothing at a 14 percent rate.
+`ENOTEMPTY`, `Wait for this Card to finish`, and both hang classes were all absent.
+
+## Two earlier conclusions in this document were wrong
+
+Both came from experiments that did not test what they claimed to test, and both are recorded here because the mistake is easier to repeat than to notice.
+
+The first attempt queried the active map with the bare Card UUID while the service keys entries by planning path and Card id, so the condition was always false and the run series that followed measured unchanged code.
+
+The second attempt fixed that key but left eight `settled()` call sites without the map argument, because the edit matched only one of the two call shapes in the file. One of those eight then failed, and that failure was reported as evidence of a second, unidentified cause. It was not: that call site had no wait condition at all. There is one cause, and it is the ordering described above.
 
 ## The suite has no test timeout
 

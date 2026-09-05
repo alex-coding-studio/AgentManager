@@ -224,15 +224,12 @@ function delivered(
 async function settled(
   store: ReturnType<typeof createPlanningService>,
   project: RegisteredProject,
-  active?: Map<string, unknown>,
+  active: Map<string, unknown>,
 ) {
   for (let i = 0; i < 100; i++) {
     const card = await store.read(project, id);
     const terminal = card.execution?.runs.at(-1)?.status !== 'running';
-    const held = active?.has(
-      `card:${path.resolve(project.planningPath)}:${id}`,
-    );
-    if (terminal && !held) return card;
+    if (terminal && active.size === 0) return card;
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
   throw new Error('Fixture did not settle.');
@@ -1126,7 +1123,7 @@ async function legacyRejectedVersionFixture(t: {
   ).stdout.trim();
   await f.service.start(f.project, f.input);
   f.calls[0].resolve(delivered(f.calls[0].request, [`git:${sha}`]));
-  const current = await settled(f.store, f.project);
+  const current = await settled(f.store, f.project, f.active);
   const run = current.execution!.runs[0];
   assert.equal(run.status, 'succeeded');
   assert.equal(run.observedRefs.includes(`git:${sha}`), false);
@@ -1737,7 +1734,7 @@ void test('new executions always coordinate, persist role traces, and carry cont
       profile: { agent: 'codex', model: 'coordinator-model', effort: 'medium' },
     },
   });
-  let card = await settled(f.store, f.project);
+  let card = await settled(f.store, f.project, serviceActive);
   const first = card.execution!.runs[0];
   assert.equal(first.status, 'succeeded', first.error ?? '');
   assert.deepEqual(
@@ -1775,7 +1772,7 @@ void test('new executions always coordinate, persist role traces, and carry cont
     expectedRevision: card.revision,
     instruction: 'Only verify existing evidence.',
   });
-  card = await settled(f.store, f.project);
+  card = await settled(f.store, f.project, serviceActive);
   assert.equal(calls.length, 3);
   assert.match(
     requests.at(-1)!.previousContext,
@@ -1818,7 +1815,7 @@ void test('host preserves worker checklist when coordination recovery fails', as
     },
   );
   await service.start(f.project, f.input);
-  const card = await settled(f.store, f.project);
+  const card = await settled(f.store, f.project, serviceActive);
   const run = card.execution!.runs[0];
   assert.equal(run.status, 'failed');
   assert.equal(run.error, 'Fixture recovery failed.');
@@ -1958,7 +1955,7 @@ void test('coordinated app verification limitations retain diagnostics without f
     async () => undefined,
   );
   await service.start(f.project, f.input);
-  let card = await settled(f.store, f.project);
+  let card = await settled(f.store, f.project, serviceActive);
   const run = card.execution!.runs[0];
   assert.equal(calls, 1);
   assert.equal(run.status, 'succeeded');
@@ -1976,7 +1973,7 @@ void test('successor context includes only final accepted prerequisite reports, 
   await f.service.start(f.project, f.input);
   await writeFile(path.join(f.project.rootPath, 'module.txt'), 'first attempt');
   f.calls[0].resolve(delivered(f.calls[0].request));
-  let card = await settled(f.store, f.project);
+  let card = await settled(f.store, f.project, f.active);
   const superseded = card.execution!.runs[0].outputRef;
   await f.service.start(f.project, {
     ...f.input,
@@ -1988,7 +1985,7 @@ void test('successor context includes only final accepted prerequisite reports, 
     'accepted correction',
   );
   f.calls[1].resolve(delivered(f.calls[1].request));
-  card = await settled(f.store, f.project);
+  card = await settled(f.store, f.project, f.active);
   card = await f.service.update(
     f.project,
     id,
@@ -2006,7 +2003,7 @@ void test('successor context includes only final accepted prerequisite reports, 
     'second accepted output',
   );
   f.calls[2].resolve(delivered(f.calls[2].request));
-  card = await settled(f.store, f.project);
+  card = await settled(f.store, f.project, f.active);
   card = await f.service.update(
     f.project,
     id,
