@@ -6,6 +6,12 @@ import path from 'node:path';
 import { prepareProductExplorationMaterializationBasis } from '../lib/modules/product-discovery/basis.ts';
 import { PRODUCT_EXPLORATION_RESULT_CONTRACT } from '../lib/modules/product-discovery/contract.ts';
 import { allocateCandidateAliases } from '../lib/graph/identity-store.ts';
+import {
+  validateProductExplorationResult,
+  type ProductExplorationValidationState,
+} from '../lib/modules/product-discovery/validation.ts';
+import { MaterializationError } from '../lib/materialization/receipt.ts';
+import type { ProductExplorationCandidate } from '../lib/modules/product-discovery/contract.ts';
 import type { RegisteredProject } from '../lib/project-registry.ts';
 
 async function fixture(t: test.TestContext) {
@@ -168,4 +174,116 @@ void test('Product Design completion records its source Node, other intentions d
     input(),
   );
   assert.equal(exploration.productSourceNodeId, null);
+});
+
+function priorCandidate(localKey: string): ProductExplorationCandidate {
+  return {
+    localKey,
+    type: 'direction',
+    title: 'Capture the item',
+    summary: 'One sentence describing the proposed direction.',
+    derivedFrom: [{ kind: 'node', id: 'NODE-00000001' }],
+    dependsOn: [],
+    resources: [],
+    typeTemplateRef: null,
+    metadata: {},
+    presentation: {},
+    assumptions: ['The reader already has the source material.'],
+    outputMarkdown:
+      '# Capture the item\n\n## Why this direction\n\n- It answers the stated need directly.\n- It can be judged without more evidence.\n\n## Assumptions\n\n- The reader already has the source material.',
+    layer: 'discovery',
+    artifactKind: 'mvp',
+  };
+}
+
+function refineInput(sourceKey: string, targetId: string) {
+  return {
+    ...input(),
+    operation: 'refine-candidate' as const,
+    revisionTarget: {
+      candidateId: targetId,
+      revision: 1,
+      uid: '00000000-0000-4000-8000-000000000001',
+    },
+    revisionSource: priorCandidate(sourceKey),
+  };
+}
+
+void test('a refine basis carries a frozen copy of the Candidate being revised', async (t) => {
+  const project = await fixture(t);
+  const source = priorCandidate('CANDIDATE-abcdef01');
+  const basis = await prepareProductExplorationMaterializationBasis(project, {
+    ...input(),
+    operation: 'refine-candidate',
+    revisionTarget: {
+      candidateId: 'CANDIDATE-abcdef01',
+      revision: 1,
+      uid: '00000000-0000-4000-8000-000000000001',
+    },
+    revisionSource: source,
+  });
+  assert.ok(basis.revisionSource);
+  assert.equal(basis.revisionSource.localKey, 'CANDIDATE-abcdef01');
+  source.assumptions.push('A later mutation by the caller.');
+  assert.deepEqual(basis.revisionSource.assumptions, [
+    'The reader already has the source material.',
+  ]);
+  assert.throws(() => {
+    (basis.revisionSource!.assumptions as string[]).push('frozen');
+  });
+});
+
+void test('a refine basis naming a different prior Candidate is refused', async (t) => {
+  const project = await fixture(t);
+  await assert.rejects(
+    () =>
+      prepareProductExplorationMaterializationBasis(
+        project,
+        refineInput('CANDIDATE-99999999', 'CANDIDATE-abcdef01'),
+      ),
+    (error: unknown) =>
+      error instanceof MaterializationError && error.boundary === 'validation',
+  );
+});
+
+void test('a refine validated without the prior Candidate is refused, not skipped', () => {
+  const revised = priorCandidate('CANDIDATE-abcdef01');
+  const state = {
+    knownNodeIds: ['NODE-00000001'],
+    acceptedCandidateIds: [],
+    knownResourcePaths: [],
+    reservedCandidateIds: [],
+    currentCandidates: [],
+    revisionTarget: { candidateId: 'CANDIDATE-abcdef01' },
+    operation: 'refine-candidate',
+    intention: 'mvp-exploration',
+    motion: 'unspecified',
+    productSourceNodeId: null,
+    revisionSource: null,
+  } satisfies ProductExplorationValidationState;
+  const tampered = {
+    ...revised,
+    type: 'something-else',
+    dependsOn: [{ kind: 'node' as const, id: 'NODE-00000001' }],
+  };
+  assert.throws(
+    () =>
+      validateProductExplorationResult(state, {
+        outcome: 'proposal',
+        candidates: [tampered],
+      }),
+    (error: unknown) =>
+      error instanceof MaterializationError &&
+      /requires the Candidate being revised/.test(error.message),
+  );
+  assert.throws(
+    () =>
+      validateProductExplorationResult(
+        { ...state, revisionSource: revised },
+        { outcome: 'proposal', candidates: [tampered] },
+      ),
+    (error: unknown) =>
+      error instanceof MaterializationError &&
+      /Refine cannot change Candidate type/.test(error.message),
+  );
 });

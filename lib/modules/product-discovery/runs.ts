@@ -1676,8 +1676,13 @@ async function materializeWhatsNextOutput(
       `Candidate ${revisionTarget.candidateId} has no stable identity to revise.`,
     );
   }
-  const basis = await prepareProductExplorationMaterializationBasis(project, {
-    operation: record.operation ?? 'explore',
+  if (record.operation === 'refine-candidate' && !revisionTarget) {
+    throw new MaterializationError(
+      'validation',
+      'A refine Run must resolve the Candidate it is revising.',
+    );
+  }
+  const subject = {
     intention: record.intention ?? 'mvp-exploration',
     motion: record.motion ?? 'unspecified',
     sourceNodeIds: record.sourceNodeIds,
@@ -1692,17 +1697,25 @@ async function materializeWhatsNextOutput(
       revision: candidate.revision,
       dependsOn: [...candidate.dependsOn],
     })),
-    revisionTarget: revisionTarget?.uid
+  };
+  const basis = await prepareProductExplorationMaterializationBasis(
+    project,
+    revisionTarget?.uid
       ? {
-          candidateId: revisionTarget.candidateId,
-          revision: revisionTarget.revision,
-          uid: revisionTarget.uid,
+          ...subject,
+          operation: 'refine-candidate',
+          revisionTarget: {
+            candidateId: revisionTarget.candidateId,
+            revision: revisionTarget.revision,
+            uid: revisionTarget.uid,
+          },
+          revisionSource: toProductExplorationCandidate(
+            revisionTarget,
+            new Set(),
+          ),
         }
-      : null,
-    revisionSource: revisionTarget
-      ? toProductExplorationCandidate(revisionTarget, new Set())
-      : null,
-  });
+      : { ...subject, operation: 'explore' },
+  );
   const materialized = await materializeProductExplorationResult(
     basis,
     toProductExplorationSemanticResult(envelope),
