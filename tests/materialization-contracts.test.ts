@@ -252,3 +252,137 @@ void test('materializationLogEntry accepts an explicit level', () => {
   );
   assert.equal(entry.level, 'WARN');
 });
+
+const MODULE_CONTRACTS = [
+  {
+    expectedId: 'praxis.product-exploration.result',
+    load: () => import('../lib/modules/product-discovery/contract.ts'),
+    pick: (m: typeof import('../lib/modules/product-discovery/contract.ts')) =>
+      [
+        m.PRODUCT_EXPLORATION_RESULT_CONTRACT,
+        m.PRODUCT_EXPLORATION_MINIMAL_EXAMPLE,
+      ] as const,
+  },
+  {
+    expectedId: 'praxis.scope-decomposition.result',
+    load: () => import('../lib/modules/scope-decomposition/contract.ts'),
+    pick: (
+      m: typeof import('../lib/modules/scope-decomposition/contract.ts'),
+    ) =>
+      [
+        m.SCOPE_DECOMPOSITION_RESULT_CONTRACT,
+        m.SCOPE_DECOMPOSITION_MINIMAL_EXAMPLE,
+      ] as const,
+  },
+  {
+    expectedId: 'praxis.domain-model.result',
+    load: () => import('../lib/modules/domain-modeling/contract.ts'),
+    pick: (m: typeof import('../lib/modules/domain-modeling/contract.ts')) =>
+      [m.DOMAIN_MODEL_RESULT_CONTRACT, m.DOMAIN_MODEL_MINIMAL_EXAMPLE] as const,
+  },
+  {
+    expectedId: 'praxis.delivery-map.result',
+    load: () => import('../lib/modules/delivery-planning/contract.ts'),
+    pick: (m: typeof import('../lib/modules/delivery-planning/contract.ts')) =>
+      [m.DELIVERY_MAP_RESULT_CONTRACT, m.DELIVERY_MAP_MINIMAL_EXAMPLE] as const,
+  },
+];
+
+void test('every module Result Contract has a versioned identity and validates its minimal example', async () => {
+  const hashes = new Set<string>();
+  for (const entry of MODULE_CONTRACTS) {
+    const loaded = await entry.load();
+    const [contract, example] = entry.pick(loaded as never);
+    assert.equal(contract.id, entry.expectedId);
+    assert.equal(contract.version, 1);
+    assert.match(contract.hash, /^[0-9a-f]{64}$/);
+    hashes.add(contract.hash);
+    assert.doesNotThrow(() => contract.validateStructure(example));
+    assert.throws(() => contract.validateStructure({ outcome: 'unknown' }));
+  }
+  assert.equal(hashes.size, MODULE_CONTRACTS.length);
+});
+
+void test('the Delivery Map contract rejects producer-supplied identity, revision and evidence hashes', async () => {
+  const { DELIVERY_MAP_RESULT_CONTRACT, DELIVERY_MAP_MINIMAL_EXAMPLE } =
+    await import('../lib/modules/delivery-planning/contract.ts');
+  const example = DELIVERY_MAP_MINIMAL_EXAMPLE as Extract<
+    typeof DELIVERY_MAP_MINIMAL_EXAMPLE,
+    { outcome: 'map-proposal' }
+  >;
+  const withCandidateIdentity = {
+    ...example,
+    contracts: [
+      { ...example.contracts[0]!, candidateId: 'CANDIDATE-0001', revision: 1 },
+    ],
+  };
+  assert.throws(() =>
+    DELIVERY_MAP_RESULT_CONTRACT.validateStructure(withCandidateIdentity),
+  );
+  const withSourceHash = {
+    ...example,
+    sourceClaims: [
+      { ...example.sourceClaims[0]!, sourceSha256: '0'.repeat(64) },
+    ],
+  };
+  assert.throws(() =>
+    DELIVERY_MAP_RESULT_CONTRACT.validateStructure(withSourceHash),
+  );
+  const withUserInputEvidence = {
+    ...example,
+    sourceClaims: [
+      {
+        ...example.sourceClaims[0]!,
+        exclusionAuthority: {
+          userInputPath: 'input/user-input.md',
+          userInputSha256: '0'.repeat(64),
+          anchor: 'Example anchor text',
+        },
+      },
+    ],
+  };
+  assert.throws(() =>
+    DELIVERY_MAP_RESULT_CONTRACT.validateStructure(withUserInputEvidence),
+  );
+});
+
+void test('the Delivery Map contract references an existing Contract by its formal identifier', async () => {
+  const { DELIVERY_MAP_RESULT_CONTRACT, DELIVERY_MAP_MINIMAL_EXAMPLE } =
+    await import('../lib/modules/delivery-planning/contract.ts');
+  const example = DELIVERY_MAP_MINIMAL_EXAMPLE as Extract<
+    typeof DELIVERY_MAP_MINIMAL_EXAMPLE,
+    { outcome: 'map-proposal' }
+  >;
+  const dependsOn = (id: string) => ({
+    ...example,
+    contracts: [
+      {
+        ...example.contracts[0]!,
+        dependsOn: [{ kind: 'contract' as const, id }],
+      },
+    ],
+  });
+  assert.doesNotThrow(() =>
+    DELIVERY_MAP_RESULT_CONTRACT.validateStructure(dependsOn('NODE-00000001')),
+  );
+  assert.throws(() =>
+    DELIVERY_MAP_RESULT_CONTRACT.validateStructure(dependsOn('CANDIDATE-0001')),
+  );
+});
+
+void test('the Domain Model contract names a pre-materialization outcome instead of the committed one', async () => {
+  const { DOMAIN_MODEL_RESULT_CONTRACT, DOMAIN_MODEL_MINIMAL_EXAMPLE } =
+    await import('../lib/modules/domain-modeling/contract.ts');
+  assert.equal(DOMAIN_MODEL_MINIMAL_EXAMPLE.outcome, 'model-change');
+  assert.doesNotThrow(() =>
+    DOMAIN_MODEL_RESULT_CONTRACT.validateStructure(
+      DOMAIN_MODEL_MINIMAL_EXAMPLE,
+    ),
+  );
+  assert.throws(() =>
+    DOMAIN_MODEL_RESULT_CONTRACT.validateStructure({
+      ...DOMAIN_MODEL_MINIMAL_EXAMPLE,
+      outcome: 'applied',
+    }),
+  );
+});
