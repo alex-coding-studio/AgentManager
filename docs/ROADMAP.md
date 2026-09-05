@@ -1,5 +1,14 @@
 # Roadmap
 
+## Current focus — graph result materialization boundary
+
+As of 2026-09-05, the graph-oriented modules are being refactored so that
+validation, identity allocation, reference resolution, Candidate staging, and
+canonical publication are deterministic services separate from Agent
+generation. See [GRAPH_RESULT_MATERIALIZATION.md](GRAPH_RESULT_MATERIALIZATION.md)
+for the ordered pull requests. MCP exposure and external producers remain out
+of scope until that boundary is proven through the existing Agent flows.
+
 ## Current implementation update — real Planning connected
 
 The [live Planning slice](JUST_DO_IT_PLANNING.md) now imports real formal Nodes,

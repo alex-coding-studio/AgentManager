@@ -1,5 +1,7 @@
 # Graph Result Materialization
 
+Status: Ready for implementation
+
 ## Task summary
 
 Decouple Agent result generation from deterministic validation, identity allocation, relationship resolution, candidate staging, canonical publication, and filesystem persistence across Praxis's graph-oriented modules.
@@ -224,6 +226,8 @@ The basis must include enough information to detect stale writes:
 
 Immediately before canonical publication, Praxis must confirm that the basis still matches current state. A stale basis produces a conflict and no partial update.
 
+Where a module has no revision counter, the basis fingerprint is computed from the current canonical file content. The Delivery Map basis fingerprints the bytes of `current-map.json`, and the graph modules fingerprint `identities.json`. Any change to that file between basis preparation and publication, including a manual edit, is a stale basis.
+
 All affected output must be validated before any canonical write. New files must be staged in Praxis-owned temporary paths and exposed only through the module's existing mutation serialization or state lock. On failure:
 
 - temporary files are removed;
@@ -373,6 +377,17 @@ Do not test by deleting a correct validation rule, altering a valid identifier, 
 
 ## Delivery sequence
 
+Deliver the implementation as an ordered series of pull requests, each of which leaves the product self-consistent after merge:
+
+1. This document.
+2. Part 1: contracts, shared core, producer adapters, and the dependency-direction test. No runtime behavior change.
+3. Part 2a: shared graph proposal primitives and the Product Exploration migration, with parity goldens captured from the existing path before the refactor.
+4. Part 2b: the Scope Decomposition migration and removal of the duplicated identity and Node-construction path.
+5. Part 3: Domain Modeling.
+6. Part 4: Delivery Planning.
+
+Part 2 is split because the two module run services are each close to two thousand lines and duplicate one another; the shared primitives and the first migration are one review unit, and the second migration is then a mirror whose diff is dominated by deletions.
+
 ### Part 1: Establish contracts and boundaries without behavior change
 
 - introduce shared terminology and core types for basis, producer kind, semantic result identity, and materialization receipt;
@@ -381,12 +396,18 @@ Do not test by deleting a correct validation rule, altering a valid identifier, 
 - add dependency-direction tests preventing Materializers from importing Harness or transport code;
 - keep existing orchestration and storage behavior unchanged.
 
-### Part 2: Product Exploration and Scope Decomposition
+### Part 2a: Shared graph primitives and Product Exploration
 
 - extract shared graph validation, local-reference resolution, Candidate staging, and formal promotion primitives;
-- route both existing Agent flows through their module Materializers;
-- retain each module's current operations and Candidate lifecycle;
-- remove duplicated Node-construction logic only after parity tests pass.
+- route the Product Exploration Agent flow through its module Materializer;
+- retain the module's current operations and Candidate lifecycle;
+- capture parity goldens from the existing path before the refactor and keep them as the regression suite.
+
+### Part 2b: Scope Decomposition
+
+- route the Scope Decomposition Agent flow through its module Materializer using the Part 2a primitives;
+- retain propose, append, revise, recompose, and all recomposition invariants;
+- remove duplicated identity allocation and Node-construction logic only after parity tests pass.
 
 ### Part 3: Domain Modeling
 

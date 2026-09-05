@@ -208,6 +208,7 @@ their exact commands and prerequisites.
 - [Domain Modeling](docs/WHATS_THAT_DOMAIN_MODEL.md)
 - [Implementation planning](docs/JUST_DO_IT_PLANNING.md)
 - [Implementation execution](docs/JUST_DO_IT_EXECUTION.md)
+- [Graph result materialization](docs/GRAPH_RESULT_MATERIALIZATION.md)
 - [Process boundaries](docs/PROCESS_BOUNDARIES.md)
 
 ## License
