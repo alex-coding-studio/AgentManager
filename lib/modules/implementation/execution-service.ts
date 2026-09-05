@@ -904,6 +904,15 @@ export function createExecutionService(
       input.instruction.length > 20000
     )
       throw new PublicApiError('Invalid execution input.', 400);
+    const settling = active.get(cardKey(project, input.cardId));
+    if (
+      settling?.reservation?.settled &&
+      settling.reservation.stopResult !== 'unconfirmed'
+    ) {
+      await settling.reservation.released;
+      if (active.get(cardKey(project, input.cardId)) === settling)
+        active.delete(cardKey(project, input.cardId));
+    }
     if (active.has(cardKey(project, input.cardId)))
       throw new PublicApiError('This Card already has a running Action.', 409);
     const reservation: Active = {
