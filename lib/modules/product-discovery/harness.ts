@@ -14,6 +14,7 @@ import {
   PRODUCT_EXPLORATION_CANDIDATE_EXTENSION_PROPERTIES,
   PRODUCT_EXPLORATION_CANDIDATE_EXTENSION_REQUIRED,
   type ProductExplorationCandidateInput,
+  type ProductExplorationRequestIdentity,
   type ProductExplorationResourceReference,
 } from './contract.ts';
 import {
@@ -52,11 +53,7 @@ export function whatsNextHarnessPrompt(
   return `${WHATS_NEXT_HARNESS_PROMPT}\n\n${whatsNextIntentionProfile(intention).prompt}\n\n${whatsNextMotionProfile(motion).prompt}`;
 }
 
-export type WhatsNextRequestIdentity = {
-  sessionId: string;
-  requestId: string;
-  inputFingerprint: string;
-};
+export type WhatsNextRequestIdentity = ProductExplorationRequestIdentity;
 
 export function canReuseWhatsNextSession(
   run: {
