@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { copyFile, mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { CANDIDATE_ALIAS_PATTERN } from '../identity.ts';
 import { reserveNodeIdentity, type Scope } from '../identity-store.ts';
 import {
   listCanvasNodesWithinCanvas,
@@ -17,6 +18,7 @@ const RUN_ROOTS = {
 } as const satisfies Record<Scope, string>;
 
 const RUN_ID = /^RUN-[0-9a-f-]{36}$/;
+const CANDIDATE_ID = new RegExp(CANDIDATE_ALIAS_PATTERN);
 
 export type PromotedNodeExtension = Pick<
   TaskGraphNode,
@@ -37,6 +39,8 @@ export async function promoteCandidateToNode(
 ) {
   const { scope, runId, candidate } = input;
   if (!RUN_ID.test(runId)) throw new Error('The Run identifier is invalid.');
+  if (!CANDIDATE_ID.test(candidate.candidateId))
+    throw new Error('The Candidate identifier is invalid.');
   if (!candidate.uid) throw new Error('Candidate stable identity is missing.');
   return mutateCanvas(project, scope, async () => {
     const existingNodes = await listCanvasNodesWithinCanvas(project, scope);
