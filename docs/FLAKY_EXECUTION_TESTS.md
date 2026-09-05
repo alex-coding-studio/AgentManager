@@ -10,12 +10,14 @@ Observed while delivering unrelated materialization work on branches that change
 
 | How it is run                                                                               | Failures |
 | ------------------------------------------------------------------------------------------- | -------- |
-| The file alone, `node --experimental-strip-types --test tests/just-do-it-execution.test.ts` | 0 of 2   |
+| The file alone, `node --experimental-strip-types --test tests/just-do-it-execution.test.ts` | 1 of 8   |
 | The suite, `npm run test:implementation-execution` (7 files, 122 tests)                     | 3 of 22  |
 | The full chain, `npm test`                                                                  | 2 of 3   |
 | CI, run 33986130044                                                                         | 1 of 1   |
 
-The file passes in isolation and fails as part of the suite, and the full chain fails more often than the suite alone. That ordering is consistent with machine load widening the window, but the samples are small and I am not claiming it as the mechanism.
+The file fails on its own as well as inside the suite, so running several files together is not the cause. The full chain fails more often than either, which is consistent with machine load widening the window, but the samples are small and I am not claiming that as the mechanism.
+
+An earlier revision of this document reported 0 failures in 2 isolated runs and concluded the file passed in isolation. Six further runs produced one failure. Two samples did not support that claim, and the corrected figure matters: a debugger can reproduce this against the single file and does not need the whole suite.
 
 ## Reproduction
 
@@ -26,7 +28,7 @@ for i in $(seq 30); do
 done
 ```
 
-At roughly 14 percent per run, 30 iterations should produce about four failures. Running the loop while the machine is otherwise busy appears to raise the rate; running the single file in isolation did not reproduce it in the attempts made.
+At roughly 14 percent per run, 30 iterations should produce about four failures. The same loop against the single file reproduces it at roughly 1 in 8, which is the cheaper starting point.
 
 ## Captured signatures
 
