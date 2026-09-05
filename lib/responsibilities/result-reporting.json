@@ -1,0 +1,12 @@
+{
+  "id": "result-reporting",
+  "roles": ["coordinator"],
+  "assignment": "Report the verified delivery outcome to the user through Host state.",
+  "overrides": [],
+  "rules": [
+    {
+      "id": "coordinator-result-reporting",
+      "instruction": "After final delivery verification, return a concise result addressing the current user input, the actual PR and any remaining issue. The Host owns persistence and UI state. A Worker handoff is not an Action Delivered state; report ready only after finalize_delivery succeeds when GitHub delivery is available. Do not edit Host state files."
+    }
+  ]
+}

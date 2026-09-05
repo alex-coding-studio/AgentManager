@@ -16,9 +16,11 @@ Complete the current User Input and Assignment amendments before reporting deliv
 
 For an Origin directory, read its numbered files in order. Apply the same exact-filename skip rule to each file inside it.
 
-Only the Responsibility files listed in Origin are active. Other files in Responsibilities are historical records. General is either the sole explicit assignment or inherited from the listed specialized responsibilities; never apply it as a duplicate explicit assignment.
+Role: Worker. Read `../roles/worker.json` relative to the Host's Responsibility library and apply its default responsibilities, plus the Responsibility pointers listed in Origin. General is the shared baseline applied once to every Role. Responsibilities compose; they do not inherit General or change the Role. Legacy general pointers mean the baseline, not an additional Role. Only the Responsibility files listed in Origin are active task additions. Other pointer files are historical records.
 
-A Responsibility pointer assigns the definition identified by `source`. Resolve a `praxis:responsibility/<id>` source through the Responsibility library named in the Host handoff, then read the definition and follow its declared inheritance before continuing the Action. A legacy pointer may contain the definition path directly in `source`.
+A Responsibility pointer assigns the definition identified by `source`. Resolve a `praxis:responsibility/<id>` source through the Responsibility library named in the Host handoff. Apply explicit rule-level overrides and report conflicting overrides; ordering never silently resolves a conflict. Role and Responsibility library definitions are live system rules, so read their current contents each assignment. A legacy pointer may contain the definition path directly in `source`.
+
+Worker handoff ends with a Draft PR, all final commits and actual validation evidence. The Coordinator owns final verification and Ready. Never turn a Draft Ready as Worker, even if older packet text assigns final publication to you.
 
 {{origin}}
 

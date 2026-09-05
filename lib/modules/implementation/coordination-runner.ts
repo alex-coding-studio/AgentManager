@@ -32,15 +32,21 @@ import {
   type CoordinatorSession,
   type CoordinatorSessionInput,
 } from '../../agents/event-driven-transport.ts';
-import type { CardEnvironmentManifest } from '../../card-host-operations.ts';
+import type {
+  CardEnvironmentManifest,
+  CandidatePublication,
+} from '../../card-host-operations.ts';
+import { runCandidatePublicationScript } from '../../agents/candidate-publication.ts';
 import type {
   AgentRuntimeEvent,
   AgentRuntimeTurn,
   HostTool,
-  HostToolContinuation,
 } from '../../agents/runtime-driver.ts';
 import { readCodexSkills, type SkillCatalog } from '../../agents/skills.ts';
-import { executionResponsibilityInstructions } from './execution-responsibilities.ts';
+import {
+  executionResponsibilityInstructions,
+  executionRoleInstructions,
+} from './execution-responsibilities.ts';
 import {
   runDeliveryPacketScript,
   packetResponsibilityState,
@@ -194,6 +200,7 @@ export function startCoordinatedExecution(input: {
     input: CoordinatorSessionInput,
   ) => Promise<CoordinatorSession | null>;
   discoverSkills?: typeof readCodexSkills;
+  finalizePublication?: typeof runCandidatePublicationScript;
 }): LocalAgentRun {
   const transport = input.transport ?? startLocalAgentRun;
   const coordinatorSession =
@@ -202,6 +209,10 @@ export function startCoordinatedExecution(input: {
       ? async () => null
       : startPushCoordinatorSession);
   let dispatchHandler: HostTool['call'] | undefined;
+  let workerPublication: CandidatePublication | null = null;
+  let finalPublication: CandidatePublication | null = null;
+  let finalizationAttempts = 0;
+  let recordDeliveryFailure: (message: string) => void = () => {};
   const dispatchTool: HostTool = {
     ...dispatchWorkerTool,
     call: (arguments_) =>
@@ -305,6 +316,15 @@ export function startCoordinatedExecution(input: {
       );
     const options: Options = {
       ...input.workerOptions,
+      candidatePublication:
+        role === 'worker' && input.workerOptions.candidatePublication
+          ? {
+              ...input.workerOptions.candidatePublication,
+              onPublished: (publication) => {
+                workerPublication = publication;
+              },
+            }
+          : undefined,
       prompt,
       model: profile.model || undefined,
       effort: profile.effort || undefined,
@@ -372,6 +392,9 @@ export function startCoordinatedExecution(input: {
     }
   }
   const workerPromptFor = async (decision: CoordinationDecision) => {
+    workerPublication = null;
+    finalPublication = null;
+    lastWorkerReport = null;
     const selectedSkills = availableSkills.filter((skill) =>
       decision.skillPaths.includes(skill.path),
     );
@@ -435,9 +458,75 @@ The Coordinator-assigned responsibilities, responsibilityInstructions, Skills an
       coordinationRecords: records,
     };
   };
-  const terminalResult = (
+  const finalizeDelivery = async () => {
+    assertActive();
+    if (finalPublication) return finalPublication;
+    const publication = input.workerOptions.candidatePublication;
+    if (
+      !publication ||
+      !lastWorkerReport ||
+      !assessRequiredChecks(
+        input.request.context.acceptanceChecklist,
+        lastWorkerReport.checks,
+        input.request.context.acceptanceOverrides,
+      ).passed
+    )
+      throw new Error(
+        'Final delivery requires a Worker handoff with passed required checks.',
+      );
+    const heads = [
+      ...new Set(
+        lastWorkerReport.artifactRefs
+          .filter((ref) => /^git:[0-9a-f]{40,64}$/.test(ref))
+          .map((ref) => ref.slice(4)),
+      ),
+    ];
+    const headSha =
+      workerPublication?.headSha ?? (heads.length === 1 ? heads[0] : undefined);
+    if (!headSha)
+      throw new Error(
+        'Worker handoff must identify the exact validated commit.',
+      );
+    if (++finalizationAttempts > 2)
+      throw new Error('Final delivery recovery budget exhausted.');
+    progress(
+      'publish',
+      'Coordinator is verifying the Worker Draft and completing GitHub delivery.',
+      { actor: 'COORDINATOR' },
+    );
+    finalPublication = await (
+      input.finalizePublication ?? runCandidatePublicationScript
+    )({
+      ...publication,
+      finalizeOnly: true,
+      baseSha: publication.environment.workspace.baseCommit,
+      headSha,
+      title: 'Finalize Action delivery',
+      body: lastWorkerReport.summary,
+      draft: false,
+    });
+    assertActive();
+    if (
+      finalPublication.headSha !== headSha ||
+      finalPublication.actionId !== input.request.actionId ||
+      finalPublication.pullRequest.draft ||
+      finalPublication.pullRequest.state !== 'OPEN'
+    ) {
+      finalPublication = null;
+      throw new Error(
+        'Host did not confirm the exact Action candidate as Ready.',
+      );
+    }
+    return finalPublication;
+  };
+  const terminalResult = async (
     decision: CoordinationDecision,
-  ): CoordinatedResult => {
+  ): Promise<CoordinatedResult> => {
+    if (
+      decision.decision === 'ready' &&
+      input.workerOptions.candidatePublication
+    )
+      await finalizeDelivery();
     const output = {
       harnessRevision: input.request.harnessRevision,
       requestId: input.request.requestId,
@@ -448,15 +537,29 @@ The Coordinator-assigned responsibilities, responsibilityInstructions, Skills an
       stage: 'execution',
       actionId: input.request.actionId,
       outcome: decision.decision === 'ready' ? 'delivered' : 'blocked',
-      summary: decision.summary,
-      artifactRefs: decision.artifactRefs,
+      summary: finalPublication
+        ? `${decision.summary}\nReady PR: ${finalPublication.pullRequest.url} (${finalPublication.headSha})`
+        : decision.summary,
+      artifactRefs: [
+        ...new Set([
+          ...decision.artifactRefs,
+          ...(finalPublication
+            ? [
+                finalPublication.pullRequest.url,
+                `git:${finalPublication.headSha}`,
+              ]
+            : []),
+        ]),
+      ],
       checks: decision.checks,
-      additionalChecks: decision.additionalFindings
-        .filter((item) => !item.resolved && item.needsAttention)
-        .map(
-          ({ resolved: _resolved, needsAttention: _attention, ...item }) =>
-            item,
-        ),
+      additionalChecks: lastWorkerReport
+        ? currentAdditionalChecks(lastWorkerReport)
+        : decision.additionalFindings
+            .filter((item) => !item.resolved && item.needsAttention)
+            .map(
+              ({ resolved: _resolved, needsAttention: _attention, ...item }) =>
+                item,
+            ),
       scopeNotes: decision.scopeNotes,
       remaining: [],
     };
@@ -493,9 +596,19 @@ The Coordinator-assigned responsibilities, responsibilityInstructions, Skills an
       environment: input.environment,
     });
     let repairs = 1;
+    recordDeliveryFailure = (message) => {
+      if (lastWorkerReport)
+        req = {
+          ...req,
+          workerReport: {
+            ...lastWorkerReport,
+            outcome: 'blocked',
+            summary: message,
+          },
+        };
+    };
     let workerBusy = false;
     let dispatchError: Error | undefined;
-    let delivered: CoordinatedResult | undefined;
     let continuationPrompt = '';
     const recordDecision = (decision: CoordinationDecision) => {
       trace.decisions.push(decision);
@@ -505,7 +618,7 @@ The Coordinator-assigned responsibilities, responsibilityInstructions, Skills an
     };
     const dispatch = async (
       decision: CoordinationDecision,
-    ): Promise<HostToolContinuation> => {
+    ): Promise<{ prompt: string }> => {
       if (
         decision.decision !== 'dispatch' &&
         decision.decision !== 'extend' &&
@@ -547,17 +660,6 @@ The Coordinator-assigned responsibilities, responsibilityInstructions, Skills an
       }
       basis = await input.readBasis();
       assertActive();
-      if (settlement.kind === 'completed') {
-        const required = assessRequiredChecks(
-          input.request.context.acceptanceChecklist,
-          settlement.report.checks,
-          input.request.context.acceptanceOverrides,
-        );
-        if (required.passed) {
-          delivered = deliveredResult(settlement.report, lastWorker!);
-          return { finalOutput: delivered.finalOutput };
-        }
-      }
       req = createCoordinationRequest({
         phase: 'qualify',
         task: input.request,
@@ -583,7 +685,13 @@ The Coordinator-assigned responsibilities, responsibilityInstructions, Skills an
             ? 'Worker failed; resuming the coordinator.'
             : settlement.kind === 'attention-required'
               ? 'Worker needs attention; resuming the coordinator.'
-              : 'Worker completed with unresolved checks; resuming the coordinator.',
+              : assessRequiredChecks(
+                    input.request.context.acceptanceChecklist,
+                    settlement.report.checks,
+                    input.request.context.acceptanceOverrides,
+                  ).passed
+                ? 'Worker handoff received; Coordinator is verifying final delivery.'
+                : 'Worker completed with unresolved checks; resuming the coordinator.',
         );
       continuationPrompt = workerSettlementPrompt(
         settlement,
@@ -625,7 +733,7 @@ The Coordinator-assigned responsibilities, responsibilityInstructions, Skills an
       profile: input.settings.profile,
       workingDirectory: input.workerOptions.workingDirectory,
       access: 'read-only',
-      instructions: coordinatorThreadInstructions,
+      instructions: `${coordinatorThreadInstructions}\n${executionRoleInstructions('coordinator')}`,
       hostJobs: false,
     });
     const runTurn = (prompt: string, initial: boolean, publicProgress = true) =>
@@ -750,7 +858,6 @@ The Coordinator-assigned responsibilities, responsibilityInstructions, Skills an
       );
       initial = false;
       assertActive();
-      if (delivered) return delivered;
       if (!response.finalOutput.trim() && dispatchError) throw dispatchError;
       if (
         !response.finalOutput.trim() &&
@@ -766,12 +873,25 @@ The Coordinator-assigned responsibilities, responsibilityInstructions, Skills an
       ) {
         recordDecision(decision);
         const continuation = await dispatch(decision);
-        if ('finalOutput' in continuation) return delivered!;
         prompt = continuation.prompt;
         continue;
       }
       recordDecision(decision);
-      return terminalResult(decision);
+      try {
+        return await terminalResult(decision);
+      } catch (error) {
+        if (
+          decision.decision !== 'ready' ||
+          !input.workerOptions.candidatePublication ||
+          finalizationAttempts >= 2
+        )
+          throw error;
+        const message =
+          error instanceof Error ? error.message : 'Final delivery failed.';
+        recordDeliveryFailure(message);
+        progress('qualify', message, { actor: 'COORDINATOR' });
+        prompt = `HOST_DELIVERY_ATTENTION_REQUIRED\n${message}\nThe Worker checks remain passed. Resolve GitHub delivery through finalize_delivery, or dispatch a bounded Worker repair when code/Draft changes are required. Do not invent failed criteria or request user approval for routine recovery.\n${coordinationPrompt(req)}`;
+      }
     }
   }
   async function runLegacy(): Promise<CoordinatedResult> {
@@ -809,8 +929,44 @@ The Coordinator-assigned responsibilities, responsibilityInstructions, Skills an
           decision.decision !== 'dispatch' &&
           decision.decision !== 'extend' &&
           decision.decision !== 'repair'
-        )
-          break;
+        ) {
+          try {
+            return await terminalResult(decision);
+          } catch (error) {
+            if (
+              decision.decision !== 'ready' ||
+              !input.workerOptions.candidatePublication ||
+              !lastWorkerReport ||
+              finalizationAttempts >= 2
+            )
+              throw error;
+            const message =
+              error instanceof Error ? error.message : 'Final delivery failed.';
+            req = createCoordinationRequest({
+              phase: 'qualify',
+              task: input.request,
+              availableSkills,
+              basis,
+              priorEvidence: input.priorEvidence,
+              previousContext: trace.contextSummary,
+              workerReport: {
+                ...lastWorkerReport,
+                outcome: 'blocked',
+                summary: message,
+              },
+              previousDecision: decision,
+              repairsRemaining: repairs,
+              environment: input.environment,
+            });
+            response = await call(
+              'coordinator',
+              'qualify',
+              `HOST_DELIVERY_ATTENTION_REQUIRED\n${message}\n${coordinationPrompt(req)}`,
+            );
+            decision = parseCoordinationDecision(response.finalOutput, req);
+            continue;
+          }
+        }
         const phase =
           decision.decision === 'repair'
             ? 'repair'
@@ -833,14 +989,6 @@ The Coordinator-assigned responsibilities, responsibilityInstructions, Skills an
         trace.attempts.at(-1)!.summary = lastWorkerReport.summary;
         basis = await input.readBasis();
         assertActive();
-        const required = assessRequiredChecks(
-          input.request.context.acceptanceChecklist,
-          lastWorkerReport.checks,
-          input.request.context.acceptanceOverrides,
-        );
-        if (required.passed && lastWorkerReport.outcome === 'delivered') {
-          return deliveredResult(lastWorkerReport, lastWorker);
-        }
         req = createCoordinationRequest({
           phase: 'qualify',
           task: input.request,
@@ -862,8 +1010,6 @@ The Coordinator-assigned responsibilities, responsibilityInstructions, Skills an
         );
         decision = parseCoordinationDecision(response.finalOutput, req);
       }
-      assertActive();
-      return terminalResult(decision);
     }
   }
   const completion = (async (): Promise<CoordinatedResult> => {
@@ -880,7 +1026,35 @@ The Coordinator-assigned responsibilities, responsibilityInstructions, Skills an
         profile: input.settings.profile,
         workingDirectory: input.workerOptions.workingDirectory,
         protectedPath: input.workerOptions.protectedPath,
-        hostTools: [dispatchTool],
+        hostTools: [
+          dispatchTool,
+          ...(input.workerOptions.candidatePublication
+            ? [
+                {
+                  name: 'finalize_delivery',
+                  description:
+                    'Coordinator GitHub delivery: verify the Worker handoff, confirm its clean pushed HEAD and turn the existing Draft PR Ready. Does not commit code or push changes.',
+                  inputSchema: {
+                    type: 'object',
+                    properties: {},
+                    additionalProperties: false,
+                  },
+                  call: async () => {
+                    try {
+                      return await finalizeDelivery();
+                    } catch (error) {
+                      recordDeliveryFailure(
+                        error instanceof Error
+                          ? error.message
+                          : 'Final delivery failed.',
+                      );
+                      throw error;
+                    }
+                  },
+                },
+              ]
+            : []),
+        ],
         skillCatalog,
       });
       assertActive();

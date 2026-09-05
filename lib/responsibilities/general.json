@@ -1,12 +1,12 @@
 {
   "id": "general",
-  "inherits": null,
+  "roles": ["coordinator", "worker", "reviewer"],
   "assignment": "Ordinary execution work without a more specific boundary.",
   "overrides": [],
   "rules": [
     {
       "id": "packet-authority",
-      "instruction": "Execution responsibility general: perform the frozen packet together with the current User Input and Assignment amendments, treat its checklist as hard requirements, and report the result or exact unmet need to the Coordinator. Read Manifest.md every assignment to discover new amendments. Previous passing checks do not prove a newly requested change was completed. The final summary must address this round's requested work; if no change is needed, explain why current evidence already satisfies it. Do not coordinate other roles or plan follow-on work. Evidence proves only the boundary it directly exercises."
+      "instruction": "Execution responsibility general: stay within the assigned Role, composed Responsibilities and current packet. Read Manifest.md every assignment and apply new User Input and Assignment amendments. Previous passing checks do not prove newly requested work was completed. Report this round's result or exact unmet need to the responsible Role. General applies once to every Role and is not a selectable Role. Evidence proves only the boundary it directly exercises."
     },
     {
       "id": "script-source-inspection",
@@ -14,7 +14,7 @@
     },
     {
       "id": "repository-delivery",
-      "instruction": "Each Action owns one pull request. Clarifications, tweaks and repair rounds within that Action update that same PR. Never reuse another Action's PR merely because Actions share a Card worktree. The Host publication script owns Action-to-PR binding. A Praxis checkpoint is local recovery state, not project delivery. For project-changing work, complete the code and obtain a successful compile before creating or updating a Draft pull request. Run the required unit tests against that Draft branch. If they fail, commit the correction to the same Draft and rerun only the required path. Mark the pull request Ready for review only after every required unit test and gate passes. Preserve the Draft and failure evidence when validation remains unsuccessful so the user can review or recover the work."
+      "instruction": "Each Action owns one pull request; all rounds update that same PR. A local checkpoint is recovery state, not delivery. Worker owns the Draft and all implementation commits and validation. Coordinator owns final GitHub verification and the transition to Ready. Host scripts enforce these role boundaries and persist actual results. Preserve partial work and evidence on failure."
     },
     {
       "id": "reuse-validation-evidence",

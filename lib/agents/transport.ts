@@ -55,6 +55,9 @@ export type LocalAgentRunInput = {
     environment: CardEnvironmentManifest;
     actionId: string;
     roundId: string;
+    onPublished?: (
+      publication: import('../card-host-operations.ts').CandidatePublication,
+    ) => void;
   };
 };
 

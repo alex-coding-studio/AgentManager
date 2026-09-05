@@ -1,0 +1,3 @@
+display_name: Execution Roles and Responsibilities
+short_description: Maintain composed responsibilities and delivery ownership in Praxis.
+default_prompt: Update the relevant Praxis Role and Responsibility JSON definitions and verify the resulting tool and handoff boundaries.

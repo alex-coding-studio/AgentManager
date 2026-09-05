@@ -269,7 +269,7 @@ function setup(
     });
   return { start, calls };
 }
-void test('complete worker self-check bypasses coordinator review and keeps separate usage', async () => {
+void test('complete Worker handoff returns to Coordinator and keeps separate usage', async () => {
   const f = setup((req) =>
     decision(req, req.phase === 'prepare' ? 'dispatch' : 'ready'),
   );
@@ -278,11 +278,11 @@ void test('complete worker self-check bypasses coordinator review and keeps sepa
   > & { coordination: { attempts: unknown[] } };
   assert.deepEqual(
     f.calls.map((c) => c.access),
-    ['read-only', 'workspace-write'],
+    ['read-only', 'workspace-write', 'read-only'],
   );
-  assert.equal(output.usage?.inputTokens, 20);
-  assert.equal(output.usage?.cachedInputTokens, 10);
-  assert.equal(output.coordination.attempts.length, 2);
+  assert.equal(output.usage?.inputTokens, 30);
+  assert.equal(output.usage?.cachedInputTokens, 15);
+  assert.equal(output.coordination.attempts.length, 3);
   assert.deepEqual(JSON.parse(output.finalOutput).additionalChecks, []);
   assert.match(f.calls[1].prompt, /Only repair the requested output/);
   assert.match(f.calls[1].prompt, /"responsibilities":\["general"\]/);
@@ -384,7 +384,7 @@ void test('responsibility resolution defaults to general and keeps additions com
     combined,
     /successful compile before creating or updating a Draft/,
   );
-  assert.match(combined, /Mark the pull request Ready for review only after/);
+  assert.match(combined, /Do not turn a Draft into Ready/);
 
   const overridden = compileResponsibilityInstructions(
     {
@@ -568,7 +568,7 @@ void test('Coordinator Harness stays a coordinator rather than becoming a Review
   );
   assert.match(prompt, /Repository delivery.*does not require ios-development/);
   assert.match(prompt, /finish code and compilation, publish a Draft/);
-  assert.match(prompt, /mark it Ready only after every required gate passes/);
+  assert.match(prompt, /Coordinator owns final GitHub verification and Ready/);
   assert.match(
     prompt,
     /logRef without opening, copying or summarizing the log/,
@@ -638,7 +638,7 @@ void test('a repaired worker result can complete within the same bounded Action 
     ['failed', 'passed'],
   );
   const r = await f.start().completion;
-  assert.equal(f.calls.length, 4);
+  assert.equal(f.calls.length, 5);
   assert.equal(JSON.parse(r.finalOutput).outcome, 'delivered');
 });
 void test('reuse is accepted only for known evidence bound to current inputs', () => {
@@ -940,11 +940,11 @@ void test('coordinator filters ignored diagnostics, surfaces material extras, an
   const output = (await f.start()
     .completion) as import('../lib/modules/implementation/coordination-runner.ts').CoordinatedResult;
   const report = JSON.parse(output.finalOutput);
-  assert.equal(f.calls.length, 2);
+  assert.equal(f.calls.length, 3);
   assert.equal(report.outcome, 'delivered');
   assert.equal(report.checks[0].status, 'passed');
   assert.deepEqual(report.additionalChecks, []);
-  assert.equal(output.coordination.decisions.length, 1);
+  assert.equal(output.coordination.decisions.length, 2);
 });
 
 void test('Coordinator can recover delivery after required checks pass without inventing a failed criterion', () => {
@@ -1022,11 +1022,11 @@ void test('repair without a supported actionable remedy stops before another wor
 
 void test('passed required checks do not ask coordinator to repair additional diagnostics', async () => {
   const f = setup((req) =>
-    decision(req, req.phase === 'prepare' ? 'dispatch' : 'repair'),
+    decision(req, req.phase === 'prepare' ? 'dispatch' : 'ready'),
   );
   const output = await f.start().completion;
   assert.equal(JSON.parse(output.finalOutput).outcome, 'delivered');
-  assert.equal(f.calls.length, 2);
+  assert.equal(f.calls.length, 3);
 });
 
 void test('machine exit contradiction routes the affected required check to coordinator recovery', async () => {
@@ -1113,7 +1113,9 @@ void test('worker controls which unresolved additional checks reach the user', a
         options.prompt.split('COORDINATION REQUEST:\n')[1],
       );
       return {
-        completion: Promise.resolve(result(decision(req, 'dispatch'))),
+        completion: Promise.resolve(
+          result(decision(req, req.phase === 'prepare' ? 'dispatch' : 'ready')),
+        ),
         cancel: () => {},
       };
     }
@@ -1148,7 +1150,7 @@ void test('worker controls which unresolved additional checks reach the user', a
     transport,
   });
   const output = JSON.parse((await run.completion).finalOutput);
-  assert.equal(calls, 2);
+  assert.equal(calls, 3);
   assert.deepEqual(
     output.additionalChecks.map((check: { summary: string }) => check.summary),
     ['Current environment limitation'],
@@ -1324,6 +1326,12 @@ function pushSetup(
     resumeWorkerSessionId?: string;
     packetDir?: string;
     runtimeInstructions?: string;
+    publication?: NonNullable<
+      Parameters<typeof startLocalAgentRun>[1]['candidatePublication']
+    >;
+    finalizePublication?: Parameters<
+      typeof startCoordinatedExecution
+    >[0]['finalizePublication'];
   } = {},
 ) {
   const request = task();
@@ -1336,6 +1344,18 @@ function pushSetup(
     workerCalls.push(opts.prompt);
     workerResumes.push(opts.resumeSessionId);
     const kind = workers[index++] ?? 'passed';
+    if (options.publication && opts.candidatePublication?.onPublished)
+      opts.candidatePublication.onPublished({
+        actionId,
+        headSha: 'a'.repeat(40),
+        pullRequest: {
+          number: 7,
+          url: 'https://github.com/example/repo/pull/7',
+          state: 'OPEN',
+          draft: true,
+          headSha: 'a'.repeat(40),
+        },
+      } as import('../lib/card-host-operations.ts').CandidatePublication);
     if (kind === 'hang') {
       let reject!: (error: Error) => void;
       const completion = new Promise<LocalAgentResult>((_, fail) => {
@@ -1381,6 +1401,7 @@ function pushSetup(
       model: 'worker-model',
       effort: 'low',
       access: 'workspace-write',
+      candidatePublication: options.publication,
     },
     workerAgent: 'codex',
     settings: { profile },
@@ -1389,6 +1410,7 @@ function pushSetup(
     readBasis: async () => 'basis',
     onProgress: (event) => progress.push(`${event.phase}: ${event.summary}`),
     workerTransport,
+    finalizePublication: options.finalizePublication,
     limits: options.limits,
     packetDir: options.packetDir,
     runtimeInstructions: options.runtimeInstructions,
@@ -1426,7 +1448,7 @@ type Coordinated = Awaited<
   };
 };
 
-void test('push coordinator dispatches through the Host tool and a complete worker self-check settles without resuming it', async () => {
+void test('push Coordinator receives the completed Worker handoff before finishing', async () => {
   const f = pushSetup((req) =>
     decision(req, req.phase === 'prepare' ? 'dispatch' : 'ready'),
   );
@@ -1434,12 +1456,12 @@ void test('push coordinator dispatches through the Host tool and a complete work
   assert.equal(JSON.parse(output.finalOutput).outcome, 'delivered');
   assert.deepEqual(
     output.coordination.attempts.map((a) => `${a.role}:${a.phase}`),
-    ['coordinator:prepare', 'worker:execute'],
+    ['coordinator:prepare', 'worker:execute', 'coordinator:qualify'],
   );
   assert.equal(output.coordination.attempts[0].sessionId, 'thread-fixture');
-  assert.equal(output.coordination.decisions.length, 1);
-  assert.equal(output.usage?.inputTokens, 20);
-  assert.equal(f.driver().prompts.length, 1);
+  assert.equal(output.coordination.decisions.length, 2);
+  assert.equal(output.usage?.inputTokens, 30);
+  assert.equal(f.driver().prompts.length, 2);
   assert.match(f.driver().prompts[0], /^DECORATED /);
   assert.equal(f.driver().threads[0].access, 'read-only');
   assert.equal(f.driver().threads[0].hostJobs, false);
@@ -1450,7 +1472,15 @@ void test('push coordinator dispatches through the Host tool and a complete work
 
 void test('WORKER_COMPLETED with unresolved checks resumes the same coordinator thread and one repair can finish the Action', async () => {
   const f = pushSetup(
-    (req) => decision(req, req.phase === 'prepare' ? 'dispatch' : 'repair'),
+    (req) =>
+      decision(
+        req,
+        req.phase === 'prepare'
+          ? 'dispatch'
+          : req.repairsRemaining
+            ? 'repair'
+            : 'ready',
+      ),
     ['delivered-failed', 'passed'],
   );
   const output = (await f.run.completion) as Coordinated;
@@ -1462,9 +1492,10 @@ void test('WORKER_COMPLETED with unresolved checks resumes the same coordinator 
       'worker:execute',
       'coordinator:qualify',
       'worker:repair',
+      'coordinator:qualify',
     ],
   );
-  assert.equal(f.driver().prompts.length, 2);
+  assert.equal(f.driver().prompts.length, 3);
   assert.ok(f.driver().prompts[1].startsWith('WORKER_COMPLETED'));
   const continuation = requestFrom(f.driver().prompts[1]);
   assert.equal(continuation.phase, 'qualify');
@@ -1475,7 +1506,83 @@ void test('WORKER_COMPLETED with unresolved checks resumes the same coordinator 
       .every((a) => a.sessionId === 'thread-fixture'),
     true,
   );
-  assert.equal(output.usage?.inputTokens, 40);
+  assert.equal(output.usage?.inputTokens, 50);
+});
+
+void test('Coordinator finalizes the exact Worker Draft and recovers a transient failure without another Worker', async () => {
+  let finalizeCalls = 0;
+  const publication = {
+    environment: {
+      workspace: { baseCommit: 'b'.repeat(40) },
+    } as import('../lib/card-host-operations.ts').CardEnvironmentManifest,
+    actionId,
+    roundId: 'round',
+  };
+  const f = pushSetup(
+    (req) => decision(req, req.phase === 'prepare' ? 'dispatch' : 'ready'),
+    ['passed'],
+    {
+      publication,
+      finalizePublication: async (input) => {
+        finalizeCalls++;
+        assert.equal(input.finalizeOnly, true);
+        assert.equal(input.draft, false);
+        assert.equal(input.headSha, 'a'.repeat(40));
+        if (finalizeCalls === 1)
+          throw new Error('PR state temporarily unavailable');
+        return {
+          actionId,
+          headSha: input.headSha,
+          pullRequest: {
+            number: 7,
+            url: 'https://github.com/example/repo/pull/7',
+            state: 'OPEN',
+            draft: false,
+            headSha: input.headSha,
+          },
+        } as import('../lib/card-host-operations.ts').CandidatePublication;
+      },
+    },
+  );
+  const output = (await f.run.completion) as Coordinated;
+  assert.equal(JSON.parse(output.finalOutput).outcome, 'delivered');
+  assert.match(JSON.parse(output.finalOutput).summary, /Ready PR:/);
+  assert.equal(f.workerCalls.length, 1);
+  assert.equal(finalizeCalls, 2);
+  assert.ok(
+    f
+      .driver()
+      .prompts.some((prompt) =>
+        prompt.includes('HOST_DELIVERY_ATTENTION_REQUIRED'),
+      ),
+  );
+});
+
+void test('Worker handoff cannot publish Delivered when Coordinator finalization remains blocked', async () => {
+  let finalizations = 0;
+  const f = pushSetup(
+    (req, turn) =>
+      decision(req, turn === 1 ? 'dispatch' : turn === 2 ? 'ready' : 'blocked'),
+    ['passed'],
+    {
+      publication: {
+        environment: {
+          workspace: { baseCommit: 'b'.repeat(40) },
+        } as import('../lib/card-host-operations.ts').CardEnvironmentManifest,
+        actionId,
+        roundId: 'round',
+      },
+      finalizePublication: async () => {
+        finalizations++;
+        throw new Error('GitHub unavailable');
+      },
+    },
+  );
+  const output = await f.run.completion;
+  assert.equal(JSON.parse(output.finalOutput).outcome, 'blocked');
+  assert.equal(JSON.parse(output.finalOutput).checks[0].status, 'passed');
+  assert.equal(f.workerCalls.length, 1);
+  assert.equal(finalizations, 1);
 });
 
 void test('WORKER_FAILED resumes the coordinator without a repair option and rejects a repair reply', async () => {
@@ -1541,7 +1648,10 @@ void test('WORKER_FAILED lets the coordinator return blocked with honest checks'
 void test('publication-only recovery finishes within the coordinated run without requesting a user decision', async () => {
   const f = pushSetup(
     (req, turn) => {
-      const value = decision(req, turn === 1 ? 'dispatch' : 'repair');
+      const value = decision(
+        req,
+        turn === 1 ? 'dispatch' : turn === 2 ? 'repair' : 'ready',
+      );
       if (value.repairAssessment) {
         value.repairAssessment.criterionIds = [];
         value.repairAssessment.cause =
@@ -1564,6 +1674,7 @@ void test('publication-only recovery finishes within the coordinated run without
       'worker:execute',
       'coordinator:qualify',
       'worker:repair',
+      'coordinator:qualify',
     ],
   );
   assert.match(f.workerCalls[1], /Delivery recovery only/);
@@ -1690,7 +1801,11 @@ void test('a non-Codex coordinator profile keeps the legacy fresh-session path',
     },
   }).completion) as Coordinated;
   assert.equal(sessions, 1);
-  assert.deepEqual(calls, ['claude:read-only', 'codex:workspace-write']);
+  assert.deepEqual(calls, [
+    'claude:read-only',
+    'codex:workspace-write',
+    'claude:read-only',
+  ]);
   assert.equal(JSON.parse(output.finalOutput).outcome, 'delivered');
 });
 
@@ -1761,7 +1876,15 @@ else if(message.method==='turn/interrupt'){interrupted=true;send({id:message.id,
 
 void test('the first worker resumes the previous round and a repair starts fresh', async () => {
   const f = pushSetup(
-    (req) => decision(req, req.phase === 'prepare' ? 'dispatch' : 'repair'),
+    (req) =>
+      decision(
+        req,
+        req.phase === 'prepare'
+          ? 'dispatch'
+          : req.repairsRemaining
+            ? 'repair'
+            : 'ready',
+      ),
     ['delivered-failed', 'passed'],
     { resumeWorkerSessionId: 'previous-round-session' },
   );
@@ -1826,7 +1949,9 @@ void test('a responsibility extension resumes its Worker and preserves fresh rep
           ? 'dispatch'
           : req.workerReport?.responsibilityGap
             ? 'extend'
-            : 'repair',
+            : req.repairsRemaining
+              ? 'repair'
+              : 'ready',
       );
       output.responsibilities =
         req.phase === 'prepare' ? ['general'] : ['ios-development'];
@@ -1843,7 +1968,7 @@ void test('a responsibility extension resumes its Worker and preserves fresh rep
       (entry) =>
         entry === 'qualify: Coordinator is preparing or assessing the Action.',
     ).length,
-    1,
+    2,
   );
   assert.equal(
     f.progress.filter(

@@ -36,7 +36,7 @@ export type CoordinatorSession = {
 };
 
 const candidatePublicationInstructions =
-  '\n\nCandidate publication tool: call publish_candidate with a title and body for each required Draft or Ready transition of this Action. One Host script owns commits, bot identity selection and restoration, repository initialization, Action-scoped push, and PR updates. Treat it as a black box. Do not run GitHub commands yourself. Set ready=true only with valid required evidence. A reported publication observation delay is a recoverable delivery operation, not a missing responsibility or user decision. Report it to the Coordinator for a bounded delivery-only continuation using this same tool. Do not repeat implementation or passed validation for an unchanged candidate. Subsequent rounds update the same Action PR.';
+  '\n\nYour Role is Worker. publish_candidate creates or updates only this Action Draft PR, including all implementation commits. It cannot turn the PR Ready. Complete code, compilation and required unit tests, publish all final commits to the same Draft, then hand the Coordinator the exact PR, HEAD and evidence. Worker outcome delivered means handoff complete. The Coordinator verifies delivery and owns Ready through finalize_delivery. Treat publication as a Host black box. Preserve actual errors and evidence; technical GitHub recovery belongs to the Coordinator, not a new user decision.';
 
 export function codexWorkerAppServerArguments(
   catalog: SkillCatalog,
@@ -220,13 +220,14 @@ function stringArgument(value: unknown) {
   return value;
 }
 
-function candidatePublicationTool(
+export function candidatePublicationTool(
   publication: NonNullable<LocalAgentRunInput['candidatePublication']>,
+  publish = runCandidatePublicationScript,
 ): HostTool {
   return {
     name: 'publish_candidate',
     description:
-      'Deliver the current Card changes through one script. It checks allowed files, commits pending changes, creates a private repository if needed, pushes and creates or updates the PR. Use ready=true only with successful required validation evidence.',
+      'Worker Draft publication: commit and push this Action changes and create or update its Draft PR. Always returns Draft; only the Coordinator may finalize Ready.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -239,8 +240,8 @@ function candidatePublicationTool(
         ready: { type: 'boolean' },
       },
     },
-    call: (arguments_) =>
-      runCandidatePublicationScript({
+    call: async (arguments_) => {
+      const result = await publish({
         environment: publication.environment,
         actionId: publication.actionId,
         roundId: publication.roundId,
@@ -248,8 +249,11 @@ function candidatePublicationTool(
         headSha: publication.environment.workspace.headSha,
         title: stringArgument(arguments_.title),
         body: stringArgument(arguments_.body),
-        draft: arguments_.ready !== true,
-      }),
+        draft: true,
+      });
+      publication.onPublished?.(result);
+      return result;
+    },
   };
 }
 

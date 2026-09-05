@@ -157,6 +157,7 @@ function actorForProgress(progress: CoordinationProgress): LogActor {
 }
 
 function runPhaseForProgress(progress: CoordinationProgress): RunPhase {
+  if (progress.phase === 'publish') return 'publishing';
   if (progress.job?.status === 'running') return 'verifying';
   if (progress.phase === 'complete') return 'finalizing';
   return ['prepare', 'dispatch', 'qualify'].includes(progress.phase)
@@ -165,6 +166,7 @@ function runPhaseForProgress(progress: CoordinationProgress): RunPhase {
 }
 
 function logPhaseForProgress(progress: CoordinationProgress): LogPhase {
+  if (progress.phase === 'publish') return 'PUBLISH';
   if (progress.job || actorForProgress(progress) === 'JOB') return 'VERIFY';
   if (progress.phase === 'prepare' || progress.phase === 'dispatch')
     return 'PREPARE';

@@ -66,8 +66,7 @@ User Input, Resources, Assignment, Skills, Verification Plan, Acceptance, and
 Product Context as a file-backed Delivery Packet. The Worker receives only the
 Manifest path. Existing entry files remain immutable; changed content becomes a
 new `Amendment-N-<Entry>.md` immediately after its source entry in Manifest
-order. A Worker may skip only an exact filename it can identify as already read
-in the same provider session. A fresh or uncertain session reads it.
+order. A Worker reads the mutable Manifest every assignment and may skip only immutable referenced files already read in the same provider session. New amendments and current Role/Responsibility definitions must be read.
 Responsibility definitions are not copied into the packet. The Host creates
 `Responsibilities/Responsibility-N.json` pointer files in assignment order.
 Each pointer names one Coordinator-selected definition in the built-in
@@ -84,17 +83,9 @@ decision may append another specialized responsibility while the finalized
 packet, checklist and acceptance criteria remain unchanged. Existing
 responsibilities cannot be removed. The Worker never expands its own role.
 
-`general` is the default base responsibility and owns packet authority, reporting and
-evidence boundaries, including the default ban on inspecting black-box script
-implementations. `mechanical` inherits it and adds black-box tool rules.
-`ios-development` inherits it and adds iOS TDD, meaningful unit-test requirements,
-and the rule that unit tests prove only unit behavior. UI tests may be authored and
-compiled but are not run by the Worker; they remain input for Review or CI.
-Responsibilities compose, so one Worker may receive both specialized
-responsibilities while inheriting `general` once. UI and visual acceptance stay
-in the separate Review flow. A specialized responsibility
-may explicitly override one named general rule without dropping the rest; a future
-script-maintenance responsibility can therefore allow source inspection only for that role.
+Role and Responsibility are separate. `lib/roles/<id>.json` gives Coordinator, Worker and Reviewer their default duties. `lib/responsibilities/<id>.json` defines eligible roles and additional rules. General applies once to every role as the common baseline; new responsibilities do not inherit it. Mechanical and iOS Development compose within Worker. Explicit overrides replace only named General rules, with conflicts rejected.
+
+Worker owns code, compile, meaningful unit tests, all commits and the Action Draft PR. Its publication tool cannot promote Ready. Every Worker handoff returns to Coordinator with final HEAD, PR and evidence. Coordinator owns final GitHub verification and Ready via Host `finalize_delivery`; only successful Coordinator completion records Action Delivered. GitHub failures return to Coordinator for bounded recovery. UI tests remain unexecuted during implementation and user acceptance stays separate.
 
 ## Evidence and limitations
 

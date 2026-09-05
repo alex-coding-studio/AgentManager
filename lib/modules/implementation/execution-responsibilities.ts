@@ -2,9 +2,11 @@ import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 
 export type ResponsibilityRule = { id: string; instruction: string };
+export type ExecutionRole = 'coordinator' | 'worker' | 'reviewer';
 export type ResponsibilityDefinition = {
   id?: string;
-  inherits: { id: string; path: string } | string | null;
+  inherits?: { id: string; path: string } | string | null;
+  roles?: ExecutionRole[];
   assignment: string;
   overrides: string[];
   rules: ResponsibilityRule[];
@@ -26,12 +28,18 @@ function assertDefinitions(
       throw new Error(`Invalid execution responsibility: ${id}`);
     const definition = candidate as Partial<ResponsibilityDefinition>;
     if (
-      (id === 'general'
-        ? definition.inherits !== null
-        : !definition.inherits ||
-          typeof definition.inherits !== 'object' ||
-          definition.inherits.id !== 'general' ||
-          definition.inherits.path !== './general.json') ||
+      (definition.inherits !== undefined &&
+        (id === 'general'
+          ? definition.inherits !== null
+          : !definition.inherits ||
+            typeof definition.inherits !== 'object' ||
+            definition.inherits.id !== 'general' ||
+            definition.inherits.path !== './general.json')) ||
+      (definition.roles !== undefined &&
+        (!Array.isArray(definition.roles) ||
+          definition.roles.some(
+            (role) => !['coordinator', 'worker', 'reviewer'].includes(role),
+          ))) ||
       definition.id !== id ||
       typeof definition.assignment !== 'string' ||
       !definition.assignment.trim() ||
@@ -106,10 +114,54 @@ export function loadExecutionResponsibilities(
 const definitions = loadExecutionResponsibilities();
 
 export const EXECUTION_RESPONSIBILITY_IDS = Object.freeze(
-  Object.keys(definitions),
+  Object.keys(definitions).filter(
+    (id) => !definitions[id].roles || definitions[id].roles!.includes('worker'),
+  ),
 );
 
-export const EXECUTION_RESPONSIBILITY_SELECTION = `Assign responsibilities from the Worker task. General is the inherited default. ${EXECUTION_RESPONSIBILITY_IDS.map((id) => `${id}: ${definitions[id].assignment}`).join(' ')} Responsibilities compose when one packet needs multiple boundaries. Return general alone for ordinary work; do not return general beside a specialized responsibility. The Coordinator selects responsibilities; the Worker must not choose or change them.`;
+export const EXECUTION_RESPONSIBILITY_SELECTION = `Agents have a Role plus composed Responsibilities. General is a shared baseline, applied once; it is not a Role or an inheritance parent. The Worker role always includes draft-publication. Select additional Worker responsibilities for the task: ${EXECUTION_RESPONSIBILITY_IDS.filter(
+  (id) => id !== 'general',
+)
+  .map((id) => `${id}: ${definitions[id].assignment}`)
+  .join(
+    ' ',
+  )} Legacy general alone means no additional duties. Do not assign Coordinator or Reviewer duties to a Worker. The Coordinator selects responsibilities; the Worker reports missing duties instead of changing its role.`;
+
+export function executionRoleSource(role: ExecutionRole) {
+  return path.join(process.cwd(), 'lib/roles', `${role}.json`);
+}
+
+export function executionRoleResponsibilities(
+  role: ExecutionRole,
+  selected: string[] = [],
+) {
+  const definition = JSON.parse(
+    readFileSync(executionRoleSource(role), 'utf8'),
+  ) as { id: string; responsibilities: string[] };
+  if (definition.id !== role || !Array.isArray(definition.responsibilities))
+    throw new Error('Invalid execution Role definition.');
+  const responsibilities = [
+    ...new Set(
+      [...definition.responsibilities, ...selected].filter(
+        (id) => id !== 'general',
+      ),
+    ),
+  ];
+  for (const id of responsibilities)
+    if (
+      !definitions[id] ||
+      !(definitions[id].roles ?? ['worker']).includes(role)
+    )
+      throw new Error(`Responsibility ${id} is not available to Role ${role}.`);
+  return responsibilities;
+}
+
+export function executionRoleInstructions(
+  role: ExecutionRole,
+  selected: string[] = [],
+) {
+  return `Role: ${role}. Responsibilities are composed, not inherited.\n${compileResponsibilityInstructions(definitions, executionRoleResponsibilities(role, selected))}`;
+}
 
 export function executionResponsibilitySource(
   responsibility: ExecutionResponsibility,
@@ -140,7 +192,7 @@ export function resolveExecutionResponsibilities(
 
 export function executionResponsibilityInstructions(value: unknown) {
   const responsibilities = resolveExecutionResponsibilities(value);
-  return compileResponsibilityInstructions(definitions, responsibilities);
+  return executionRoleInstructions('worker', responsibilities);
 }
 
 export function compileResponsibilityInstructions(

@@ -60,6 +60,7 @@ export type PrepareCardEnvironmentRequest = {
 };
 
 export type CandidatePublishRequest = {
+  finalizeOnly?: boolean;
   environment: CardEnvironmentManifest;
   actionId: string;
   roundId: string;
@@ -522,12 +523,15 @@ async function publishCardCandidateUnlocked(
   if (!Array.isArray(existing) || existing.length > 1)
     throw new Error('Candidate branch has ambiguous pull request state.');
   let pr = existing[0];
+  if (request.finalizeOnly && !pr)
+    throw new Error('The Worker has not created this Action Draft PR yet.');
   if (pr && pr.state !== 'OPEN')
     throw new Error(
       `This Action's pull request is ${pr.state.toLowerCase()}; it cannot be updated.`,
     );
   if (
     pr &&
+    !request.finalizeOnly &&
     !pr.isDraft &&
     (request.draft || pr.headRefOid !== request.headSha)
   ) {
@@ -542,6 +546,10 @@ async function publishCardCandidateUnlocked(
   const remoteHead = (
     await git(runner, workspace, 'ls-remote', '--heads', 'origin', publishedRef)
   ).split(/\s+/)[0];
+  if (request.finalizeOnly && remoteHead !== request.headSha)
+    throw new Error(
+      `Worker handoff is not fully pushed: expected ${request.headSha}, remote ${remoteHead || '(missing)'}.`,
+    );
   if (remoteHead !== request.headSha)
     await git(runner, workspace, 'push', 'origin', `HEAD:${publishedRef}`);
   if (!pr) {

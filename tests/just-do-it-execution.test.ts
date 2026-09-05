@@ -1725,11 +1725,11 @@ void test('new executions always coordinate, persist role traces, and carry cont
   assert.equal(first.status, 'succeeded', first.error ?? '');
   assert.deepEqual(
     calls.map((c) => c.access),
-    ['read-only', 'workspace-write'],
+    ['read-only', 'workspace-write', 'read-only'],
   );
   assert.equal(calls[0].model, 'coordinator-model');
   assert.equal(calls[1].model, 'test-model');
-  assert.equal(first.coordination?.attempts.length, 2);
+  assert.equal(first.coordination?.attempts.length, 3);
   assert.ok(first.coordination?.logRef);
   assert.ok(first.activityRef);
   assert.equal(
@@ -1739,7 +1739,7 @@ void test('new executions always coordinate, persist role traces, and carry cont
         'utf8',
       ),
     ).attempts.length,
-    2,
+    3,
   );
   assert.ok(
     (
@@ -1759,7 +1759,7 @@ void test('new executions always coordinate, persist role traces, and carry cont
     instruction: 'Only verify existing evidence.',
   });
   card = await settled(f.store, f.project);
-  assert.equal(calls.length, 3);
+  assert.equal(calls.length, 4);
   assert.match(
     requests.at(-1)!.previousContext,
     /retain the fixture repository target/,

@@ -5,33 +5,26 @@ description: Create or refine Praxis execution responsibilities for the Developm
 
 # Manage Execution Responsibilities
 
-Add a responsibility only when repeated execution work needs a stable behavioral boundary that cannot live in an Action packet or an existing domain Skill.
+Maintain reusable Role and Responsibility boundaries in Development Execution. Task-specific commands and requirements remain in the Action packet; domain procedures remain in their Skills.
 
-## Contract
+## Model
 
-- Keep `general` as the default base for every Worker. Each specialized responsibility inherits it and stores only its own additions.
-- A specialized responsibility contains only its additions and explicit overrides to `general`; never copy the base rules into it.
-- Give every general rule a stable ID. An override names only the inherited rule it replaces and leaves every other general rule active. For example, a future `script-maintainer` may override `script-source-inspection` without weakening packet or reporting boundaries.
-- Responsibilities compose. When one Worker task has multiple natures, compile `general` once and apply every selected addition.
-- Keep task-specific scope, commands, inputs, outputs and acceptance criteria in the Action packet.
-- Keep domain procedures in their owning Skill. A responsibility controls execution behavior and evidence boundaries without reproducing a Skill body.
-- The Coordinator first summarizes the task at a high level, then selects and assigns at least one responsibility after reading the Action packet and applicable Skill. The Worker cannot choose, remove or reinterpret them.
-- Coordinator context stops at the applicable `SKILL.md` entrypoint. The Worker reads that entrypoint again, then follows only its required references. `general` denies black-box script inspection unless an assigned specialized responsibility explicitly overrides that named boundary.
-- When a Worker reports that the assigned roles cannot complete part of the packet, the Coordinator may replace or append a responsibility while keeping the finalized packet and acceptance criteria unchanged. The changed role must address the reported gap; the Worker still cannot expand itself.
-- Apply responsibilities during Development Execution. Do not expand planning, review, or UI behavior unless the requested change requires it.
+- `lib/roles/<role>.json` defines a stable workflow Role and its default responsibilities.
+- `lib/responsibilities/<id>.json` owns one responsibility: eligible `roles`, assignment hint, rules and explicit overrides. These JSON files are the source of truth; packet pointers reference them without copying definitions.
+- General is a shared baseline applied once to every Role, not a Role or an inheritance parent. Do not add `inherits` to new definitions. Legacy General pointers remain readable for existing packets.
+- An Agent has a Role and composed responsibilities. Worker can combine Mechanical and iOS Development. Coordinator adds missing Worker duties when a concrete gap is reported; it does not change the frozen task or let Worker choose its own Role.
+- Overrides name specific General rule IDs and supply replacements. Unrelated General rules remain. Conflicting overrides fail rather than depending on order.
 
-## Current responsibilities
+## Delivery
 
-- `general`: execute the frozen packet, honor its checklist, report the result or exact unmet need, and stop without coordinating follow-on work.
-- `mechanical`: treat a declared script or tool as the black-box execution and error boundary. Run it once and report its result without inspection, decomposition, supplementation or repeated verification.
-- `ios-development`: prefer criterion-linked TDD for unit-observable behavior, avoid artificial Red and low-value tests, and limit unit-test evidence to unit behavior. UI tests may be authored and compiled but remain unexecuted input for Review or CI; UI and visual acceptance remain in Review.
+Worker owns code, compilation, relevant unit tests, all commits and its Draft PR. Its publication tool cannot promote Ready. Worker hands off the final HEAD, PR and evidence to Coordinator.
+
+Coordinator owns coordination, GitHub delivery and result reporting. It receives every Worker handoff, resolves technical delivery issues, invokes Host finalization to verify the clean pushed HEAD and promote Ready, then returns the outcome. Host persists state. Worker success alone cannot mark an Action Delivered. Product choices and user acceptance retain their separate owners.
 
 ## Change path
 
-1. Edit `lib/modules/implementation/execution-responsibilities.json` as the source of responsibility IDs, inheritance, assignment hints, rules and named overrides.
-2. Update the compiler and validator in `lib/modules/implementation/execution-responsibilities.ts` only when the representation changes. Update the Coordinator contract and structured response in `lib/modules/implementation/coordination.ts` when assignment behavior changes.
-3. Compile the Coordinator's selected responsibilities and validated Skill paths into the Worker packet in `lib/modules/implementation/coordination-runner.ts`. Filter the runtime Skill catalog to those paths. The Coordinator assigns roles and suspends; the Worker follows every assigned responsibility, reports its result, and stops.
-4. Update `docs/JUST_DO_IT_PLANNING.md` and `docs/JUST_DO_IT_EXECUTION.md` only when the public contract changes.
-5. Verify observable invariants: every responsibility includes `general`, specialized additions compose without duplicating the base, an override replaces only its named general rule, missing values resolve to `general`, and the Worker receives exactly the Coordinator's selections. Avoid tests that only mirror prose.
-
-Do not add a responsibility for a single failure, provider, model, repository, command, or temporary workaround. Let real use reveal the next responsibility before extending this set.
+1. Inspect the current Role JSON, applicable responsibility JSON and `docs/EXECUTION_PUBLICATION.md` before editing.
+2. Add a definition only for a recurring boundary. Declare compatible Roles. Keep a new rule out of General when it belongs to one responsibility.
+3. Update `lib/modules/implementation/execution-responsibilities.ts` only for composition changes; update coordination and tool routing when permissions change.
+4. Preserve per-round Manifest reading and immutable amendment references. Read live Role/Responsibility definitions each assignment. Coordinator reads Skill entrypoints; Worker follows their required references.
+5. Verify role eligibility, General applied once, explicit override behavior, and the affected tool/handoff boundary with existing tests. Do not add tests that merely mirror prose.

@@ -1,0 +1,12 @@
+{
+  "id": "draft-publication",
+  "roles": ["worker"],
+  "assignment": "Publish the Worker's changes as the current Action's Draft PR.",
+  "overrides": [],
+  "rules": [
+    {
+      "id": "worker-draft-handoff",
+      "instruction": "Obtain a successful compile before creating or updating a Draft PR through publish_candidate. Run required unit tests and applicable gates, correct failures and submit all commits to the same Draft. Hand the Coordinator the Draft PR URL, final commit SHA, actual validation results and unresolved delivery facts. Delivered in a Worker report means this handoff is complete, not that the Action has finished delivery. Do not turn a Draft into Ready, merge or accept the Action. The Coordinator owns final verification and Ready. Reuse valid unchanged evidence."
+    }
+  ]
+}
