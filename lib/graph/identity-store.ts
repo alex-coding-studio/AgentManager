@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import {
   copyFile,
@@ -19,6 +19,9 @@ import {
   type GraphIdentityIndex,
   type IdentityEntity,
 } from './identity.ts';
+import { MaterializationError } from '../materialization/receipt.ts';
+import type { GraphProposalRevision } from './proposal/contract.ts';
+import { LOCAL_KEY_PATTERN } from './proposal/reference.ts';
 
 export type Scope = 'task-graph' | 'whats-next';
 type StoredRun = {
@@ -397,6 +400,124 @@ export async function readIdentifiedEntities<T extends IdentityEntity>(
       }
     }
     return entities.map((entity) => projectDisplayRelations(entity, index));
+  });
+}
+
+async function indexFingerprint(file: string) {
+  const text = await readFile(file, 'utf8').catch(
+    (error: NodeJS.ErrnoException) => {
+      if (error.code === 'ENOENT') return null;
+      throw error;
+    },
+  );
+  return text === null
+    ? 'absent'
+    : createHash('sha256').update(text).digest('hex');
+}
+
+export async function identitiesFingerprint(
+  planningPath: string,
+  scope: Scope,
+): Promise<string> {
+  await ensureGraphIdentities(planningPath, scope);
+  const file = indexPath(planningPath, scope);
+  return serialized(file, () => indexFingerprint(file));
+}
+
+export type CandidateAliasRequest = {
+  localKeys: readonly string[];
+  revisionTarget?: GraphProposalRevision | null;
+};
+
+export type CandidateAliasAllocation = {
+  aliases: Map<string, string>;
+  index: GraphIdentityIndex;
+};
+
+function allocateRevisionAlias(
+  index: GraphIdentityIndex,
+  localKeys: readonly string[],
+  revisionTarget: GraphProposalRevision,
+) {
+  const alias = revisionTarget.candidateId;
+  if (localKeys.length !== 1 || localKeys[0] !== alias) {
+    throw new MaterializationError(
+      'identity',
+      'A revision must return exactly the requested Candidate identifier.',
+    );
+  }
+  if (!new RegExp(CANDIDATE_ALIAS_PATTERN).test(alias)) {
+    throw new MaterializationError(
+      'identity',
+      `${alias} is not a canonical Candidate identifier.`,
+    );
+  }
+  const known = index.aliases[alias];
+  if (known === undefined) {
+    throw new MaterializationError(
+      'identity',
+      `Candidate ${alias} has no stable identity to revise.`,
+    );
+  }
+  if (known !== revisionTarget.uid) {
+    throw new MaterializationError(
+      'identity',
+      `Candidate ${alias} does not hold the stable identity being revised.`,
+    );
+  }
+  bindIdentity(index, alias, revisionTarget.uid);
+  return new Map([[alias, alias]]);
+}
+
+function allocateProposalAliases(
+  index: GraphIdentityIndex,
+  localKeys: readonly string[],
+) {
+  const aliases = new Map<string, string>();
+  for (const localKey of localKeys) {
+    if (
+      typeof localKey !== 'string' ||
+      !new RegExp(LOCAL_KEY_PATTERN).test(localKey)
+    ) {
+      throw new MaterializationError('identity', 'Invalid local proposal key.');
+    }
+    if (aliases.has(localKey)) {
+      throw new MaterializationError(
+        'identity',
+        'Duplicate local proposal key.',
+      );
+    }
+    let uid = randomUUID();
+    while (Object.values(index.aliases).includes(uid)) uid = randomUUID();
+    const alias = uuidAlias(index, 'CANDIDATE', uid);
+    bindIdentity(index, alias, uid);
+    aliases.set(localKey, alias);
+  }
+  return aliases;
+}
+
+export async function allocateCandidateAliases(
+  planningPath: string,
+  scope: Scope,
+  request: CandidateAliasRequest,
+  expectedFingerprint: string,
+): Promise<CandidateAliasAllocation> {
+  await ensureGraphIdentities(planningPath, scope);
+  const file = indexPath(planningPath, scope);
+  return serialized(file, async () => {
+    const fingerprint = await indexFingerprint(file);
+    if (fingerprint !== expectedFingerprint) {
+      throw new MaterializationError(
+        'stale-basis',
+        'The graph identity index changed after this result was prepared.',
+      );
+    }
+    const index = await readIndex(file);
+    const aliases = request.revisionTarget
+      ? allocateRevisionAlias(index, request.localKeys, request.revisionTarget)
+      : allocateProposalAliases(index, request.localKeys);
+    await atomicJson(file, index);
+    return { aliases, index };
   });
 }
 
