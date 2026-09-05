@@ -1,9 +1,9 @@
 import dagre from '@dagrejs/dagre';
 import { TASK_GRAPH_NODE_MIN_HEIGHT } from '../card-metrics.ts';
 export { TASK_GRAPH_NODE_MIN_HEIGHT } from '../card-metrics.ts';
-import type { HarnessCandidate } from '@/lib/modules/scope-decomposition/harness';
-import type { TaskGraphNode } from '@/lib/graph/task/model';
-import type { WhatsNextCandidate } from '@/lib/modules/product-discovery/harness';
+import type { TaskGraphNode } from '@/lib/graph/task/nodes';
+import type { ProductExplorationCandidateInput } from '@/lib/modules/product-discovery/contract';
+import type { ScopeDecompositionCandidateInput } from '@/lib/modules/scope-decomposition/contract';
 import type { GraphIdentityFields, IdentityEntity } from '../identity.ts';
 
 export type TaskGraphPreview = GraphIdentityFields & {
@@ -21,7 +21,9 @@ export type TaskGraphPreview = GraphIdentityFields & {
   agentLabel?: string;
   derivedFrom?: string[];
   dependsOn?: string[];
-  candidate?: HarnessCandidate | WhatsNextCandidate;
+  candidate?:
+    | ScopeDecompositionCandidateInput
+    | ProductExplorationCandidateInput;
   outputPath?: string;
   previousOutputPath?: string;
   previousMarkdown?: string;

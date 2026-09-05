@@ -20,7 +20,7 @@ import {
   type IdentityEntity,
 } from './identity.ts';
 
-type Scope = 'task-graph' | 'whats-next';
+export type Scope = 'task-graph' | 'whats-next';
 type StoredRun = {
   result?: { outcome: string; candidates?: IdentityEntity[] };
 };

@@ -1,0 +1,156 @@
+{
+  "whats-next/identities.json": {
+    "schemaVersion": 1,
+    "aliases": {
+      "NODE-U0": "U0",
+      "CANDIDATE-U5": "U5",
+      "CANDIDATE-U1": "U1"
+    },
+    "formalAliases": ["NODE-U0"]
+  },
+  "whats-next/nodes/NODE-U0/node.json": {
+    "schemaVersion": 1,
+    "id": "NODE-U0",
+    "uid": "U0",
+    "relations": {
+      "derivedFrom": [],
+      "dependsOn": []
+    },
+    "role": "start",
+    "type": "source",
+    "title": "Build my local website",
+    "status": "captured",
+    "createdAt": "T",
+    "updatedAt": "T",
+    "resources": [
+      {
+        "kind": "idea",
+        "path": "whats-next/nodes/NODE-U0/resources/user-input.md"
+      }
+    ],
+    "dependsOn": [],
+    "typeTemplateRef": "NODE-U0",
+    "metadata": {},
+    "layer": "discovery",
+    "artifactKind": "source",
+    "presentation": {
+      "color": "#525252"
+    }
+  },
+  "whats-next/runs/RUN-U2/candidates/CANDIDATE-U1/output.md": "# Share the item\n\n## Why this direction\n\n- It answers the stated need directly.\n- It can be judged without more evidence.\n\n## Assumptions\n\n- The reader already has the source material.\n",
+  "whats-next/runs/RUN-U2/run.json": {
+    "schemaVersion": 1,
+    "runId": "RUN-U2",
+    "sessionId": "SESSION-U3",
+    "requestId": "REQUEST-U4",
+    "agentSessionId": null,
+    "agentSessionMode": "persistent",
+    "sourceNodeIds": ["NODE-U0"],
+    "operation": "explore",
+    "intention": "mvp-exploration",
+    "motion": "unspecified",
+    "replacement": {
+      "state": "applied",
+      "candidateIds": ["CANDIDATE-U5"],
+      "runIds": ["RUN-U6"]
+    },
+    "status": "proposal",
+    "transport": "codex-cli",
+    "profile": {
+      "agent": "codex",
+      "model": "",
+      "effort": ""
+    },
+    "harness": {
+      "id": "praxis.whats-next",
+      "revision": 8
+    },
+    "input": {
+      "userInputPath": "input/user-input.md",
+      "moduleInstructionsState": "cleared",
+      "resourcePaths": [
+        "whats-next/nodes/NODE-U0/resources/user-input.md",
+        "whats-next/runs/RUN-U2/context/input/user-input.md",
+        "whats-next/runs/RUN-U2/resources/previous-proposal.md"
+      ],
+      "feedbackAnchors": [],
+      "requestArtifact": "request.json",
+      "intention": "mvp-exploration",
+      "motion": "unspecified"
+    },
+    "inputFingerprint": "H0",
+    "startedAt": "T",
+    "updatedAt": "T",
+    "endedAt": "T",
+    "usage": null,
+    "sessionUsage": null,
+    "activity": [
+      {
+        "at": "T",
+        "summary": "Exploring the selected direction."
+      }
+    ],
+    "result": {
+      "schemaVersion": 1,
+      "harness": {
+        "id": "praxis.whats-next",
+        "revision": 8
+      },
+      "request": {
+        "sessionId": "SESSION-U3",
+        "requestId": "REQUEST-U4",
+        "inputFingerprint": "H0"
+      },
+      "reflection": {
+        "markdown": "The product needs one clear direction first.",
+        "continuationAdvice": {
+          "action": "continue",
+          "recommendedFocus": "concretize",
+          "reason": "Turn the chosen direction into a bounded outcome."
+        }
+      },
+      "exploration": {
+        "consideredNodeIds": ["NODE-U0"],
+        "notes": []
+      },
+      "outcome": "proposal",
+      "candidates": [
+        {
+          "candidateId": "CANDIDATE-U1",
+          "revision": 1,
+          "type": "mvp",
+          "title": "Share the item",
+          "summary": "Share the item stated as one bounded outcome.",
+          "derivedFrom": ["NODE-U0"],
+          "dependsOn": [],
+          "resources": [],
+          "typeTemplateRef": null,
+          "metadata": {},
+          "presentation": {},
+          "assumptions": ["The reader already has the source material."],
+          "outputMarkdown": "# Share the item\n\n## Why this direction\n\n- It answers the stated need directly.\n- It can be judged without more evidence.\n\n## Assumptions\n\n- The reader already has the source material.\n",
+          "layer": "discovery",
+          "artifactKind": "mvp",
+          "uid": "U1",
+          "relations": {
+            "derivedFrom": ["U0"],
+            "dependsOn": []
+          }
+        }
+      ],
+      "candidateAliases": {
+        "CANDIDATE-0001": "CANDIDATE-U1"
+      }
+    },
+    "error": null,
+    "logRef": "whats-next/runs/RUN-U2/run.log",
+    "hostPid": 0,
+    "response": {
+      "status": "completed",
+      "title": "Review",
+      "detail": "The product needs one clear direction first.",
+      "supplementaryWarnings": [],
+      "recovery": ["log", "continue"]
+    }
+  }
+}
