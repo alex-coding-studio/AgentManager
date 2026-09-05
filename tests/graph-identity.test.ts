@@ -120,6 +120,7 @@ for (const scope of ['whats-next', 'task-graph'] as const) {
         reservedCandidateIds: ['CANDIDATE-00000003', 'CANDIDATE-00000004'],
         knownCandidates: original.map((c) => ({
           candidateId: c.candidateId,
+          revision: 1,
           dependsOn: [],
         })),
       };

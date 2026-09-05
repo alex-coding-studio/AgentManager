@@ -51,3 +51,11 @@ export class MaterializationError extends Error {
     this.status = boundary === 'stale-basis' ? 409 : 400;
   }
 }
+
+export function isStaleBasisError(
+  error: unknown,
+): error is MaterializationError {
+  return (
+    error instanceof MaterializationError && error.boundary === 'stale-basis'
+  );
+}

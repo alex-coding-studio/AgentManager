@@ -25,7 +25,7 @@ import {
 import {
   validateProductExplorationResult,
   type ProductExplorationValidationState,
-} from './materializer.ts';
+} from './validation.ts';
 import {
   toProductExplorationCandidate,
   toProductExplorationSemanticResult,
@@ -149,7 +149,7 @@ export type WhatsNextValidationContext = {
   reservedCandidateIds?: Iterable<string>;
   acceptedCandidateIds?: Iterable<string>;
   knownCandidates?: Iterable<
-    Pick<WhatsNextCandidate, 'candidateId' | 'dependsOn'>
+    Pick<WhatsNextCandidate, 'candidateId' | 'revision' | 'dependsOn'>
   >;
 };
 

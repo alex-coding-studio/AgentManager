@@ -9,7 +9,7 @@ import { allocateCandidateAliases } from '../lib/graph/identity-store.ts';
 import {
   validateProductExplorationResult,
   type ProductExplorationValidationState,
-} from '../lib/modules/product-discovery/materializer.ts';
+} from '../lib/modules/product-discovery/validation.ts';
 import { MaterializationError } from '../lib/materialization/receipt.ts';
 import type { ProductExplorationCandidate } from '../lib/modules/product-discovery/contract.ts';
 import type { RegisteredProject } from '../lib/project-registry.ts';

@@ -11,7 +11,6 @@ import {
 } from '../../agents/profile.ts';
 import {
   ensureGraphIdentities,
-  parseIdentifiedResult,
   readIdentifiedEntities,
   reservedCandidateAliases,
 } from '../../graph/identity-store.ts';
@@ -73,7 +72,20 @@ import {
 } from './redo.ts';
 import { readWhatsNextAttachment, readWhatsNextContext } from './context.ts';
 import { candidateDependencyBlockers } from '../../graph/proposal/dependencies.ts';
-import { whatsNextValidationContext } from './validation-context.ts';
+import {
+  whatsNextValidationContext,
+  type WhatsNextValidationContextInput,
+} from './validation-context.ts';
+import {
+  isStaleBasisError,
+  MaterializationError,
+} from '../../materialization/receipt.ts';
+import { prepareProductExplorationMaterializationBasis } from './basis.ts';
+import { materializeProductExplorationResult } from './materializer.ts';
+import {
+  toProductExplorationCandidate,
+  toProductExplorationSemanticResult,
+} from './producer-adapter.ts';
 import { promoteCandidateToNode } from '../../graph/proposal/promote.ts';
 import { stageCandidateDocuments } from '../../graph/proposal/stage.ts';
 import {
@@ -749,24 +761,17 @@ export async function recoverWhatsNextRunResult(
             : null,
         )
       : null;
-  const result = await parseIdentifiedResult(
-    project.planningPath,
-    GRAPH_ROOT,
-    finalOutput,
-    whatsNextValidationContext({
-      record,
-      nodes,
-      knownResourcePaths: record.input?.resourcePaths ?? [],
-      reservedCandidateIds:
-        record.operation === 'refine-candidate'
-          ? []
-          : await collectReservedCandidateIds(project),
-      knownCandidates: await collectLatestUnacceptedCandidates(project),
-      revisionTarget: revisionTarget ?? undefined,
-    }),
-    parseWhatsNextHarnessResult,
-    revisionTarget ?? undefined,
-  );
+  const result = await materializeWhatsNextOutput(project, finalOutput, {
+    record,
+    nodes,
+    knownResourcePaths: record.input?.resourcePaths ?? [],
+    reservedCandidateIds:
+      record.operation === 'refine-candidate'
+        ? []
+        : await collectReservedCandidateIds(project),
+    knownCandidates: await collectLatestUnacceptedCandidates(project),
+    revisionTarget: revisionTarget ?? undefined,
+  });
   const timestamp = new Date().toISOString();
   record.status = result.outcome;
   record.result = result;
@@ -1033,11 +1038,10 @@ async function finishWhatsNextRun(
     await writeRunRecord(project, record);
     if (superseded()) return;
 
-    const result = await parseIdentifiedResult(
-      project.planningPath,
-      GRAPH_ROOT,
+    const result = await materializeWhatsNextOutput(
+      project,
       agentResult.finalOutput,
-      whatsNextValidationContext({
+      {
         record,
         nodes,
         knownResourcePaths: resources.map((resource) => resource.logicalPath),
@@ -1049,9 +1053,7 @@ async function finishWhatsNextRun(
             !record.replacement?.candidateIds.includes(candidate.candidateId),
         ),
         revisionTarget,
-      }),
-      parseWhatsNextHarnessResult,
-      revisionTarget,
+      },
     );
     if (
       revisionTarget &&
@@ -1109,12 +1111,7 @@ async function finishWhatsNextRun(
     const classification = classifyModuleRun({
       runState: 'settled',
       failure: {
-        kind:
-          error instanceof PublicApiError && error.status === 409
-            ? 'persistence'
-            : agentOutput
-              ? 'parse'
-              : 'transport',
+        kind: whatsNextFailureKind(error, agentOutput),
         message: original,
       },
     });
@@ -1659,6 +1656,90 @@ function getActiveRuns() {
   };
   runtime.__praxisWhatsNextRuns ??= new Map<string, ActiveRun>();
   return runtime.__praxisWhatsNextRuns;
+}
+
+export function whatsNextFailureKind(
+  error: unknown,
+  agentOutput: string | null,
+): 'persistence' | 'parse' | 'transport' {
+  if (
+    isStaleBasisError(error) ||
+    (error instanceof PublicApiError && error.status === 409)
+  ) {
+    return 'persistence';
+  }
+  return agentOutput ? 'parse' : 'transport';
+}
+
+async function materializeWhatsNextOutput(
+  project: RegisteredProject,
+  output: string,
+  input: WhatsNextValidationContextInput,
+) {
+  const envelope = parseWhatsNextHarnessResult(
+    output,
+    whatsNextValidationContext(input),
+  );
+  const { record, nodes, revisionTarget } = input;
+  if (revisionTarget && !revisionTarget.uid) {
+    throw new MaterializationError(
+      'identity',
+      `Candidate ${revisionTarget.candidateId} has no stable identity to revise.`,
+    );
+  }
+  if (record.operation === 'refine-candidate' && !revisionTarget) {
+    throw new MaterializationError(
+      'validation',
+      'A refine Run must resolve the Candidate it is revising.',
+    );
+  }
+  const subject = {
+    intention: record.intention ?? 'mvp-exploration',
+    motion: record.motion ?? 'unspecified',
+    sourceNodeIds: record.sourceNodeIds,
+    knownNodeIds: nodes.map((node) => node.id),
+    acceptedCandidateIds: nodes.flatMap((node) =>
+      node.provenance?.candidateId ? [node.provenance.candidateId] : [],
+    ),
+    knownResourcePaths: input.knownResourcePaths,
+    reservedCandidateIds: input.reservedCandidateIds,
+    currentCandidates: input.knownCandidates.map((candidate) => ({
+      candidateId: candidate.candidateId,
+      revision: candidate.revision,
+      dependsOn: [...candidate.dependsOn],
+    })),
+  };
+  const basis = await prepareProductExplorationMaterializationBasis(
+    project,
+    revisionTarget?.uid
+      ? {
+          ...subject,
+          operation: 'refine-candidate',
+          revisionTarget: {
+            candidateId: revisionTarget.candidateId,
+            revision: revisionTarget.revision,
+            uid: revisionTarget.uid,
+          },
+          revisionSource: toProductExplorationCandidate(
+            revisionTarget,
+            new Set(),
+          ),
+        }
+      : { ...subject, operation: 'explore' },
+  );
+  const materialized = await materializeProductExplorationResult(
+    basis,
+    toProductExplorationSemanticResult(envelope),
+  );
+  return materialized
+    ? {
+        ...envelope,
+        candidates: materialized.candidates,
+        ...(materialized.candidateAliases && {
+          candidateAliases: materialized.candidateAliases,
+        }),
+      }
+    : envelope;
 }
 
 async function ensureCandidateArtifacts(
