@@ -610,6 +610,11 @@ void test('an override that resolves the Coordinator blocker reclassifies it, wh
   });
   assert.equal(resolved.status, 'completed');
   assert.ok(resolved.recovery.includes('pass'));
+  assert.doesNotMatch(resolved.detail, /Blocked on the deployment target/);
+  assert.match(
+    resolved.detail,
+    /User overrides satisfied the remaining required check \(Target\)/,
+  );
   assert.match(
     resolved.supplementaryWarnings.join(' '),
     /Accepted by user override: Target \(not-run\)/,

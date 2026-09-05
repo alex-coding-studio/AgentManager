@@ -360,7 +360,9 @@ export function classifyActionRun(
     retained: input.retained ?? null,
     accepted: input.accepted ?? false,
     semantic,
-    summary: result?.summary ?? null,
+    summary: overridden.length
+      ? `User overrides satisfied the remaining required ${overridden.length === 1 ? 'check' : 'checks'} (${overridden.map((check) => check.summary).join(', ')}). The original report and its findings remain in the Run Log.`
+      : (result?.summary ?? null),
   });
 }
 const runtime = globalThis as typeof globalThis & {
