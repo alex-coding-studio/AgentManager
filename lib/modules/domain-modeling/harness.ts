@@ -146,9 +146,21 @@ export function domainModelSessionIndex(model: DomainModel) {
   };
 }
 
-export type DomainModelEnvelope = DomainModelAgentResult & {
-  patch?: DomainModelPatch;
+type DomainModelEnvelopeIdentity = {
+  harnessVersion: 2;
+  requestId: string;
+  baseVersion: number;
+  inputFingerprint: string;
+  summary: string;
 };
+
+export type DomainModelEnvelope = DomainModelEnvelopeIdentity &
+  (
+    | { outcome: 'applied'; model: ProposedDomainModel; patch?: undefined }
+    | { outcome: 'applied'; patch: DomainModelPatch; model?: undefined }
+    | { outcome: 'clarification'; question: string }
+    | { outcome: 'no-change'; reason: string }
+  );
 
 export function parseDomainModelEnvelope(
   raw: string,
@@ -158,6 +170,9 @@ export function parseDomainModelEnvelope(
     throw new Error('The Domain Model response is too large.');
   const value = JSON.parse(stripFence(raw)) as DomainModelEnvelope & {
     model?: ProposedDomainModel;
+    patch?: DomainModelPatch;
+    question?: string;
+    reason?: string;
   };
   if (
     value.harnessVersion !== request.harnessVersion ||
@@ -195,14 +210,12 @@ export function composeDomainModelEnvelope(
 ): DomainModelAgentResult {
   if (envelope.outcome !== 'applied') return envelope;
   if (envelope.patch) {
-    const { patch, ...content } = envelope;
-    return {
-      ...content,
-      model: applyDomainModelPatch(current, patch),
-    } as DomainModelAgentResult;
+    const { patch, model: _model, ...content } = envelope;
+    return { ...content, model: applyDomainModelPatch(current, patch) };
   }
   assertLegacyModelCoverage(current, envelope.model);
-  return envelope;
+  const { patch: _patch, ...content } = envelope;
+  return { ...content, model: envelope.model };
 }
 
 export function parseDomainModelResult(

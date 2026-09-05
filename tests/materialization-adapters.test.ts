@@ -5,6 +5,7 @@ import { PRODUCT_EXPLORATION_RESULT_CONTRACT } from '../lib/modules/product-disc
 import { toScopeDecompositionSemanticResult } from '../lib/modules/scope-decomposition/producer-adapter.ts';
 import { SCOPE_DECOMPOSITION_RESULT_CONTRACT } from '../lib/modules/scope-decomposition/contract.ts';
 import { toDomainModelSemanticResult } from '../lib/modules/domain-modeling/producer-adapter.ts';
+import type { DomainModelEnvelope } from '../lib/modules/domain-modeling/harness.ts';
 import { DOMAIN_MODEL_RESULT_CONTRACT } from '../lib/modules/domain-modeling/contract.ts';
 import { toDeliveryMapSemanticResult } from '../lib/modules/delivery-planning/producer-adapter.ts';
 import { DELIVERY_MAP_RESULT_CONTRACT } from '../lib/modules/delivery-planning/contract.ts';
@@ -152,7 +153,7 @@ void test('the Domain Model adapter reports a requested change rather than a com
     upsertConstraints: [],
     removeConstraintIds: [],
   };
-  const result = toDomainModelSemanticResult({
+  const envelope: DomainModelEnvelope = {
     harnessVersion: 2,
     requestId: 'REQUEST-1',
     baseVersion: 3,
@@ -160,7 +161,8 @@ void test('the Domain Model adapter reports a requested change rather than a com
     outcome: 'applied',
     summary: 'Adds nothing.',
     patch,
-  } as never);
+  };
+  const result = toDomainModelSemanticResult(envelope);
   assert.deepEqual(result, {
     outcome: 'model-change',
     summary: 'Adds nothing.',
