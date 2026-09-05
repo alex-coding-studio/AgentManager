@@ -165,10 +165,11 @@ async function fixture(
       },
     } as LocalAgentRun;
   };
+  const active = new Map();
   const service = createExecutionService(
     store,
     transport,
-    new Map(),
+    active,
     1800000,
     reader,
     async () => undefined,
@@ -186,7 +187,7 @@ async function fixture(
       effort: 'low' as const,
     },
   };
-  return { project, card, store, service, transport, calls, input };
+  return { project, card, store, service, transport, calls, input, active };
 }
 
 function delivered(
@@ -223,10 +224,12 @@ function delivered(
 async function settled(
   store: ReturnType<typeof createPlanningService>,
   project: RegisteredProject,
+  active?: Map<string, unknown>,
 ) {
   for (let i = 0; i < 100; i++) {
     const card = await store.read(project, id);
-    if (card.execution?.runs.at(-1)?.status !== 'running') return card;
+    const terminal = card.execution?.runs.at(-1)?.status !== 'running';
+    if (terminal && !active?.has(id)) return card;
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
   throw new Error('Fixture did not settle.');
@@ -268,7 +271,7 @@ void test('execution cannot start from a Delivery Contract that is no longer cur
 });
 
 void test('Action supplemental Product Context and Markdown become validated request resources', async (t) => {
-  const { project, store, service, calls, input } = await fixture(t);
+  const { project, store, service, calls, input, active } = await fixture(t);
   const contextPath = 'context/research/notes.md';
   await mkdir(path.join(project.planningPath, 'context/research'), {
     recursive: true,
@@ -299,7 +302,7 @@ void test('Action supplemental Product Context and Markdown become validated req
     '# Constraint\n\nUse Swift.',
   );
   calls[0].reject(new Error('Fixture finished'));
-  await settled(store, project);
+  await settled(store, project, active);
 });
 
 void test('Action supplemental input rejects unsupported files before dispatch', async (t) => {
@@ -334,7 +337,7 @@ void test('Action supplemental input rejects malformed collections and Task Exec
 });
 
 void test('coding output persists, feedback creates another round, and only user acceptance unlocks the next Action', async (t) => {
-  const { project, store, service, calls, input } = await fixture(t);
+  const { project, store, service, calls, input, active } = await fixture(t);
   await savePlanningInstructions(project, 'Use local development rules.');
   await assert.rejects(
     () => service.start(project, { ...input, actionId: two }),
@@ -353,7 +356,7 @@ void test('coding output persists, feedback creates another round, and only user
   );
   await writeFile(path.join(project.rootPath, 'module.txt'), 'first');
   calls[0].resolve(delivered(calls[0].request));
-  card = await settled(store, project);
+  card = await settled(store, project, active);
   assert.equal(
     card.execution?.runs[0].status,
     'succeeded',
@@ -400,7 +403,7 @@ void test('coding output persists, feedback creates another round, and only user
   );
   await writeFile(path.join(project.rootPath, 'module.txt'), 'compact');
   calls[1].resolve(delivered(calls[1].request));
-  card = await settled(store, project);
+  card = await settled(store, project, active);
   const gitDir = path.join(
     project.planningPath,
     'implementation/cards',
@@ -467,7 +470,7 @@ void test('coding output persists, feedback creates another round, and only user
   );
   assert.equal(calls[2].request.context.handoffMarkdown, '');
   calls[2].reject(new Error('Stop fixture'));
-  await settled(store, project);
+  await settled(store, project, active);
 });
 
 void test('cancellation preserves partial files and never accepts late output', async (t) => {
@@ -495,11 +498,11 @@ void test('cancellation preserves partial files and never accepts late output', 
 });
 
 void test('existing workspace files are version references rather than new changes and interruption still locks replanning', async (t) => {
-  const { project, store, service, calls, input } = await fixture(t);
+  const { project, store, service, calls, input, active } = await fixture(t);
   await writeFile(path.join(project.rootPath, 'module.txt'), 'existing');
   await service.start(project, input);
   calls[0].resolve(delivered(calls[0].request));
-  const card = await settled(store, project);
+  const card = await settled(store, project, active);
   assert.equal(card.execution?.runs[0].status, 'succeeded');
   assert.deepEqual(card.execution?.runs[0].verifiedVersionRefs, [
     'file:module.txt',
@@ -510,7 +513,8 @@ void test('existing workspace files are version references rather than new chang
   );
   assert.deepEqual(card.execution?.acceptedActionIds, []);
   await service.start(project, { ...input, expectedRevision: card.revision });
-  const fresh = createExecutionService(store, undefined, new Map());
+  const freshActive = new Map();
+  const fresh = createExecutionService(store, undefined, freshActive);
   const recovered = await fresh.refresh(project, await store.read(project, id));
   assert.equal(recovered.execution?.runs.at(-1)?.status, 'failed');
   assert.match(recovered.execution!.runs.at(-1)!.error!, /interrupted/);
@@ -573,10 +577,11 @@ void test('execution permissions do not broaden planning and explicit execution 
 
 void test('timeout ends the Action without acceptance or rolling back partial files', async (t) => {
   const { project, store, transport, calls, input } = await fixture(t);
+  const timeoutActive = new Map();
   const service = createExecutionService(
     store,
     transport,
-    new Map(),
+    timeoutActive,
     5,
     undefined,
     async () => undefined,
@@ -584,7 +589,7 @@ void test('timeout ends the Action without acceptance or rolling back partial fi
     (input) => input.transport!(input.workerAgent, input.workerOptions),
   );
   await service.start(project, input);
-  const card = await settled(store, project);
+  const card = await settled(store, project, timeoutActive);
   assert.equal(card.execution?.runs[0].status, 'failed');
   assert.match(card.execution!.runs[0].error!, /timed out/);
   assert.equal(calls[0].canceled, true);
@@ -787,13 +792,13 @@ void test('Git checkpoint rejects changed input bytes and linked history stores'
 });
 
 void test('a no-code-change round can report its real Git checkpoint without relabeling unchanged inputs', async (t) => {
-  const { project, service, store, calls, input } = await fixture(t);
+  const { project, service, store, calls, input, active } = await fixture(t);
   await writeFile(path.join(project.rootPath, 'module.txt'), 'already present');
   await service.start(project, input);
   calls[0].resolve(
     delivered(calls[0].request, [`checkpoint:${calls[0].request.requestId}`]),
   );
-  const card = await settled(store, project);
+  const card = await settled(store, project, active);
   assert.equal(card.execution?.runs[0].status, 'succeeded');
   assert.match(card.execution!.runs[0].commit!, /^[0-9a-f]{40}$/);
   assert.deepEqual(card.execution?.acceptedActionIds, []);
@@ -862,21 +867,28 @@ void test('GitHub refresh persists remote state without accepting, starting, or 
       }),
     },
   );
-  const service = createExecutionService(store, transport, new Map(), 1800000, {
-    repository: async () => 'main',
-    branchPullRequests: async () => [],
-    pullRequest: async () => ({
-      number: 1,
-      url: 'https://github.com/example/fixture/pull/1',
-      title: 'Fixture',
-      state: 'MERGED',
-      isDraft: false,
-      headRefOid: hash,
-      headRefName: 'feature',
-      baseRefName: 'main',
-      mergedAt: '2026-08-30T12:00:00Z',
-    }),
-  });
+  const localActive = new Map();
+  const service = createExecutionService(
+    store,
+    transport,
+    localActive,
+    1800000,
+    {
+      repository: async () => 'main',
+      branchPullRequests: async () => [],
+      pullRequest: async () => ({
+        number: 1,
+        url: 'https://github.com/example/fixture/pull/1',
+        title: 'Fixture',
+        state: 'MERGED',
+        isDraft: false,
+        headRefOid: hash,
+        headRefName: 'feature',
+        baseRefName: 'main',
+        mergedAt: '2026-08-30T12:00:00Z',
+      }),
+    },
+  );
   const refreshed = await service.refreshGitHub(project, id, 2, runId);
   assert.equal(
     refreshed.execution?.runs[0].github?.pullRequests[0].state,
@@ -893,7 +905,7 @@ void test('GitHub refresh persists remote state without accepting, starting, or 
 });
 
 void test('an Action-created repository and reported PR become durable output evidence automatically', async (t) => {
-  const { project, store, service, calls, input } = await fixture(t, {
+  const { project, store, service, calls, input, active } = await fixture(t, {
     repository: async () => 'main',
     branchPullRequests: async () => [],
     pullRequest: async () => ({
@@ -935,7 +947,7 @@ void test('an Action-created repository and reported PR become durable output ev
   const output = JSON.parse(result.finalOutput);
   output.summary += ' https://github.com/example/fixture/pull/7';
   calls[0].resolve({ ...result, finalOutput: JSON.stringify(output) });
-  const card = await settled(store, project);
+  const card = await settled(store, project, active);
   assert.equal(card.execution?.runs[0].status, 'succeeded');
   assert.equal(card.execution?.runs[0].github?.pullRequests[0].number, 7);
   assert.equal(card.execution?.runs[0].github?.cleanAtOutput, false);
@@ -944,7 +956,7 @@ void test('an Action-created repository and reported PR become durable output ev
 });
 
 void test('blocked reports retain intermediate commits and unverified check references without acceptance', async (t) => {
-  const { project, service, store, calls, input } = await fixture(t);
+  const { project, service, store, calls, input, active } = await fixture(t);
   const exec = promisify(execFile);
   await service.start(project, input);
   const git = (...args: string[]) =>
@@ -993,7 +1005,7 @@ void test('blocked reports retain intermediate commits and unverified check refe
     },
   ];
   calls[0].resolve({ ...response, finalOutput: JSON.stringify(report) });
-  const card = await settled(store, project);
+  const card = await settled(store, project, active);
   const run = card.execution!.runs[0];
   assert.equal(run.status, 'succeeded');
   assert.equal(run.result?.outcome, 'blocked');
@@ -1008,12 +1020,12 @@ void test('blocked reports retain intermediate commits and unverified check refe
 });
 
 void test('artifact verification warnings preserve the report and do not add an acceptance gate', async (t) => {
-  const { project, service, store, calls, input } = await fixture(t);
+  const { project, service, store, calls, input, active } = await fixture(t);
   await service.start(project, input);
   await writeFile(path.join(project.rootPath, 'module.txt'), 'real change');
   const response = delivered(calls[0].request, ['file:invented.txt']);
   calls[0].resolve(response);
-  const card = await settled(store, project);
+  const card = await settled(store, project, active);
   const run = card.execution!.runs[0];
   assert.equal(run.status, 'failed');
   assert.ok(run.result?.summary);
@@ -1035,7 +1047,7 @@ void test('artifact verification warnings preserve the report and do not add an 
 });
 
 void test('a verified repository-only blocked output is retained without pretending it is a changed file or acceptance', async (t) => {
-  const { project, service, store, calls, input } = await fixture(t, {
+  const { project, service, store, calls, input, active } = await fixture(t, {
     repository: async () => null,
     branchPullRequests: async () => [],
     pullRequest: async () => {
@@ -1071,7 +1083,7 @@ void test('a verified repository-only blocked output is retained without pretend
   result.outcome = 'blocked';
   result.remaining = ['Push gate is blocked'];
   calls[0].resolve({ ...response, finalOutput: JSON.stringify(result) });
-  const current = await settled(store, project);
+  const current = await settled(store, project, active);
   const run = current.execution!.runs[0];
   assert.equal(run.status, 'succeeded');
   assert.equal(run.result?.outcome, 'blocked');
@@ -1239,10 +1251,11 @@ void test('recheck preserves captured branch evidence for implicit PR discovery'
       }),
     },
   );
+  const serviceActive = new Map();
   const service = createExecutionService(
     f.store,
     f.transport,
-    new Map(),
+    serviceActive,
     1800000,
     {
       repository: async () => 'main',
@@ -1278,7 +1291,7 @@ void test('recheck preserves captured branch evidence for implicit PR discovery'
 });
 
 void test('required failure blocks acceptance; explicit user decision preserves failure and unlocks acceptance', async (t) => {
-  const { project, store, service, calls, input } = await fixture(t);
+  const { project, store, service, calls, input, active } = await fixture(t);
   await service.start(project, input);
   await writeFile(path.join(project.rootPath, 'module.txt'), 'delivered');
   const response = delivered(calls[0].request);
@@ -1288,7 +1301,7 @@ void test('required failure blocks acceptance; explicit user decision preserves 
     { summary: 'Optional probe', status: 'failed', evidenceRefs: [] },
   ];
   calls[0].resolve({ ...response, finalOutput: JSON.stringify(report) });
-  let card = await settled(store, project);
+  let card = await settled(store, project, active);
   await assert.rejects(
     () =>
       service.update(
@@ -1428,7 +1441,7 @@ void test('ignored acceptance attachments are archived and escaped or later-modi
 });
 
 void test('an ignored screenshot does not reject otherwise valid delivery and is retained outside the source repository', async (t) => {
-  const { project, store, service, calls, input } = await fixture(t);
+  const { project, store, service, calls, input, active } = await fixture(t);
   await service.start(project, input);
   await mkdir(path.join(project.rootPath, 'build/acceptance'), {
     recursive: true,
@@ -1440,7 +1453,7 @@ void test('an ignored screenshot does not reject otherwise valid delivery and is
   calls[0].resolve(
     delivered(calls[0].request, ['file:build/acceptance/home.png']),
   );
-  const card = await settled(store, project);
+  const card = await settled(store, project, active);
   const run = card.execution!.runs[0];
   assert.equal(run.status, 'succeeded', run.error ?? '');
   const archived = JSON.parse(
@@ -1494,13 +1507,13 @@ void test('attachment timestamps compare at the recorded Round millisecond preci
 });
 
 void test('unsupported app bundle retries stop before workspace and remote verification', async (t) => {
-  const { project, store, service, calls, input } = await fixture(t);
+  const { project, store, service, calls, input, active } = await fixture(t);
   await service.start(project, input);
   await mkdir(path.join(project.rootPath, 'build/App.app'), {
     recursive: true,
   });
   calls[0].resolve(delivered(calls[0].request, ['file:build/App.app']));
-  const card = await settled(store, project);
+  const card = await settled(store, project, active);
   assert.equal(card.execution!.runs[0].status, 'failed');
   await rm(project.rootPath + '/build', { recursive: true });
   await assert.rejects(
@@ -1518,10 +1531,10 @@ void test('unsupported app bundle retries stop before workspace and remote verif
 });
 
 void test('accepted reports with artifact warnings are handed to the next Action with their original evidence', async (t) => {
-  const { project, store, service, calls, input } = await fixture(t);
+  const { project, store, service, calls, input, active } = await fixture(t);
   await service.start(project, input);
   calls[0].resolve(delivered(calls[0].request, ['file:unverified.txt']));
-  let card = await settled(store, project);
+  let card = await settled(store, project, active);
   const original = structuredClone(card.execution!.runs[0]);
   card = await service.update(
     project,
@@ -1555,14 +1568,14 @@ void test('accepted reports with artifact warnings are handed to the next Action
     path.join(project.planningPath, accepted.outputRef),
   );
   calls[1].reject(new Error('Fixture finished'));
-  await settled(store, project);
+  await settled(store, project, active);
 });
 
 void test('continuation repairs a legacy accepted report without changing history or rerunning it', async (t) => {
-  const { project, store, service, calls, input } = await fixture(t);
+  const { project, store, service, calls, input, active } = await fixture(t);
   await service.start(project, input);
   calls[0].resolve(delivered(calls[0].request, ['file:unverified.txt']));
-  let card = await settled(store, project);
+  let card = await settled(store, project, active);
   card = await service.update(
     project,
     id,
@@ -1623,7 +1636,7 @@ void test('continuation repairs a legacy accepted report without changing histor
     null,
   );
   calls[1].reject(new Error('Fixture finished'));
-  await settled(store, project);
+  await settled(store, project, active);
 });
 
 void test('new executions always coordinate, persist role traces, and carry context into a coordinator-only next Action', async (t) => {
@@ -1706,10 +1719,11 @@ void test('new executions always coordinate, persist role traces, and carry cont
       cancel: () => {},
     };
   };
+  const serviceActive = new Map();
   const service = createExecutionService(
     f.store,
     transport,
-    new Map(),
+    serviceActive,
     1800000,
     undefined,
     async () => undefined,
@@ -1770,10 +1784,11 @@ void test('new executions always coordinate, persist role traces, and carry cont
 
 void test('host preserves worker checklist when coordination recovery fails', async (t) => {
   const f = await fixture(t);
+  const serviceActive = new Map();
   const service = createExecutionService(
     f.store,
     f.transport,
-    new Map(),
+    serviceActive,
     1800000,
     undefined,
     async () => undefined,
@@ -1837,10 +1852,11 @@ void test('canceling coordinator preparation persists its partial record and nev
       },
     };
   };
+  const serviceActive = new Map();
   const service = createExecutionService(
     f.store,
     transport,
-    new Map(),
+    serviceActive,
     1800000,
     undefined,
     async () => undefined,
@@ -1929,10 +1945,11 @@ void test('coordinated app verification limitations retain diagnostics without f
       cancel: () => {},
     };
   };
+  const serviceActive = new Map();
   const service = createExecutionService(
     f.store,
     transport,
-    new Map(),
+    serviceActive,
     1800000,
     undefined,
     async () => undefined,
