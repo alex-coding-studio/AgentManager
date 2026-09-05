@@ -13,12 +13,10 @@ import {
   ensureGraphIdentities,
   parseIdentifiedResult,
   readIdentifiedEntities,
-  reserveNodeIdentity,
   reservedCandidateAliases,
 } from '../../graph/identity-store.ts';
 import {
   access,
-  copyFile,
   mkdir,
   readdir,
   readFile,
@@ -74,10 +72,7 @@ import {
   type ProposalReplacement,
 } from './redo.ts';
 import { readWhatsNextAttachment, readWhatsNextContext } from './context.ts';
-import {
-  candidateDependencyBlockers,
-  resolveCandidateDependencies,
-} from '../../graph/proposal/dependencies.ts';
+import { candidateDependencyBlockers } from '../../graph/proposal/dependencies.ts';
 import { promoteCandidateToNode } from '../../graph/proposal/promote.ts';
 import {
   primarySourceResourcePaths,

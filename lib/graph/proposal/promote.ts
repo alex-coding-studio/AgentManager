@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { copyFile, mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { reserveNodeIdentity, type Scope } from '../identity-store.ts';
-import { listTaskGraphNodes, type TaskGraphNode } from '../task/model.ts';
+import { listTaskGraphNodes, type TaskGraphNode } from '../task/nodes.ts';
 import { resolveCandidateDependencies } from './dependencies.ts';
 import type { GraphCandidateInput } from './contract.ts';
 import type { RegisteredProject } from '../../project-registry.ts';
@@ -57,7 +57,7 @@ export async function promoteCandidateToNode(
       relations: candidate.relations,
       role: 'node',
       type: candidate.type,
-      ...(input.extension ?? {}),
+      ...input.extension,
       title: candidate.title,
       summary: candidate.summary,
       status: 'accepted',
@@ -77,9 +77,9 @@ export async function promoteCandidateToNode(
       metadata: candidate.metadata,
       presentation: candidate.presentation,
       provenance: {
-        ...(input.provenanceFeature
-          ? { feature: input.provenanceFeature }
-          : {}),
+        ...(input.provenanceFeature && {
+          feature: input.provenanceFeature,
+        }),
         runId,
         candidateId: candidate.candidateId,
         revision: candidate.revision,
