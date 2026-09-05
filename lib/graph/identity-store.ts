@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import {
   copyFile,
@@ -19,6 +19,7 @@ import {
   type GraphIdentityIndex,
   type IdentityEntity,
 } from './identity.ts';
+import { MaterializationError } from '../materialization/receipt.ts';
 
 export type Scope = 'task-graph' | 'whats-next';
 type StoredRun = {
@@ -397,6 +398,100 @@ export async function readIdentifiedEntities<T extends IdentityEntity>(
       }
     }
     return entities.map((entity) => projectDisplayRelations(entity, index));
+  });
+}
+
+async function indexFingerprint(file: string) {
+  const text = await readFile(file, 'utf8').catch(
+    (error: NodeJS.ErrnoException) => {
+      if (error.code === 'ENOENT') return null;
+      throw error;
+    },
+  );
+  return text === null
+    ? 'absent'
+    : createHash('sha256').update(text).digest('hex');
+}
+
+export async function identitiesFingerprint(
+  planningPath: string,
+  scope: Scope,
+): Promise<string> {
+  await ensureGraphIdentities(planningPath, scope);
+  const file = indexPath(planningPath, scope);
+  return serialized(file, () => indexFingerprint(file));
+}
+
+export type CandidateAliasRequest = {
+  localKeys: readonly string[];
+  revisionTarget?: { candidateId: string; uid?: string } | null;
+};
+
+export type CandidateAliasAllocation = {
+  aliases: Map<string, string>;
+  index: GraphIdentityIndex;
+};
+
+export async function allocateCandidateAliases(
+  planningPath: string,
+  scope: Scope,
+  request: CandidateAliasRequest,
+  expectedFingerprint: string,
+): Promise<CandidateAliasAllocation> {
+  await ensureGraphIdentities(planningPath, scope);
+  const file = indexPath(planningPath, scope);
+  return serialized(file, async () => {
+    const fingerprint = await indexFingerprint(file);
+    if (fingerprint !== expectedFingerprint) {
+      throw new MaterializationError(
+        'stale-basis',
+        'The graph identity index changed after this result was prepared.',
+      );
+    }
+    const index = await readIndex(file);
+    const revisionKey = request.revisionTarget?.candidateId ?? null;
+    const aliases = new Map<string, string>();
+    for (const localKey of request.localKeys) {
+      if (
+        typeof localKey !== 'string' ||
+        !new RegExp(CANDIDATE_ALIAS_PATTERN).test(localKey)
+      ) {
+        throw new MaterializationError(
+          'identity',
+          'Invalid local Candidate identifier.',
+        );
+      }
+      if (aliases.has(localKey)) {
+        throw new MaterializationError(
+          'identity',
+          'Duplicate local Candidate identifier.',
+        );
+      }
+      if (localKey === revisionKey) {
+        bindIdentity(
+          index,
+          localKey,
+          request.revisionTarget?.uid ??
+            index.aliases[localKey] ??
+            randomUUID(),
+        );
+        aliases.set(localKey, localKey);
+        continue;
+      }
+      if (revisionKey !== null) {
+        throw new MaterializationError(
+          'identity',
+          'A revision must return exactly the requested Candidate identifier.',
+        );
+      }
+      let uid = randomUUID();
+      while (Object.values(index.aliases).includes(uid)) uid = randomUUID();
+      const alias = uuidAlias(index, 'CANDIDATE', uid);
+      bindIdentity(index, alias, uid);
+      aliases.set(localKey, alias);
+    }
+    await atomicJson(file, index);
+    return { aliases, index };
   });
 }
 
