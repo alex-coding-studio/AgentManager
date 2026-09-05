@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { readModuleLatestResponse } from '@/lib/latest-response-service';
 import { ProjectShell } from '@/components/project-shell';
 import { WhatsNextWorkspace } from '@/components/whats-next-workspace';
 import { readContextBrowser } from '@/lib/modules/product-context/catalog';
@@ -72,6 +73,7 @@ export default async function WhatsNextPage({
     >
       <WhatsNextWorkspace
         projectId={project.id}
+        initialResponse={await readModuleLatestResponse(project, 'whats-next')}
         folders={folders}
         initialNodes={reviewPreview?.nodes ?? nodes}
         initialRuns={reviewPreview?.runs ?? []}

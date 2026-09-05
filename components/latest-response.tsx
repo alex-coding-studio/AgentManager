@@ -96,21 +96,25 @@ export function LatestResponseActions({
   responseLabel,
   summaryLabel,
   logLabel,
+  logHref,
   onOpenResponse,
   onOpenSummary,
   onOpenLog,
 }: {
   responseLabel: string;
   summaryLabel: string;
-  logLabel: string;
+  logLabel?: string;
+  logHref?: string;
   onOpenResponse: () => void;
   onOpenSummary: () => void;
-  onOpenLog: () => void;
+  onOpenLog?: () => void;
 }) {
   const actions = [
     { label: responseLabel, onSelect: onOpenResponse },
     { label: summaryLabel, onSelect: onOpenSummary },
-    { label: logLabel, onSelect: onOpenLog },
+    ...(logLabel && onOpenLog && !logHref
+      ? [{ label: logLabel, onSelect: onOpenLog }]
+      : []),
   ];
   return (
     <div className="flex flex-wrap gap-1.5">
@@ -125,6 +129,16 @@ export function LatestResponseActions({
           {action.label}
         </Button>
       ))}
+      {logLabel && logHref ? (
+        <a
+          href={logHref}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex h-6 items-center rounded-md border border-border px-2 text-xs font-medium hover:bg-secondary"
+        >
+          {logLabel}
+        </a>
+      ) : null}
     </div>
   );
 }

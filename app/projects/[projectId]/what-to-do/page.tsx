@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { readModuleLatestResponse } from '@/lib/latest-response-service';
 import { ProjectShell } from '@/components/project-shell';
 import { WhatToDoWorkspace } from '@/components/what-to-do-workspace';
 import { readContextBrowser } from '@/lib/modules/product-context/catalog';
@@ -53,6 +54,7 @@ export default async function WhatToDoPage({
     >
       <WhatToDoWorkspace
         projectId={project.id}
+        initialResponse={await readModuleLatestResponse(project, 'what-to-do')}
         folders={folders}
         productDesignNodes={nodes.filter(
           (node) => node.role === 'start' || isWhatToDoFeatureNode(node),

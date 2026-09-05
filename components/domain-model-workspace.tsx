@@ -8,7 +8,10 @@ import {
   AgentComposerShell,
 } from '@/components/agent-composer-shell';
 import { AgentGraphComposerCard } from '@/components/agent-graph-composer-card';
-import { AgentGraphRunningCard } from '@/components/agent-graph-running-card';
+import { LatestResponseCard } from '@/components/latest-response-card';
+import { useLatestResponse } from '@/hooks/use-latest-response';
+import { useSurfacePreference } from '@/hooks/use-surface-preference';
+import type { LatestResponseDocument } from '@/lib/execution-observability/types';
 import { ContextAttachmentPicker } from '@/components/context-attachment-picker';
 import { DomainModelCanvas } from '@/components/domain-model-canvas';
 import {
@@ -38,10 +41,7 @@ import type {
 } from '@/lib/modules/domain-modeling/model';
 import type { DomainModelRunRecord } from '@/lib/modules/domain-modeling/runs';
 import { deriveDomainRelationships } from '@/lib/modules/domain-modeling/view';
-import {
-  latestDomainModelResponse,
-  renderLatestResponseActivityLog,
-} from '@/lib/latest-response';
+import { latestDomainModelResponse } from '@/lib/latest-response';
 import type { ContextBrowserFolder } from '@/lib/modules/product-context/catalog';
 import { useUiText } from '@/components/ui-language-provider';
 
@@ -49,6 +49,7 @@ export function DomainModelWorkspace({
   projectId,
   initialModel,
   initialRuns,
+  initialResponse = null,
   initialCanUndo,
   initialLastChange,
   folders,
@@ -56,6 +57,7 @@ export function DomainModelWorkspace({
   projectId: string;
   initialModel: DomainModel;
   initialRuns: DomainModelRunRecord[];
+  initialResponse?: LatestResponseDocument | null;
   initialCanUndo: boolean;
   initialLastChange: DomainChange | null;
   folders: ContextBrowserFolder[];
@@ -91,6 +93,21 @@ export function DomainModelWorkspace({
   const submittingRef = useRef(false);
   const latest = runs[0] ?? null;
   const running = latest?.status === 'running' ? latest : null;
+  const moduleResponse = useLatestResponse(
+    projectId,
+    'domain-model',
+    initialResponse,
+  );
+  const [responseCollapsed, setResponseCollapsed] = useSurfacePreference(
+    projectId,
+    'domain-model',
+    'latest-response',
+  );
+  const [composerCollapsed, setComposerCollapsed] = useSurfacePreference(
+    projectId,
+    'domain-model',
+    'composer',
+  );
 
   const refreshModel = useCallback(async () => {
     const response = await fetch(`/api/projects/${projectId}/domain-model`, {
@@ -302,28 +319,35 @@ export function DomainModelWorkspace({
             icon="success"
             className="absolute top-4 left-4 z-20 w-[min(360px,calc(100%-2rem))]"
           />
-        ) : latest && latest.status !== 'running' ? (
-          <LatestDomainResponse
-            run={latest}
-            model={model}
-            canUndo={canUndo}
-            onUndo={undo}
-            onPreview={setResponsePreview}
-          />
+        ) : moduleResponse.document ? (
+          <LatestResponseCard
+            document={moduleResponse.document}
+            collapsed={responseCollapsed}
+            onCollapsedChange={setResponseCollapsed}
+            onCancel={() => void cancelRun()}
+            className="z-20 w-[min(360px,calc(100%-2rem))]"
+          >
+            {latest &&
+            latest.status !== 'running' &&
+            latest.id === moduleResponse.document.runId ? (
+              <LatestDomainResponse
+                projectId={projectId}
+                run={latest}
+                model={model}
+                canUndo={canUndo}
+                onUndo={undo}
+                onPreview={setResponsePreview}
+              />
+            ) : null}
+          </LatestResponseCard>
         ) : null}
 
-        {running ? (
-          <AgentGraphRunningCard
-            className="z-20"
-            agent={running.profile.agent}
-            startedAt={running.startedAt}
-            activity={running.activity}
-            fallback="Preparing the Agent request."
-            onCancel={() => void cancelRun()}
-          />
-        ) : (
+        {
           <AgentGraphComposerCard
             className="z-20"
+            running={moduleResponse.running || Boolean(running)}
+            collapsed={composerCollapsed}
+            onCollapsedChange={setComposerCollapsed}
             title={t('Describe the model change')}
             description={
               selectedContext.length
@@ -446,7 +470,7 @@ export function DomainModelWorkspace({
               </p>
             ) : null}
           </AgentGraphComposerCard>
-        )}
+        }
       </div>
 
       <DomainInspector
@@ -473,12 +497,14 @@ export function DomainModelWorkspace({
 }
 
 function LatestDomainResponse({
+  projectId,
   run,
   model,
   canUndo,
   onUndo,
   onPreview,
 }: {
+  projectId: string;
   run: DomainModelRunRecord;
   model: DomainModel;
   canUndo: boolean;
@@ -490,16 +516,9 @@ function LatestDomainResponse({
   }) => void;
 }) {
   const { t } = useUiText();
-  const presentation = latestDomainModelResponse(run);
   const changes = domainChangeGroups(run.change, model);
   return (
-    <LatestResponse
-      {...presentation}
-      statusLabel={t(presentation.statusLabel)}
-      summary={t(presentation.summary)}
-      title={t('Latest Response')}
-      className="absolute top-4 left-4 z-20 w-[min(360px,calc(100%-2rem))]"
-    >
+    <div className="w-full">
       <div className="space-y-3 text-xs">
         {changes.length ? (
           <div className="space-y-2">
@@ -552,13 +571,7 @@ function LatestDomainResponse({
                 markdown: renderDomainModelSummary(run, model, t),
               })
             }
-            onOpenLog={() =>
-              onPreview({
-                title: t('Activity Log'),
-                path: `domain-model/runs/${run.id}/activity.jsonl`,
-                markdown: renderDomainModelLog(run, model, t),
-              })
-            }
+            logHref={`/projects/${projectId}/logs/domain-model/${run.id}`}
           />
           {canUndo ? (
             <Button
@@ -572,7 +585,7 @@ function LatestDomainResponse({
           ) : null}
         </div>
       </div>
-    </LatestResponse>
+    </div>
   );
 }
 
@@ -642,47 +655,6 @@ function renderDomainModelSummary(
       )}${change.cards.length ? ` · ${change.cards.map((card) => card.label).join(', ')}` : ''}`,
     );
   }
-  return `${sections.join('\n')}\n`;
-}
-
-function renderDomainModelLog(
-  run: DomainModelRunRecord,
-  model: DomainModel,
-  t: (text: string, values?: Record<string, string | number>) => string,
-) {
-  const sections = [`# ${t('Activity Log')}`];
-  const changes = domainChangeGroups(run.change, model);
-  if (changes.length) {
-    sections.push('', `## ${t('Model changes')}`);
-    for (const change of changes) {
-      sections.push(
-        '',
-        `### ${t(change.label)} · ${t(
-          '{cards} Cards · {entries} model entries',
-          {
-            cards: change.cards.length,
-            entries: change.entryCount,
-          },
-        )}`,
-        '',
-        change.entries
-          .map(
-            (entry) =>
-              `- **${t(changeKindLabel(entry.kind))}:** ${entry.label}`,
-          )
-          .join('\n'),
-      );
-    }
-  }
-  sections.push(
-    '',
-    renderLatestResponseActivityLog(
-      run.activity,
-      t('Run activity'),
-      t('No recorded activity.'),
-      t,
-    ).replace(/^# .+\n/, ''),
-  );
   return `${sections.join('\n')}\n`;
 }
 
@@ -763,14 +735,6 @@ function describeDomainChangeItem(
   }
   const constraint = model.constraints.find((item) => item.id === id);
   return constraint ? { id, kind: 'constraint', label: constraint.text } : null;
-}
-
-function changeKindLabel(kind: DisplayDomainChangeItem['kind']) {
-  if (kind === 'card') return 'Card';
-  if (kind === 'field') return 'Field';
-  if (kind === 'relationship') return 'Relationship';
-  if (kind === 'constraint') return 'Constraint';
-  return 'Model entry no longer present';
 }
 
 function DomainInspector({

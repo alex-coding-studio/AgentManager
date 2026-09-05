@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { readModuleLatestResponse } from '@/lib/latest-response-service';
 import { ProjectShell } from '@/components/project-shell';
 import { TaskDecompositionWorkspace } from '@/components/task-decomposition-workspace';
 import { readContextBrowser } from '@/lib/modules/product-context/catalog';
@@ -65,6 +66,10 @@ export default async function TaskDecompositionPage({
     >
       <TaskDecompositionWorkspace
         projectId={project.id}
+        initialResponse={await readModuleLatestResponse(
+          project,
+          'task-decomposition',
+        )}
         folders={folders}
         initialNodes={graphPreview?.nodes ?? nodes}
         initialPreviews={graphPreview?.previews ?? []}

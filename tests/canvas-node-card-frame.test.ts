@@ -481,9 +481,12 @@ void test('Delivery Planning restores clarification Context independently of opt
     source,
     /Choose an option or write your own answer in the Composer/,
   );
+  const selectOptionStart = source.indexOf(
+    'function selectClarificationOption',
+  );
   const selectOption = source.slice(
-    source.indexOf('function selectClarificationOption'),
-    source.indexOf('const presentation ='),
+    selectOptionStart,
+    source.indexOf('\n  }\n', selectOptionStart),
   );
   assert.doesNotMatch(selectOption, /setSourceUids|setProfile|startRun/);
 });
@@ -513,7 +516,11 @@ void test('Domain Modeling separates the current answer, compact summary and cha
   );
   assert.match(source, /renderDomainModelResponse\(run, model, t\)/);
   assert.match(source, /renderDomainModelSummary\(run, model, t\)/);
-  assert.match(source, /renderDomainModelLog\(run, model, t\)/);
+  assert.match(
+    source,
+    /logHref=\{`\/projects\/\$\{projectId\}\/logs\/domain-model\/\$\{run\.id\}`\}/,
+  );
+  assert.doesNotMatch(source, /renderDomainModelLog/);
   const relationshipInspector = source.slice(
     source.indexOf(') : relationship ? ('),
     source.indexOf(
@@ -547,19 +554,21 @@ void test('Delivery Planning replaces the full Composer while its Agent is runni
     'utf8',
   );
   const transition = source.slice(
-    source.indexOf('{running ? ('),
+    source.indexOf('<LatestResponseCard'),
     source.indexOf('<ProductDesignFeaturePicker'),
   );
-  assert.match(transition, /<AgentGraphRunningCard/);
-  assert.match(transition, /activity=\{running\.activity\}/);
+  assert.doesNotMatch(source, /<AgentGraphRunningCard/);
   assert.match(transition, /onCancel=\{\(\) => void cancelRun\(\)\}/);
-  assert.match(transition, /\) : \(\s*<AgentGraphComposerCard/);
+  assert.match(
+    transition,
+    /<AgentGraphComposerCard\s+running=\{moduleResponse\.running \|\| Boolean\(running\)\}/,
+  );
   assert.match(transition, /<Textarea/);
   assert.doesNotMatch(source, /function buildPreviews/);
   assert.match(source, /previews=\{\[\]\}/);
 });
 
-void test('Domain Modeling, Delivery Planning and Just Do It share one running card', async () => {
+void test('Graph and Flow modules run inside Latest Response while Just Do It still shares the running card', async () => {
   const { latestReadableAgentActivity } =
     await import('../components/agent-graph-running-card.tsx');
   assert.equal(
@@ -590,16 +599,25 @@ void test('Domain Modeling, Delivery Planning and Just Do It share one running c
   assert.doesNotMatch(runningCard, /overflow-y-auto/);
   assert.match(runningCard, /<Square/);
   for (const file of [
+    'whats-next-workspace.tsx',
+    'task-decomposition-workspace.tsx',
     'domain-model-workspace.tsx',
     'what-to-do-workspace.tsx',
-    'just-do-it-live-workspace.tsx',
   ]) {
     const source = await readFile(
       new URL(`../components/${file}`, import.meta.url),
       'utf8',
     );
-    assert.match(source, /<AgentGraphRunningCard/, file);
+    assert.doesNotMatch(source, /<AgentGraphRunningCard/, file);
+    assert.match(source, /<LatestResponseCard/, file);
+    assert.match(source, /running=\{moduleResponse\.running/, file);
+    assert.match(source, /useSurfacePreference\(/, file);
   }
+  const justDoIt = await readFile(
+    new URL('../components/just-do-it-live-workspace.tsx', import.meta.url),
+    'utf8',
+  );
+  assert.match(justDoIt, /<AgentGraphRunningCard/);
 });
 
 void test('terminal What’s Next outcomes leave the Canvas and stay in Latest Response', async () => {

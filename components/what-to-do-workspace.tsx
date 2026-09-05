@@ -8,11 +8,13 @@ import {
   AgentComposerAttachments,
   AgentComposerShell,
 } from '@/components/agent-composer-shell';
-import { AgentGraphRunningCard } from '@/components/agent-graph-running-card';
+import { LatestResponseCard } from '@/components/latest-response-card';
+import { useLatestResponse } from '@/hooks/use-latest-response';
+import { useSurfacePreference } from '@/hooks/use-surface-preference';
+import type { LatestResponseDocument } from '@/lib/execution-observability/types';
 import { AgentRunControls } from '@/components/agent-run-controls';
 import { ContextAttachmentPicker } from '@/components/context-attachment-picker';
 import {
-  LatestResponse,
   LatestResponseActions,
   LatestResponseOptions,
 } from '@/components/latest-response';
@@ -25,10 +27,6 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useUiText } from '@/components/ui-language-provider';
 import type { AgentProfile } from '@/lib/agents/profile';
-import {
-  latestWhatToDoResponse,
-  renderLatestResponseActivityLog,
-} from '@/lib/latest-response';
 import type { ContextBrowserFolder } from '@/lib/modules/product-context/catalog';
 import type { TaskGraphNode } from '@/lib/graph/task/model';
 import {
@@ -46,6 +44,7 @@ export function WhatToDoWorkspace({
   folders,
   productDesignNodes,
   initialRuns,
+  initialResponse = null,
   initialMap,
   initialSourceUids,
 }: {
@@ -53,6 +52,7 @@ export function WhatToDoWorkspace({
   folders: ContextBrowserFolder[];
   productDesignNodes: TaskGraphNode[];
   initialRuns: WhatToDoRunRecord[];
+  initialResponse?: LatestResponseDocument | null;
   initialMap: WhatToDoDeliveryMap | null;
   initialSourceUids: string[];
 }) {
@@ -126,6 +126,21 @@ export function WhatToDoWorkspace({
   } | null>(null);
   const running = runs.find((run) => run.status === 'running') ?? null;
   const latestTerminal = runs.find((run) => run.status !== 'running') ?? null;
+  const moduleResponse = useLatestResponse(
+    projectId,
+    'what-to-do',
+    initialResponse,
+  );
+  const [responseCollapsed, setResponseCollapsed] = useSurfacePreference(
+    projectId,
+    'what-to-do',
+    'latest-response',
+  );
+  const [composerCollapsed, setComposerCollapsed] = useSurfacePreference(
+    projectId,
+    'what-to-do',
+    'composer',
+  );
   const featureNodes = productDesignNodes.filter(
     (node) =>
       node.role === 'node' &&
@@ -343,9 +358,6 @@ export function WhatToDoWorkspace({
     );
   }
 
-  const presentation = latestTerminal
-    ? latestWhatToDoResponse(latestTerminal)
-    : null;
   return (
     <div className="flex h-dvh min-h-[480px] flex-col overflow-hidden">
       <ProjectModuleHeader
@@ -387,74 +399,59 @@ export function WhatToDoWorkspace({
           onDecompose={() => {}}
           onCancelRun={() => void cancelRun()}
         />
-        {presentation && latestTerminal ? (
-          <LatestResponse
-            className="absolute top-4 left-4 z-10 w-[min(380px,calc(100%-2rem))]"
-            title={t('Latest Response')}
-            statusLabel={t(presentation.statusLabel)}
-            summary={t(presentation.summary)}
-            tone={presentation.tone}
-            attention={presentation.attention}
-            icon={presentation.icon}
-          >
-            <div className="space-y-2.5">
-              {latestTerminal.result?.outcome === 'clarification' ? (
-                <LatestResponseOptions
-                  options={latestTerminal.result.clarification.options}
-                  recommendedLabel={t('Recommended')}
-                  selectedId={clarificationOptionId}
-                  onSelect={selectClarificationOption}
-                />
-              ) : null}
-              {latestTerminal.result?.outcome === 'clarification' ? (
-                <p className="text-[10px] leading-4 text-muted-foreground">
-                  {t(
-                    'Choose an option or write your own answer in the Composer.',
-                  )}
-                </p>
-              ) : null}
-              <LatestResponseActions
-                responseLabel={t('Response')}
-                summaryLabel={t('Summary')}
-                logLabel={t('Log')}
-                onOpenResponse={() =>
-                  void openResource(
-                    t('Latest Response'),
-                    `what-to-do/runs/${latestTerminal.id}/response.md`,
-                  )
-                }
-                onOpenSummary={() =>
-                  void openResource(
-                    t('Summary'),
-                    `what-to-do/runs/${latestTerminal.id}/summary.md`,
-                  )
-                }
-                onOpenLog={() =>
-                  setPreview({
-                    title: t('Activity Log'),
-                    path: latestTerminal.id,
-                    markdown: renderLatestResponseActivityLog(
-                      latestTerminal.activity,
-                      t('Activity Log'),
-                      t('No recorded activity.'),
-                      t,
-                    ),
-                  })
-                }
-              />
-            </div>
-          </LatestResponse>
-        ) : null}
-        {running ? (
-          <AgentGraphRunningCard
-            agent={running.profile.agent}
-            startedAt={running.startedAt}
-            activity={running.activity}
-            fallback="Reading the frozen Packet and coordinating Contracts."
+        {moduleResponse.document ? (
+          <LatestResponseCard
+            document={moduleResponse.document}
+            collapsed={responseCollapsed}
+            onCollapsedChange={setResponseCollapsed}
             onCancel={() => void cancelRun()}
-          />
-        ) : (
+            className="w-[min(380px,calc(100%-2rem))]"
+          >
+            {latestTerminal &&
+            latestTerminal.id === moduleResponse.document.runId ? (
+              <div className="w-full space-y-2.5">
+                {latestTerminal.result?.outcome === 'clarification' ? (
+                  <LatestResponseOptions
+                    options={latestTerminal.result.clarification.options}
+                    recommendedLabel={t('Recommended')}
+                    selectedId={clarificationOptionId}
+                    onSelect={selectClarificationOption}
+                  />
+                ) : null}
+                {latestTerminal.result?.outcome === 'clarification' ? (
+                  <p className="text-[10px] leading-4 text-muted-foreground">
+                    {t(
+                      'Choose an option or write your own answer in the Composer.',
+                    )}
+                  </p>
+                ) : null}
+                <LatestResponseActions
+                  responseLabel={t('Response')}
+                  summaryLabel={t('Summary')}
+                  logLabel={t('Log')}
+                  onOpenResponse={() =>
+                    void openResource(
+                      t('Latest Response'),
+                      `what-to-do/runs/${latestTerminal.id}/response.md`,
+                    )
+                  }
+                  onOpenSummary={() =>
+                    void openResource(
+                      t('Summary'),
+                      `what-to-do/runs/${latestTerminal.id}/summary.md`,
+                    )
+                  }
+                  logHref={`/projects/${projectId}/logs/what-to-do/${latestTerminal.id}`}
+                />
+              </div>
+            ) : null}
+          </LatestResponseCard>
+        ) : null}
+        {
           <AgentGraphComposerCard
+            running={moduleResponse.running || Boolean(running)}
+            collapsed={composerCollapsed}
+            onCollapsedChange={setComposerCollapsed}
             title={
               <span className="flex items-center gap-2">
                 <Route className="size-4 text-muted-foreground" />
@@ -655,7 +652,7 @@ export function WhatToDoWorkspace({
               <p className="mt-2 text-xs text-destructive">{error}</p>
             ) : null}
           </AgentGraphComposerCard>
-        )}
+        }
       </section>
       <ProductDesignFeaturePicker
         open={featurePickerOpen}

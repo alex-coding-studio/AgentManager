@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { readModuleLatestResponse } from '@/lib/latest-response-service';
 import { DomainModelWorkspace } from '@/components/domain-model-workspace';
 import { ProjectShell } from '@/components/project-shell';
 import { readDomainModelView } from '@/lib/modules/domain-modeling/model';
@@ -33,6 +34,10 @@ export default async function DomainModelPage({
     >
       <DomainModelWorkspace
         projectId={project.id}
+        initialResponse={await readModuleLatestResponse(
+          project,
+          'domain-model',
+        )}
         initialModel={view.model}
         initialRuns={runs}
         initialCanUndo={view.canUndo}
