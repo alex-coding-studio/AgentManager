@@ -229,7 +229,10 @@ async function settled(
   for (let i = 0; i < 100; i++) {
     const card = await store.read(project, id);
     const terminal = card.execution?.runs.at(-1)?.status !== 'running';
-    if (terminal && !active?.has(id)) return card;
+    const held = active?.has(
+      `card:${path.resolve(project.planningPath)}:${id}`,
+    );
+    if (terminal && !held) return card;
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
   throw new Error('Fixture did not settle.');

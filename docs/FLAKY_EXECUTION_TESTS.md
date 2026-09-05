@@ -68,9 +68,19 @@ Waiting on the observability reservation's `released` promise is not sufficient:
 
 ## The obvious fix is not sufficient on its own
 
-Each fixture was changed to keep the active map it passes to `createExecutionService`, and `settled()` was changed to require both a terminal persisted Run and release of the Card from that map. Measured over 15 suite runs afterwards, one still failed.
+Each fixture now keeps the active map it passes to `createExecutionService`, and `settled()` requires both a terminal persisted Run and release of the Card from that map.
 
-So the ordering above is real and necessary, but something further is still unawaited. Whoever continues should start from that partial fix rather than repeat it, and should measure again over at least 15 runs before calling it fixed. One green run proves nothing at a 14 percent rate.
+A first attempt queried that map with the bare Card UUID while the service stores entries under `card:${path.resolve(project.planningPath)}:${cardId}`, so the added condition was always false and the measurement that followed it tested the unchanged code. That is corrected; the helper now builds the service key.
+
+With the correct key the condition genuinely applies, and the failure still occurs: `host preserves worker checklist when coordination recovery fails` failed on the third of a fresh run series. So the ordering above is real and necessary but not sufficient, and this is now a measured result rather than an artifact of a broken experiment.
+
+Whoever continues should start from this partial fix rather than repeat it, and should measure over at least 15 runs before calling it fixed. One green run proves nothing at a 14 percent rate.
+
+## The suite has no test timeout
+
+`test:implementation-execution` does not pass `--test-timeout`, and node:test waits indefinitely by default. The same defect therefore appears in two forms: a named failure when a timeout is set, and a process that never exits when one is not. Two runs of the measurement loop hung for minutes with no output until they were killed; adding `--test-timeout=30000` turned that into an ordinary reported failure.
+
+Four concurrency-sensitive suites in `package.json` already set `--test-timeout=20000`. This suite, which drives real Card execution, does not. Adding one would not fix the race, but it would stop a hang from stalling the whole chain silently.
 
 ## What I checked and ruled out
 
