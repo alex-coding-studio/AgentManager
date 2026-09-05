@@ -43,14 +43,14 @@ void test('allocation mints a fresh alias per local key and records it', async (
   const { aliases, index } = await allocateCandidateAliases(
     planning,
     'whats-next',
-    { localKeys: ['CANDIDATE-0001', 'CANDIDATE-0002'] },
+    { localKeys: ['first-direction', 'CANDIDATE-0002'] },
     fingerprint,
   );
-  const first = aliases.get('CANDIDATE-0001');
+  const first = aliases.get('first-direction');
   const second = aliases.get('CANDIDATE-0002');
   assert.ok(first && second);
   assert.notEqual(first, second);
-  assert.notEqual(first, 'CANDIDATE-0001');
+  assert.notEqual(first, 'first-direction');
   assert.match(first, /^CANDIDATE-[0-9a-f]{8,}$/);
   assert.ok(index.aliases[first]);
   assert.notEqual(index.aliases[first], index.aliases[second]);
@@ -59,7 +59,7 @@ void test('allocation mints a fresh alias per local key and records it', async (
   };
   assert.equal(persisted.aliases[first], index.aliases[first]);
   assert.equal(persisted.aliases[second], index.aliases[second]);
-  assert.equal('CANDIDATE-0001' in persisted.aliases, false);
+  assert.equal('first-direction' in persisted.aliases, false);
 });
 
 void test('an allocation against a stale fingerprint is refused with 409', async (t) => {
@@ -90,7 +90,8 @@ void test('a rejected local key consumes no alias', async (t) => {
   const fingerprint = await identitiesFingerprint(planning, 'whats-next');
   const before = await indexDigest(planning);
   for (const localKeys of [
-    ['CANDIDATE-0001', 'not-a-candidate'],
+    ['CANDIDATE-0001', '-leading-punctuation'],
+    ['CANDIDATE-0001', 'has a space'],
     ['CANDIDATE-0001', 'CANDIDATE-0001'],
   ]) {
     const error = await rejects(() =>
@@ -125,7 +126,10 @@ void test('a revision rebinds the requested alias and keeps its stable identity'
   const revision = await allocateCandidateAliases(
     planning,
     'whats-next',
-    { localKeys: [alias], revisionTarget: { candidateId: alias, uid } },
+    {
+      localKeys: [alias],
+      revisionTarget: { candidateId: alias, revision: 2, uid },
+    },
     second,
   );
   assert.equal(revision.aliases.get(alias), alias);
@@ -142,11 +146,96 @@ void test('a revision that returns another key is refused', async (t) => {
       'whats-next',
       {
         localKeys: ['CANDIDATE-0002'],
-        revisionTarget: { candidateId: 'CANDIDATE-0001' },
+        revisionTarget: {
+          candidateId: 'CANDIDATE-0001',
+          revision: 2,
+          uid: '00000000-0000-4000-8000-000000000001',
+        },
       },
       fingerprint,
     ),
   );
   assert.equal(error.boundary, 'identity');
+  assert.equal(await indexDigest(planning), before);
+});
+
+void test('a revision of a Candidate the index does not know is refused', async (t) => {
+  const planning = await planningPath(t);
+  const fingerprint = await identitiesFingerprint(planning, 'whats-next');
+  const before = await indexDigest(planning);
+  const alias = 'CANDIDATE-abcdef01';
+  const error = await rejects(() =>
+    allocateCandidateAliases(
+      planning,
+      'whats-next',
+      {
+        localKeys: [alias],
+        revisionTarget: {
+          candidateId: alias,
+          revision: 2,
+          uid: '00000000-0000-4000-8000-000000000002',
+        },
+      },
+      fingerprint,
+    ),
+  );
+  assert.equal(error.boundary, 'identity');
+  assert.match(error.message, /no stable identity/);
+  assert.equal(await indexDigest(planning), before);
+});
+
+void test('a revision naming a Candidate that holds another identity is refused', async (t) => {
+  const planning = await planningPath(t);
+  const first = await identitiesFingerprint(planning, 'whats-next');
+  const { aliases } = await allocateCandidateAliases(
+    planning,
+    'whats-next',
+    { localKeys: ['first-direction'] },
+    first,
+  );
+  const alias = aliases.get('first-direction')!;
+  const second = await identitiesFingerprint(planning, 'whats-next');
+  const before = await indexDigest(planning);
+  const error = await rejects(() =>
+    allocateCandidateAliases(
+      planning,
+      'whats-next',
+      {
+        localKeys: [alias],
+        revisionTarget: {
+          candidateId: alias,
+          revision: 2,
+          uid: '00000000-0000-4000-8000-000000000003',
+        },
+      },
+      second,
+    ),
+  );
+  assert.equal(error.boundary, 'identity');
+  assert.match(error.message, /does not hold the stable identity/);
+  assert.equal(await indexDigest(planning), before);
+});
+
+void test('a revision whose local key is not a canonical alias is refused', async (t) => {
+  const planning = await planningPath(t);
+  const fingerprint = await identitiesFingerprint(planning, 'whats-next');
+  const before = await indexDigest(planning);
+  const error = await rejects(() =>
+    allocateCandidateAliases(
+      planning,
+      'whats-next',
+      {
+        localKeys: ['first-direction'],
+        revisionTarget: {
+          candidateId: 'first-direction',
+          revision: 2,
+          uid: '00000000-0000-4000-8000-000000000004',
+        },
+      },
+      fingerprint,
+    ),
+  );
+  assert.equal(error.boundary, 'identity');
+  assert.match(error.message, /not a canonical Candidate identifier/);
   assert.equal(await indexDigest(planning), before);
 });
