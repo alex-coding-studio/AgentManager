@@ -1,7 +1,7 @@
 import dagre from '@dagrejs/dagre';
 import { TASK_GRAPH_NODE_MIN_HEIGHT } from '../card-metrics.ts';
 export { TASK_GRAPH_NODE_MIN_HEIGHT } from '../card-metrics.ts';
-import type { TaskGraphNode } from '@/lib/graph/task/model';
+import type { TaskGraphNode } from '@/lib/graph/task/nodes';
 import type { ProductExplorationCandidateInput } from '@/lib/modules/product-discovery/contract';
 import type { ScopeDecompositionCandidateInput } from '@/lib/modules/scope-decomposition/contract';
 import type { GraphIdentityFields, IdentityEntity } from '../identity.ts';

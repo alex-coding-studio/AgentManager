@@ -1,4 +1,4 @@
-import type { TaskGraphNode } from '@/lib/graph/task/model';
+import type { TaskGraphNode } from '@/lib/graph/task/nodes';
 import type { TaskGraphPreview } from '@/lib/graph/task/layout';
 import type { GraphCandidateInput } from '@/lib/graph/proposal/contract';
 
