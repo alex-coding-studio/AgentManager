@@ -13,6 +13,7 @@ import {
 import {
   MATERIALIZATION_FAILURE_BOUNDARIES,
   MaterializationError,
+  type MaterializationFailureBoundary,
 } from '../lib/materialization/receipt.ts';
 import {
   MATERIALIZATION_LOG_EVENTS,
@@ -21,7 +22,10 @@ import {
 } from '../lib/materialization/log.ts';
 import { LOG_EVENT_PATTERN } from '../lib/execution-observability/run-log-format.ts';
 import { GRAPH_REFERENCE_SCHEMA } from '../lib/graph/proposal/reference.ts';
-import { GRAPH_PROPOSAL_CANDIDATE_PROPERTIES } from '../lib/graph/proposal/contract.ts';
+import {
+  GRAPH_PROPOSAL_CANDIDATE_PROPERTIES,
+  RESOURCE_REFERENCE_SCHEMA,
+} from '../lib/graph/proposal/contract.ts';
 
 const SYNTHETIC_SCHEMA = {
   type: 'object',
@@ -126,11 +130,26 @@ void test('canonicalJson omits undefined properties', () => {
   assert.equal(canonicalJson({ a: 1, b: undefined }), canonicalJson({ a: 1 }));
 });
 
+const EXPECTED_FAILURE_BOUNDARY_STATUSES: readonly [
+  MaterializationFailureBoundary,
+  400 | 409,
+][] = [
+  ['validation', 400],
+  ['identity', 400],
+  ['staging', 400],
+  ['stale-basis', 409],
+  ['publication', 400],
+];
+
 void test('MaterializationError status is 409 for stale-basis and 400 otherwise', () => {
-  for (const boundary of MATERIALIZATION_FAILURE_BOUNDARIES) {
+  assert.deepEqual(
+    [...MATERIALIZATION_FAILURE_BOUNDARIES].sort(),
+    EXPECTED_FAILURE_BOUNDARY_STATUSES.map(([boundary]) => boundary).sort(),
+  );
+  for (const [boundary, status] of EXPECTED_FAILURE_BOUNDARY_STATUSES) {
     const error = new MaterializationError(boundary, 'synthetic failure');
     assert.equal(error.boundary, boundary);
-    assert.equal(error.status, boundary === 'stale-basis' ? 409 : 400);
+    assert.equal(error.status, status);
   }
 });
 
@@ -185,14 +204,42 @@ void test('GRAPH_REFERENCE_SCHEMA and GRAPH_PROPOSAL_CANDIDATE_PROPERTIES compil
   );
 });
 
+const EXPECTED_LOG_EVENT_PHASES: readonly [MaterializationLogEvent, string][] =
+  [
+    ['materialization.basis.prepared', 'PREPARE'],
+    ['materialization.validated', 'VERIFY'],
+    ['materialization.rejected', 'VERIFY'],
+    ['materialization.identities.allocated', 'PUBLISH'],
+    ['materialization.staged', 'PUBLISH'],
+    ['materialization.stale', 'PUBLISH'],
+    ['materialization.published', 'PUBLISH'],
+    ['materialization.publication.failed', 'PUBLISH'],
+  ];
+
+void test('RESOURCE_REFERENCE_SCHEMA accepts a valid resource and rejects malformed entries', () => {
+  const ajv = new Ajv2020({ strict: true });
+  const validateResources = ajv.compile({
+    type: 'array',
+    items: RESOURCE_REFERENCE_SCHEMA,
+  });
+  assert.equal(validateResources([{ kind: 'doc', path: 'docs/a.md' }]), true);
+  assert.equal(validateResources(['docs/a.md']), false);
+  assert.equal(
+    validateResources([{ kind: 'doc', path: 'docs/a.md', extra: true }]),
+    false,
+  );
+});
+
 void test('materializationLogEntry returns HOST actor entries matching LOG_EVENT_PATTERN', () => {
-  for (const event of Object.keys(
-    MATERIALIZATION_LOG_EVENTS,
-  ) as MaterializationLogEvent[]) {
+  assert.deepEqual(
+    Object.keys(MATERIALIZATION_LOG_EVENTS).sort(),
+    EXPECTED_LOG_EVENT_PHASES.map(([event]) => event).sort(),
+  );
+  for (const [event, phase] of EXPECTED_LOG_EVENT_PHASES) {
     const entry = materializationLogEntry(event, 'synthetic message');
     assert.equal(entry.actor, 'HOST');
     assert.equal(entry.level, 'INFO');
-    assert.equal(entry.phase, MATERIALIZATION_LOG_EVENTS[event]);
+    assert.equal(entry.phase, phase);
     assert.match(entry.event, LOG_EVENT_PATTERN);
   }
 });

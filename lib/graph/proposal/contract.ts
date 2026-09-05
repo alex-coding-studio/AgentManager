@@ -17,7 +17,7 @@ export type GraphProposalCandidate = {
   summary: string;
   derivedFrom: NodeReference[];
   dependsOn: GraphReference[];
-  resources: string[];
+  resources: GraphResourceReference[];
   typeTemplateRef: NodeReference | null;
   metadata: Record<string, unknown>;
   presentation: { color?: string };
@@ -57,6 +57,16 @@ const stringArray = {
   items: nonEmptyString,
 } as const;
 
+export const RESOURCE_REFERENCE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['kind', 'path'],
+  properties: {
+    kind: { ...nonEmptyString, maxLength: 80 },
+    path: { ...nonEmptyString, maxLength: 500 },
+  },
+} as const;
+
 export const GRAPH_PROPOSAL_CANDIDATE_PROPERTIES = {
   localKey: LOCAL_KEY_SCHEMA,
   revision: { type: 'integer', minimum: 1 },
@@ -73,7 +83,11 @@ export const GRAPH_PROPOSAL_CANDIDATE_PROPERTIES = {
     uniqueItems: true,
     items: GRAPH_REFERENCE_SCHEMA,
   },
-  resources: stringArray,
+  resources: {
+    type: 'array',
+    uniqueItems: true,
+    items: RESOURCE_REFERENCE_SCHEMA,
+  },
   typeTemplateRef: { oneOf: [NODE_REFERENCE_SCHEMA, { type: 'null' }] },
   metadata: { type: 'object' },
   presentation: {
