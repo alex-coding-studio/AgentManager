@@ -98,7 +98,7 @@ import {
   listTaskGraphNodes,
   readTaskGraphMarkdownResource,
   type TaskGraphNode,
-} from '../../graph/task/model.ts';
+} from '../../graph/task/nodes.ts';
 import {
   assertWhatsNextIntention,
   assertWhatsNextMotion,

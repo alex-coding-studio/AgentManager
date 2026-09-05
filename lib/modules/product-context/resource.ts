@@ -16,7 +16,7 @@ import {
   type PlanningPathShape,
 } from '../../planning-paths.ts';
 import type { RegisteredProject } from '../../project-registry.ts';
-import type { TaskGraphNode } from '../../graph/task/model.ts';
+import type { TaskGraphNode } from '../../graph/task/nodes.ts';
 import { readWhatToDoCurrentMap } from '../delivery-planning/storage.ts';
 
 export type ProductContextSectionSlug = string;

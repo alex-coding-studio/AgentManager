@@ -8,7 +8,7 @@ import {
   getProject,
   listProjects,
 } from '@/lib/project-registry';
-import { listTaskGraphNodes } from '@/lib/graph/task/model';
+import { listTaskGraphNodes } from '@/lib/graph/task/nodes';
 import { listLatestWhatToDoRuns } from '@/lib/modules/delivery-planning/runs';
 import { isWhatToDoFeatureNode } from '@/lib/modules/delivery-planning/sources';
 import { readWhatToDoCurrentMap } from '@/lib/modules/delivery-planning/storage';

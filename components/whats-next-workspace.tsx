@@ -56,7 +56,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import type { ContextBrowserFolder } from '@/lib/modules/product-context/catalog';
-import type { TaskGraphNode } from '@/lib/graph/task/model';
+import type { TaskGraphNode } from '@/lib/graph/task/nodes';
 import type { TaskGraphPreview } from '@/lib/graph/task/layout';
 import { replaceRunWithPreviewsInPlace } from '@/lib/graph/task/preview-state';
 import { getTaskGraphRelationships } from '@/lib/graph/task/rules';
