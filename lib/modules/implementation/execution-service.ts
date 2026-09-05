@@ -116,6 +116,8 @@ const sharedActive = (runtime.jdiExecutionActive ??= new Map());
 const root = (project: Parameters<typeof planningService.read>[0]) =>
   path.join(project.planningPath, 'implementation/cards');
 type Project = Parameters<typeof planningService.read>[0];
+const cardKey = (project: Project, cardId: string) =>
+  `card:${path.resolve(project.planningPath)}:${cardId}`;
 const reference = (card: PlanningCard, file: string) =>
   `implementation/cards/${card.id}/${String(card.revision + 1).padStart(8, '0')}/${file}`;
 
@@ -325,12 +327,12 @@ export function createExecutionService(
     card: PlanningCard,
   ): Promise<PlanningCard> {
     const run = card.execution?.runs.at(-1);
-    const live = active.get(project.rootPath);
+    const live = active.get(cardKey(project, card.id));
     if (run?.status === 'running' && live?.id === run.id && live.progress)
       return replaceRun(card, { ...run, progress: live.progress });
     if (
       run?.status !== 'running' ||
-      active.get(project.rootPath)?.id === run.id
+      active.get(cardKey(project, card.id))?.id === run.id
     )
       return card;
     if (run.hostPid !== process.pid) {
@@ -416,7 +418,7 @@ export function createExecutionService(
         ))
           files[`coordination-${name}`] = text;
       }
-      const activity = active.get(project.rootPath)?.activity ?? [];
+      const activity = active.get(cardKey(project, request.context.cardId))?.activity ?? [];
       if (activity.length) {
         nextRun.activityRef = reference(card, 'activity.json');
         nextRun.progress = activity.at(-1);
@@ -605,10 +607,10 @@ export function createExecutionService(
         );
       }
     } finally {
-      const running = active.get(project.rootPath);
+      const running = active.get(cardKey(project, request.context.cardId));
       if (running?.id === request.requestId && !running.canceling) {
         if (running.timer) clearTimeout(running.timer);
-        active.delete(project.rootPath);
+        active.delete(cardKey(project, request.context.cardId));
       }
     }
   }
@@ -628,10 +630,10 @@ export function createExecutionService(
       input.instruction.length > 20000
     )
       throw new PublicApiError('Invalid execution input.', 400);
-    if (active.has(project.rootPath))
+    if (active.has(cardKey(project, input.cardId)))
       throw new PublicApiError(
-        'This project already has a running Action.',
-        400,
+        'This Card already has a running Action.',
+        409,
       );
     const reservation: Active = {
       id: randomUUID(),
@@ -639,18 +641,18 @@ export function createExecutionService(
       handle: null,
       timer: null,
     };
-    active.set(project.rootPath, reservation);
+    active.set(cardKey(project, input.cardId), reservation);
     try {
       const cards = await store.list(project);
-      for (const item of cards) {
-        const current = await refresh(project, item);
-        if (current.execution?.runs.at(-1)?.status === 'running')
-          throw new PublicApiError(
-            'This project already has a running Action.',
-            400,
-          );
-      }
       let card = await store.read(project, input.cardId);
+      if (
+        (await refresh(project, card)).execution?.runs.at(-1)?.status ===
+        'running'
+      )
+        throw new PublicApiError(
+          'This Card already has a running Action.',
+          409,
+        );
       await assertCurrentPlanningCardSource(project, card);
       if (card.revision !== input.expectedRevision)
         throw new PublicApiError(
@@ -932,7 +934,7 @@ export function createExecutionService(
       try {
         const recordProgress = (progress: CoordinationProgress) => {
           if (
-            active.get(project.rootPath) !== reservation ||
+            active.get(cardKey(project, input.cardId)) !== reservation ||
             reservation.canceling
           )
             return;
@@ -1073,8 +1075,8 @@ export function createExecutionService(
         .catch(() => undefined);
       return saved;
     } catch (error) {
-      if (active.get(project.rootPath) === reservation)
-        active.delete(project.rootPath);
+      if (active.get(cardKey(project, input.cardId)) === reservation)
+        active.delete(cardKey(project, input.cardId));
       throw error;
     }
   }
@@ -1100,7 +1102,7 @@ export function createExecutionService(
     if (action === 'cancel') {
       if (run.status !== 'running')
         throw new PublicApiError('No execution is running.', 400);
-      const handle = active.get(project.rootPath);
+      const handle = active.get(cardKey(project, cardId));
       if (handle?.id !== run.id)
         throw new Error('Execution is owned by another server.');
       const saved = await commit(
@@ -1189,8 +1191,8 @@ export function createExecutionService(
           canceledFiles,
         );
       } finally {
-        if (active.get(project.rootPath)?.id === run.id)
-          active.delete(project.rootPath);
+        if (active.get(cardKey(project, cardId))?.id === run.id)
+          active.delete(cardKey(project, cardId));
       }
     }
     if (action !== 'accept' || !hasReviewableReport(run) || !run.result)
@@ -1302,7 +1304,7 @@ export function createExecutionService(
       card.plan?.status !== 'finalized' ||
       !action ||
       action.acceptanceCriteria?.length ||
-      active.has(project.rootPath) ||
+      active.has(cardKey(project, cardId)) ||
       card.execution?.runs.at(-1)?.status === 'running' ||
       card.execution?.acceptedActionIds.includes(actionId)
     )
@@ -1400,7 +1402,7 @@ export function createExecutionService(
     if (
       !run?.acceptanceChecklist ||
       run.status === 'running' ||
-      active.has(project.rootPath) ||
+      active.has(cardKey(project, cardId)) ||
       card.execution!.acceptedActionIds.includes(run.actionId)
     )
       throw new PublicApiError(
@@ -1505,9 +1507,9 @@ export function createExecutionService(
   ) {
     assertCardUuid(cardId);
     assertCardUuid(outputId);
-    if (active.has(project.rootPath))
+    if (active.has(cardKey(project, cardId)))
       throw new PublicApiError(
-        'Wait for project execution to finish before rechecking.',
+        'Wait for this Card to finish before rechecking.',
         400,
       );
     const reservation: Active = {
@@ -1516,7 +1518,7 @@ export function createExecutionService(
       handle: null,
       timer: null,
     };
-    active.set(project.rootPath, reservation);
+    active.set(cardKey(project, cardId), reservation);
     try {
       const card = await store.read(project, cardId);
       if (card.revision !== expectedRevision)
@@ -1696,8 +1698,8 @@ export function createExecutionService(
         },
       );
     } finally {
-      if (active.get(project.rootPath) === reservation)
-        active.delete(project.rootPath);
+      if (active.get(cardKey(project, cardId)) === reservation)
+        active.delete(cardKey(project, cardId));
     }
   }
 
@@ -1739,9 +1741,9 @@ export function createExecutionService(
     reopenPlan: boolean,
   ) {
     assertCardUuid(cardId);
-    if (active.has(project.rootPath))
+    if (active.has(cardKey(project, cardId)))
       throw new PublicApiError(
-        'Stop project execution before resetting a Card.',
+        'Stop this Card before resetting it.',
         400,
       );
     const reservation: Active = {
@@ -1750,7 +1752,7 @@ export function createExecutionService(
       handle: null,
       timer: null,
     };
-    active.set(project.rootPath, reservation);
+    active.set(cardKey(project, cardId), reservation);
     try {
       const card = await store.read(project, cardId);
       if (card.revision !== expectedRevision)
@@ -1861,8 +1863,8 @@ export function createExecutionService(
         throw error;
       }
     } finally {
-      if (active.get(project.rootPath) === reservation)
-        active.delete(project.rootPath);
+      if (active.get(cardKey(project, cardId)) === reservation)
+        active.delete(cardKey(project, cardId));
     }
   }
 
@@ -1874,15 +1876,15 @@ export function createExecutionService(
   ) {
     assertCardUuid(cardId);
     assertCardUuid(actionId);
-    if (active.has(project.rootPath))
-      throw new PublicApiError('Stop project execution before undoing.', 400);
+    if (active.has(cardKey(project, cardId)))
+      throw new PublicApiError('Stop this Card before undoing.', 400);
     const reservation: Active = {
       id: randomUUID(),
       cardId,
       handle: null,
       timer: null,
     };
-    active.set(project.rootPath, reservation);
+    active.set(cardKey(project, cardId), reservation);
     try {
       const card = await store.read(project, cardId);
       if (card.revision !== expectedRevision)
@@ -2035,8 +2037,8 @@ export function createExecutionService(
         throw error;
       }
     } finally {
-      if (active.get(project.rootPath) === reservation)
-        active.delete(project.rootPath);
+      if (active.get(cardKey(project, cardId)) === reservation)
+        active.delete(cardKey(project, cardId));
     }
   }
 
