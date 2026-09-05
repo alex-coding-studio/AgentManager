@@ -285,6 +285,7 @@ export function classifyActionRun(
   } = {},
 ): ResponseClassification {
   const result = run.result;
+  const decision = run.coordination?.decisions.at(-1);
   const effective =
     result && run.acceptanceChecklist
       ? assessRequiredChecks(
@@ -296,13 +297,25 @@ export function classifyActionRun(
   const overridden = effective?.passed
     ? (result?.checks ?? []).filter((check) => check.status !== 'passed')
     : [];
-  const decision = run.coordination?.decisions.at(-1);
+  const satisfied = new Set([
+    ...(result?.checks ?? [])
+      .filter((check) => check.status === 'passed' && check.criterionId)
+      .map((check) => check.criterionId!),
+    ...Object.keys(input.overrides ?? {}),
+  ]);
+  const decisionResolved =
+    Boolean(effective?.passed) &&
+    (decision?.verificationPlan ?? [])
+      .filter((item) => item.mode === 'needs-user-decision')
+      .every((item) => satisfied.has(item.criterionId));
+  const activeDecision = decisionResolved ? null : decision;
   const semantic =
-    decision &&
-    (decision.decision === 'needs-user' || decision.decision === 'blocked') &&
-    decision.title &&
-    decision.detail
-      ? { title: decision.title, detail: decision.detail }
+    activeDecision &&
+    (activeDecision.decision === 'needs-user' ||
+      activeDecision.decision === 'blocked') &&
+    activeDecision.title &&
+    activeDecision.detail
+      ? { title: activeDecision.title, detail: activeDecision.detail }
       : null;
   const checks = result?.checks ?? [];
   return classifyResponse({
@@ -317,8 +330,9 @@ export function classifyActionRun(
           : 'failed'
       : null,
     coordinatorDecision:
-      decision?.decision === 'needs-user' || decision?.decision === 'blocked'
-        ? decision.decision
+      activeDecision?.decision === 'needs-user' ||
+      activeDecision?.decision === 'blocked'
+        ? activeDecision.decision
         : null,
     requiredChecks: result
       ? effective?.passed

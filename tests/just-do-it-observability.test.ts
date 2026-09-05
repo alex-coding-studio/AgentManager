@@ -542,6 +542,99 @@ void test('Coordinator title and detail shape a Warning without choosing its col
   assert.equal(fallback.title, 'Blocked');
 });
 
+void test('an override that resolves the Coordinator blocker reclassifies it, while unrelated blockers stay', () => {
+  const base = {
+    id: 'run',
+    actionId: 'action',
+    status: 'succeeded',
+    startedAt: '',
+    endedAt: '',
+    hostPid: 1,
+    agentSessionId: null,
+    usage: null,
+    input: '',
+    profile: { agent: 'codex', model: '', effort: '' },
+    error: null,
+    observedRefs: [],
+    outputRef: null,
+    acceptanceChecklist: {
+      version: 'v1',
+      items: [
+        { id: 'AC-01', criterion: 'Target', passCondition: 'x', evidence: 'y' },
+      ],
+    },
+    result: {
+      stage: 'execution',
+      actionId: 'action',
+      outcome: 'blocked',
+      summary: 'Blocked on the deployment target.',
+      artifactRefs: [],
+      checks: [
+        {
+          criterionId: 'AC-01',
+          summary: 'Target',
+          status: 'not-run',
+          evidenceRefs: [],
+        },
+      ],
+      remaining: [],
+      handoffSummary: '',
+      harnessRevision: 1,
+      requestId: 'run',
+      cardId: 'card',
+      contextRevision: 1,
+      inputFingerprint: '',
+    },
+    coordination: {
+      profile: { agent: 'codex', model: '', effort: '' },
+      attempts: [],
+      contextSummary: '',
+      decisions: [
+        {
+          decision: 'needs-user',
+          title: 'Target needs confirmation',
+          detail: 'Choose the target.',
+          verificationPlan: [
+            { criterionId: 'AC-01', mode: 'needs-user-decision' },
+          ],
+        },
+      ],
+    },
+  } as unknown as ActionRun;
+  const override = { note: 'iOS 26.1', recordedAt: '', checklistVersion: 'v1' };
+  const before = classifyActionRun(base);
+  assert.equal(before.status, 'warning');
+  assert.equal(before.title, 'Target needs confirmation');
+  const resolved = classifyActionRun(base, {
+    overrides: { 'AC-01': override },
+  });
+  assert.equal(resolved.status, 'completed');
+  assert.ok(resolved.recovery.includes('pass'));
+  assert.match(
+    resolved.supplementaryWarnings.join(' '),
+    /Accepted by user override: Target \(not-run\)/,
+  );
+  const unrelated = classifyActionRun(
+    {
+      ...base,
+      coordination: {
+        ...base.coordination!,
+        decisions: [
+          {
+            ...base.coordination!.decisions[0]!,
+            verificationPlan: [
+              { criterionId: 'AC-02', mode: 'needs-user-decision' },
+            ],
+          },
+        ],
+      },
+    } as unknown as ActionRun,
+    { overrides: { 'AC-01': override } },
+  );
+  assert.equal(unrelated.status, 'warning');
+  assert.equal(unrelated.title, 'Target needs confirmation');
+});
+
 void test('Undo writes a Host operation log and records it on the Card', async (t) => {
   const { project, cards, calls, service, input, settled } = await fixture(t);
   const alpha = cards[0]!;
