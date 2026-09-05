@@ -15,7 +15,7 @@ export type MaterializationReceipt = {
   producer: {
     kind: 'agent-run';
     runId: string;
-    generation?: { id: string; revision: number };
+    harness?: { id: string; revision: number };
   };
   basis: { fingerprint: string; preparedAt: string };
   semanticResultHash: string;
