@@ -483,7 +483,7 @@ URL shapes:
 /projects/<project-id>/logs/host/<operation-id>
 ```
 
-The URL uses the origin through which the user opened Praxis. A user on a LAN URL receives a LAN URL that can be pasted to another local Agent.
+Logs must remain directly accessible on the Praxis host for local Agent investigation. Cross-device investigation, LAN-specific URL sharing, clipboard support, and copy-link fallbacks are outside this delivery scope. LAN access is primarily for observing progress and code.
 
 The Log Viewer displays:
 
@@ -499,7 +499,7 @@ The Log Viewer displays:
 - Links to Host Job output logs
 - Final title and detail
 - Retained files, commits, checkpoints, and pull requests when applicable
-- Copy Link action
+- Direct browser access to the Log
 
 The viewer follows a running Log by requesting only appended content. It does not download the whole growing file on every poll.
 
@@ -791,7 +791,7 @@ Implement in the pull request order above and keep the internal work ordered:
 - Log button is present for Running, Completed, Warning, Fail, and canceled output.
 - Log opens a browser page, not inline JSON.
 - Log Viewer follows appended activity without reloading the whole file.
-- Copy Link produces a URL for the exact Log through the user's current origin.
+- A local Agent can access the exact Run Log directly; no clipboard or LAN sharing acceptance requirement applies.
 - Logs exclude private reasoning and are not tracked by Git.
 
 ### Error and Warning Summaries
