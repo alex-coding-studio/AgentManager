@@ -177,6 +177,63 @@ function jobReference(
   };
 }
 
+async function recordOwnershipLoss(
+  project: Project,
+  card: PlanningCard,
+  run: ActionRun,
+  classification: ResponseClassification,
+) {
+  if (run.logRef) {
+    try {
+      const log = await openRunLog(path.join(project.planningPath, run.logRef));
+      log.append({
+        level: 'ERROR',
+        actor: 'HOST',
+        phase: 'RECOVERY',
+        event: 'recovery.ownership-lost',
+        message: `Host process ${run.hostPid} no longer owns this Run; closing it as Fail`,
+      });
+      await log.close();
+    } catch {}
+  }
+  await publishLatestResponse(
+    cardOwner(project, card.id),
+    cardResponseDocument(project, card, run, classification, {
+      retained: retainedEffectsOf(run, run.observedRefs.length),
+      jobLogs: run.jobs,
+    }),
+  ).catch(() => undefined);
+}
+
+async function publishRecheck(
+  project: Project,
+  card: PlanningCard,
+  run: ActionRun,
+  classification: ResponseClassification,
+) {
+  if (run.logRef) {
+    try {
+      const log = await openRunLog(path.join(project.planningPath, run.logRef));
+      log.append({
+        level: classification.status === 'completed' ? 'INFO' : 'WARN',
+        actor: 'HOST',
+        phase: 'RECOVERY',
+        event: 'recovery.reread',
+        message: `Re-read the saved result without starting an Agent: ${classification.title}`,
+      });
+      await log.close();
+    } catch {}
+  }
+  await publishLatestResponse(
+    cardOwner(project, card.id),
+    cardResponseDocument(project, card, run, classification, {
+      retained: retainedEffectsOf(run, run.observedRefs.length),
+      jobLogs: run.jobs,
+    }),
+    { allowTerminalReplace: true },
+  ).catch(() => undefined);
+}
+
 function classifyRun(
   run: ActionRun,
   input: {
@@ -471,14 +528,16 @@ export function createExecutionService(
     }
     const error =
       'Execution was interrupted. Files may have changed; nothing was rolled back. Inspect the workspace before retrying.';
+    const classification = classifyRun(run, { runState: 'ownership-lost' });
     const next = replaceRun(card, {
       ...run,
       status: 'failed',
       endedAt: new Date().toISOString(),
       error,
+      response: classification,
     });
     try {
-      return await commit(project, next, {
+      const committed = await commit(project, next, {
         kind: 'system-event',
         stage: 'execution',
         actionId: run.actionId,
@@ -486,6 +545,13 @@ export function createExecutionService(
         text: error,
         refs: [],
       });
+      await recordOwnershipLoss(
+        project,
+        committed,
+        committed.execution!.runs.at(-1)!,
+        classification,
+      );
+      return committed;
     } catch (error) {
       if (/revision conflict/.test(String(error)))
         return store.read(project, card.id);
@@ -500,6 +566,8 @@ export function createExecutionService(
     outcome: Awaited<LocalAgentRun['completion']> | Error,
   ) {
     try {
+      const canceling = active.get(cardKey(project, request.context.cardId));
+      if (canceling?.id === request.requestId && canceling.canceling) return;
       const card = await store.read(project, request.context.cardId);
       const run = card.execution?.runs.at(-1);
       if (
@@ -1270,6 +1338,7 @@ export function createExecutionService(
             packetDir: usesDeliveryPacket ? packetDir : undefined,
             runtimeInstructions,
           });
+          owner.attach(reservation.handle);
         }
       } catch (error) {
         await finish(
@@ -1348,13 +1417,97 @@ export function createExecutionService(
       const handle = active.get(cardKey(project, cardId));
       if (handle?.id !== run.id)
         throw new Error('Execution is owned by another server.');
+      const owner = handle.reservation ?? null;
+      const interruptedPhase = owner?.phase ?? 'executing';
+      const interruptedActor = owner?.actor ?? 'WORKER';
+      if (handle.timer) clearTimeout(handle.timer);
+      handle.canceling = true;
+      let stop: 'confirmed' | 'unconfirmed' = 'confirmed';
+      if (owner) stop = await requestStop(owner);
+      else handle.handle?.cancel();
+      const termination =
+        stop === 'confirmed'
+          ? await handle.handle?.completion.catch((error: unknown) => error)
+          : null;
+      const canceledFiles: Record<string, string> = {};
+      const salvage = (target: ActionRun, base: PlanningCard) => {
+        if (termination instanceof CoordinationRunError) {
+          target.coordination = {
+            ...termination.coordination,
+            logRef: reference(base, 'coordination.json'),
+          };
+          target.usage = totalCoordinationUsage(termination.coordination);
+          canceledFiles['coordination.json'] = JSON.stringify(
+            target.coordination,
+          );
+          for (const [name, text] of Object.entries(
+            termination.coordinationRecords,
+          ))
+            canceledFiles[`coordination-${name}`] = text;
+        }
+        if (handle.activity?.length) {
+          target.activityRef = reference(base, 'activity.json');
+          canceledFiles['activity.json'] = JSON.stringify(handle.activity);
+        }
+        target.jobs = handle.jobs?.length ? handle.jobs : target.jobs;
+        target.logRef = owner?.logRef ?? target.logRef;
+      };
+      if (stop === 'unconfirmed') {
+        const classification = classifyRun(run, {
+          runState: 'termination-unconfirmed',
+          interruptedPhase,
+          interruptedActor,
+        });
+        const failed: ActionRun = {
+          ...run,
+          status: 'failed',
+          endedAt: new Date().toISOString(),
+          stopResult: 'unconfirmed',
+          error: classification.detail,
+          response: classification,
+        };
+        salvage(failed, card);
+        const saved = await commit(
+          project,
+          replaceRun(card, failed),
+          {
+            kind: 'system-event',
+            stage: 'execution',
+            actionId: run.actionId,
+            event: 'run-ended',
+            text: `${classification.title}. ${classification.detail}`,
+            refs: [],
+          },
+          canceledFiles,
+        );
+        if (owner)
+          await settleRun(owner, {
+            classification,
+            jobLogs: handle.jobs,
+          }).catch(() => undefined);
+        void handle.handle?.completion
+          .catch(() => undefined)
+          .finally(() => {
+            if (active.get(cardKey(project, cardId)) === handle)
+              active.delete(cardKey(project, cardId));
+          });
+        return saved;
+      }
+      const provisional = classifyRun(run, {
+        runState: 'canceled',
+        interruptedPhase,
+        interruptedActor,
+      });
       const saved = await commit(
         project,
         replaceRun(card, {
           ...run,
           status: 'canceled',
           endedAt: new Date().toISOString(),
+          stopResult: 'confirmed',
           error: 'Canceled by user. Existing changes were not reverted.',
+          response: provisional,
+          logRef: owner?.logRef ?? run.logRef,
         }),
         {
           kind: 'system-event',
@@ -1365,32 +1518,8 @@ export function createExecutionService(
           refs: [],
         },
       );
-      if (handle.timer) clearTimeout(handle.timer);
-      handle.canceling = true;
-      handle.handle?.cancel();
-      const termination = await handle.handle?.completion.catch(
-        (error: unknown) => error,
-      );
-      const canceledFiles: Record<string, string> = {};
       const canceledRun = { ...saved.execution!.runs.at(-1)! };
-      if (termination instanceof CoordinationRunError) {
-        canceledRun.coordination = {
-          ...termination.coordination,
-          logRef: reference(saved, 'coordination.json'),
-        };
-        canceledRun.usage = totalCoordinationUsage(termination.coordination);
-        canceledFiles['coordination.json'] = JSON.stringify(
-          canceledRun.coordination,
-        );
-        for (const [name, text] of Object.entries(
-          termination.coordinationRecords,
-        ))
-          canceledFiles[`coordination-${name}`] = text;
-      }
-      if (handle.activity?.length) {
-        canceledRun.activityRef = reference(saved, 'activity.json');
-        canceledFiles['activity.json'] = JSON.stringify(handle.activity);
-      }
+      salvage(canceledRun, saved);
       try {
         const snapshot = await snapshotWorkspace(
           workspaceProject(project, card.execution?.workspace),
@@ -1403,9 +1532,30 @@ export function createExecutionService(
           run.id,
           `Canceled Action ${run.actionId}\nRound ${run.id}`,
         );
-        return await commit(
+        let changedFiles = 0;
+        try {
+          changedFiles = observedChanges(
+            await readActionBaseline(project, saved, run),
+            snapshot,
+          ).length;
+        } catch {}
+        const retained = retainedEffectsOf(
+          { ...canceledRun, commit: hash },
+          changedFiles,
+        );
+        const classification = classifyRun(canceledRun, {
+          runState: 'canceled',
+          interruptedPhase,
+          interruptedActor,
+          retained,
+        });
+        const result = await commit(
           project,
-          replaceRun(saved, { ...canceledRun, commit: hash }),
+          replaceRun(saved, {
+            ...canceledRun,
+            commit: hash,
+            response: classification,
+          }),
           {
             kind: 'system-event',
             stage: 'execution',
@@ -1416,11 +1566,24 @@ export function createExecutionService(
           },
           canceledFiles,
         );
+        if (owner)
+          await settleRun(owner, {
+            classification,
+            retained,
+            jobLogs: handle.jobs,
+          }).catch(() => undefined);
+        return result;
       } catch (error) {
-        return await commit(
+        const classification = classifyRun(canceledRun, {
+          runState: 'canceled',
+          interruptedPhase,
+          interruptedActor,
+        });
+        const result = await commit(
           project,
           replaceRun(saved, {
             ...canceledRun,
+            response: classification,
             error: `Canceled; changes remain. Git checkpoint failed: ${error instanceof Error ? error.message : 'unknown error'}`,
           }),
           {
@@ -1433,6 +1596,12 @@ export function createExecutionService(
           },
           canceledFiles,
         );
+        if (owner)
+          await settleRun(owner, {
+            classification,
+            jobLogs: handle.jobs,
+          }).catch(() => undefined);
+        return result;
       } finally {
         if (active.get(cardKey(project, cardId))?.id === run.id)
           active.delete(cardKey(project, cardId));
@@ -1918,7 +2087,10 @@ export function createExecutionService(
           ...versions,
         ]),
       };
-      return commit(
+      nextRun.response = classifyRun(nextRun, {
+        retained: retainedEffectsOf(nextRun, nextRun.observedRefs.length),
+      });
+      const rechecked = await commit(
         project,
         replaceRun(card, nextRun),
         {
@@ -1940,6 +2112,13 @@ export function createExecutionService(
           'output.md': `# Rechecked Action output\n\n${result.summary}\n\nOutcome: ${result.outcome}\n\nNo Agent commands were rerun. Reported checks and remaining limitations are unchanged.\n\n## Required self-checks\n${result.checks.map((check) => `- ${check.status}: ${check.summary}`).join('\n')}\n\n## Additional checks (non-blocker)\n${(result.additionalChecks ?? []).map((check) => `- ${check.status}: ${check.summary}`).join('\n')}\n\n## Remaining\n${result.remaining.map((item) => `- ${item}`).join('\n')}`,
         },
       );
+      await publishRecheck(
+        project,
+        rechecked,
+        rechecked.execution!.runs.at(-1)!,
+        nextRun.response,
+      );
+      return rechecked;
     } finally {
       if (active.get(cardKey(project, cardId)) === reservation)
         active.delete(cardKey(project, cardId));

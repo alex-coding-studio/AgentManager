@@ -146,12 +146,21 @@ async function fixture(
       resolve = yes;
       reject = no;
     });
-    const call = { request, options, resolve, reject, canceled: false };
+    const call = {
+      request,
+      options,
+      resolve,
+      reject,
+      canceled: false,
+      lateOutput: null as LocalAgentResult | null,
+    };
     calls.push(call);
     return {
       completion,
       cancel: () => {
         call.canceled = true;
+        if (call.lateOutput) resolve(call.lateOutput);
+        else reject(new Error('canceled'));
         reject(new Error('Canceled'));
       },
     } as LocalAgentRun;
