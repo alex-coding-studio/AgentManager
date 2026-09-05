@@ -1299,6 +1299,8 @@ function WhatsNextCanvas({
                 'The Product Source and all current Product Design Features are included automatically.',
               )}
             </p>
+          ) : moduleResponse.running ? (
+            <AgentGraphComposerCard title="" running />
           ) : null}
 
           <div className="mt-3 flex max-h-40 flex-col gap-0.5 overflow-y-auto">

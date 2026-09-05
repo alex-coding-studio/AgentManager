@@ -610,6 +610,20 @@ void test('Graph and Flow modules run inside Latest Response while Just Do It st
     assert.match(source, /running=\{moduleResponse\.running/, file);
     assert.match(source, /useSurfacePreference\(/, file);
   }
+  for (const file of [
+    'whats-next-workspace.tsx',
+    'task-decomposition-workspace.tsx',
+  ]) {
+    const source = await readFile(
+      new URL(`../components/${file}`, import.meta.url),
+      'utf8',
+    );
+    assert.match(
+      source,
+      /\) : moduleResponse\.running \? \(\s*<AgentGraphComposerCard title="" running \/>/,
+      file,
+    );
+  }
   const justDoIt = await readFile(
     new URL('../components/just-do-it-live-workspace.tsx', import.meta.url),
     'utf8',

@@ -1760,6 +1760,8 @@ export function TaskDecompositionWorkspace({
                 <p role="alert" className="text-xs text-destructive">
                   {requestError}
                 </p>
+              ) : moduleResponse.running ? (
+                <AgentGraphComposerCard title="" running />
               ) : null}
 
               <AgentComposerShell
