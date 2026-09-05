@@ -73,6 +73,7 @@ import {
 } from './redo.ts';
 import { readWhatsNextAttachment, readWhatsNextContext } from './context.ts';
 import { candidateDependencyBlockers } from '../../graph/proposal/dependencies.ts';
+import { whatsNextValidationContext } from './validation-context.ts';
 import { promoteCandidateToNode } from '../../graph/proposal/promote.ts';
 import {
   primarySourceResourcePaths,
@@ -751,35 +752,17 @@ export async function recoverWhatsNextRunResult(
     project.planningPath,
     GRAPH_ROOT,
     finalOutput,
-    {
-      request: {
-        sessionId: record.sessionId,
-        requestId: record.requestId,
-        inputFingerprint: record.inputFingerprint,
-      },
-      operation: record.operation,
-      revisionCandidateId: revisionTarget?.candidateId,
-      revisionTarget: revisionTarget ?? undefined,
-      knownNodeIds: nodes.map((node) => node.id),
+    whatsNextValidationContext({
+      record,
+      nodes,
       knownResourcePaths: record.input?.resourcePaths ?? [],
-      acceptedCandidateIds: nodes.flatMap((node) =>
-        node.provenance?.candidateId ? [node.provenance.candidateId] : [],
-      ),
-      previousCandidateRevisions: revisionTarget
-        ? { [revisionTarget.candidateId]: revisionTarget.revision }
-        : undefined,
       reservedCandidateIds:
         record.operation === 'refine-candidate'
           ? []
           : await collectReservedCandidateIds(project),
       knownCandidates: await collectLatestUnacceptedCandidates(project),
-      intention: record.intention,
-      motion: record.motion,
-      productSourceNodeId:
-        record.intention === 'product-design-completion'
-          ? record.sourceNodeIds[0]
-          : undefined,
-    },
+      revisionTarget: revisionTarget ?? undefined,
+    }),
     parseWhatsNextHarnessResult,
     revisionTarget ?? undefined,
   );
@@ -1053,20 +1036,10 @@ async function finishWhatsNextRun(
       project.planningPath,
       GRAPH_ROOT,
       agentResult.finalOutput,
-      {
-        request: {
-          sessionId: record.sessionId,
-          requestId: record.requestId,
-          inputFingerprint: record.inputFingerprint,
-        },
-        knownNodeIds: nodes.map((node) => node.id),
+      whatsNextValidationContext({
+        record,
+        nodes,
         knownResourcePaths: resources.map((resource) => resource.logicalPath),
-        acceptedCandidateIds: nodes.flatMap((node) =>
-          node.provenance?.candidateId ? [node.provenance.candidateId] : [],
-        ),
-        previousCandidateRevisions: revisionTarget
-          ? { [revisionTarget.candidateId]: revisionTarget.revision }
-          : undefined,
         reservedCandidateIds,
         knownCandidates: (
           await collectLatestUnacceptedCandidates(project)
@@ -1074,16 +1047,8 @@ async function finishWhatsNextRun(
           (candidate) =>
             !record.replacement?.candidateIds.includes(candidate.candidateId),
         ),
-        operation: record.operation,
-        revisionCandidateId: revisionTarget?.candidateId,
         revisionTarget,
-        intention: record.intention,
-        motion: record.motion,
-        productSourceNodeId:
-          record.intention === 'product-design-completion'
-            ? record.sourceNodeIds[0]
-            : undefined,
-      },
+      }),
       parseWhatsNextHarnessResult,
       revisionTarget,
     );
